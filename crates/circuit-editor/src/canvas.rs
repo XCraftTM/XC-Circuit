@@ -67,6 +67,8 @@ pub struct CanvasView {
     pub wire_menu: Option<(Link, Pos2)>,
     /// Text fields that open a bigger editor while being edited: (block, field) → editor size.
     pub expanded: HashMap<(String, String), Vec2>,
+    /// Where the expanded editor was drawn last frame (screen).
+    pub overlay_rect: Option<Rect>,
     /// Screen rectangles of the text fields drawn last frame.
     pub text_fields: Vec<((String, String), Rect)>,
     /// The expanded editor that is open now, and for how many more frames it
@@ -1147,7 +1149,6 @@ const OVERLAY_FOCUS_FRAMES: u8 = 3;
 /// the block) without changing the block, can be resized from its corner, and
 /// closes when the focus moves elsewhere.
 fn expanded_editor(ctx: &egui::Context, base: egui::Id, view: &mut CanvasView, ws: &mut Workspace, anchor: Option<Rect>, theme: &Theme, dirty: &mut bool) {
-    if view.overlay.is_some() || !view.expanded.is_empty() { eprintln!("DBG overlay={:?} anchor={:?} expanded={:?}", view.overlay, anchor, view.expanded); }
     let Some((node, key, fresh)) = view.overlay.clone() else { return };
     let (Some(anchor), Some(n)) = (anchor, ws.nodes.get_mut(&node)) else {
         view.overlay = None;
@@ -1169,8 +1170,11 @@ fn expanded_editor(ctx: &egui::Context, base: egui::Id, view: &mut CanvasView, w
             .inner_margin(6)
             .shadow(ctx.global_style().visuals.popup_shadow)
             .show(ui, |ui| {
-                egui::ScrollArea::vertical().max_height(size.y).max_width(size.x).show(ui, |ui| {
-                    let resp = ui.add_sized(size, egui::TextEdit::multiline(&mut text).id(edit_id).frame(egui::Frame::NONE).desired_width(size.x));
+                // Exactly `size`: the text box fills it, and longer text scrolls.
+                ui.set_width(size.x);
+                ui.set_height(size.y);
+                egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+                    let resp = ui.add(egui::TextEdit::multiline(&mut text).id(edit_id).frame(egui::Frame::NONE).desired_width(size.x).min_size(size));
                     if resp.changed() {
                         n.values.insert(key.clone(), Value::String(text.clone()));
                         *dirty = true;
@@ -1189,7 +1193,7 @@ fn expanded_editor(ctx: &egui::Context, base: egui::Id, view: &mut CanvasView, w
         if g.dragged() {
             resizing = true;
             let d = g.drag_delta();
-            resized = Some(vec2((size.x + d.x).clamp(180.0, 1000.0), (size.y + d.y).clamp(60.0, 800.0)));
+            resized = Some(vec2((size.x + d.x).clamp(180.0, 3000.0), (size.y + d.y).clamp(60.0, 3000.0)));
         }
     });
 
@@ -1197,6 +1201,7 @@ fn expanded_editor(ctx: &egui::Context, base: egui::Id, view: &mut CanvasView, w
         view.expanded.insert(field_key, s);
     }
     let focused = ctx.memory(|m| m.has_focus(edit_id));
+    view.overlay_rect = Some(area.response.rect);
     let pointer_inside = ctx.input(|i| i.pointer.interact_pos()).is_some_and(|p| area.response.rect.contains(p));
     if fresh > 0 || resizing || (!focused && pointer_inside && ctx.input(|i| i.pointer.any_down())) {
         // Keep (or put) the text cursor in the big editor.
@@ -1204,7 +1209,6 @@ fn expanded_editor(ctx: &egui::Context, base: egui::Id, view: &mut CanvasView, w
         view.overlay = Some((node, key, fresh.saturating_sub(1)));
         ctx.request_repaint();
     } else if !focused {
-        eprintln!("DBG closing: focused={focused} inside={pointer_inside} focus={:?}", ctx.memory(|m| m.focused()));
         view.overlay = None;
     }
 }
@@ -1322,6 +1326,22 @@ mod tests {
         frame(&ctx, &mut ed, "rank-command", vec![egui::Event::Text("!!".into())]);
         let text = ed.workspace("rank-command").unwrap().nodes["4"].values["text"].clone();
         assert!(text.as_str().unwrap().ends_with("!!"), "typing goes into the expanded editor: {text}");
+
+        // Dragging the corner grip down (and right) grows the editor by as much.
+        let before = ed.views["rank-command"].overlay_rect.unwrap();
+        let grip = before.right_bottom() - vec2(8.0, 8.0);
+        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerMoved(grip)]);
+        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerButton { pos: grip, button: PointerButton::Primary, pressed: true, modifiers: Default::default() }]);
+        for step in 1..=10 {
+            frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerMoved(grip + vec2(4.0 * step as f32, 25.0 * step as f32))]);
+        }
+        let end = grip + vec2(40.0, 250.0);
+        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerButton { pos: end, button: PointerButton::Primary, pressed: false, modifiers: Default::default() }]);
+        settle(&mut ed);
+        assert!(open(&ed), "resizing keeps it open");
+        let after = ed.views["rank-command"].overlay_rect.unwrap();
+        assert!((after.height() - before.height() - 250.0).abs() < 4.0, "grew {} px down", after.height() - before.height());
+        assert!((after.width() - before.width() - 40.0).abs() < 4.0, "grew {} px right", after.width() - before.width());
 
         // Clicking elsewhere hides it; clicking the field again brings it back.
         frame(&ctx, &mut ed, "rank-command", click(pos2(300.0, 850.0)));

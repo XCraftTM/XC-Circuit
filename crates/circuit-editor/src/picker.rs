@@ -9,6 +9,12 @@ use crate::canvas::{Dir, PinEnd};
 use crate::editor::Editor;
 use crate::theme::{Theme, with_alpha};
 
+/// Picker size: the result list on the left, details of the highlighted block on the right.
+const PICKER_W: f32 = 700.0;
+const BODY_H: f32 = 380.0;
+const LIST_W: f32 = 290.0;
+const ROW_H: f32 = 32.0;
+
 #[derive(Clone, Debug)]
 pub struct PendingWire {
     pub node: String,
@@ -120,7 +126,9 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
     let mut close = escape;
 
     let screen = ctx.content_rect();
-    let size = vec2(520.0, 300.0);
+    // Smaller windows get a smaller picker.
+    let body_h = BODY_H.min(screen.height() - 120.0).max(160.0);
+    let size = vec2(PICKER_W.min(screen.width() - 16.0), body_h + 90.0);
     let mut pos = picker.screen_pos;
     pos.x = pos.x.min(screen.right() - size.x - 8.0);
     pos.y = pos.y.min(screen.bottom() - size.y - 8.0);
@@ -135,14 +143,14 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                 ui.set_width(size.x);
                 ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
                 // Search row.
-                Frame::new().inner_margin(Margin::symmetric(12, 8)).show(ui, |ui| {
+                Frame::new().inner_margin(Margin::symmetric(14, 11)).show(ui, |ui| {
                     ui.horizontal(|ui| {
                         let edit = ui.add(
                             TextEdit::singleline(&mut picker.query)
                                 .hint_text("Search blocks")
                                 .frame(Frame::new())
                                 .desired_width(size.x - 140.0)
-                                .font(egui::TextStyle::Body),
+                                .font(egui::FontId::proportional(15.0)),
                         );
                         if picker.opened_frames <= 2 {
                             edit.request_focus();
@@ -163,9 +171,9 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                 let column = egui::Layout::top_down(egui::Align::Min);
                 ui.horizontal_top(|ui| {
                     // Result list grouped by category.
-                    ui.allocate_ui_with_layout(vec2(220.0, 210.0), column, |ui| {
-                        ScrollArea::vertical().id_salt("picker-list").max_height(210.0).auto_shrink([false, false]).show(ui, |ui| {
-                            ui.set_width(220.0);
+                    ui.allocate_ui_with_layout(vec2(LIST_W, body_h), column, |ui| {
+                        ScrollArea::vertical().id_salt("picker-list").max_height(body_h).auto_shrink([false, false]).show(ui, |ui| {
+                            ui.set_width(LIST_W);
                             let mut last_cat: Option<String> = None;
                             for (i, (def, pin)) in list.iter().enumerate() {
                                 let cat = def.category.clone().unwrap_or_default();
@@ -180,7 +188,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                                     last_cat = Some(cat);
                                 }
                                 let selected = i == picker.highlighted;
-                                let (rect, resp) = ui.allocate_exact_size(vec2(212.0, 28.0), egui::Sense::click());
+                                let (rect, resp) = ui.allocate_exact_size(vec2(LIST_W - 8.0, ROW_H), egui::Sense::click());
                                 let rect = rect.translate(vec2(4.0, 0.0));
                                 if selected {
                                     ui.painter().rect_filled(rect, 6.0, with_alpha(theme.accent, 45));
@@ -188,11 +196,11 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                                     ui.painter().rect_filled(rect, 6.0, theme.panel_header);
                                 }
                                 if let Some(path) = ed.reg.block_icon(def, mode.as_ref()) {
-                                    let icon = egui::Rect::from_center_size(rect.left_center() + vec2(16.0, 0.0), vec2(14.0, 14.0));
+                                    let icon = egui::Rect::from_center_size(rect.left_center() + vec2(18.0, 0.0), vec2(16.0, 16.0));
                                     let tint = if selected { theme.accent } else { theme.text_muted };
                                     egui::Image::from_uri(crate::editor::file_uri(&path)).tint(tint).paint_at(ui, icon);
                                 }
-                                ui.painter().text(rect.left_center() + vec2(32.0, 0.0), Align2::LEFT_CENTER, &def.name, egui::FontId::proportional(13.0), theme.text);
+                                ui.painter().text(rect.left_center() + vec2(36.0, 0.0), Align2::LEFT_CENTER, &def.name, egui::FontId::proportional(14.0), theme.text);
                                 if resp.hovered() {
                                     picker.highlighted = i;
                                 }
@@ -213,9 +221,9 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                     ui.painter().vline(sep.right(), sep.y_range(), Stroke::new(1.0, theme.line));
 
                     // Details of the highlighted block.
-                    ui.allocate_ui_with_layout(vec2(size.x - 221.0, 210.0), column, |ui| {
-                        Frame::new().inner_margin(Margin::same(14)).show(ui, |ui| {
-                            ui.set_max_width(size.x - 221.0 - 28.0);
+                    ui.allocate_ui_with_layout(vec2(size.x - LIST_W - 1.0, body_h), column, |ui| {
+                        Frame::new().inner_margin(Margin::same(16)).show(ui, |ui| {
+                            ui.set_max_width(size.x - LIST_W - 1.0 - 32.0);
                             ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
                             if let Some((def, _)) = list.get(picker.highlighted) {
                                 details(ui, def, &ed.reg, &theme);
@@ -252,16 +260,16 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
 }
 
 fn details(ui: &mut egui::Ui, def: &BlockDef, reg: &Registry, theme: &Theme) {
-    ui.label(RichText::new(&def.name).strong().size(14.0));
-    ui.label(RichText::new(format!("by {} · v{} · {}", def.author, def.version, def.plugin)).size(11.0).color(theme.text_muted));
+    ui.label(RichText::new(&def.name).strong().size(16.0));
+    ui.label(RichText::new(format!("by {} · v{} · {}", def.author, def.version, def.plugin)).size(12.0).color(theme.text_muted));
     ui.label(&def.description);
     let fields: Vec<String> = def.fields.iter().filter(|(_, f)| !f.advanced).map(|(k, f)| f.label(k)).collect();
     let outputs: Vec<String> = def.outputs.iter().map(|(k, o)| format!("{} ({})", o.label(k), o.ty.display(reg))).collect();
     if !fields.is_empty() {
-        ui.label(RichText::new(format!("In: {}", fields.join(", "))).size(11.5).color(theme.text_muted));
+        ui.label(RichText::new(format!("In: {}", fields.join(", "))).size(12.5).color(theme.text_muted));
     }
     if !outputs.is_empty() {
-        ui.label(RichText::new(format!("Out: {}", outputs.join(", "))).size(11.5).color(theme.text_muted));
+        ui.label(RichText::new(format!("Out: {}", outputs.join(", "))).size(12.5).color(theme.text_muted));
     }
 }
 
