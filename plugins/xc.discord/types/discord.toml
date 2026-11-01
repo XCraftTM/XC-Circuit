@@ -1,0 +1,74 @@
+[[type]]
+id = "discord.user"
+name = "User"
+extends = "object"
+color = "#7B83FF"
+icon = "user"
+check = "v => v?.constructor?.name === 'User'"
+description = "A Discord account, the same in every server."
+
+[[type]]
+id = "discord.member"
+name = "Member"
+extends = "object"
+color = "#7B83FF"
+icon = "user"
+check = "v => v?.constructor?.name === 'GuildMember'"
+description = "A person inside one server, with roles and a nickname."
+
+[[type.converts]]
+to = "discord.user"
+via = "v => v.user"
+
+[[type]]
+id = "discord.message"
+name = "Message"
+extends = "object"
+color = "#7B83FF"
+icon = "message"
+check = "v => v?.constructor?.name === 'Message'"
+description = "A message in a channel."
+
+[[type]]
+id = "discord.channel"
+name = "Channel"
+extends = "object"
+color = "#7B83FF"
+icon = "hash"
+check = "v => typeof v?.isTextBased === 'function'"
+description = "A text, voice, thread or forum channel."
+
+[[type]]
+id = "discord.guild"
+name = "Server"
+extends = "object"
+color = "#7B83FF"
+icon = "shield"
+check = "v => v?.constructor?.name === 'Guild'"
+description = "A Discord server."
+
+[[type]]
+id = "discord.role"
+name = "Role"
+extends = "object"
+color = "#7B83FF"
+icon = "tag"
+check = "v => v?.constructor?.name === 'Role'"
+description = "A role in a server."
+
+[[type]]
+id = "discord.interaction"
+name = "Interaction"
+extends = "object"
+color = "#7B83FF"
+icon = "slash"
+check = "v => typeof v?.isRepliable === 'function'"
+description = "A slash command, button press, menu choice or modal submit that can be answered."
+
+[[type]]
+id = "discord.embed"
+name = "Embed"
+extends = "object"
+color = "#3DD9C1"
+icon = "embed"
+description = "A rich message card with title, description, fields and images."

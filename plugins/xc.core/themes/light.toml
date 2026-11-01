@@ -1,0 +1,36 @@
+id = "light"
+name = "Light"
+base = "light"
+
+[colors]
+frame = "#DCE1E5"
+panel = "#F4F6F8"
+panelHeader = "#E7EBEE"
+canvas = "#E8ECEF"
+canvasDots = "#00000018"
+node = "#FFFFFF"
+nodeHeader = "#F0F3F5"
+nodeBorder = "#C9D1D7"
+field = "#E4E9ED"
+line = "#D2D9DF"
+text = "#141A1F"
+textMuted = "#4C5863"
+accent = "#008C9C"
+action = "#13A43B"
+statusBar = "#008C9C"
+statusText = "#FFFFFF"
+error = "#C42A52"
+warning = "#B26A00"
+
+[pinColors]
+text = "#B7860B"
+number = "#1F7AD1"
+boolean = "#D13B63"
+list = "#7D4FD6"
+object = "#11968A"
+date = "#D4691F"
+any = "#6B747C"
+
+[shape]
+nodeRadius = 9
+wireWidth = 2.6

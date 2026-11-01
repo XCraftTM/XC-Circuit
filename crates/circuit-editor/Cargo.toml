@@ -1,0 +1,26 @@
+[package]
+name = "circuit-editor"
+description = "XC Circuit: a node editor for building bots"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "xc-circuit"
+path = "src/main.rs"
+
+[dependencies]
+circuit-core.workspace = true
+circuit-plugins.workspace = true
+anyhow.workspace = true
+dirs.workspace = true
+eframe.workspace = true
+egui_dock.workspace = true
+egui_extras.workspace = true
+image.workspace = true
+indexmap.workspace = true
+open.workspace = true
+rfd.workspace = true
+serde.workspace = true
+serde_json.workspace = true

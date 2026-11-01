@@ -1,0 +1,16 @@
+id          = "xc.discord"
+name        = "Discord Bot"
+version     = "1.0.0"
+author      = "XC Team"
+description = "Blocks, pin types and the build mode for Discord bots made with discord.js."
+
+[engines]
+circuit = "^1.0"
+
+[dependencies]
+"xc.core" = "^1.0"
+
+[contributes]
+buildModes = ["modes/*.toml"]
+blocks     = ["blocks/**/*.{js,cjs,mjs,ts}"]
+pinTypes   = ["types/*.toml"]

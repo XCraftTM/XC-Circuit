@@ -1,0 +1,14 @@
+id          = "xc.core"
+name        = "Circuit Core"
+version     = "1.0.0"
+author      = "XC Team"
+description = "Mode-independent blocks (flow, text, math, logic, stored data, debug), the icon set and the built-in themes."
+icon        = "icons/block.svg"
+
+[engines]
+circuit = "^1.0"
+
+[contributes]
+blocks = ["blocks/**/*.{js,cjs,mjs,ts}"]
+themes = ["themes/*.toml"]
+icons  = ["icons/*.{svg,png}"]

@@ -1,0 +1,59 @@
+id          = "discord-bot"
+name        = "Discord Bot"
+icon        = "bolt"
+description = "A Discord bot built with discord.js."
+
+blocks      = ["xc.core/*", "xc.discord/*"]
+runtime     = "node"
+runtimeLibs = ["xc.discord/runtime/discord.js"]
+exporter    = "xc.discord/node-bundle"
+
+[[categories]]
+id = "events"
+name = "Events"
+icon = "bolt"
+
+[[categories]]
+id = "messages"
+name = "Messages"
+icon = "message"
+
+[[categories]]
+id = "members"
+name = "Members"
+icon = "user"
+
+[[categories]]
+id = "flow"
+name = "Flow"
+icon = "branch"
+
+[[categories]]
+id = "logic"
+name = "Logic"
+icon = "scale"
+
+[[categories]]
+id = "text"
+name = "Text"
+icon = "text"
+
+[[categories]]
+id = "math"
+name = "Math"
+icon = "hash"
+
+[[categories]]
+id = "data"
+name = "Stored Data"
+icon = "database"
+
+[[categories]]
+id = "debug"
+name = "Debug"
+icon = "terminal"
+
+[settings]
+token = { type = "secret", label = "Bot token", required = true }
+devServer = { type = "text", label = "Dev server id", description = "Slash commands register here instantly." }
+prefix = { type = "text", label = "Text command prefix", default = "!" }

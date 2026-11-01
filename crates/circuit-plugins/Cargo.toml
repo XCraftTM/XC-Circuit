@@ -1,0 +1,17 @@
+[package]
+name = "circuit-plugins"
+description = "Plugin manifests, contributions and the QuickJS block sandbox for XC Circuit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+
+[dependencies]
+circuit-core.workspace = true
+anyhow.workspace = true
+glob.workspace = true
+indexmap.workspace = true
+rquickjs.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true

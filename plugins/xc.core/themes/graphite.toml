@@ -1,0 +1,39 @@
+id = "graphite"
+name = "Graphite"
+base = "dark"
+
+[colors]
+frame = "#18191C"
+panel = "#232529"
+panelHeader = "#2B2E33"
+canvas = "#1E2023"
+canvasDots = "#FFFFFF16"
+node = "#2C2F34"
+nodeHeader = "#363A41"
+nodeBorder = "#454A52"
+field = "#40454D"
+line = "#34383E"
+text = "#E7EAED"
+textMuted = "#A9B1B9"
+accent = "#00D8F0"
+action = "#3DFF6E"
+statusBar = "#00A9BD"
+statusText = "#00181C"
+error = "#FF6F91"
+warning = "#FFB454"
+
+[pinColors]
+text = "#F5C451"
+number = "#4FB3FF"
+boolean = "#FF6F91"
+list = "#B98CFF"
+object = "#3DD9C1"
+date = "#FF9F5A"
+any = "#9AA3AB"
+
+[shape]
+nodeRadius = 9
+wireWidth = 2.6
+
+[motion]
+speed = 1.0

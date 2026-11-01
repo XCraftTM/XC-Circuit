@@ -1,0 +1,36 @@
+{
+  "name": "Rank command",
+  "nodes": {
+    "a1": {
+      "block": "discord.on_slash_command@1",
+      "at": [40, 60],
+      "values": { "command": "rank" }
+    },
+    "b2": {
+      "block": "core.get_stored@1",
+      "at": [40, 330],
+      "values": { "scope": "user", "key": "xp", "fallback": 0 },
+      "pins": ["target"]
+    },
+    "c3": {
+      "block": "discord.build_embed@1",
+      "at": [360, 60],
+      "values": { "title": "Rank of {user}", "description": "", "color": "#00D8F0" },
+      "pins": ["description"]
+    },
+    "d4": {
+      "block": "discord.send_message@3",
+      "at": [700, 100],
+      "values": { "mode": "reply", "text": "GG {user}! Here's your rank.", "private": true },
+      "pins": ["embeds"]
+    }
+  },
+  "links": [
+    "a1.next > c3.in",
+    "c3.next > d4.in",
+    "a1.interaction > d4.interaction",
+    "a1.user > b2.target",
+    "b2.value > c3.description",
+    "c3.embed > d4.embeds"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "name": "Welcome",
+  "nodes": {
+    "a1": {
+      "block": "discord.on_member_join@1",
+      "at": [40, 60]
+    },
+    "b2": {
+      "block": "discord.add_role@2",
+      "at": [360, 60],
+      "values": { "roleId": "" }
+    },
+    "c3": {
+      "block": "core.log@1",
+      "at": [680, 60],
+      "values": { "message": "Gave the welcome role", "level": "success" }
+    }
+  },
+  "links": [
+    "a1.next > b2.in",
+    "a1.member > b2.member",
+    "b2.next > c3.in"
+  ]
+}

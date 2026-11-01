@@ -1,0 +1,27 @@
+id = "midnight"
+name = "Midnight"
+base = "dark"
+
+[colors]
+frame = "#0A0D10"
+panel = "#11161B"
+panelHeader = "#171D24"
+canvas = "#0D1115"
+canvasDots = "#00D8F014"
+node = "#18212A"
+nodeHeader = "#1F2A35"
+nodeBorder = "#2C3946"
+field = "#25313C"
+line = "#1F2932"
+text = "#E4F1F4"
+textMuted = "#97AAB3"
+accent = "#00E5FF"
+action = "#3DFF6E"
+statusBar = "#00A9BD"
+statusText = "#00181C"
+error = "#FF6F91"
+warning = "#FFB454"
+
+[shape]
+nodeRadius = 9
+wireWidth = 2.6

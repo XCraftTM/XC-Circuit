@@ -1,0 +1,124 @@
+//! Inline editors for field values, shared by blocks on the canvas and the inspector.
+
+use circuit_core::{FieldDef, PinType};
+use eframe::egui::{self, Color32, ComboBox, DragValue, Response, Sense, TextEdit, Ui, Vec2};
+use serde_json::{Number, Value};
+
+use crate::theme::{Theme, hex_color};
+
+/// Whether a field can be edited inline at all (lists, objects and plugin types must be connected).
+pub fn is_inline_editable(field: &FieldDef) -> bool {
+    field.is_select()
+        || matches!(field.type_name.as_str(), "color" | "textarea")
+        || matches!(field.ty.required(), PinType::Text | PinType::Number | PinType::Boolean | PinType::Any | PinType::Date)
+}
+
+/// Draws an editor for one field value. Returns true when the value changed.
+pub fn value_editor(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width: f32, multiline: bool, theme: &Theme) -> bool {
+    if field.is_select() {
+        return select(ui, id, field, value, width);
+    }
+    if field.type_name == "color" {
+        return color(ui, value);
+    }
+    match field.ty.required() {
+        PinType::Boolean => {
+            let mut b = value.as_bool().unwrap_or(false);
+            let changed = toggle(ui, &mut b, theme).changed();
+            if changed {
+                *value = Value::Bool(b);
+            }
+            changed
+        }
+        PinType::Number => {
+            let mut n = value.as_f64().or_else(|| value.as_str().and_then(|s| s.parse().ok())).unwrap_or(0.0);
+            let mut drag = DragValue::new(&mut n).speed(field.step.unwrap_or(0.1).max(0.01));
+            if let Some(min) = field.min {
+                drag = drag.range(min..=field.max.unwrap_or(f64::MAX));
+            }
+            let changed = ui.add_sized([width, 22.0], drag).changed();
+            if changed {
+                *value = Number::from_f64(n).map(Value::Number).unwrap_or(Value::Null);
+            }
+            changed
+        }
+        _ if is_inline_editable(field) => {
+            let mut s = match &*value {
+                Value::String(s) => s.clone(),
+                Value::Null => String::new(),
+                other => other.to_string(),
+            };
+            let edit = if multiline && field.type_name == "textarea" {
+                TextEdit::multiline(&mut s).desired_rows(3)
+            } else {
+                TextEdit::singleline(&mut s)
+            };
+            let edit = edit.desired_width(width).hint_text(field.placeholder.clone().unwrap_or_default());
+            let changed = ui.add(edit).changed();
+            if changed {
+                *value = Value::String(s);
+            }
+            changed
+        }
+        _ => {
+            ui.label(egui::RichText::new("connect a value").italics().color(theme.text_muted));
+            false
+        }
+    }
+}
+
+fn select(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width: f32) -> bool {
+    let choices = field.choice_list();
+    let current = value.as_str().unwrap_or_default().to_string();
+    let label = choices.iter().find(|(_, k, _)| *k == current).map(|(_, _, l)| l.clone()).unwrap_or(current.clone());
+    let mut picked = None;
+    ComboBox::from_id_salt(id).width(width).selected_text(label).show_ui(ui, |ui| {
+        let mut last_group: Option<&String> = None;
+        for (group, key, text) in &choices {
+            if group.as_ref() != last_group {
+                if let Some(g) = group {
+                    ui.label(egui::RichText::new(g.to_uppercase()).small().weak());
+                }
+                last_group = group.as_ref();
+            }
+            if ui.selectable_label(*key == current, text).clicked() {
+                picked = Some(key.clone());
+            }
+        }
+    });
+    match picked {
+        Some(k) if k != current => {
+            *value = Value::String(k);
+            true
+        }
+        _ => false,
+    }
+}
+
+fn color(ui: &mut Ui, value: &mut Value) -> bool {
+    let mut c = value.as_str().and_then(hex_color).unwrap_or(Color32::WHITE);
+    let changed = egui::color_picker::color_edit_button_srgba(ui, &mut c, egui::color_picker::Alpha::Opaque).changed();
+    if changed {
+        *value = Value::String(format!("#{:02X}{:02X}{:02X}", c.r(), c.g(), c.b()));
+    }
+    changed
+}
+
+/// A pill-shaped on/off switch in the theme's Action green.
+pub fn toggle(ui: &mut Ui, on: &mut bool, theme: &Theme) -> Response {
+    let size = Vec2::new(30.0, 17.0);
+    let (rect, mut response) = ui.allocate_exact_size(size, Sense::click());
+    if response.clicked() {
+        *on = !*on;
+        response.mark_changed();
+    }
+    let t = ui.ctx().animate_bool_responsive(response.id, *on);
+    let bg = crate::theme::mix(theme.field, theme.action, t);
+    let painter = ui.painter();
+    painter.rect_filled(rect, rect.height() / 2.0, bg);
+    let r = rect.height() / 2.0 - 2.5;
+    let x = egui::lerp((rect.left() + r + 2.5)..=(rect.right() - r - 2.5), t);
+    let knob = if *on { Color32::from_rgb(4, 33, 13) } else { theme.text_muted };
+    painter.circle_filled(egui::pos2(x, rect.center().y), r, knob);
+    response
+}
