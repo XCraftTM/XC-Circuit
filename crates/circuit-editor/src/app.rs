@@ -19,11 +19,17 @@ pub enum Tab {
     Inspector,
     Console,
     Problems,
+    StoredData,
 }
 
 impl Tab {
-    const PANELS: [(Tab, &'static str); 4] =
-        [(Tab::Workspaces, "Workspaces"), (Tab::Inspector, "Inspector"), (Tab::Console, "Console"), (Tab::Problems, "Problems")];
+    const PANELS: [(Tab, &'static str); 5] = [
+        (Tab::Workspaces, "Workspaces"),
+        (Tab::Inspector, "Inspector"),
+        (Tab::Console, "Console"),
+        (Tab::Problems, "Problems"),
+        (Tab::StoredData, "Stored Data"),
+    ];
 }
 
 const KEY_DOCK: &str = "dock";
@@ -40,6 +46,8 @@ pub struct CircuitApp {
     allow_close: bool,
     problem_count: usize,
     bot: BotUi,
+    stored: crate::stored::StoredView,
+    watcher: crate::watch::PluginWatcher,
 }
 
 impl CircuitApp {
@@ -73,6 +81,9 @@ impl CircuitApp {
             None => default_layout(),
         };
 
+        let repaint = cc.egui_ctx.clone();
+        let mut watcher = crate::watch::PluginWatcher::new(move || repaint.request_repaint());
+        watcher.watch(&ed.watch_dirs());
         CircuitApp {
             ed,
             dock,
@@ -83,6 +94,8 @@ impl CircuitApp {
             allow_close: false,
             problem_count: 0,
             bot: BotUi::new(),
+            stored: Default::default(),
+            watcher,
         }
     }
 
@@ -146,6 +159,8 @@ impl CircuitApp {
         self.bot.stop(&mut self.ed);
         self.dock.retain_tabs(|t| !matches!(t, Tab::Canvas(_)));
         self.ed.open_project(dir);
+        self.watcher.watch(&self.ed.watch_dirs());
+        self.stored = Default::default();
     }
 
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
@@ -454,6 +469,14 @@ impl eframe::App for CircuitApp {
             self.bot.stop(&mut self.ed);
         }
         self.bot.poll(&mut self.ed);
+        if self.watcher.poll() {
+            self.ed.log(Level::Info, "Plugin files changed, reloading");
+            self.ed.reload_plugins();
+            self.ed.refresh_define_ctx();
+            self.ed.theme.apply(&ctx);
+        } else if self.watcher.waiting() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        }
         self.edit_shortcuts(&ctx);
         if !self.ed.activity.is_empty() {
             ctx.request_repaint_after(std::time::Duration::from_millis(33));
@@ -481,7 +504,8 @@ impl eframe::App for CircuitApp {
         self.problem_count = problems.len();
         egui::CentralPanel::no_frame().show(ui, |ui| {
             let style = theme.dock_style(ui.style());
-            let mut viewer = Viewer { ed: &mut self.ed, problem_count: self.problem_count, problems };
+            let running = self.bot.state != BotState::Stopped;
+            let mut viewer = Viewer { ed: &mut self.ed, problem_count: self.problem_count, problems, stored: &mut self.stored, running };
             DockArea::new(&mut self.dock)
                 .style(style)
                 .show_add_buttons(false)
@@ -519,6 +543,8 @@ impl eframe::App for CircuitApp {
 
 struct Viewer<'a> {
     ed: &'a mut Editor,
+    stored: &'a mut crate::stored::StoredView,
+    running: bool,
     problem_count: usize,
     problems: Vec<panels::ProblemItem>,
 }
@@ -536,6 +562,7 @@ impl TabViewer for Viewer<'_> {
             Tab::Inspector => "Inspector".into(),
             Tab::Console => "Console".into(),
             Tab::Problems => format!("Problems  {}", self.problem_count).into(),
+            Tab::StoredData => "Stored Data".into(),
             Tab::Canvas(key) => self.ed.workspace(key).map(|w| w.name.clone()).unwrap_or_else(|| key.clone()).into(),
         }
     }
@@ -546,6 +573,7 @@ impl TabViewer for Viewer<'_> {
             Tab::Inspector => panels::inspector(ui, self.ed),
             Tab::Console => panels::console(ui, self.ed),
             Tab::Problems => panels::problems(ui, self.ed, std::mem::take(&mut self.problems)),
+            Tab::StoredData => crate::stored::panel(ui, self.ed, self.stored, self.running),
             Tab::Canvas(key) => {
                 let key = key.clone();
                 canvas::show(ui, self.ed, &key);
@@ -559,7 +587,7 @@ impl TabViewer for Viewer<'_> {
 }
 
 fn default_layout() -> DockState<Tab> {
-    let mut dock = DockState::new(vec![Tab::Console, Tab::Problems]);
+    let mut dock = DockState::new(vec![Tab::Console, Tab::Problems, Tab::StoredData]);
     let surface = dock.main_surface_mut();
     // Root starts as the bottom panel; the top area holds Workspaces | (canvases) | Inspector.
     // A split's fraction is the share of its left/top child.

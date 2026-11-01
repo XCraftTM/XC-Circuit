@@ -1,0 +1,85 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows-x64
+            exe: xc-circuit.exe
+          # 22.04 keeps the Linux build compatible with older distributions (glibc).
+          - os: ubuntu-22.04
+            name: linux-x64
+            exe: xc-circuit
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libdbus-1-dev pkg-config
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Tests
+        run: cargo test --workspace
+
+      - name: Runtime tests
+        run: |
+          node runtime/test/smoke.js
+          node runtime/test/library.js
+
+      - name: Release build
+        run: cargo build --release -p circuit-editor
+
+      # The program finds plugins/ and examples/ next to itself.
+      - name: Package
+        shell: bash
+        run: |
+          out="XC-Circuit-${{ matrix.name }}"
+          mkdir -p "$out"
+          cp "target/release/${{ matrix.exe }}" "$out/"
+          cp -r plugins examples README.md "$out/"
+          rm -rf "$out"/examples/*/.circuit
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            7z a "$out.zip" "$out" > /dev/null
+          else
+            tar -czf "$out.tar.gz" "$out"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: XC-Circuit-${{ matrix.name }}
+          path: XC-Circuit-${{ matrix.name }}.*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" XC-Circuit-* --repo "${{ github.repository }}" --title "XC Circuit ${{ github.ref_name }}" --generate-notes

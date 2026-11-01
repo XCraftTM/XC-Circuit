@@ -138,6 +138,15 @@ impl Editor {
             .unwrap_or_else(Theme::fallback);
     }
 
+    /// Plugin folders to watch for changes, including the project's own.
+    pub fn watch_dirs(&self) -> Vec<PathBuf> {
+        let mut dirs = self.plugin_dirs.clone();
+        if let Some(p) = &self.project {
+            dirs.push(p.root.join("plugins"));
+        }
+        dirs
+    }
+
     /// Reloads every plugin, including the open project's own `plugins/` folder.
     pub fn reload_plugins(&mut self) {
         let mut dirs = self.plugin_dirs.clone();

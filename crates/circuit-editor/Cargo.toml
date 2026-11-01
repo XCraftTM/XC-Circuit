@@ -16,6 +16,7 @@ circuit-plugins.workspace = true
 circuit-runner.workspace = true
 anyhow.workspace = true
 arboard = "3"
+notify = "8"
 dirs.workspace = true
 eframe.workspace = true
 egui_dock.workspace = true

@@ -10,7 +10,9 @@ mod history;
 mod panels;
 mod picker;
 mod slash;
+mod stored;
 mod theme;
+mod watch;
 mod widgets;
 
 use eframe::egui;
