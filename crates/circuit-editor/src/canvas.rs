@@ -56,6 +56,8 @@ pub struct CanvasView {
     pub box_start: Option<Pos2>,
     /// Last pointer position over this canvas, in scene coordinates (used for pasting).
     pub pointer: Option<Pos2>,
+    /// A block to center on the next time this canvas is drawn.
+    pub focus: Option<String>,
 }
 
 impl CanvasView {
@@ -322,6 +324,11 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
 
     if !view.initialized {
         fit_view(view, outer, &layouts[..node_count]);
+    }
+    if let Some(id) = view.focus.take()
+        && let Some(l) = layouts.iter().find(|l| l.id == id)
+    {
+        view.offset = outer.size() / 2.0 - l.rect.center().to_vec2() * view.zoom;
     }
 
     // Pan and zoom.

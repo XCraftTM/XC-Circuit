@@ -10,7 +10,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::bot::{BotState, BotUi};
 use crate::editor::{Action, Editor, Level};
-use crate::{canvas, dialog, panels, picker};
+use crate::palette::{Cmd, Item};
+use crate::{canvas, dialog, palette, panels, picker};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Tab {
@@ -48,6 +49,7 @@ pub struct CircuitApp {
     bot: BotUi,
     stored: crate::stored::StoredView,
     watcher: crate::watch::PluginWatcher,
+    palette: Option<palette::Palette>,
 }
 
 impl CircuitApp {
@@ -96,6 +98,7 @@ impl CircuitApp {
             bot: BotUi::new(),
             stored: Default::default(),
             watcher,
+            palette: None,
         }
     }
 
@@ -244,14 +247,11 @@ impl CircuitApp {
                     }
                 }
                 ui.separator();
+                if ui.add(egui::Button::new("Command Palette…").shortcut_text("Ctrl+P")).clicked() {
+                    self.palette = Some(Default::default());
+                }
                 if ui.button("Reset layout").clicked() {
-                    let canvases: Vec<Tab> = self.dock.iter_all_tabs().map(|(_, t)| t.clone()).filter(|t| matches!(t, Tab::Canvas(_))).collect();
-                    self.dock = default_layout();
-                    for t in canvases {
-                        if let Tab::Canvas(k) = t {
-                            open_canvas(&mut self.dock, k);
-                        }
-                    }
+                    self.reset_layout();
                 }
             });
             let has_project = self.ed.project.is_some();
@@ -297,6 +297,119 @@ impl CircuitApp {
                 }
             });
         });
+    }
+
+    fn reset_layout(&mut self) {
+        let canvases: Vec<Tab> = self.dock.iter_all_tabs().map(|(_, t)| t.clone()).filter(|t| matches!(t, Tab::Canvas(_))).collect();
+        self.dock = default_layout();
+        for t in canvases {
+            if let Tab::Canvas(k) = t {
+                open_canvas(&mut self.dock, k);
+            }
+        }
+    }
+
+    /// Everything the command palette offers right now.
+    fn palette_items(&self) -> Vec<Item> {
+        let has_project = self.ed.project.is_some();
+        let running = self.bot.state != BotState::Stopped;
+        let key = self.ed.active_workspace.clone().unwrap_or_default();
+        let has_sel = !self.ed.selection(&key).is_empty();
+        let mut items = Vec::new();
+        if has_project {
+            items.push(Item::new("Bot", if running { "Restart bot" } else { "Run bot" }, Cmd::Run).shortcut("F5"));
+        }
+        if running {
+            items.push(Item::new("Bot", "Stop bot", Cmd::Stop).shortcut("Shift+F5"));
+        }
+        if has_project {
+            items.push(Item::new("Bot", "Slash Commands…", Cmd::SlashCommands));
+            items.push(Item::new("Bot", "Bot Settings…", Cmd::Settings));
+            items.push(Item::new("Bot", "Export…", Cmd::Export));
+            items.push(Item::new("File", "Save", Cmd::Save).shortcut("Ctrl+S"));
+        }
+        items.push(Item::new("File", "New Project…", Cmd::NewProject));
+        items.push(Item::new("File", "Open Project…", Cmd::OpenProject));
+        if self.examples_dir.is_some() {
+            items.push(Item::new("File", "Open Example: DemoBot", Cmd::OpenExample));
+        }
+        items.push(Item::new("File", "Reload Plugins", Cmd::ReloadPlugins));
+        if self.ed.history.can_undo(&key) {
+            items.push(Item::new("Edit", "Undo", Cmd::Undo).shortcut("Ctrl+Z"));
+        }
+        if self.ed.history.can_redo(&key) {
+            items.push(Item::new("Edit", "Redo", Cmd::Redo).shortcut("Ctrl+Y"));
+        }
+        if has_sel {
+            items.push(Item::new("Edit", "Duplicate", Cmd::Duplicate).shortcut("Ctrl+D"));
+            items.push(Item::new("Edit", "Delete", Cmd::Delete).shortcut("Del"));
+        }
+        if has_project {
+            items.push(Item::new("Edit", "Select all", Cmd::SelectAll).shortcut("Ctrl+A"));
+        }
+        for (tab, name) in Tab::PANELS {
+            let verb = if self.dock.find_tab(&tab).is_some() { "Close" } else { "Show" };
+            items.push(Item::new("View", format!("{verb} {name} panel"), Cmd::TogglePanel(tab)));
+        }
+        for t in &self.ed.reg.themes {
+            if t.id != self.ed.theme.id {
+                items.push(Item::new("Theme", format!("Use {} theme", t.name), Cmd::Theme(t.id.clone())));
+            }
+        }
+        items.push(Item::new("View", "Reset layout", Cmd::ResetLayout));
+        items.push(Item::new("Help", "About XC™ Circuit", Cmd::About));
+        if let Some(p) = &self.ed.project {
+            for (wk, ws) in &p.workspaces {
+                items.push(Item::new("Workspace", ws.name.clone(), Cmd::OpenWorkspace(wk.clone())));
+            }
+            for (wk, ws) in &p.workspaces {
+                for (id, node) in &ws.nodes {
+                    let block = node.block.split('@').next().unwrap_or(&node.block);
+                    let name = self.ed.reg.block(block).map(|d| d.name.clone()).unwrap_or_else(|| block.to_string());
+                    items.push(Item::new("Block", name, Cmd::RevealBlock(wk.clone(), id.clone())).detail(format!("{} · #{id}", ws.name)));
+                }
+            }
+        }
+        items
+    }
+
+    fn run_command(&mut self, cmd: Cmd, ctx: &egui::Context) {
+        match cmd {
+            Cmd::NewProject => self.new_project_dialog(),
+            Cmd::OpenProject => self.open_project_dialog(),
+            Cmd::OpenExample => {
+                if let Some(examples) = self.examples_dir.clone() {
+                    self.switch_project(&examples.join("DemoBot"));
+                }
+            }
+            Cmd::Save => {
+                self.ed.save();
+                self.bot.restart_if_running(&mut self.ed, ctx);
+            }
+            Cmd::ReloadPlugins => {
+                self.ed.reload_plugins();
+                self.ed.theme.apply(ctx);
+            }
+            Cmd::Undo => self.ed.undo(),
+            Cmd::Redo => self.ed.redo(),
+            Cmd::Duplicate => self.ed.duplicate(),
+            Cmd::Delete => self.ed.delete_selection(),
+            Cmd::SelectAll => self.ed.select_all(),
+            Cmd::TogglePanel(tab) => self.toggle_panel(tab),
+            Cmd::Theme(id) => {
+                self.ed.set_theme(&id);
+                self.ed.theme.apply(ctx);
+            }
+            Cmd::ResetLayout => self.reset_layout(),
+            Cmd::Run => self.bot.start(&mut self.ed, ctx),
+            Cmd::Stop => self.bot.stop(&mut self.ed),
+            Cmd::SlashCommands => crate::slash::open(&mut self.ed),
+            Cmd::Settings => self.bot.open_settings(&self.ed),
+            Cmd::Export => self.bot.open_export(&self.ed),
+            Cmd::About => self.show_about = true,
+            Cmd::OpenWorkspace(key) => self.ed.actions.push(Action::OpenWorkspace(key)),
+            Cmd::RevealBlock(ws, id) => self.ed.reveal(&ws, &id),
+        }
     }
 
     fn status_bar(&mut self, ui: &mut egui::Ui) {
@@ -468,6 +581,10 @@ impl eframe::App for CircuitApp {
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::SHIFT, egui::Key::F5)) {
             self.bot.stop(&mut self.ed);
         }
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::P) || i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::P)) {
+            self.palette = if self.palette.is_some() { None } else { Some(Default::default()) };
+            self.ed.picker = None;
+        }
         self.bot.poll(&mut self.ed);
         if self.watcher.poll() {
             self.ed.log(Level::Info, "Plugin files changed, reloading");
@@ -515,6 +632,16 @@ impl eframe::App for CircuitApp {
         });
 
         picker::show(&ctx, &mut self.ed);
+        if let Some(mut state) = self.palette.take() {
+            let items = self.palette_items();
+            let (cmd, close) = palette::show(&ctx, &theme, &mut state, &items);
+            if !close {
+                self.palette = Some(state);
+            }
+            if let Some(cmd) = cmd {
+                self.run_command(cmd, &ctx);
+            }
+        }
         self.apply_actions();
         self.dialogs(&ctx);
         self.bot.windows(&ctx, &mut self.ed);

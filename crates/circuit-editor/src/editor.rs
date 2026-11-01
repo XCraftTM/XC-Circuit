@@ -265,6 +265,14 @@ impl Editor {
         self.multi = HashSet::from([id.to_string()]);
     }
 
+    /// Opens a block's workspace, selects the block and centers the canvas on it.
+    pub fn reveal(&mut self, ws_key: &str, id: &str) {
+        self.actions.push(Action::OpenWorkspace(ws_key.to_string()));
+        self.select_only(ws_key, id);
+        let view = self.views.entry(ws_key.to_string()).or_insert_with(|| CanvasView { zoom: 1.0, ..Default::default() });
+        view.focus = Some(id.to_string());
+    }
+
     pub fn clear_selection(&mut self) {
         self.selected = None;
         self.multi.clear();

@@ -7,6 +7,7 @@ mod dialog;
 mod editor;
 mod embed;
 mod history;
+mod palette;
 mod panels;
 mod picker;
 mod slash;

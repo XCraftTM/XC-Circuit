@@ -258,8 +258,7 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
         });
     });
     if let Some((ws, node)) = jump {
-        ed.actions.push(Action::OpenWorkspace(ws.clone()));
-        ed.select_only(&ws, &node);
+        ed.reveal(&ws, &node);
     }
 }
 
@@ -326,8 +325,7 @@ pub fn problems(ui: &mut Ui, ed: &mut Editor, items: Vec<ProblemItem>) {
                     if let Some(t) = target
                         && resp.clicked()
                     {
-                        ed.actions.push(Action::OpenWorkspace(t.0.clone()));
-                        ed.select_only(&t.0, &t.1);
+                        ed.reveal(&t.0, &t.1);
                     }
                 });
             }
