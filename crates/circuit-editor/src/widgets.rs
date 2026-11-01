@@ -62,13 +62,14 @@ pub fn value_editor(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Val
                 Value::Null => String::new(),
                 other => other.to_string(),
             };
-            let edit = if multiline && field.type_name == "textarea" {
-                TextEdit::multiline(&mut s).desired_rows(3)
+            let hint = field.placeholder.clone().unwrap_or_default();
+            let changed = if multiline && field.type_name == "textarea" {
+                ui.add(crate::inputs::TextArea::new(id, &mut s).hint(hint).rows(3)).changed()
+            } else if multiline {
+                ui.add(crate::inputs::TextLine::new(&mut s).hint(hint).width(width).compact()).changed()
             } else {
-                TextEdit::singleline(&mut s)
+                ui.add(TextEdit::singleline(&mut s).desired_width(width).hint_text(hint)).changed()
             };
-            let edit = edit.desired_width(width).hint_text(field.placeholder.clone().unwrap_or_default());
-            let changed = ui.add(edit).changed();
             if changed {
                 *value = Value::String(s);
             }

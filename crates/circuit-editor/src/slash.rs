@@ -304,7 +304,7 @@ fn option_card(ui: &mut Ui, theme: &Theme, o: &mut SlashOption, choices: &mut St
 
 fn number_box(ui: &mut Ui, label: &str, v: &mut Option<f64>) {
     let mut text = v.map(|n| n.to_string()).unwrap_or_default();
-    if ui.add(egui::TextEdit::singleline(&mut text).hint_text(label).desired_width(82.0).margin(Margin::symmetric(8, 8))).changed() {
+    if ui.add(crate::inputs::TextLine::new(&mut text).hint(label).width(82.0)).changed() {
         *v = text.trim().parse().ok();
     }
 }

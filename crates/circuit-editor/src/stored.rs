@@ -54,7 +54,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, view: &mut StoredView, bot_running: b
     let mut changed = false;
     Frame::new().inner_margin(Margin::symmetric(12, 8)).show(ui, |ui| {
         ui.horizontal(|ui| {
-            ui.add(egui::TextEdit::singleline(&mut view.filter).hint_text("Filter keys").desired_width(200.0));
+            ui.add(crate::inputs::TextLine::new(&mut view.filter).hint("Filter keys").width(200.0).compact());
             if ui.small_button("Refresh").clicked() {
                 view.reload(ed);
             }
@@ -86,7 +86,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, view: &mut StoredView, bot_running: b
                             let editing_this = view.editing.as_ref().is_some_and(|(s, k, _)| s == &scope && k == key);
                             if editing_this {
                                 let text = &mut view.editing.as_mut().unwrap().2;
-                                let r = ui.add(egui::TextEdit::singleline(text).desired_width(260.0).font(egui::TextStyle::Monospace));
+                                let r = ui.add(crate::inputs::TextLine::new(text).width(260.0).monospace().compact());
                                 if r.lost_focus() {
                                     let (s, k, t) = view.editing.take().unwrap();
                                     let parsed = serde_json::from_str(&t).unwrap_or(Value::String(t));

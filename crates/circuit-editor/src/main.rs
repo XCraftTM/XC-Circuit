@@ -8,6 +8,7 @@ mod dialog;
 mod editor;
 mod embed;
 mod history;
+mod inputs;
 mod native;
 mod palette;
 mod panels;

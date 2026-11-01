@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use eframe::egui::{self, Align, Color32, CornerRadius, Frame, Id, Layout, Margin, Response, RichText, Sense, Stroke, TextEdit, Ui, vec2};
+use eframe::egui::{self, Align, Color32, CornerRadius, Frame, Id, Layout, Margin, Response, RichText, Sense, Stroke, Ui, vec2};
 
 use crate::editor::file_uri;
 use crate::theme::{Theme, mix, with_alpha};
@@ -130,13 +130,7 @@ pub fn field<R>(ui: &mut Ui, theme: &Theme, label: &str, help: Option<&str>, add
 
 /// A full-width text box with comfortable padding.
 pub fn text_input(ui: &mut Ui, value: &mut String, hint: &str, password: bool) -> Response {
-    ui.add(
-        TextEdit::singleline(value)
-            .hint_text(hint)
-            .password(password)
-            .margin(Margin::symmetric(10, 8))
-            .desired_width(f32::INFINITY),
-    )
+    ui.add(crate::inputs::TextLine::new(value).hint(hint).password(password))
 }
 
 pub fn primary_button(ui: &mut Ui, theme: &Theme, text: &str) -> Response {
