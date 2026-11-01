@@ -81,6 +81,11 @@ impl Project {
         workspaces.insert("main".to_string(), Workspace::new("Main"));
         let project = Project { root, meta, workspaces };
         project.save()?;
+        // Run output and test data stay out of version control.
+        let ignore = project.root.join(".gitignore");
+        if !ignore.exists() {
+            fs::write(ignore, ".circuit/\n")?;
+        }
         Ok(project)
     }
 

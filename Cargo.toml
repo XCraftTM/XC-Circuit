@@ -11,18 +11,20 @@ authors = ["XC Team"]
 [workspace.dependencies]
 circuit-core = { path = "crates/circuit-core" }
 circuit-plugins = { path = "crates/circuit-plugins" }
+circuit-runner = { path = "crates/circuit-runner" }
 
 anyhow = "1"
 dirs = "6"
 glob = "0.3"
 indexmap = { version = "2", features = ["serde"] }
+keyring = "4"
 open = "5"
 rfd = "0.15"
 rquickjs = "0.14"
 serde = { version = "1", features = ["derive"] }
 # preserve_order keeps fields, outputs and values in the order block files declare them.
 serde_json = { version = "1", features = ["preserve_order"] }
-toml = "0.9"
+toml = { version = "0.9", features = ["preserve_order"] }
 
 # egui_dock 0.21 is built against egui 0.36, so eframe and egui_extras stay on 0.36.
 eframe = { version = "0.36", features = ["persistence"] }

@@ -211,6 +211,7 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
             ed.log.clear();
         }
     });
+    let mut jump: Option<(String, String)> = None;
     ScrollArea::vertical().auto_shrink([false, false]).stick_to_bottom(true).show(ui, |ui| {
         Frame::new().inner_margin(Margin::symmetric(12, 6)).show(ui, |ui| {
             for line in &ed.log {
@@ -224,10 +225,19 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
                     ui.label(RichText::new(&line.time).monospace().color(theme.text_muted));
                     ui.label(RichText::new(tag).monospace().color(color));
                     ui.label(RichText::new(&line.text).monospace());
+                    if let Some(t) = &line.target
+                        && ui.link(RichText::new("show").size(11.0)).on_hover_text("Show the block that wrote this").clicked()
+                    {
+                        jump = Some(t.clone());
+                    }
                 });
             }
         });
     });
+    if let Some((ws, node)) = jump {
+        ed.actions.push(Action::OpenWorkspace(ws.clone()));
+        ed.selected = Some((ws, node));
+    }
 }
 
 /// One entry in the Problems panel: where, what, and the block to jump to.
@@ -255,8 +265,22 @@ pub fn collect_problems(ed: &Editor) -> Vec<ProblemItem> {
                 }
             }
             for link in &ws.links {
-                if !ws.nodes.contains_key(&link.from.node) || !ws.nodes.contains_key(&link.to.node) {
+                let from_ok = ws.nodes.contains_key(&link.from.node) || ws.zones.contains_key(&link.from.node);
+                if !from_ok || !ws.nodes.contains_key(&link.to.node) {
                     items.push((ws.name.clone(), format!("wire `{link}` points to a missing block"), None));
+                    continue;
+                }
+                // Action wires leave a Try Zone only through its Done / Error outputs.
+                if link.to.pin == ACTION_IN
+                    && let Some(zone) = ws.nodes.get(&link.from.node).and_then(|n| n.zone.as_ref())
+                    && ws.nodes[&link.to.node].zone.as_ref() != Some(zone)
+                {
+                    let name = ws.zones.get(zone).map(|z| z.title.clone()).unwrap_or_default();
+                    items.push((
+                        format!("{} › Try {name}", ws.name),
+                        "an Action wire leaves the Try Zone; connect the zone's Done output instead".into(),
+                        Some((key.clone(), link.from.node.clone())),
+                    ));
                 }
             }
         }

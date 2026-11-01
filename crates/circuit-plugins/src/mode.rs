@@ -20,6 +20,8 @@ pub struct BuildMode {
     pub categories: Vec<Category>,
     /// Settings page fields, keyed by setting id.
     pub settings: IndexMap<String, Value>,
+    /// npm packages the runtime libraries need.
+    pub dependencies: IndexMap<String, String>,
     #[serde(skip)]
     pub plugin: String,
 }

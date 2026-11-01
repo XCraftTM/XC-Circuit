@@ -201,10 +201,60 @@ enum NodeMenu {
     Delete(String),
     Duplicate(String),
     OpenSource(String),
+    WrapInZone(String),
+    LeaveZone(String),
+    RemoveZone(String),
+}
+
+const ZONE_PANEL_W: f32 = 150.0;
+const ZONE_ROW_H: f32 = 22.0;
+const ZONE_PANEL_H: f32 = 4.0 * ZONE_ROW_H + 8.0;
+
+/// Rectangles of the zones that have blocks, fitted around them. `exclude` leaves
+/// one block out (used to decide where a dragged block was dropped).
+fn zone_rects(ws: &Workspace, layouts: &[NodeLayout], exclude: Option<&str>) -> Vec<(String, Rect)> {
+    ws.zones
+        .keys()
+        .filter_map(|zid| {
+            let bounds = layouts
+                .iter()
+                .filter(|l| Some(l.id.as_str()) != exclude && ws.nodes.get(&l.id).is_some_and(|n| n.zone.as_deref() == Some(zid)))
+                .map(|l| l.rect)
+                .reduce(|a, b| a.union(b))?;
+            let rect = Rect::from_min_max(bounds.min - vec2(28.0, 44.0), bounds.max + vec2(28.0 + ZONE_PANEL_W * 0.4, 28.0 + ZONE_PANEL_H));
+            Some((zid.clone(), rect))
+        })
+        .collect()
+}
+
+fn zone_layout(zid: &str, rect: Rect) -> NodeLayout {
+    let header = Rect::from_min_size(rect.min, vec2(rect.width(), 28.0));
+    let top = rect.bottom() - 8.0 - ZONE_PANEL_H + 4.0;
+    let outputs: [(&str, &str, PinType, &str); 4] = [
+        ("done", "Done", PinType::Action, "Runs when every block inside finished without an error."),
+        ("error", "Error", PinType::Action, "Runs when a block inside failed (after all retries)."),
+        ("message", "Error message", PinType::Text, "What went wrong."),
+        ("details", "Error details", PinType::Object, "Block name, error code, workspace and stack trace."),
+    ];
+    let pins = outputs
+        .into_iter()
+        .enumerate()
+        .map(|(i, (pin, label, ty, description))| PinSpot {
+            pin: pin.into(),
+            dir: Dir::Out,
+            ty,
+            pos: pos2(rect.right(), top + ZONE_ROW_H * (i as f32 + 0.5)),
+            label: label.into(),
+            description: Some(description.into()),
+            faint: false,
+            multi: true,
+        })
+        .collect();
+    NodeLayout { id: zid.into(), rect, header, value_block: false, rows: Vec::new(), pins }
 }
 
 pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
-    let Editor { reg, engine, theme, project, shapes, views, selected, dirty, picker, active_workspace, .. } = ed;
+    let Editor { reg, engine, theme, project, shapes, views, selected, dirty, picker, active_workspace, activity, .. } = ed;
     let Some(project) = project.as_mut() else { return };
     let mode = reg.mode(&project.meta.mode).or_else(|| reg.modes.first());
     let Some(ws) = project.workspaces.get_mut(ws_key) else {
@@ -226,6 +276,15 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             node_shapes.insert(id.clone(), s);
         }
     }
+    // Try Zones fit around their blocks; their outputs act like a block's pins.
+    let node_count = layouts.len();
+    let fitted = zone_rects(ws, &layouts, None);
+    for (zid, rect) in &fitted {
+        if let Some(z) = ws.zones.get_mut(zid) {
+            z.rect = [rect.min.x, rect.min.y, rect.width(), rect.height()];
+        }
+        layouts.push(zone_layout(zid, *rect));
+    }
     let pin_index: HashMap<(String, String, Dir), usize> = layouts
         .iter()
         .enumerate()
@@ -237,7 +296,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     ui.painter().rect_filled(outer, 0.0, theme.canvas);
 
     if !view.initialized {
-        fit_view(view, outer, &layouts);
+        fit_view(view, outer, &layouts[..node_count]);
     }
 
     // Pan and zoom.
@@ -280,29 +339,101 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     let painter = cui.painter().clone();
 
     draw_grid(&painter, visible, theme, view.zoom);
-    for zone in ws.zones.values() {
-        let r = Rect::from_min_size(pos2(zone.rect[0], zone.rect[1]), vec2(zone.rect[2], zone.rect[3]));
-        painter.rect(r, 16.0, with_alpha(theme.accent, 14), Stroke::new(1.5, with_alpha(theme.accent, 150)), StrokeKind::Inside);
-        let band = Rect::from_min_size(r.min, vec2(r.width(), 28.0));
-        painter.rect_filled(band, CornerRadius { nw: 16, ne: 16, sw: 0, se: 0 }, with_alpha(theme.accent, 36));
-        painter.text(band.left_center() + vec2(12.0, 0.0), Align2::LEFT_CENTER, format!("Try · {}", zone.title), FontId::proportional(12.0), theme.accent);
+    let recent = |id: &str| activity.get(&(ws_key.to_string(), id.to_string()));
+    let glow = |id: &str| recent(id).filter(|a| a.error.is_none()).map(|a| (1.0 - a.at.elapsed().as_secs_f32()).max(0.0)).unwrap_or(0.0);
+
+    // Try Zones: drawn behind everything, dragged by their title band.
+    let mut menu: Option<NodeMenu> = None;
+    let mut start_drag: Option<PinEnd> = None;
+    let drag = view.drag.clone();
+    for layout in &layouts[node_count..] {
+        let zid = layout.id.clone();
+        let r = layout.rect;
+        let failed = recent(&zid).and_then(|a| a.error.clone());
+        let edge = if failed.is_some() { theme.error } else { mix(with_alpha(theme.accent, 150), theme.action, glow(&zid)) };
+        painter.rect(r, 16.0, with_alpha(theme.accent, 14), Stroke::new(1.5, edge), StrokeKind::Inside);
+        painter.rect_filled(layout.header, CornerRadius { nw: 16, ne: 16, sw: 0, se: 0 }, with_alpha(theme.accent, 36));
+        let (title, retry, timeout) = ws.zones.get(&zid).map(|z| (z.title.clone(), z.retry, z.timeout_ms)).unwrap_or_default();
+        painter.text(layout.header.left_center() + vec2(14.0, 0.0), Align2::LEFT_CENTER, format!("Try · {title}"), FontId::proportional(12.5), theme.accent);
+        let mut extra = Vec::new();
+        if retry > 0 {
+            extra.push(format!("retry {retry}×"));
+        }
+        if let Some(t) = timeout {
+            extra.push(format!("{:.0} s timeout", t as f32 / 1000.0));
+        }
+        painter.text(layout.header.right_center() - vec2(14.0, 0.0), Align2::RIGHT_CENTER, extra.join(" · "), FontId::proportional(11.0), theme.text_muted);
+        // Outputs panel in the bottom-right corner.
+        let panel = Rect::from_min_max(pos2(r.right() - ZONE_PANEL_W, r.bottom() - ZONE_PANEL_H - 8.0), pos2(r.right(), r.bottom() - 8.0));
+        painter.rect(panel, CornerRadius { nw: 9, ne: 0, sw: 9, se: 0 }, theme.node, Stroke::new(1.0, theme.node_border), StrokeKind::Inside);
+        for spot in &layout.pins {
+            let color = if spot.pin == "error" { theme.error } else if spot.ty.is_action() { theme.text } else { theme.text_muted };
+            painter.text(spot.pos - vec2(16.0, 0.0), Align2::RIGHT_CENTER, &spot.label, FontId::proportional(12.0), color);
+        }
+        if let Some(err) = &failed {
+            painter.text(r.left_bottom() + vec2(14.0, -16.0), Align2::LEFT_CENTER, format!("Caught: {err}"), FontId::proportional(11.5), theme.error);
+        }
+
+        let band = cui.interact(layout.header, cui.id().with(("zone", &zid)), Sense::click_and_drag());
+        if band.hovered() {
+            ctx.set_cursor_icon(CursorIcon::Grab);
+        }
+        if band.dragged_by(PointerButton::Primary) {
+            let d = band.drag_delta();
+            for n in ws.nodes.values_mut().filter(|n| n.zone.as_deref() == Some(zid.as_str())) {
+                n.at[0] += d.x;
+                n.at[1] += d.y;
+            }
+            *dirty = true;
+        }
+        band.on_hover_text("A Try Zone catches errors from the blocks inside it. Right-click for settings.").context_menu(|ui| {
+            if let Some(z) = ws.zones.get_mut(&zid) {
+                ui.label("Title");
+                *dirty |= ui.text_edit_singleline(&mut z.title).changed();
+                ui.horizontal(|ui| {
+                    ui.label("Retries");
+                    *dirty |= ui.add(egui::DragValue::new(&mut z.retry).range(0..=10)).changed();
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Timeout (s)");
+                    let mut secs = z.timeout_ms.map(|t| t as f64 / 1000.0).unwrap_or(0.0);
+                    if ui.add(egui::DragValue::new(&mut secs).range(0.0..=600.0).speed(0.5)).changed() {
+                        z.timeout_ms = (secs > 0.0).then(|| (secs * 1000.0) as u64);
+                        *dirty = true;
+                    }
+                });
+                ui.separator();
+                if ui.button("Remove Try Zone").clicked() {
+                    menu = Some(NodeMenu::RemoveZone(zid.clone()));
+                }
+            }
+        });
+        for spot in &layout.pins {
+            let connected = ws.links.iter().any(|l| l.from.node == zid && l.from.pin == spot.pin);
+            let candidate = drag.as_ref().map(|d| drag_compat(d, &zid, spot, reg));
+            draw_pin(&painter, spot, connected, candidate, theme, reg);
+            let resp = cui.interact(Rect::from_center_size(spot.pos, vec2(16.0, 16.0)), cui.id().with(("zpin", &zid, &spot.pin)), Sense::click_and_drag());
+            if resp.drag_started() {
+                start_drag = Some(PinEnd { node: zid.clone(), pin: spot.pin.clone(), dir: Dir::Out, ty: spot.ty.clone() });
+            }
+            resp.on_hover_ui(|ui| pin_tooltip(ui, spot, reg, theme));
+        }
     }
 
-    // Wires.
+    // Wires. Action wires light up while the bot runs through them.
     for link in &ws.links {
         let a = pin_at(&(link.from.node.clone(), link.from.pin.clone(), Dir::Out));
         let b = pin_at(&(link.to.node.clone(), link.to.pin.clone(), Dir::In));
         if let (Some(a), Some(b)) = (a, b) {
-            draw_wire(&painter, a.pos, b.pos, &a.ty, theme, reg);
+            let lit = if a.ty.is_action() { glow(&link.to.node) } else { 0.0 };
+            draw_wire(&painter, a.pos, b.pos, &a.ty, theme, reg, lit);
         }
     }
 
     // Blocks.
-    let mut menu: Option<NodeMenu> = None;
-    let mut start_drag: Option<PinEnd> = None;
     let mut toggle_pin: Option<(String, String)> = None;
-    let drag = view.drag.clone();
-    for layout in &layouts {
+    let mut dropped: Option<String> = None;
+    for layout in &layouts[..node_count] {
         let id = &layout.id;
         let is_selected = selected.as_ref().is_some_and(|(w, n)| w == ws_key && n == id);
         let (block_ref, def) = {
@@ -312,8 +443,26 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         let radius = if layout.value_block { 14.0 } else { theme.node_radius };
 
         painter.add(Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha(if theme.dark { 90 } else { 30 }) }.as_shape(layout.rect, radius));
-        let border = if is_selected { Stroke::new(2.0, theme.accent) } else { Stroke::new(1.0, theme.node_border) };
+        let failed = recent(id).and_then(|a| a.error.clone());
+        let lit = glow(id);
+        let border = if failed.is_some() {
+            Stroke::new(2.0, theme.error)
+        } else if is_selected {
+            Stroke::new(2.0, theme.accent)
+        } else {
+            Stroke::new(1.0, theme.node_border)
+        };
+        if lit > 0.0 {
+            painter.rect_stroke(layout.rect.expand(3.0), radius + 3.0, Stroke::new(3.0, with_alpha(theme.action, (lit * 200.0) as u8)), StrokeKind::Outside);
+        }
         painter.rect(layout.rect, radius, theme.node, border, StrokeKind::Inside);
+        if let Some(err) = &failed {
+            let text = if err.len() > 60 { format!("{}…", &err[..err.char_indices().nth(60).map(|(i, _)| i).unwrap_or(err.len())]) } else { err.clone() };
+            let galley = painter.layout_no_wrap(text, FontId::proportional(11.5), Color32::WHITE);
+            let pill = Rect::from_min_size(layout.rect.left_bottom() + vec2(0.0, 6.0), galley.size() + vec2(16.0, 8.0));
+            painter.rect_filled(pill, 6.0, theme.error);
+            painter.galley(pill.min + vec2(8.0, 4.0), galley, Color32::WHITE);
+        }
         let r8 = radius as u8;
         painter.rect_filled(layout.header.shrink(if is_selected { 2.0 } else { 1.0 }), CornerRadius { nw: r8, ne: r8, sw: 0, se: 0 }, theme.node_header);
         painter.hline(layout.header.x_range(), layout.header.bottom(), Stroke::new(1.0, theme.node_border));
@@ -410,14 +559,25 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             node.at[1] += head.drag_delta().y;
             *dirty = true;
         }
+        if head.drag_stopped() {
+            dropped = Some(id.clone());
+        }
         if head.clicked() || head.drag_started() || body.clicked() || body.drag_started() {
             *selected = Some((ws_key.to_string(), id.clone()));
         }
+        let in_zone = ws.nodes[id].zone.is_some();
         let head = head.on_hover_ui(|ui| block_tooltip(ui, def, theme));
         for r in [&head, &body] {
             r.context_menu(|ui| {
                 if ui.button("Duplicate").clicked() {
                     menu = Some(NodeMenu::Duplicate(id.clone()));
+                }
+                if in_zone {
+                    if ui.button("Take out of Try Zone").clicked() {
+                        menu = Some(NodeMenu::LeaveZone(id.clone()));
+                    }
+                } else if def.kind != BlockKind::Event && ui.button("Wrap in Try Zone").clicked() {
+                    menu = Some(NodeMenu::WrapInZone(id.clone()));
                 }
                 if ui.button("Open block source").clicked() {
                     menu = Some(NodeMenu::OpenSource(def.source.display().to_string()));
@@ -475,7 +635,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         let source = pin_at(&(d.node.clone(), d.pin.clone(), d.dir)).map(|s| s.pos);
         if let (Some(a), Some(p)) = (source, pointer_scene) {
             let (from, to) = if d.dir == Dir::Out { (a, p) } else { (p, a) };
-            draw_wire(&painter, from, to, &d.ty, theme, reg);
+            draw_wire(&painter, from, to, &d.ty, theme, reg, 0.0);
         }
         if ctx.input(|i| i.key_pressed(Key::Escape)) {
             view.drag = None;
@@ -545,7 +705,49 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         Some(NodeMenu::OpenSource(path)) => {
             let _ = open::that(path);
         }
+        Some(NodeMenu::WrapInZone(n)) => {
+            let zid = (1..).map(|i| format!("z{i}")).find(|z| !ws.zones.contains_key(z) && !ws.nodes.contains_key(z)).unwrap();
+            ws.zones.insert(zid.clone(), circuit_core::Zone { title: "Try".into(), retry: 0, ..Default::default() });
+            if let Some(node) = ws.nodes.get_mut(&n) {
+                node.zone = Some(zid);
+            }
+            *dirty = true;
+        }
+        Some(NodeMenu::LeaveZone(n)) => {
+            if let Some(node) = ws.nodes.get_mut(&n) {
+                node.zone = None;
+            }
+            *dirty = true;
+        }
+        Some(NodeMenu::RemoveZone(zid)) => {
+            for node in ws.nodes.values_mut().filter(|n| n.zone.as_deref() == Some(zid.as_str())) {
+                node.zone = None;
+            }
+            *dirty = true;
+        }
         None => {}
+    }
+
+    // A dropped block joins the zone it was dropped into, or leaves its zone.
+    if let Some(n) = dropped
+        && let Some(layout) = layouts[..node_count].iter().find(|l| l.id == n)
+    {
+        let at = ws.nodes[&n].at;
+        let center = pos2(at[0], at[1]) + layout.rect.size() / 2.0;
+        let target = zone_rects(ws, &layouts[..node_count], Some(&n)).into_iter().find(|(_, r)| r.contains(center)).map(|(z, _)| z);
+        let node = ws.nodes.get_mut(&n).unwrap();
+        if node.zone != target && (target.is_some() || node.zone.is_some()) {
+            node.zone = target;
+            *dirty = true;
+        }
+    }
+    // Zones without blocks disappear, with the wires from their outputs.
+    let used: std::collections::HashSet<String> = ws.nodes.values().filter_map(|n| n.zone.clone()).collect();
+    if ws.zones.keys().any(|z| !used.contains(z)) {
+        ws.zones.retain(|z, _| used.contains(z));
+        let zones: std::collections::HashSet<String> = ws.zones.keys().cloned().collect();
+        ws.links.retain(|l| ws.nodes.contains_key(&l.from.node) || zones.contains(&l.from.node));
+        *dirty = true;
     }
 
     // Zoom readout.
@@ -585,12 +787,14 @@ fn draw_grid(painter: &egui::Painter, visible: Rect, theme: &Theme, zoom: f32) {
     }
 }
 
-fn draw_wire(painter: &egui::Painter, a: Pos2, b: Pos2, ty: &PinType, theme: &Theme, reg: &Registry) {
+/// `lit` (0..1) makes an Action wire glow while the bot runs through it.
+fn draw_wire(painter: &egui::Painter, a: Pos2, b: Pos2, ty: &PinType, theme: &Theme, reg: &Registry, lit: f32) {
     let color = theme.pin_color(ty, reg);
     let dx = ((b.x - a.x).abs() * 0.5).max(40.0);
     let points = [a, a + vec2(dx, 0.0), b - vec2(dx, 0.0), b];
     if ty.is_action() {
-        painter.add(CubicBezierShape::from_points_stroke(points, false, Color32::TRANSPARENT, Stroke::new(theme.wire_width * 3.0, with_alpha(color, 40))));
+        let halo = Stroke::new(theme.wire_width * (3.0 + 3.0 * lit), with_alpha(color, (40.0 + 120.0 * lit) as u8));
+        painter.add(CubicBezierShape::from_points_stroke(points, false, Color32::TRANSPARENT, halo));
     }
     painter.add(CubicBezierShape::from_points_stroke(points, false, Color32::TRANSPARENT, Stroke::new(theme.wire_width, color)));
 }

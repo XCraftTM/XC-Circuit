@@ -1,0 +1,24 @@
+{
+  "name": "Startup",
+  "nodes": {
+    "a1": {
+      "block": "core.on_start@1",
+      "at": [40, 60]
+    },
+    "b2": {
+      "block": "core.increase_stored@1",
+      "at": [340, 60],
+      "values": { "scope": "global", "key": "starts", "by": 1 }
+    },
+    "c3": {
+      "block": "core.log@1",
+      "at": [660, 60],
+      "values": { "message": "DemoBot started {value} times", "level": "success" }
+    }
+  },
+  "links": [
+    "a1.next > b2.in",
+    "b2.next > c3.in",
+    "b2.value > c3.value"
+  ]
+}

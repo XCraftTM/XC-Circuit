@@ -53,7 +53,12 @@ id = "debug"
 name = "Debug"
 icon = "terminal"
 
+# Shown in Bot › Settings, grouped by `group`, in this order.
 [settings]
-token = { type = "secret", label = "Bot token", required = true }
-devServer = { type = "text", label = "Dev server id", description = "Slash commands register here instantly." }
-prefix = { type = "text", label = "Text command prefix", default = "!" }
+token = { type = "secret", group = "Connection", label = "Bot token", required = true, placeholder = "Paste the token from the Discord developer portal", description = "Discord developer portal › your app › Bot › Reset Token." }
+devServer = { type = "text", group = "Slash commands", label = "Dev server id", placeholder = "e.g. 123456789012345678", description = "Commands register on this server instantly while you test. Leave empty to register them globally." }
+prefix = { type = "text", group = "Messages", label = "Text command prefix", default = "!", placeholder = "!", description = "Used by blocks that react to text commands such as !help." }
+
+# npm packages the runtime libraries need, installed before Run and listed in exports.
+[dependencies]
+"discord.js" = "^14.28.0"

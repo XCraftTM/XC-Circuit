@@ -8,8 +8,9 @@ use eframe::egui::{self, Frame, Id, Margin, RichText, ViewportCommand, WidgetTex
 use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
 use serde::{Deserialize, Serialize};
 
+use crate::bot::{BotState, BotUi};
 use crate::editor::{Action, Editor, Level};
-use crate::{canvas, panels, picker};
+use crate::{canvas, dialog, panels, picker};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Tab {
@@ -38,6 +39,7 @@ pub struct CircuitApp {
     confirm_close: bool,
     allow_close: bool,
     problem_count: usize,
+    bot: BotUi,
 }
 
 impl CircuitApp {
@@ -71,7 +73,17 @@ impl CircuitApp {
             None => default_layout(),
         };
 
-        CircuitApp { ed, dock, examples_dir, title: String::new(), show_about: false, confirm_close: false, allow_close: false, problem_count: 0 }
+        CircuitApp {
+            ed,
+            dock,
+            examples_dir,
+            title: String::new(),
+            show_about: false,
+            confirm_close: false,
+            allow_close: false,
+            problem_count: 0,
+            bot: BotUi::new(),
+        }
     }
 
     fn apply_actions(&mut self) {
@@ -131,6 +143,7 @@ impl CircuitApp {
         if self.ed.dirty {
             self.ed.save();
         }
+        self.bot.stop(&mut self.ed);
         self.dock.retain_tabs(|t| !matches!(t, Tab::Canvas(_)));
         self.ed.open_project(dir);
     }
@@ -155,6 +168,7 @@ impl CircuitApp {
                 ui.separator();
                 if ui.add_enabled(self.ed.project.is_some(), egui::Button::new("Save").shortcut_text("Ctrl+S")).clicked() {
                     self.ed.save();
+                    self.bot.restart_if_running(&mut self.ed, ui.ctx());
                 }
                 if ui.button("Reload Plugins").clicked() {
                     self.ed.reload_plugins();
@@ -193,13 +207,43 @@ impl CircuitApp {
                     }
                 }
             });
+            let has_project = self.ed.project.is_some();
             ui.menu_button("Bot", |ui| {
-                ui.add_enabled(false, egui::Button::new("Run  (next milestone)"));
-                ui.add_enabled(false, egui::Button::new("Export…  (next milestone)"));
+                let running = self.bot.state != BotState::Stopped;
+                if ui.add_enabled(has_project, egui::Button::new(if running { "Restart" } else { "Run" }).shortcut_text("F5")).clicked() {
+                    self.bot.start(&mut self.ed, ui.ctx());
+                }
+                if ui.add_enabled(running, egui::Button::new("Stop").shortcut_text("Shift+F5")).clicked() {
+                    self.bot.stop(&mut self.ed);
+                }
+                ui.separator();
+                if ui.add_enabled(has_project, egui::Button::new("Settings…")).clicked() {
+                    self.bot.open_settings(&self.ed);
+                }
+                if ui.add_enabled(has_project, egui::Button::new("Export…")).clicked() {
+                    self.bot.open_export(&self.ed);
+                }
             });
             ui.menu_button("Help", |ui| {
                 if ui.button("About XC™ Circuit").clicked() {
                     self.show_about = true;
+                }
+            });
+
+            // Run / Stop on the right.
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let running = self.bot.state != BotState::Stopped;
+                if running && ui.button("Stop").on_hover_text("Stop the bot (Shift+F5)").clicked() {
+                    self.bot.stop(&mut self.ed);
+                }
+                let label = match self.bot.state {
+                    BotState::Stopped => "Run",
+                    BotState::Starting => "Starting…",
+                    BotState::Running => "Restart",
+                };
+                let run = egui::Button::new(RichText::new(label).strong().color(egui::Color32::from_rgb(4, 33, 13))).fill(theme.action);
+                if ui.add_enabled(has_project, run).on_hover_text("Run the bot (F5)").clicked() {
+                    self.bot.start(&mut self.ed, ui.ctx());
                 }
             });
         });
@@ -210,6 +254,17 @@ impl CircuitApp {
         let text = |s: String| RichText::new(s).size(11.5).color(t.status_text);
         ui.horizontal_centered(|ui| {
             ui.spacing_mut().item_spacing.x = 18.0;
+            let (dot, state) = match self.bot.state {
+                BotState::Stopped => (egui::Color32::from_rgba_unmultiplied(0, 24, 28, 90), "Bot stopped"),
+                BotState::Starting => (egui::Color32::from_rgb(0xFF, 0xB4, 0x54), "Bot starting"),
+                BotState::Running => (egui::Color32::from_rgb(0x04, 0x6B, 0x2A), "Bot running"),
+            };
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 6.0;
+                let (r, _) = ui.allocate_exact_size(egui::vec2(8.0, 8.0), egui::Sense::hover());
+                ui.painter().circle_filled(r.center(), 4.0, dot);
+                ui.label(text(state.into()));
+            });
             match &self.ed.project {
                 Some(p) => {
                     ui.label(text(p.meta.name.clone()));
@@ -232,35 +287,74 @@ impl CircuitApp {
     }
 
     fn dialogs(&mut self, ctx: &egui::Context) {
+        let theme = self.ed.theme.clone();
         if self.show_about {
-            egui::Window::new("About XC™ Circuit").collapsible(false).resizable(false).open(&mut self.show_about).show(ctx, |ui| {
-                ui.add(egui::Image::new(egui::include_image!("../assets/icon.svg")).fit_to_exact_size(egui::vec2(56.0, 56.0)));
-                ui.heading("XC™ Circuit");
-                ui.label(format!("Version {}", env!("CARGO_PKG_VERSION")));
-                ui.label("Build bots by connecting blocks.");
-            });
+            let info = format!(
+                "{} plugins · {} blocks · {} themes loaded",
+                self.ed.reg.plugins.len(),
+                self.ed.reg.blocks.len(),
+                self.ed.reg.themes.len()
+            );
+            let mut ok = false;
+            let close = dialog::show(
+                ctx,
+                &theme,
+                dialog::Spec { id: "about", title: "About XC™ Circuit", subtitle: None, icon: None, width: 420.0 },
+                |ui, part| match part {
+                    dialog::Part::Body => {
+                        ui.vertical_centered(|ui| {
+                            ui.add_space(6.0);
+                            ui.add(egui::Image::new(egui::include_image!("../assets/icon.svg")).fit_to_exact_size(egui::vec2(76.0, 76.0)));
+                            ui.add_space(10.0);
+                            ui.label(RichText::new("XC™ Circuit").size(22.0).strong().color(theme.text));
+                            ui.label(RichText::new(format!("Version {}", env!("CARGO_PKG_VERSION"))).size(12.5).color(theme.text_muted));
+                            ui.add_space(10.0);
+                            ui.label(RichText::new("Build bots by connecting blocks.").size(13.5).color(theme.text));
+                            ui.add_space(4.0);
+                            ui.label(RichText::new(&info).size(11.5).color(theme.text_muted));
+                            ui.add_space(6.0);
+                        });
+                    }
+                    dialog::Part::Footer => ok = dialog::primary_button(ui, &theme, "Close").clicked(),
+                },
+            );
+            if ok || close {
+                self.show_about = false;
+            }
         }
         if self.confirm_close {
-            egui::Modal::new(Id::new("confirm-close")).show(ctx, |ui| {
-                ui.set_width(320.0);
-                ui.heading("Save changes?");
-                ui.label("This project has changes that are not saved yet.");
-                ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    if ui.button("Save and close").clicked() {
-                        self.ed.save();
-                        self.allow_close = true;
-                        ctx.send_viewport_cmd(ViewportCommand::Close);
+            let name = self.ed.project.as_ref().map(|p| p.meta.name.clone()).unwrap_or_default();
+            let title = format!("Save changes to {name}?");
+            let icon = self.ed.reg.icons.get("alert").cloned();
+            let (mut save, mut discard, mut cancel) = (false, false, false);
+            let close = dialog::show(
+                ctx,
+                &theme,
+                dialog::Spec { id: "confirm-close", title: &title, subtitle: None, icon: icon.as_deref(), width: 460.0 },
+                |ui, part| match part {
+                    dialog::Part::Body => {
+                        ui.label(RichText::new("Your changes are lost if you close without saving.").size(13.5).color(theme.text));
+                        if self.bot.state != BotState::Stopped {
+                            ui.add_space(4.0);
+                            ui.label(RichText::new("The running bot will be stopped.").size(12.0).color(theme.text_muted));
+                        }
                     }
-                    if ui.button("Close without saving").clicked() {
-                        self.allow_close = true;
-                        ctx.send_viewport_cmd(ViewportCommand::Close);
+                    dialog::Part::Footer => {
+                        save = dialog::primary_button(ui, &theme, "Save and close").clicked();
+                        discard = dialog::secondary_button(ui, &theme, "Don't save").clicked();
+                        cancel = dialog::secondary_button(ui, &theme, "Cancel").clicked();
                     }
-                    if ui.button("Cancel").clicked() {
-                        self.confirm_close = false;
-                    }
-                });
-            });
+                },
+            );
+            if save || discard {
+                if save {
+                    self.ed.save();
+                }
+                self.allow_close = true;
+                ctx.send_viewport_cmd(ViewportCommand::Close);
+            } else if cancel || close {
+                self.confirm_close = false;
+            }
         }
     }
 }
@@ -274,6 +368,18 @@ impl eframe::App for CircuitApp {
         }
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
             self.ed.save();
+            self.bot.restart_if_running(&mut self.ed, &ctx);
+        }
+        if self.ed.project.is_some() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F5)) {
+            self.bot.start(&mut self.ed, &ctx);
+        }
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::SHIFT, egui::Key::F5)) {
+            self.bot.stop(&mut self.ed);
+        }
+        self.bot.poll(&mut self.ed);
+        if !self.ed.activity.is_empty() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(33));
+            self.ed.activity.retain(|_, a| a.error.is_some() || a.at.elapsed().as_secs_f32() < 1.2);
         }
 
         let title = match &self.ed.project {
@@ -309,6 +415,11 @@ impl eframe::App for CircuitApp {
         picker::show(&ctx, &mut self.ed);
         self.apply_actions();
         self.dialogs(&ctx);
+        self.bot.windows(&ctx, &mut self.ed);
+    }
+
+    fn on_exit(&mut self) {
+        self.bot.stop(&mut self.ed);
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {

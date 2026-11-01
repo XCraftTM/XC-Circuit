@@ -29,6 +29,14 @@ pub struct LogLine {
     pub time: String,
     pub level: Level,
     pub text: String,
+    /// The block that wrote it, as (workspace key, node id).
+    pub target: Option<(String, String)>,
+}
+
+impl LogLine {
+    pub fn new(level: Level, text: impl Into<String>) -> Self {
+        LogLine { time: clock(), level, text: text.into(), target: None }
+    }
 }
 
 /// Work the dock can only do after it has finished drawing this frame.
@@ -54,6 +62,8 @@ pub struct Editor {
     pub actions: Vec<Action>,
     /// The workspace whose canvas was used last.
     pub active_workspace: Option<String>,
+    /// What blocks and zones of the running bot did recently, keyed by (workspace, id).
+    pub activity: HashMap<(String, String), crate::bot::Activity>,
 }
 
 impl Editor {
@@ -74,6 +84,7 @@ impl Editor {
             picker: None,
             actions: Vec::new(),
             active_workspace: None,
+            activity: HashMap::new(),
         };
         ed.set_theme(theme_id.unwrap_or("graphite"));
         ed.log_plugin_summary();
@@ -81,7 +92,7 @@ impl Editor {
     }
 
     pub fn log(&mut self, level: Level, text: impl Into<String>) {
-        self.log.push(LogLine { time: clock(), level, text: text.into() });
+        self.log.push(LogLine::new(level, text));
         if self.log.len() > 2000 {
             self.log.drain(..500);
         }

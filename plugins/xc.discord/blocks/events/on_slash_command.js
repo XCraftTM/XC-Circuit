@@ -10,6 +10,13 @@ module.exports = {
   intents: ["Guilds"],
   fields: {
     command: { type: "text", pin: false, required: true, default: "rank", description: "The command name, without the slash." },
+    description: {
+      type: "text",
+      pin: false,
+      advanced: true,
+      default: "A command made with XC Circuit",
+      description: "Shown under the command in Discord's command list (up to 100 characters).",
+    },
   },
   outputs: {
     interaction: { type: "discord.interaction", description: "The command use. Connect it to Reply." },

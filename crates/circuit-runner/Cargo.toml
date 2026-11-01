@@ -1,0 +1,16 @@
+[package]
+name = "circuit-runner"
+description = "Runs and exports XC Circuit projects with Node.js"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+
+[dependencies]
+circuit-core.workspace = true
+circuit-plugins.workspace = true
+anyhow.workspace = true
+indexmap.workspace = true
+keyring.workspace = true
+serde.workspace = true
+serde_json.workspace = true

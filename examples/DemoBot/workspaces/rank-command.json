@@ -4,7 +4,7 @@
     "a1": {
       "block": "discord.on_slash_command@1",
       "at": [40, 60],
-      "values": { "command": "rank" }
+      "values": { "command": "rank", "description": "Shows your rank and XP" }
     },
     "b2": {
       "block": "core.get_stored@1",
@@ -20,9 +20,16 @@
     },
     "d4": {
       "block": "discord.send_message@3",
-      "at": [700, 100],
+      "at": [730, 120],
       "values": { "mode": "reply", "text": "GG {user}! Here's your rank.", "private": true },
-      "pins": ["embeds"]
+      "pins": ["embeds"],
+      "zone": "z1"
+    },
+    "e5": {
+      "block": "core.log@1",
+      "at": [1120, 420],
+      "values": { "message": "Could not reply to /rank", "level": "warn" },
+      "pins": ["message"]
     }
   },
   "links": [
@@ -31,6 +38,11 @@
     "a1.interaction > d4.interaction",
     "a1.user > b2.target",
     "b2.value > c3.description",
-    "c3.embed > d4.embeds"
-  ]
+    "c3.embed > d4.embeds",
+    "z1.error > e5.in",
+    "z1.message > e5.message"
+  ],
+  "zones": {
+    "z1": { "title": "Rank reply", "rect": [702, 76, 336, 418], "retry": 1 }
+  }
 }
