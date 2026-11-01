@@ -1,0 +1,11 @@
+id          = "demo.custom"
+name        = "DemoBot custom blocks"
+version     = "1.0.0"
+author      = "You"
+description = "Blocks that live inside this project. Edit them and they reload right away."
+
+[engines]
+circuit = "^1.0"
+
+[contributes]
+blocks = ["blocks/**/*.{js,ts}"]

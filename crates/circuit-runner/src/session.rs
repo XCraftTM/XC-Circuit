@@ -165,6 +165,62 @@ mod tests {
     use super::*;
     use crate::bundle::build_bundle;
 
+    /// Runs a project and returns once a log line equal to `want` appears.
+    fn run_until(reg: &Registry, ws: Workspace, name: &str, want: &str) {
+        let dir = std::env::temp_dir().join(format!("xc-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let mut project = Project::create(&dir, name, "none").unwrap();
+        project.workspaces.insert("main".into(), ws);
+        let bundle = build_bundle(&project, reg, None).unwrap();
+        let session = Session::start(
+            SessionConfig {
+                bundle: bundle.value,
+                dependencies: bundle.dependencies,
+                packages_dir: dir.join("packages"),
+                run_dir: dir.join(".circuit/run"),
+                data_dir: dir.join(".circuit/data"),
+                env: vec![],
+            },
+            || {},
+        );
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut seen = Vec::new();
+        while Instant::now() < deadline {
+            for m in session.poll() {
+                if let Msg::Bot(BotEvent::Log { text, .. }) = &m
+                    && text == want
+                {
+                    session.stop();
+                    return;
+                }
+                seen.push(format!("{m:?}"));
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+        panic!("never saw {want:?}; got:\n{}", seen.join("\n"));
+    }
+
+    /// A TypeScript block from a project's own plugins/ folder runs in the bot.
+    #[test]
+    fn runs_a_typescript_block() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let engine = BlockEngine::new().unwrap();
+        let reg = Registry::load(&[root.join("plugins"), root.join("examples/DemoBot/plugins")], &engine);
+        assert!(reg.problems.is_empty(), "{:?}", reg.problems);
+        assert!(reg.block("demo.level_from_xp").and_then(|d| d.compiled.as_ref()).is_some());
+        let ws: Workspace = serde_json::from_value(serde_json::json!({
+            "name": "Main",
+            "nodes": {
+                "a": { "block": "core.on_start@1", "at": [0, 0] },
+                "lv": { "block": "demo.level_from_xp@1", "at": [0, 0], "values": { "xp": 250, "perLevel": 100 } },
+                "l": { "block": "core.log@1", "at": [0, 0], "values": { "message": "level {lvl}, {toNext} to go", "level": "info" } }
+            },
+            "links": ["a.next > l.in", "lv.level > l.lvl", "lv.toNext > l.toNext"]
+        }))
+        .unwrap();
+        run_until(&reg, ws, "ts", "level 3, 50 to go");
+    }
+
     /// Loads the bundled plugins, builds a project in a temp folder, runs it with
     /// Node and waits for the log line the graph produces.
     #[test]

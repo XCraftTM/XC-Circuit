@@ -119,14 +119,22 @@ impl Registry {
 
     fn load_block(&mut self, plugin: &LoadedPlugin, path: &Path, engine: &BlockEngine) {
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or_default();
-        if ext == "ts" {
-            self.problem(display(path), "TypeScript blocks are not supported yet; use .js for now");
-            return;
-        }
         let source = match fs::read_to_string(path) {
             Ok(s) => s,
             Err(e) => return self.problem(display(path), e.to_string()),
         };
+        // TypeScript is converted to JavaScript; `import` lines become require().
+        let compiled = if ext == "ts" {
+            match crate::ts::to_javascript(path, &source) {
+                Ok(js) => Some(js),
+                Err(e) => return self.problem(display(path), format!("TypeScript: {e:#}")),
+            }
+        } else if source.lines().any(|l| l.trim_start().starts_with("import ")) {
+            Some(crate::ts::imports_to_require(&source))
+        } else {
+            None
+        };
+        let source = compiled.clone().unwrap_or(source);
         let key = display(path);
         let mut def = match engine.load_block(&key, &source) {
             Ok(def) => def,
@@ -143,6 +151,7 @@ impl Registry {
         }
         def.plugin = plugin.manifest.id.clone();
         def.source = path.to_path_buf();
+        def.compiled = compiled;
 
         if let Some(existing) = self.blocks.get(&def.id)
             && existing.plugin != def.plugin

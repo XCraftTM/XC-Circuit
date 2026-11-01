@@ -1,0 +1,9 @@
+{
+  "name": "@xc-circuit/sdk",
+  "version": "1.0.0",
+  "description": "Types for writing XC Circuit blocks in TypeScript or JavaScript.",
+  "types": "index.d.ts",
+  "main": "index.js",
+  "files": ["index.d.ts", "index.js"],
+  "license": "MIT"
+}

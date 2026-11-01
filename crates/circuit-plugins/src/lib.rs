@@ -6,6 +6,7 @@ pub mod manifest;
 pub mod mode;
 pub mod registry;
 pub mod theme;
+pub mod ts;
 pub mod types_def;
 
 pub use engine::BlockEngine;

@@ -82,6 +82,8 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
     }
     let theme = ed.theme.clone();
     let mode = ed.mode().cloned();
+    // Blocks from the project's own plugins/ folder always belong.
+    let project_root = ed.project.as_ref().map(|p| p.root.clone());
     let picker = ed.picker.as_mut().unwrap();
     picker.opened_frames += 1;
 
@@ -89,7 +91,10 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
         .reg
         .blocks
         .values()
-        .filter(|d| mode.as_ref().is_none_or(|m: &BuildMode| m.includes(&d.plugin, &d.id)))
+        .filter(|d| {
+            mode.as_ref().is_none_or(|m: &BuildMode| m.includes(&d.plugin, &d.id))
+                || project_root.as_ref().is_some_and(|r| d.source.starts_with(r))
+        })
         .filter(|d| d.deprecated.is_none())
         .filter(|d| matches_query(d, &picker.query))
         .filter_map(|d| match &picker.pending {

@@ -80,7 +80,8 @@ class Runtime {
 
   loadModule(source, file) {
     const module = { exports: {} };
-    const req = (name) => this.require(name);
+    // `@xc-circuit/sdk` only helps editors with types; at run time defineBlock returns the block.
+    const req = (name) => (name === "@xc-circuit/sdk" ? { defineBlock: (b) => b } : this.require(name));
     new Function("module", "exports", "require", "__filename", "__dirname", source)(
       module,
       module.exports,
@@ -616,8 +617,8 @@ function cli() {
   const bundle = JSON.parse(fs.readFileSync(bundlePath, "utf8"));
   start(bundle, {
     debug: args.includes("--debug"),
-    depsRoot: arg("--deps") || process.cwd(),
-    dataDir: arg("--data") || path.join(process.cwd(), "data"),
+    depsRoot: path.resolve(arg("--deps") || process.cwd()),
+    dataDir: path.resolve(arg("--data") || path.join(process.cwd(), "data")),
   });
 }
 

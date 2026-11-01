@@ -28,7 +28,10 @@ pub fn build_bundle(project: &Project, reg: &Registry, mode: Option<&BuildMode>)
     let mut blocks = Map::new();
     for id in &used {
         let Some(def) = reg.block(id) else { continue };
-        let source = fs::read_to_string(&def.source).with_context(|| format!("reading {}", def.source.display()))?;
+        let source = match &def.compiled {
+            Some(js) => js.clone(),
+            None => fs::read_to_string(&def.source).with_context(|| format!("reading {}", def.source.display()))?,
+        };
         blocks.insert(id.clone(), json!({ "source": source, "file": def.source.display().to_string(), "plugin": def.plugin }));
         for (name, version) in &def.dependencies {
             dependencies.entry(name.clone()).or_insert_with(|| version.clone());

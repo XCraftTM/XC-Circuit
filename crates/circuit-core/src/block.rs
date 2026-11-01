@@ -187,6 +187,9 @@ pub struct BlockDef {
     /// The block file on disk.
     #[serde(skip)]
     pub source: PathBuf,
+    /// JavaScript made from a TypeScript file (or one with `import` lines); runs instead of `source`.
+    #[serde(skip)]
+    pub compiled: Option<String>,
 }
 
 impl BlockDef {

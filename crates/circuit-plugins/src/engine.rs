@@ -26,7 +26,8 @@ const __inert = () => new Proxy(function () {}, {
   apply: () => __inert(),
   construct: () => __inert(),
 });
-const __require = () => __inert();
+const __sdk = { defineBlock: (block) => block };
+const __require = (name) => (name === "@xc-circuit/sdk" ? __sdk : __inert());
 
 function __error(e) {
   return JSON.stringify({ error: String(e && e.stack ? e.message + "\n" + e.stack : e) });
