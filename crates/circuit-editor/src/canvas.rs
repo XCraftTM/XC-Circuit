@@ -455,7 +455,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     ui.label("Timeout (s)");
                     let mut secs = z.timeout_ms.map(|t| t as f64 / 1000.0).unwrap_or(0.0);
                     if ui.add(egui::DragValue::new(&mut secs).range(0.0..=600.0).speed(0.5)).changed() {
-                        z.timeout_ms = (secs > 0.0).then(|| (secs * 1000.0) as u64);
+                        z.timeout_ms = (secs > 0.0).then_some((secs * 1000.0) as u64);
                         *dirty = true;
                     }
                 });

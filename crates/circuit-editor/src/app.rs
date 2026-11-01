@@ -736,7 +736,7 @@ fn open_canvas(dock: &mut DockState<Tab>, key: String) {
         .map(|p| p.node_path())
         .or_else(|| dock.find_tab(&Tab::Inspector).map(|p| p.node_path()));
     match target {
-        Some(np) if matches!(dock.find_tab_from(|t| matches!(t, Tab::Canvas(_))), Some(_)) => {
+        Some(np) if dock.find_tab_from(|t| matches!(t, Tab::Canvas(_))).is_some() => {
             if let Ok(leaf) = dock.leaf_mut(np) {
                 leaf.append_tab(tab.clone());
             }
