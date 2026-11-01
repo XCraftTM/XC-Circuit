@@ -13,6 +13,7 @@ mod picker;
 mod slash;
 mod stored;
 mod theme;
+mod titlebar;
 mod watch;
 mod widgets;
 
@@ -25,6 +26,8 @@ fn main() -> eframe::Result {
             .with_app_id("xc-circuit")
             .with_inner_size([1440.0, 900.0])
             .with_min_inner_size([900.0, 600.0])
+            // XC Circuit draws its own title bar; View › Use system title bar turns the system one back on.
+            .with_decorations(false)
             .with_icon(app_icon(64)),
         ..Default::default()
     };

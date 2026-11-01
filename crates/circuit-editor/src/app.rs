@@ -36,6 +36,7 @@ impl Tab {
 const KEY_DOCK: &str = "dock";
 const KEY_THEME: &str = "theme";
 const KEY_PROJECT: &str = "project";
+const KEY_SYSTEM_TITLEBAR: &str = "system_titlebar";
 
 pub struct CircuitApp {
     ed: Editor,
@@ -50,6 +51,8 @@ pub struct CircuitApp {
     stored: crate::stored::StoredView,
     watcher: crate::watch::PluginWatcher,
     palette: Option<palette::Palette>,
+    /// Use the operating system's title bar instead of ours.
+    system_titlebar: bool,
 }
 
 impl CircuitApp {
@@ -59,6 +62,10 @@ impl CircuitApp {
         let theme_id: Option<String> = cc.storage.and_then(|s| eframe::get_value(s, KEY_THEME));
         let last_project: Option<PathBuf> = cc.storage.and_then(|s| eframe::get_value(s, KEY_PROJECT));
         let saved_dock: Option<DockState<Tab>> = cc.storage.and_then(|s| eframe::get_value(s, KEY_DOCK));
+        let system_titlebar: bool = cc.storage.and_then(|s| eframe::get_value(s, KEY_SYSTEM_TITLEBAR)).unwrap_or(false);
+        if system_titlebar {
+            cc.egui_ctx.send_viewport_cmd(ViewportCommand::Decorations(true));
+        }
 
         let mut ed = match Editor::new(plugin_dirs, theme_id.as_deref()) {
             Ok(ed) => ed,
@@ -99,6 +106,7 @@ impl CircuitApp {
             stored: Default::default(),
             watcher,
             palette: None,
+            system_titlebar,
         }
     }
 
@@ -168,7 +176,15 @@ impl CircuitApp {
 
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
         let theme = self.ed.theme.clone();
-        egui::MenuBar::new().ui(ui, |ui| {
+        let custom = !self.system_titlebar;
+        let bar = ui.max_rect();
+        if custom {
+            crate::titlebar::drag_region(ui, bar);
+            ui.painter().text(bar.center(), egui::Align2::CENTER_CENTER, &self.title, egui::FontId::proportional(12.5), theme.text_muted);
+        }
+        let row = |ui: &mut egui::Ui, layout| ui.new_child(egui::UiBuilder::new().max_rect(bar).layout(layout));
+        let mut left = row(ui, egui::Layout::left_to_right(egui::Align::Center));
+        egui::MenuBar::new().ui(&mut left, |ui| {
             ui.add(egui::Image::new(egui::include_image!("../assets/icon.svg")).fit_to_exact_size(egui::vec2(18.0, 18.0)));
             ui.add_space(4.0);
             ui.menu_button("File", |ui| {
@@ -247,6 +263,9 @@ impl CircuitApp {
                     }
                 }
                 ui.separator();
+                if ui.checkbox(&mut self.system_titlebar, "Use system title bar").clicked() {
+                    ui.ctx().send_viewport_cmd(ViewportCommand::Decorations(self.system_titlebar));
+                }
                 if ui.add(egui::Button::new("Command Palette…").shortcut_text("Ctrl+P")).clicked() {
                     self.palette = Some(Default::default());
                 }
@@ -279,24 +298,29 @@ impl CircuitApp {
                     self.show_about = true;
                 }
             });
-
-            // Run / Stop on the right.
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let running = self.bot.state != BotState::Stopped;
-                if running && ui.button("Stop").on_hover_text("Stop the bot (Shift+F5)").clicked() {
-                    self.bot.stop(&mut self.ed);
-                }
-                let label = match self.bot.state {
-                    BotState::Stopped => "Run",
-                    BotState::Starting => "Starting…",
-                    BotState::Running => "Restart",
-                };
-                let run = egui::Button::new(RichText::new(label).strong().color(egui::Color32::from_rgb(4, 33, 13))).fill(theme.action);
-                if ui.add_enabled(has_project, run).on_hover_text("Run the bot (F5)").clicked() {
-                    self.bot.start(&mut self.ed, ui.ctx());
-                }
-            });
         });
+
+        // Window buttons and Run / Stop on the right.
+        let ui = &mut row(ui, egui::Layout::right_to_left(egui::Align::Center));
+        if custom {
+            ui.spacing_mut().item_spacing.x = 0.0;
+            crate::titlebar::window_buttons(ui, &theme);
+            ui.spacing_mut().item_spacing.x = 8.0;
+            ui.add_space(10.0);
+        }
+        let running = self.bot.state != BotState::Stopped;
+        if running && ui.button("Stop").on_hover_text("Stop the bot (Shift+F5)").clicked() {
+            self.bot.stop(&mut self.ed);
+        }
+        let label = match self.bot.state {
+            BotState::Stopped => "Run",
+            BotState::Starting => "Starting…",
+            BotState::Running => "Restart",
+        };
+        let run = egui::Button::new(RichText::new(label).strong().color(egui::Color32::from_rgb(4, 33, 13))).fill(theme.action);
+        if ui.add_enabled(self.ed.project.is_some(), run).on_hover_text("Run the bot (F5)").clicked() {
+            self.bot.start(&mut self.ed, ui.ctx());
+        }
     }
 
     fn reset_layout(&mut self) {
@@ -610,9 +634,12 @@ impl eframe::App for CircuitApp {
         }
 
         let theme = self.ed.theme.clone();
-        egui::Panel::top("menu")
-            .frame(Frame::new().fill(theme.frame).inner_margin(Margin::symmetric(8, 4)))
-            .show(ui, |ui| self.menu_bar(ui));
+        let (margin, height) = if self.system_titlebar { (Margin::symmetric(8, 4), None) } else { (Margin { left: 8, right: 0, top: 0, bottom: 0 }, Some(crate::titlebar::HEIGHT)) };
+        let mut top = egui::Panel::top("menu").frame(Frame::new().fill(theme.frame).inner_margin(margin));
+        if let Some(h) = height {
+            top = top.exact_size(h);
+        }
+        top.show(ui, |ui| self.menu_bar(ui));
         egui::Panel::bottom("status")
             .exact_size(24.0)
             .frame(Frame::new().fill(theme.status_bar).inner_margin(Margin::symmetric(12, 0)))
@@ -647,6 +674,9 @@ impl eframe::App for CircuitApp {
         self.bot.windows(&ctx, &mut self.ed);
         crate::embed::window(&ctx, &mut self.ed);
         crate::slash::window(&ctx, &mut self.ed);
+        if !self.system_titlebar {
+            crate::titlebar::frame_edges(&ctx, &theme);
+        }
 
         // Record an undo step once an edit has settled.
         let settled = !ctx.input(|i| i.pointer.any_down()) && !ctx.text_edit_focused();
@@ -662,6 +692,7 @@ impl eframe::App for CircuitApp {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, KEY_DOCK, &self.dock);
         eframe::set_value(storage, KEY_THEME, &self.ed.theme.id);
+        eframe::set_value(storage, KEY_SYSTEM_TITLEBAR, &self.system_titlebar);
         if let Some(p) = &self.ed.project {
             eframe::set_value(storage, KEY_PROJECT, &p.root);
         }
