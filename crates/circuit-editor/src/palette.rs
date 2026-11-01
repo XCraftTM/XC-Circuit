@@ -105,7 +105,8 @@ pub fn show(ctx: &egui::Context, theme: &Theme, state: &mut Palette, items: &[It
 
     let width = 560.0;
     let screen = ctx.content_rect();
-    let pos = egui::pos2(screen.center().x - width / 2.0, screen.top() + 70.0);
+    // Opens over the title bar's search box.
+    let pos = egui::pos2(screen.center().x - width / 2.0, screen.top() + 4.0);
     let area = egui::Area::new(egui::Id::new("command-palette")).order(Order::Foreground).fixed_pos(pos).show(ctx, |ui| {
         Frame::new()
             .fill(theme.panel)

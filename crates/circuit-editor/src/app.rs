@@ -180,7 +180,15 @@ impl CircuitApp {
         let bar = ui.max_rect();
         if custom {
             crate::titlebar::drag_region(ui, bar);
-            ui.painter().text(bar.center(), egui::Align2::CENTER_CENTER, &self.title, egui::FontId::proportional(12.5), theme.text_muted);
+        }
+        // The search box sits in the middle, where the window title would be.
+        let search = egui::Rect::from_center_size(bar.center(), egui::vec2(crate::titlebar::SEARCH_W, 24.0));
+        let label = match &self.ed.project {
+            Some(p) => format!("Search {}", p.meta.name),
+            None => "Search".into(),
+        };
+        if crate::titlebar::search_box(ui, search, &theme, &label) {
+            self.palette = Some(Default::default());
         }
         let row = |ui: &mut egui::Ui, layout| ui.new_child(egui::UiBuilder::new().max_rect(bar).layout(layout));
         let mut left = row(ui, egui::Layout::left_to_right(egui::Align::Center));
