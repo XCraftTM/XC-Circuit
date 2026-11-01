@@ -72,3 +72,11 @@ extends = "object"
 color = "#3DD9C1"
 icon = "embed"
 description = "A rich message card with title, description, fields and images."
+
+[[type]]
+id = "discord.component"
+name = "Component"
+extends = "object"
+color = "#3DD9C1"
+icon = "pointer"
+description = "A button or select menu to attach to a message."

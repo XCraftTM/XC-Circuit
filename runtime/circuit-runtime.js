@@ -417,10 +417,20 @@ function fillTemplate(text, run, fields) {
     if (run && run.event && head in run.event) value = run.event[head];
     else if (run && run.vars.has(head)) value = run.vars.get(head);
     else if (head in fields) value = fields[head];
+    else if (run && lastOutput(run, head) !== NOT_FOUND) value = lastOutput(run, head);
     else return whole;
     for (const k of rest) value = value == null ? undefined : value[k];
     return value == null ? "" : String(value);
   });
+}
+
+const NOT_FOUND = Symbol("not found");
+
+/** The most recently set output with this name from any block earlier in the run. */
+function lastOutput(run, name) {
+  let found = NOT_FOUND;
+  for (const outputs of run.outputs.values()) if (outputs && name in outputs) found = outputs[name];
+  return found;
 }
 
 function coerce(value, type) {
@@ -431,7 +441,7 @@ function coerce(value, type) {
     return String(value);
   }
   if (t === "number" && typeof value === "string" && value.trim() !== "" && !isNaN(Number(value))) return Number(value);
-  if (t === "boolean" && typeof value === "string") return value === "true";
+  if (t === "boolean" && typeof value === "string") return !["", "false", "0", "no", "off"].includes(value.trim().toLowerCase());
   return value;
 }
 

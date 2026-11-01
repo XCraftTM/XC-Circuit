@@ -17,6 +17,13 @@ module.exports = {
     mode: { type: "select", pin: false, default: "reply", choices: MODES, description: "What kind of message to send." },
     text: { type: "textarea", template: true, default: "", description: "The message text. Use {name} for connected values." },
     embeds: { type: "list<discord.embed>", pin: true, multi: true, description: "Embeds to attach." },
+    components: {
+      type: "list<discord.component>",
+      pin: true,
+      multi: true,
+      advanced: true,
+      description: "Buttons and select menus. Up to 5 per row; rows fill in order.",
+    },
     private: {
       type: "boolean",
       pin: false,
@@ -46,6 +53,19 @@ module.exports = {
   async run({ fields, ctx }) {
     const flags = fields.private ? ["Ephemeral"] : undefined;
     const payload = { content: fields.text || undefined, embeds: fields.embeds?.length ? fields.embeds : undefined, flags };
+    const parts = (fields.components || []).filter(Boolean);
+    if (parts.length) {
+      // Buttons share a row (up to 5); a select menu takes a row of its own.
+      const { ActionRowBuilder } = require("discord.js");
+      const rows = [];
+      for (const c of parts) {
+        const isSelect = typeof c.setMinValues === "function";
+        const last = rows[rows.length - 1];
+        if (!isSelect && last && !last.isSelect && last.items.length < 5) last.items.push(c);
+        else rows.push({ isSelect, items: [c] });
+      }
+      payload.components = rows.slice(0, 5).map((r) => new ActionRowBuilder().addComponents(...r.items));
+    }
     const target = fields.interaction ?? fields.channel ?? fields.message;
     const send = {
       reply: () => (target.deferred ? target.editReply(payload) : target.reply({ ...payload, withResponse: true })),

@@ -24,9 +24,24 @@ name = "Members"
 icon = "user"
 
 [[categories]]
+id = "channels"
+name = "Channels & Bot"
+icon = "hash"
+
+[[categories]]
 id = "flow"
 name = "Flow"
 icon = "branch"
+
+[[categories]]
+id = "variables"
+name = "Variables"
+icon = "function"
+
+[[categories]]
+id = "lists"
+name = "Lists & Objects"
+icon = "repeat"
 
 [[categories]]
 id = "logic"
@@ -44,9 +59,19 @@ name = "Math"
 icon = "hash"
 
 [[categories]]
+id = "dates"
+name = "Dates"
+icon = "clock"
+
+[[categories]]
 id = "data"
 name = "Stored Data"
 icon = "database"
+
+[[categories]]
+id = "web"
+name = "Web"
+icon = "send"
 
 [[categories]]
 id = "debug"

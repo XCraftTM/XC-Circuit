@@ -1,0 +1,51 @@
+const ACTIONS = {
+  timeout: "Time out",
+  untimeout: "Remove time out",
+  kick: "Kick",
+  ban: "Ban",
+  unban: "Unban (by user id)",
+  removeRole: "Remove role",
+  nickname: "Change nickname",
+};
+
+module.exports = {
+  id: "discord.moderate",
+  name: "Moderate Member",
+  description: "Times out, kicks, bans or unbans a member, removes a role or changes a nickname. The bot needs the matching permission.",
+  author: "XC Team",
+  version: "1.0.0",
+  category: "members",
+  icon: "shield",
+  kind: "action",
+  tags: ["kick", "ban", "mute", "timeout", "role", "nickname"],
+  fields: {
+    action: { type: "select", pin: false, default: "timeout", choices: ACTIONS },
+    member: { type: "discord.member", pin: "only", required: true, description: "Who to moderate.", show: { action: ["timeout", "untimeout", "kick", "ban", "removeRole", "nickname"] } },
+    server: { type: "discord.guild", pin: "only", description: "The server to unban in.", show: { action: ["unban"] } },
+    userId: { type: "text", default: "", label: "User id", show: { action: ["unban"] } },
+    minutes: { type: "number", default: 10, min: 1, description: "How long the time out lasts.", show: { action: ["timeout"] } },
+    roleId: { type: "text", default: "", label: "Role id", show: { action: ["removeRole"] } },
+    nickname: { type: "text", template: true, default: "", description: "Empty resets it.", show: { action: ["nickname"] } },
+    deleteDays: { type: "number", default: 0, min: 0, max: 7, label: "Delete messages (days)", show: { action: ["ban"] } },
+    reason: { type: "text", template: true, default: "", description: "Shown in the audit log." },
+  },
+  async run({ fields: f }) {
+    const reason = f.reason || undefined;
+    switch (f.action) {
+      case "timeout":
+        return void (await f.member.timeout(f.minutes * 60000, reason));
+      case "untimeout":
+        return void (await f.member.timeout(null, reason));
+      case "kick":
+        return void (await f.member.kick(reason));
+      case "ban":
+        return void (await f.member.ban({ reason, deleteMessageSeconds: Math.round((f.deleteDays || 0) * 86400) }));
+      case "unban":
+        return void (await f.server.members.unban(String(f.userId), reason));
+      case "removeRole":
+        return void (await f.member.roles.remove(f.roleId?.id ?? f.roleId, reason));
+      case "nickname":
+        return void (await f.member.setNickname(f.nickname || null, reason));
+    }
+  },
+};
