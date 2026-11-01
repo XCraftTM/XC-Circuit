@@ -11,7 +11,7 @@ use serde_json::{Map, Value};
 /// The input pin every action block has.
 pub const ACTION_IN: &str = "in";
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Workspace {
     pub name: String,
@@ -23,7 +23,7 @@ pub struct Workspace {
     pub comments: Vec<Comment>,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Node {
     /// `id@major`, for example `discord.send_message@3`.
@@ -107,7 +107,68 @@ pub struct Zone {
     pub timeout_ms: Option<u64>,
 }
 
+/// The rectangle is recomputed from the zone's blocks, so it does not count as a change.
+impl PartialEq for Zone {
+    fn eq(&self, other: &Self) -> bool {
+        self.title == other.title && self.retry == other.retry && self.timeout_ms == other.timeout_ms
+    }
+}
+
+/// Copied blocks with the wires between them and the zones they use.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Clip {
+    pub format: String,
+    pub nodes: IndexMap<String, Node>,
+    pub links: Vec<Link>,
+    pub zones: IndexMap<String, Zone>,
+}
+
+pub const CLIP_FORMAT: &str = "xc-circuit-clip/1";
+
+impl Workspace {
+    /// Copies the given blocks, the wires between them and their zones.
+    pub fn extract(&self, ids: &[String]) -> Clip {
+        let nodes: IndexMap<String, Node> = self.nodes.iter().filter(|(k, _)| ids.contains(k)).map(|(k, n)| (k.clone(), n.clone())).collect();
+        let zones = self
+            .zones
+            .iter()
+            .filter(|(z, _)| nodes.values().any(|n| n.zone.as_deref() == Some(z.as_str())))
+            .map(|(k, z)| (k.clone(), z.clone()))
+            .collect::<IndexMap<_, _>>();
+        let inside = |id: &str| nodes.contains_key(id) || zones.contains_key(id);
+        let links = self.links.iter().filter(|l| inside(&l.from.node) && inside(&l.to.node)).cloned().collect();
+        Clip { format: CLIP_FORMAT.into(), nodes, links, zones }
+    }
+
+    /// Pastes a clip with fresh ids, moved by `offset`. Returns the new block ids.
+    pub fn paste(&mut self, clip: &Clip, offset: [f32; 2]) -> Vec<String> {
+        let mut map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        for (old, zone) in &clip.zones {
+            let id = (1..).map(|i| format!("z{i}")).find(|z| !self.zones.contains_key(z) && !self.nodes.contains_key(z)).unwrap();
+            self.zones.insert(id.clone(), zone.clone());
+            map.insert(old.clone(), id);
+        }
+        let mut new_ids = Vec::new();
+        for (old, node) in &clip.nodes {
+            let id = (1..).map(|i| format!("n{i}")).find(|n| !self.nodes.contains_key(n) && !self.zones.contains_key(n)).unwrap();
+            let mut n = node.clone();
+            n.at = [n.at[0] + offset[0], n.at[1] + offset[1]];
+            n.zone = n.zone.as_ref().and_then(|z| map.get(z).cloned());
+            self.nodes.insert(id.clone(), n);
+            map.insert(old.clone(), id.clone());
+            new_ids.push(id);
+        }
+        for l in &clip.links {
+            if let (Some(from), Some(to)) = (map.get(&l.from.node), map.get(&l.to.node)) {
+                self.links.push(Link { from: PinRef::new(from, &l.from.pin), to: PinRef::new(to, &l.to.pin) });
+            }
+        }
+        new_ids
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Comment {
     pub text: String,
@@ -178,6 +239,26 @@ mod tests {
         fn to_string_pair(&self) -> (&str, &str) {
             (&self.node, &self.pin)
         }
+    }
+
+    #[test]
+    fn copy_paste_remaps_ids() {
+        let mut w: Workspace = serde_json::from_value(serde_json::json!({
+            "name": "t",
+            "nodes": { "a": { "block": "x@1", "at": [0, 0], "zone": "z1" }, "b": { "block": "y@1", "at": [10, 0] }, "c": { "block": "y@1", "at": [20, 0] } },
+            "links": ["a.next > b.in", "b.next > c.in", "z1.done > b.in"],
+            "zones": { "z1": { "title": "T", "rect": [0, 0, 1, 1] } }
+        }))
+        .unwrap();
+        let clip = w.extract(&["a".into(), "b".into()]);
+        assert_eq!(clip.links.len(), 2, "wires to blocks outside the selection are left out");
+        let ids = w.paste(&clip, [100.0, 0.0]);
+        assert_eq!(ids.len(), 2);
+        assert_eq!(w.nodes.len(), 5);
+        assert_eq!(w.zones.len(), 2);
+        assert_eq!(w.nodes[&ids[0]].at, [100.0, 0.0]);
+        assert_eq!(w.nodes[&ids[0]].zone.as_deref(), Some("z2"));
+        assert!(w.links.iter().any(|l| l.from.node == ids[0] && l.to.node == ids[1]));
     }
 
     #[test]

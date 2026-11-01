@@ -6,7 +6,11 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use circuit_core::{BlockShape, Node, Project, Workspace};
+use std::collections::HashSet;
+
+use circuit_core::{BlockShape, CLIP_FORMAT, Clip, Node, Project, Workspace};
+
+use crate::history::Histories;
 use circuit_core::graph::ACTION_IN;
 use circuit_plugins::{BlockEngine, BuildMode, Registry};
 use eframe::egui::Pos2;
@@ -64,6 +68,9 @@ pub struct Editor {
     pub active_workspace: Option<String>,
     /// What blocks and zones of the running bot did recently, keyed by (workspace, id).
     pub activity: HashMap<(String, String), crate::bot::Activity>,
+    /// Every selected block in the selected workspace (includes `selected`).
+    pub multi: HashSet<String>,
+    pub history: Histories,
 }
 
 impl Editor {
@@ -85,6 +92,8 @@ impl Editor {
             actions: Vec::new(),
             active_workspace: None,
             activity: HashMap::new(),
+            multi: HashSet::new(),
+            history: Histories::default(),
         };
         ed.set_theme(theme_id.unwrap_or("graphite"));
         ed.log_plugin_summary();
@@ -147,6 +156,8 @@ impl Editor {
                 self.project = Some(project);
                 self.dirty = false;
                 self.selected = None;
+                self.multi.clear();
+                self.history.clear();
                 self.views.clear();
                 self.reload_plugins();
                 if let Some(first) = first {
@@ -188,8 +199,130 @@ impl Editor {
             Node { block: def.reference(), at: [at.x, at.y], values: def.default_values(), pins: def.default_pins(), zone: None },
         );
         self.dirty = true;
-        self.selected = Some((ws_key.to_string(), id.clone()));
+        self.select_only(ws_key, &id);
         Some(id)
+    }
+
+    pub fn select_only(&mut self, ws_key: &str, id: &str) {
+        self.selected = Some((ws_key.to_string(), id.to_string()));
+        self.multi = HashSet::from([id.to_string()]);
+    }
+
+    pub fn clear_selection(&mut self) {
+        self.selected = None;
+        self.multi.clear();
+    }
+
+    /// Selected block ids in a workspace.
+    pub fn selection(&self, ws_key: &str) -> Vec<String> {
+        match &self.selected {
+            Some((w, n)) if w == ws_key => {
+                let mut ids: Vec<String> = self.multi.iter().cloned().collect();
+                if !ids.contains(n) {
+                    ids.push(n.clone());
+                }
+                ids.sort();
+                ids
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// The workspace edit commands act on.
+    fn edit_target(&self) -> Option<String> {
+        self.active_workspace.clone().filter(|k| self.workspace(k).is_some())
+    }
+
+    pub fn undo(&mut self) {
+        let Some(key) = self.edit_target() else { return };
+        let Some(ws) = self.project.as_mut().and_then(|p| p.workspaces.get_mut(&key)) else { return };
+        if self.history.undo(&key, ws) {
+            self.after_history_jump(&key);
+        }
+    }
+
+    pub fn redo(&mut self) {
+        let Some(key) = self.edit_target() else { return };
+        let Some(ws) = self.project.as_mut().and_then(|p| p.workspaces.get_mut(&key)) else { return };
+        if self.history.redo(&key, ws) {
+            self.after_history_jump(&key);
+        }
+    }
+
+    fn after_history_jump(&mut self, key: &str) {
+        self.dirty = true;
+        self.shapes.retain(|(w, _), _| w != key);
+        let alive: HashSet<String> = self.workspace(key).map(|w| w.nodes.keys().cloned().collect()).unwrap_or_default();
+        self.multi.retain(|n| alive.contains(n));
+        if self.selected.as_ref().is_some_and(|(w, n)| w == key && !alive.contains(n)) {
+            self.clear_selection();
+        }
+    }
+
+    /// Copies the selected blocks to the clipboard as JSON.
+    pub fn copy(&self, ctx: &eframe::egui::Context) -> bool {
+        let Some(key) = self.edit_target() else { return false };
+        let ids = self.selection(&key);
+        let Some(ws) = self.workspace(&key) else { return false };
+        if ids.is_empty() {
+            return false;
+        }
+        let clip = ws.extract(&ids);
+        if let Ok(text) = serde_json::to_string_pretty(&clip) {
+            ctx.copy_text(text);
+        }
+        true
+    }
+
+    pub fn delete_selection(&mut self) {
+        let Some(key) = self.edit_target() else { return };
+        let ids = self.selection(&key);
+        let Some(ws) = self.project.as_mut().and_then(|p| p.workspaces.get_mut(&key)) else { return };
+        for id in &ids {
+            ws.remove_node(id);
+        }
+        if !ids.is_empty() {
+            self.dirty = true;
+            self.clear_selection();
+        }
+    }
+
+    /// Pastes blocks copied from XC Circuit. Pasted at `at` (scene position) or next to the originals.
+    pub fn paste(&mut self, text: &str, at: Option<Pos2>) -> bool {
+        let Some(key) = self.edit_target() else { return false };
+        let Ok(clip) = serde_json::from_str::<Clip>(text) else { return false };
+        if clip.format != CLIP_FORMAT || clip.nodes.is_empty() {
+            return false;
+        }
+        let min = clip.nodes.values().fold([f32::MAX, f32::MAX], |m, n| [m[0].min(n.at[0]), m[1].min(n.at[1])]);
+        let offset = match at {
+            Some(p) => [p.x - min[0], p.y - min[1]],
+            None => [40.0, 40.0],
+        };
+        let Some(ws) = self.project.as_mut().and_then(|p| p.workspaces.get_mut(&key)) else { return false };
+        let ids = ws.paste(&clip, offset);
+        self.dirty = true;
+        self.selected = ids.first().map(|f| (key.clone(), f.clone()));
+        self.multi = ids.into_iter().collect();
+        true
+    }
+
+    pub fn duplicate(&mut self) {
+        let Some(key) = self.edit_target() else { return };
+        let ids = self.selection(&key);
+        let Some(ws) = self.workspace(&key) else { return };
+        if let Ok(text) = serde_json::to_string(&ws.extract(&ids)) {
+            self.paste(&text, None);
+        }
+    }
+
+    pub fn select_all(&mut self) {
+        let Some(key) = self.edit_target() else { return };
+        let ids: Vec<String> = self.workspace(&key).map(|w| w.nodes.keys().cloned().collect()).unwrap_or_default();
+        if let Some(first) = ids.first() {
+            self.selected = Some((key, first.clone()));
+            self.multi = ids.into_iter().collect();
+        }
     }
 }
 

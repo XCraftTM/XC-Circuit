@@ -179,6 +179,38 @@ impl CircuitApp {
                     ui.ctx().send_viewport_cmd(ViewportCommand::Close);
                 }
             });
+            ui.menu_button("Edit", |ui| {
+                let key = self.ed.active_workspace.clone().unwrap_or_default();
+                if ui.add_enabled(self.ed.history.can_undo(&key) || self.ed.dirty, egui::Button::new("Undo").shortcut_text("Ctrl+Z")).clicked() {
+                    self.ed.undo();
+                }
+                if ui.add_enabled(self.ed.history.can_redo(&key), egui::Button::new("Redo").shortcut_text("Ctrl+Y")).clicked() {
+                    self.ed.redo();
+                }
+                ui.separator();
+                let has_sel = !self.ed.selection(&key).is_empty();
+                if ui.add_enabled(has_sel, egui::Button::new("Cut").shortcut_text("Ctrl+X")).clicked() && self.ed.copy(ui.ctx()) {
+                    self.ed.delete_selection();
+                }
+                if ui.add_enabled(has_sel, egui::Button::new("Copy").shortcut_text("Ctrl+C")).clicked() {
+                    self.ed.copy(ui.ctx());
+                }
+                if ui.add(egui::Button::new("Paste").shortcut_text("Ctrl+V")).clicked()
+                    && let Ok(text) = arboard::Clipboard::new().and_then(|mut c| c.get_text())
+                {
+                    self.ed.paste(&text, None);
+                }
+                if ui.add_enabled(has_sel, egui::Button::new("Duplicate").shortcut_text("Ctrl+D")).clicked() {
+                    self.ed.duplicate();
+                }
+                if ui.add_enabled(has_sel, egui::Button::new("Delete").shortcut_text("Del")).clicked() {
+                    self.ed.delete_selection();
+                }
+                ui.separator();
+                if ui.add(egui::Button::new("Select all").shortcut_text("Ctrl+A")).clicked() {
+                    self.ed.select_all();
+                }
+            });
             ui.menu_button("View", |ui| {
                 ui.label(RichText::new("PANELS").size(10.5).color(theme.text_muted));
                 for (tab, name) in Tab::PANELS {
@@ -286,6 +318,48 @@ impl CircuitApp {
         });
     }
 
+    /// Undo, clipboard and selection shortcuts, unless a text box has focus.
+    fn edit_shortcuts(&mut self, ctx: &egui::Context) {
+        if ctx.text_edit_focused() || self.ed.picker.is_some() {
+            return;
+        }
+        use egui::{Key, Modifiers};
+        let cmd = Modifiers::COMMAND;
+        let cmd_shift = Modifiers::COMMAND | Modifiers::SHIFT;
+        if ctx.input_mut(|i| i.consume_key(cmd_shift, Key::Z) || i.consume_key(cmd, Key::Y)) {
+            self.ed.redo();
+        } else if ctx.input_mut(|i| i.consume_key(cmd, Key::Z)) {
+            self.ed.undo();
+        }
+        if ctx.input_mut(|i| i.consume_key(cmd, Key::D)) {
+            self.ed.duplicate();
+        }
+        if ctx.input_mut(|i| i.consume_key(cmd, Key::A)) {
+            self.ed.select_all();
+        }
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Delete)) {
+            self.ed.delete_selection();
+        }
+        let events = ctx.input(|i| i.events.clone());
+        for e in events {
+            match e {
+                egui::Event::Copy => {
+                    self.ed.copy(ctx);
+                }
+                egui::Event::Cut => {
+                    if self.ed.copy(ctx) {
+                        self.ed.delete_selection();
+                    }
+                }
+                egui::Event::Paste(text) => {
+                    let at = self.ed.active_workspace.as_ref().and_then(|k| self.ed.views.get(k)).and_then(|v| v.pointer);
+                    self.ed.paste(&text, at);
+                }
+                _ => {}
+            }
+        }
+    }
+
     fn dialogs(&mut self, ctx: &egui::Context) {
         let theme = self.ed.theme.clone();
         if self.show_about {
@@ -377,6 +451,7 @@ impl eframe::App for CircuitApp {
             self.bot.stop(&mut self.ed);
         }
         self.bot.poll(&mut self.ed);
+        self.edit_shortcuts(&ctx);
         if !self.ed.activity.is_empty() {
             ctx.request_repaint_after(std::time::Duration::from_millis(33));
             self.ed.activity.retain(|_, a| a.error.is_some() || a.at.elapsed().as_secs_f32() < 1.2);
@@ -416,6 +491,12 @@ impl eframe::App for CircuitApp {
         self.apply_actions();
         self.dialogs(&ctx);
         self.bot.windows(&ctx, &mut self.ed);
+
+        // Record an undo step once an edit has settled.
+        let settled = !ctx.input(|i| i.pointer.any_down()) && !ctx.text_edit_focused();
+        if let Some(p) = &self.ed.project {
+            self.ed.history.track(p, settled);
+        }
     }
 
     fn on_exit(&mut self) {

@@ -49,6 +49,10 @@ pub struct CanvasView {
     pub zoom: f32,
     pub initialized: bool,
     pub drag: Option<PinEnd>,
+    /// Scene position where a box selection started.
+    pub box_start: Option<Pos2>,
+    /// Last pointer position over this canvas, in scene coordinates (used for pasting).
+    pub pointer: Option<Pos2>,
 }
 
 impl CanvasView {
@@ -254,7 +258,7 @@ fn zone_layout(zid: &str, rect: Rect) -> NodeLayout {
 }
 
 pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
-    let Editor { reg, engine, theme, project, shapes, views, selected, dirty, picker, active_workspace, activity, .. } = ed;
+    let Editor { reg, engine, theme, project, shapes, views, selected, dirty, picker, active_workspace, activity, multi, .. } = ed;
     let Some(project) = project.as_mut() else { return };
     let mode = reg.mode(&project.meta.mode).or_else(|| reg.modes.first());
     let Some(ws) = project.workspaces.get_mut(ws_key) else {
@@ -331,11 +335,36 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     cui.set_clip_rect(visible);
     // Registered before any block, so blocks and pins sit on top of it.
     let bg = cui.interact(visible, cui.id().with("background"), Sense::click_and_drag());
-    if bg.dragged_by(PointerButton::Primary) || bg.dragged_by(PointerButton::Middle) {
+    let pointer_scene = pointer.map(|p| to_global.inverse() * p);
+    if over_canvas {
+        view.pointer = pointer_scene;
+    }
+    // Shift- or Ctrl-drag on empty canvas draws a selection box; a plain drag pans.
+    let boxing = ctx.input(|i| i.modifiers.shift || i.modifiers.command);
+    if bg.drag_started_by(PointerButton::Primary) && boxing {
+        view.box_start = pointer_scene;
+    }
+    let mut selection_box: Option<Rect> = None;
+    if let Some(start) = view.box_start {
+        if let Some(p) = pointer_scene {
+            selection_box = Some(Rect::from_two_pos(start, p));
+        }
+        if bg.drag_stopped() || !ctx.input(|i| i.pointer.primary_down()) {
+            view.box_start = None;
+            if let Some(b) = selection_box {
+                let hits: Vec<String> = layouts[..node_count].iter().filter(|l| l.rect.intersects(b)).map(|l| l.id.clone()).collect();
+                let keep = selected.as_ref().is_some_and(|(w, _)| w == ws_key);
+                if !keep {
+                    multi.clear();
+                }
+                multi.extend(hits.iter().cloned());
+                *selected = multi.iter().next().map(|n| (ws_key.to_string(), n.clone()));
+            }
+        }
+    } else if bg.dragged_by(PointerButton::Primary) || bg.dragged_by(PointerButton::Middle) {
         view.offset += bg.drag_delta() * view.zoom;
         ctx.set_cursor_icon(CursorIcon::Grabbing);
     }
-    let pointer_scene = pointer.map(|p| to_global.inverse() * p);
     let painter = cui.painter().clone();
 
     draw_grid(&painter, visible, theme, view.zoom);
@@ -435,7 +464,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     let mut dropped: Option<String> = None;
     for layout in &layouts[..node_count] {
         let id = &layout.id;
-        let is_selected = selected.as_ref().is_some_and(|(w, n)| w == ws_key && n == id);
+        let is_selected = selected.as_ref().is_some_and(|(w, n)| w == ws_key && (n == id || multi.contains(id)));
         let (block_ref, def) = {
             let node = &ws.nodes[id];
             (node.block.clone(), reg.block(&node.block))
@@ -474,6 +503,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             painter.text(layout.header.left_bottom() + vec2(14.0, ROW_H / 2.0 + 4.0), Align2::LEFT_CENTER, &block_ref, FontId::monospace(11.0), theme.text_muted);
             if body.clicked() {
                 *selected = Some((ws_key.to_string(), id.clone()));
+                *multi = std::iter::once(id.clone()).collect();
             }
             body.context_menu(|ui| {
                 if ui.button("Delete block").clicked() {
@@ -554,16 +584,34 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         }
         if head.dragged_by(PointerButton::Primary) {
             ctx.set_cursor_icon(CursorIcon::Grabbing);
-            let node = ws.nodes.get_mut(id).unwrap();
-            node.at[0] += head.drag_delta().x;
-            node.at[1] += head.drag_delta().y;
+            let d = head.drag_delta();
+            // Dragging one of several selected blocks moves them all.
+            let group = is_selected && multi.len() > 1;
+            for (nid, node) in ws.nodes.iter_mut() {
+                if nid == id || (group && multi.contains(nid)) {
+                    node.at[0] += d.x;
+                    node.at[1] += d.y;
+                }
+            }
             *dirty = true;
         }
         if head.drag_stopped() {
             dropped = Some(id.clone());
         }
-        if head.clicked() || head.drag_started() || body.clicked() || body.drag_started() {
+        let toggle = ctx.input(|i| i.modifiers.command || i.modifiers.shift);
+        if head.clicked() || body.clicked() {
+            if toggle && selected.as_ref().is_some_and(|(w, _)| w == ws_key) {
+                if !multi.remove(id) {
+                    multi.insert(id.clone());
+                }
+                *selected = Some((ws_key.to_string(), id.clone()));
+            } else {
+                *selected = Some((ws_key.to_string(), id.clone()));
+                *multi = std::iter::once(id.clone()).collect();
+            }
+        } else if (head.drag_started() || body.drag_started()) && !is_selected {
             *selected = Some((ws_key.to_string(), id.clone()));
+            *multi = std::iter::once(id.clone()).collect();
         }
         let in_zone = ws.nodes[id].zone.is_some();
         let head = head.on_hover_ui(|ui| block_tooltip(ui, def, theme));
@@ -670,36 +718,32 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         }
     } else if bg.clicked() {
         *selected = None;
+        multi.clear();
     }
     let typing = ctx.text_edit_focused();
     if over_canvas && !typing && picker.is_none() && ctx.input(|i| i.key_pressed(Key::Space)) {
         let p = pointer.unwrap();
         *picker = Some(Picker::new(ws_key, p, to_global.inverse() * p, None));
     }
-    if !typing && ctx.input(|i| i.key_pressed(Key::Delete)) {
-        if let Some((w, n)) = selected.clone()
-            && w == ws_key
-        {
-            menu = Some(NodeMenu::Delete(n));
-        }
-    }
 
     match menu {
         Some(NodeMenu::Delete(n)) => {
-            ws.remove_node(&n);
-            shapes.remove(&(ws_key.to_string(), n.clone()));
-            if selected.as_ref().is_some_and(|(_, s)| *s == n) {
+            let ids: Vec<String> = if multi.contains(&n) { multi.drain().collect() } else { vec![n] };
+            for id in &ids {
+                ws.remove_node(id);
+                shapes.remove(&(ws_key.to_string(), id.clone()));
+            }
+            if selected.as_ref().is_some_and(|(_, s)| ids.contains(s)) {
                 *selected = None;
+                multi.clear();
             }
             *dirty = true;
         }
         Some(NodeMenu::Duplicate(n)) => {
-            let mut copy = ws.nodes[&n].clone();
-            copy.at[0] += 30.0;
-            copy.at[1] += 30.0;
-            let new_id = ws.next_node_id();
-            ws.nodes.insert(new_id.clone(), copy);
-            *selected = Some((ws_key.to_string(), new_id));
+            let ids: Vec<String> = if multi.contains(&n) { multi.iter().cloned().collect() } else { vec![n] };
+            let new_ids = ws.paste(&ws.extract(&ids), [30.0, 30.0]);
+            *selected = new_ids.first().map(|f| (ws_key.to_string(), f.clone()));
+            *multi = new_ids.into_iter().collect();
             *dirty = true;
         }
         Some(NodeMenu::OpenSource(path)) => {
@@ -748,6 +792,10 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         let zones: std::collections::HashSet<String> = ws.zones.keys().cloned().collect();
         ws.links.retain(|l| ws.nodes.contains_key(&l.from.node) || zones.contains(&l.from.node));
         *dirty = true;
+    }
+
+    if let Some(b) = selection_box {
+        painter.rect(b, 4.0, with_alpha(theme.accent, 30), Stroke::new(1.0, theme.accent), StrokeKind::Inside);
     }
 
     // Zoom readout.
