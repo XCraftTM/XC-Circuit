@@ -235,11 +235,11 @@ mod tests {
         let ws: Workspace = serde_json::from_value(serde_json::json!({
             "name": "Main",
             "nodes": {
-                "a": { "block": "core.on_start@1", "at": [0, 0] },
-                "m": { "block": "core.math@1", "at": [0, 0], "values": { "a": 20, "op": "add", "b": 22 } },
-                "l": { "block": "core.log@1", "at": [0, 0], "values": { "message": "sum is {result}", "level": "success" } }
+                "1": { "block": "core.on_start@1", "at": [0, 0] },
+                "2": { "block": "core.math@1", "at": [0, 0], "values": { "a": 20, "op": "add", "b": 22 } },
+                "3": { "block": "core.log@1", "at": [0, 0], "values": { "message": "sum is {result}", "level": "success" } }
             },
-            "links": ["a.next > l.in", "m.result > l.result"]
+            "links": ["1.next > 3.in", "2.result > 3.result"]
         }))
         .unwrap();
         project.workspaces.insert("main".into(), ws);

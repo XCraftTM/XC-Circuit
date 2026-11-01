@@ -551,39 +551,68 @@ impl CircuitApp {
 
     fn status_bar(&mut self, ui: &mut egui::Ui) {
         let t = self.ed.theme.clone();
-        let text = |s: String| RichText::new(s).size(11.5).color(t.status_text);
-        ui.horizontal_centered(|ui| {
-            ui.spacing_mut().item_spacing.x = 18.0;
-            let (dot, state) = match self.bot.state {
-                BotState::Stopped => (egui::Color32::from_rgba_unmultiplied(0, 24, 28, 90), "Bot stopped"),
-                BotState::Starting => (egui::Color32::from_rgb(0xFF, 0xB4, 0x54), "Bot starting"),
-                BotState::Running => (egui::Color32::from_rgb(0x04, 0x6B, 0x2A), "Bot running"),
-            };
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 6.0;
-                let (r, _) = ui.allocate_exact_size(egui::vec2(8.0, 8.0), egui::Sense::hover());
-                ui.painter().circle_filled(r.center(), 4.0, dot);
-                ui.label(text(state.into()));
-            });
-            match &self.ed.project {
-                Some(p) => {
-                    ui.label(text(p.meta.name.clone()));
-                    let mode = self.ed.reg.mode(&p.meta.mode).map(|m| m.name.clone()).unwrap_or(p.meta.mode.clone());
-                    ui.label(text(mode));
+        let ctx = ui.ctx().clone();
+        ui.spacing_mut().item_spacing.x = 2.0;
+        let bar = ui.max_rect();
+        let (dot, state) = match self.bot.state {
+            BotState::Stopped => (t.status_text.gamma_multiply(0.45), "Bot stopped"),
+            BotState::Starting => (egui::Color32::from_rgb(0xFF, 0xB4, 0x54), "Bot starting"),
+            BotState::Running => (t.action, "Bot running"),
+        };
+        let has_project = self.ed.project.is_some();
+        let mut left = ui.new_child(egui::UiBuilder::new().max_rect(bar).layout(egui::Layout::left_to_right(egui::Align::Center)));
+        let running = self.bot.state != BotState::Stopped;
+        let tip = if running { "Stop the bot (Shift+F5)" } else { "Run the bot (F5)" };
+        if status_item(&mut left, &t, Some(dot), state).on_hover_text(tip).clicked() && has_project {
+            if running { self.bot.stop(&mut self.ed) } else { self.bot.start(&mut self.ed, &ctx) }
+        }
+        match self.ed.project.as_ref().map(|p| (p.meta.name.clone(), p.meta.mode.clone())) {
+            Some((name, mode_id)) => {
+                if status_item(&mut left, &t, None, &name).on_hover_text("Bot settings").clicked() {
+                    self.bot.open_settings(&self.ed);
                 }
-                None => {
-                    ui.label(text("No project".into()));
+                let mode = self.ed.reg.mode(&mode_id).map(|m| (m.name.clone(), m.description.clone()));
+                let (mode_name, about) = mode.unwrap_or((mode_id, String::new()));
+                let r = status_item(&mut left, &t, None, &mode_name);
+                if !about.is_empty() {
+                    r.on_hover_text(about);
                 }
             }
-            ui.label(text(format!("{} plugins · {} blocks", self.ed.reg.plugins.len(), self.ed.reg.blocks.len())));
-            if self.problem_count > 0 {
-                ui.label(text(format!("⚠ {} problems", self.problem_count)));
+            None => {
+                if status_item(&mut left, &t, None, "No project").on_hover_text("Open a project").clicked() {
+                    self.open_project_dialog();
+                }
             }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(text(format!("Theme: {}", t.name)));
-                ui.label(text(if self.ed.dirty { "Unsaved changes".into() } else { "Saved".into() }));
-            });
-        });
+        }
+        let counts = format!("{} plugins · {} blocks", self.ed.reg.plugins.len(), self.ed.reg.blocks.len());
+        if status_item(&mut left, &t, None, &counts).on_hover_text("Manage plugins").clicked() {
+            self.show_plugins = true;
+        }
+        if self.problem_count > 0 {
+            let label = format!("⚠ {} problem{}", self.problem_count, if self.problem_count == 1 { "" } else { "s" });
+            if status_item(&mut left, &t, None, &label).on_hover_text("Show the Problems panel").clicked() {
+                match self.dock.find_tab(&Tab::Problems) {
+                    Some(path) => {
+                        let _ = self.dock.set_active_tab(path);
+                    }
+                    None => self.toggle_panel(Tab::Problems),
+                }
+            }
+        }
+
+        let mut right = ui.new_child(egui::UiBuilder::new().max_rect(bar).layout(egui::Layout::right_to_left(egui::Align::Center)));
+        if status_item(&mut right, &t, None, &format!("Theme: {}", t.name)).on_hover_text("Switch to the next theme").clicked() {
+            let ids: Vec<String> = self.ed.reg.themes.iter().map(|x| x.id.clone()).collect();
+            if let Some(next) = ids.iter().position(|id| *id == t.id).map(|i| ids[(i + 1) % ids.len()].clone()) {
+                self.ed.set_theme(&next);
+                self.ed.theme.apply(&ctx);
+            }
+        }
+        let saved = if self.ed.dirty { "Unsaved changes" } else { "Saved" };
+        if status_item(&mut right, &t, None, saved).on_hover_text("Save (Ctrl+S)").clicked() && has_project {
+            self.ed.save();
+            self.bot.restart_if_running(&mut self.ed, &ctx);
+        }
     }
 
     /// Undo, clipboard and selection shortcuts, unless a text box has focus.
@@ -754,7 +783,7 @@ impl eframe::App for CircuitApp {
         top.show(ui, |ui| self.menu_bar(ui));
         egui::Panel::bottom("status")
             .exact_size(24.0)
-            .frame(Frame::new().fill(theme.status_bar).inner_margin(Margin::symmetric(12, 0)))
+            .frame(Frame::new().fill(theme.status_bar).inner_margin(Margin::symmetric(4, 0)))
             .show(ui, |ui| self.status_bar(ui));
         let mut problems = panels::collect_problems(&self.ed);
         problems.extend(self.native.problems());
@@ -940,4 +969,25 @@ fn find_plugin_dirs() -> (Vec<PathBuf>, Option<PathBuf>) {
     }
     dirs.dedup();
     (dirs, bundled_root)
+}
+
+/// A status bar entry: highlights on hover, can be clicked, and its text
+/// can't be selected.
+fn status_item(ui: &mut egui::Ui, theme: &crate::theme::Theme, dot: Option<egui::Color32>, text: &str) -> egui::Response {
+    let font = egui::FontId::proportional(11.5);
+    let galley = ui.painter().layout_no_wrap(text.to_string(), font, theme.status_text);
+    let dot_w = if dot.is_some() { 14.0 } else { 0.0 };
+    let size = egui::vec2(galley.size().x + dot_w + 16.0, ui.available_height());
+    let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
+    if resp.hovered() {
+        ui.painter().rect_filled(rect.shrink2(egui::vec2(0.0, 2.0)), 4.0, crate::theme::mix(theme.status_bar, theme.status_text, 0.14));
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    let mut x = rect.left() + 8.0;
+    if let Some(c) = dot {
+        ui.painter().circle_filled(egui::pos2(x + 4.0, rect.center().y), 4.0, c);
+        x += dot_w;
+    }
+    ui.painter().galley(egui::pos2(x, rect.center().y - galley.size().y / 2.0), galley, theme.status_text);
+    resp
 }

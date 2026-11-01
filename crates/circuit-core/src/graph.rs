@@ -151,7 +151,7 @@ impl Workspace {
         }
         let mut new_ids = Vec::new();
         for (old, node) in &clip.nodes {
-            let id = (1..).map(|i| format!("n{i}")).find(|n| !self.nodes.contains_key(n) && !self.zones.contains_key(n)).unwrap();
+            let id = self.next_node_id();
             let mut n = node.clone();
             n.at = [n.at[0] + offset[0], n.at[1] + offset[1]];
             n.zone = n.zone.as_ref().and_then(|z| map.get(z).cloned());
@@ -181,12 +181,11 @@ impl Workspace {
         Self { name: name.into(), ..Default::default() }
     }
 
-    /// A short id not used in this workspace yet: `n1`, `n2`, …
+    /// The next block number in this workspace: one more than the highest so
+    /// far, so ids count up `1`, `2`, `3` and a deleted block's id isn't reused.
     pub fn next_node_id(&self) -> String {
-        (1..)
-            .map(|i| format!("n{i}"))
-            .find(|id| !self.nodes.contains_key(id))
-            .expect("unbounded range")
+        let max = self.nodes.keys().filter_map(|id| id.parse::<u64>().ok()).max().unwrap_or(0);
+        (max + 1..).map(|i| i.to_string()).find(|id| !self.zones.contains_key(id)).expect("unbounded range")
     }
 
     pub fn links_into<'a>(&'a self, node: &'a str, pin: &'a str) -> impl Iterator<Item = &'a Link> + 'a {
@@ -253,12 +252,22 @@ mod tests {
         let clip = w.extract(&["a".into(), "b".into()]);
         assert_eq!(clip.links.len(), 2, "wires to blocks outside the selection are left out");
         let ids = w.paste(&clip, [100.0, 0.0]);
-        assert_eq!(ids.len(), 2);
+        assert_eq!(ids, ["1", "2"]);
         assert_eq!(w.nodes.len(), 5);
         assert_eq!(w.zones.len(), 2);
         assert_eq!(w.nodes[&ids[0]].at, [100.0, 0.0]);
         assert_eq!(w.nodes[&ids[0]].zone.as_deref(), Some("z2"));
         assert!(w.links.iter().any(|l| l.from.node == ids[0] && l.to.node == ids[1]));
+    }
+
+    #[test]
+    fn block_ids_count_up() {
+        let mut w = Workspace::new("t");
+        assert_eq!(w.next_node_id(), "1");
+        for id in ["1", "2", "7", "a1"] {
+            w.nodes.insert(id.into(), Node::default());
+        }
+        assert_eq!(w.next_node_id(), "8", "after the highest number, ignoring old letter ids");
     }
 
     #[test]

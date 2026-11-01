@@ -8,7 +8,7 @@ use std::time::SystemTime;
 
 use std::collections::HashSet;
 
-use circuit_core::{BlockShape, CLIP_FORMAT, Clip, Node, Project, Workspace};
+use circuit_core::{BlockShape, CLIP_FORMAT, Clip, Link, Node, Project, Workspace};
 
 use crate::history::Histories;
 use circuit_core::graph::ACTION_IN;
@@ -70,6 +70,8 @@ pub struct Editor {
     pub activity: HashMap<(String, String), crate::bot::Activity>,
     /// Every selected block in the selected workspace (includes `selected`).
     pub multi: HashSet<String>,
+    /// A selected wire (workspace, link), deleted with Del.
+    pub selected_wire: Option<(String, Link)>,
     pub history: Histories,
     /// Successful saves so far, so others can react to a save.
     pub saves: u64,
@@ -99,6 +101,7 @@ impl Editor {
             active_workspace: None,
             activity: HashMap::new(),
             multi: HashSet::new(),
+            selected_wire: None,
             history: Histories::default(),
             saves: 0,
             define_ctx: Value::Object(Map::new()),
@@ -344,6 +347,16 @@ impl Editor {
     }
 
     pub fn delete_selection(&mut self) {
+        if self.selected.is_none()
+            && let Some((key, link)) = self.selected_wire.take()
+        {
+            if let Some(ws) = self.project.as_mut().and_then(|p| p.workspaces.get_mut(&key)) {
+                let before = ws.links.len();
+                ws.links.retain(|l| *l != link);
+                self.dirty |= ws.links.len() != before;
+            }
+            return;
+        }
         let Some(key) = self.edit_target() else { return };
         let ids = self.selection(&key);
         let Some(ws) = self.project.as_mut().and_then(|p| p.workspaces.get_mut(&key)) else { return };

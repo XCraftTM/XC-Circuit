@@ -42,6 +42,9 @@ pub struct PinEnd {
     pub pin: String,
     pub dir: Dir,
     pub ty: PinType,
+    /// A wire picked up from its input: dropped on empty canvas it is deleted,
+    /// Esc puts it back.
+    pub picked_up: Option<Link>,
 }
 
 /// Pan and zoom of one workspace canvas, plus a wire being dragged.
@@ -58,6 +61,10 @@ pub struct CanvasView {
     pub pointer: Option<Pos2>,
     /// A block to center on the next time this canvas is drawn.
     pub focus: Option<String>,
+    /// Zone outlines from when the current block drag started.
+    pub drag_zones: Vec<(String, Rect)>,
+    /// The wire whose right-click menu is open, and where (screen position).
+    pub wire_menu: Option<(Link, Pos2)>,
 }
 
 impl CanvasView {
@@ -228,15 +235,14 @@ const ZONE_PANEL_W: f32 = 150.0;
 const ZONE_ROW_H: f32 = 22.0;
 const ZONE_PANEL_H: f32 = 4.0 * ZONE_ROW_H + 8.0;
 
-/// Rectangles of the zones that have blocks, fitted around them. `exclude` leaves
-/// one block out (used to decide where a dragged block was dropped).
-fn zone_rects(ws: &Workspace, layouts: &[NodeLayout], exclude: Option<&str>) -> Vec<(String, Rect)> {
+/// Rectangles of the zones that have blocks, fitted around them.
+fn zone_rects(ws: &Workspace, layouts: &[NodeLayout]) -> Vec<(String, Rect)> {
     ws.zones
         .keys()
         .filter_map(|zid| {
             let bounds = layouts
                 .iter()
-                .filter(|l| Some(l.id.as_str()) != exclude && ws.nodes.get(&l.id).is_some_and(|n| n.zone.as_deref() == Some(zid)))
+                .filter(|l| ws.nodes.get(&l.id).is_some_and(|n| n.zone.as_deref() == Some(zid)))
                 .map(|l| l.rect)
                 .reduce(|a, b| a.union(b))?;
             let rect = Rect::from_min_max(bounds.min - vec2(28.0, 44.0), bounds.max + vec2(28.0 + ZONE_PANEL_W * 0.4, 28.0 + ZONE_PANEL_H));
@@ -272,7 +278,7 @@ fn zone_layout(zid: &str, rect: Rect) -> NodeLayout {
 }
 
 pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
-    let Editor { reg, engine, theme, project, shapes, views, selected, dirty, picker, active_workspace, activity, multi, define_ctx, embed_edit, .. } = ed;
+    let Editor { reg, engine, theme, project, shapes, views, selected, dirty, picker, active_workspace, activity, multi, define_ctx, embed_edit, selected_wire, .. } = ed;
     let Some(project) = project.as_mut() else { return };
     let mode = reg.mode(&project.meta.mode).or_else(|| reg.modes.first());
     let Some(ws) = project.workspaces.get_mut(ws_key) else {
@@ -305,7 +311,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     }
     // Try Zones fit around their blocks; their outputs act like a block's pins.
     let node_count = layouts.len();
-    let fitted = zone_rects(ws, &layouts, None);
+    let fitted = zone_rects(ws, &layouts);
     for (zid, rect) in &fitted {
         if let Some(z) = ws.zones.get_mut(zid) {
             z.rect = [rect.min.x, rect.min.y, rect.width(), rect.height()];
@@ -471,26 +477,50 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             draw_pin(&painter, spot, connected, candidate, theme, reg);
             let resp = cui.interact(Rect::from_center_size(spot.pos, vec2(16.0, 16.0)), cui.id().with(("zpin", &zid, &spot.pin)), Sense::click_and_drag());
             if resp.drag_started() {
-                start_drag = Some(PinEnd { node: zid.clone(), pin: spot.pin.clone(), dir: Dir::Out, ty: spot.ty.clone() });
+                start_drag = Some(PinEnd { node: zid.clone(), pin: spot.pin.clone(), dir: Dir::Out, ty: spot.ty.clone(), picked_up: None });
             }
             resp.on_hover_ui(|ui| pin_tooltip(ui, spot, reg, theme));
         }
     }
 
-    // Wires. Action wires light up while the bot runs through them.
+    // Wires. Action wires light up while the bot runs through them. The wire
+    // under the pointer (on empty canvas) can be clicked or right-clicked.
+    let over_block = pointer_scene.is_some_and(|p| layouts[..node_count].iter().any(|l| l.rect.expand(8.0).contains(p)));
+    let wire_pick = (bg.hovered() && view.drag.is_none() && !over_block).then_some(pointer_scene).flatten();
+    let reach = 6.0 / view.zoom.max(0.3);
+    let mut hovered_wire: Option<Link> = None;
+    for link in &ws.links {
+        let a = pin_at(&(link.from.node.clone(), link.from.pin.clone(), Dir::Out));
+        let b = pin_at(&(link.to.node.clone(), link.to.pin.clone(), Dir::In));
+        if let (Some(a), Some(b)) = (a, b)
+            && let Some(p) = wire_pick
+            && wire_distance(a.pos, b.pos, p) < reach
+        {
+            hovered_wire = Some(link.clone());
+        }
+    }
+    let wire_selected = |l: &Link| selected_wire.as_ref().is_some_and(|(w, s)| w == ws_key && s == l) || view.wire_menu.as_ref().is_some_and(|(s, _)| s == l);
     for link in &ws.links {
         let a = pin_at(&(link.from.node.clone(), link.from.pin.clone(), Dir::Out));
         let b = pin_at(&(link.to.node.clone(), link.to.pin.clone(), Dir::In));
         if let (Some(a), Some(b)) = (a, b) {
             let lit = if a.ty.is_action() { glow(&link.to.node) } else { 0.0 };
+            if wire_selected(link) || hovered_wire.as_ref() == Some(link) {
+                let strength = if wire_selected(link) { 110 } else { 60 };
+                painter.add(CubicBezierShape::from_points_stroke(wire_points(a.pos, b.pos), false, Color32::TRANSPARENT, Stroke::new(theme.wire_width + 6.0, with_alpha(theme.accent, strength))));
+            }
             draw_wire(&painter, a.pos, b.pos, &a.ty, theme, reg, lit);
         }
+    }
+    if hovered_wire.is_some() {
+        ctx.set_cursor_icon(CursorIcon::PointingHand);
     }
 
     // Blocks.
     let mut toggle_pin: Option<(String, String)> = None;
     let mut open_embed_for: Option<(String, String)> = None;
     let mut dropped: Option<String> = None;
+    let mut drag_zones: Option<Vec<(String, Rect)>> = None;
     for layout in &layouts[..node_count] {
         let id = &layout.id;
         let is_selected = selected.as_ref().is_some_and(|(w, n)| w == ws_key && (n == id || multi.contains(id)));
@@ -640,6 +670,9 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             }
             *dirty = true;
         }
+        if head.drag_started() {
+            drag_zones = Some(fitted.clone());
+        }
         if head.drag_stopped() {
             dropped = Some(id.clone());
         }
@@ -693,15 +726,15 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                 ctx.set_cursor_icon(CursorIcon::Crosshair);
             }
             if resp.drag_started() {
-                let existing = (spot.dir == Dir::In && !spot.ty.is_action()).then(|| ws.links_into(id, &spot.pin).next().cloned()).flatten();
+                // Dragging from a connected input picks up its (latest) wire.
+                let existing = (spot.dir == Dir::In).then(|| ws.links_into(id, &spot.pin).last().cloned()).flatten();
                 start_drag = Some(match existing {
-                    // Pick up an existing wire from its input end and move it.
                     Some(link) => {
                         ws.links.retain(|l| *l != link);
                         *dirty = true;
-                        PinEnd { node: link.from.node.clone(), pin: link.from.pin.clone(), dir: Dir::Out, ty: spot.ty.clone() }
+                        PinEnd { node: link.from.node.clone(), pin: link.from.pin.clone(), dir: Dir::Out, ty: spot.ty.clone(), picked_up: Some(link) }
                     }
-                    None => PinEnd { node: id.clone(), pin: spot.pin.clone(), dir: spot.dir, ty: spot.ty.clone() },
+                    None => PinEnd { node: id.clone(), pin: spot.pin.clone(), dir: spot.dir, ty: spot.ty.clone(), picked_up: None },
                 });
             } else if resp.clicked() && spot.dir == Dir::In && !spot.ty.is_action() && !connected {
                 toggle_pin = Some((id.clone(), spot.pin.clone()));
@@ -736,6 +769,9 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         }
         if ctx.input(|i| i.key_pressed(Key::Escape)) {
             view.drag = None;
+            if let Some(link) = d.picked_up.clone() {
+                ws.links.push(link);
+            }
         } else if ctx.input(|i| i.pointer.any_released()) {
             view.drag = None;
             let target = pointer_scene.and_then(|p| {
@@ -751,6 +787,8 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     connect(ws, &d, &node, &spot);
                     *dirty = true;
                 }
+                // A picked-up wire dropped on nothing is deleted.
+                None if d.picked_up.is_some() => {}
                 None if over_canvas => {
                     let p = pointer.unwrap();
                     *picker = Some(Picker::new(ws_key, p, to_global.inverse() * p, Some(PendingWire::from(&d))));
@@ -760,14 +798,39 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         }
     }
 
-    // Background: right-click or Space opens the block picker.
+    // Background: a click selects the wire under the pointer; right-click opens
+    // its menu, or the block picker on empty canvas (Space too).
     if bg.secondary_clicked() {
         if let Some(p) = pointer.or_else(|| ctx.input(|i| i.pointer.interact_pos())) {
-            *picker = Some(Picker::new(ws_key, p, to_global.inverse() * p, None));
+            match hovered_wire.clone() {
+                Some(link) => view.wire_menu = Some((link, p)),
+                None => *picker = Some(Picker::new(ws_key, p, to_global.inverse() * p, None)),
+            }
         }
     } else if bg.clicked() {
         *selected = None;
         multi.clear();
+        *selected_wire = hovered_wire.clone().map(|l| (ws_key.to_string(), l));
+    }
+    if selected.is_some() {
+        *selected_wire = None;
+    }
+    if let Some((link, at)) = view.wire_menu.clone() {
+        let mut close = ctx.input(|i| i.key_pressed(Key::Escape));
+        let area = egui::Area::new(cui.id().with("wire-menu")).order(egui::Order::Foreground).fixed_pos(at).show(&ctx, |ui| {
+            egui::Frame::menu(ui.style()).show(ui, |ui| {
+                ui.set_min_width(140.0);
+                if ui.button("Delete wire").clicked() {
+                    ws.links.retain(|l| *l != link);
+                    *dirty = true;
+                    close = true;
+                }
+            });
+        });
+        let outside = ctx.input(|i| i.pointer.any_pressed()) && ctx.input(|i| i.pointer.interact_pos()).is_some_and(|p| !area.response.rect.contains(p)) && !bg.secondary_clicked();
+        if close || outside || !ws.links.contains(&link) {
+            view.wire_menu = None;
+        }
     }
     let typing = ctx.text_edit_focused();
     if over_canvas && !typing && picker.is_none() && ctx.input(|i| i.key_pressed(Key::Space)) {
@@ -821,13 +884,33 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         None => {}
     }
 
-    // A dropped block joins the zone it was dropped into, or leaves its zone.
+    if let Some(z) = drag_zones {
+        view.drag_zones = z;
+    }
+    // A dropped block stays in its zone while it is inside the zone's outline
+    // from before the drag, joins another zone it was dropped into, or leaves.
+    // A zone's only block always stays: the zone moves with it.
     if let Some(n) = dropped
         && let Some(layout) = layouts[..node_count].iter().find(|l| l.id == n)
     {
         let at = ws.nodes[&n].at;
         let center = pos2(at[0], at[1]) + layout.rect.size() / 2.0;
-        let target = zone_rects(ws, &layouts[..node_count], Some(&n)).into_iter().find(|(_, r)| r.contains(center)).map(|(z, _)| z);
+        let zones = match std::mem::take(&mut view.drag_zones) {
+            z if z.is_empty() => fitted.clone(),
+            z => z,
+        };
+        let own = ws.nodes[&n].zone.clone();
+        let alone = own.as_ref().is_some_and(|z| ws.nodes.values().filter(|m| m.zone.as_ref() == Some(z)).count() == 1);
+        let inside = |z: &str| zones.iter().any(|(id, r)| id == z && r.contains(center));
+        let target = if own.as_deref().is_some_and(inside) {
+            own.clone()
+        } else if let Some((other, _)) = zones.iter().find(|(id, r)| Some(id) != own.as_ref() && r.contains(center)) {
+            Some(other.clone())
+        } else if alone {
+            own.clone()
+        } else {
+            None
+        };
         let node = ws.nodes.get_mut(&n).unwrap();
         if node.zone != target && (target.is_some() || node.zone.is_some()) {
             node.zone = target;
@@ -846,6 +929,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     if let Some(b) = selection_box {
         painter.rect(b, 4.0, with_alpha(theme.accent, 30), Stroke::new(1.0, theme.accent), StrokeKind::Inside);
     }
+    sharpen_text(&ctx, layer, to_global);
 
     // Zoom readout.
     let label = format!("{:.0}%", view.zoom * 100.0);
@@ -884,11 +968,33 @@ fn draw_grid(painter: &egui::Painter, visible: Rect, theme: &Theme, zoom: f32) {
     }
 }
 
+/// The bezier control points of a wire from output `a` to input `b`.
+fn wire_points(a: Pos2, b: Pos2) -> [Pos2; 4] {
+    let dx = ((b.x - a.x).abs() * 0.5).max(40.0);
+    [a, a + vec2(dx, 0.0), b - vec2(dx, 0.0), b]
+}
+
+/// How far `p` is from the wire between `a` and `b`.
+fn wire_distance(a: Pos2, b: Pos2, p: Pos2) -> f32 {
+    let curve = CubicBezierShape::from_points_stroke(wire_points(a, b), false, Color32::TRANSPARENT, Stroke::NONE);
+    if !curve.logical_bounding_rect().expand(12.0).contains(p) {
+        return f32::INFINITY;
+    }
+    let pts: Vec<Pos2> = (0..=32).map(|i| curve.sample(i as f32 / 32.0)).collect();
+    pts.windows(2)
+        .map(|w| {
+            let (s, e) = (w[0], w[1]);
+            let d = e - s;
+            let t = if d.length_sq() > 0.0 { ((p - s).dot(d) / d.length_sq()).clamp(0.0, 1.0) } else { 0.0 };
+            p.distance(s + d * t)
+        })
+        .fold(f32::INFINITY, f32::min)
+}
+
 /// `lit` (0..1) makes an Action wire glow while the bot runs through it.
 fn draw_wire(painter: &egui::Painter, a: Pos2, b: Pos2, ty: &PinType, theme: &Theme, reg: &Registry, lit: f32) {
     let color = theme.pin_color(ty, reg);
-    let dx = ((b.x - a.x).abs() * 0.5).max(40.0);
-    let points = [a, a + vec2(dx, 0.0), b - vec2(dx, 0.0), b];
+    let points = wire_points(a, b);
     if ty.is_action() {
         let halo = Stroke::new(theme.wire_width * (3.0 + 3.0 * lit), with_alpha(color, (40.0 + 120.0 * lit) as u8));
         painter.add(CubicBezierShape::from_points_stroke(points, false, Color32::TRANSPARENT, halo));
@@ -974,5 +1080,82 @@ fn pin_tooltip(ui: &mut Ui, spot: &PinSpot, reg: &Registry, theme: &Theme) {
     }
     if spot.faint {
         ui.label(egui::RichText::new("Click to turn this field into a pin, or drop a wire on it.").small().italics().color(theme.text_muted));
+    }
+}
+
+/// egui draws text in a zoomed layer from glyphs rendered for 100% and then
+/// scales them, which blurs them (at 65% the letters are shrunken bitmaps).
+/// This lays every text in the canvas out again at the size it appears on
+/// screen, shrinks it back so the layer's zoom brings it to exactly that size,
+/// and snaps it to whole pixels.
+fn sharpen_text(ctx: &egui::Context, layer: LayerId, to_global: TSTransform) {
+    let zoom = to_global.scaling;
+    let ppp = ctx.pixels_per_point();
+    let texts: Vec<(usize, Pos2, std::sync::Arc<egui::Galley>)> = ctx.graphics(|g| {
+        g.get(layer)
+            .map(|list| list.all_entries().enumerate().filter_map(|(i, c)| if let egui::Shape::Text(t) = &c.shape { Some((i, t.pos, t.galley.clone())) } else { None }).collect())
+            .unwrap_or_default()
+    });
+    if texts.is_empty() {
+        return;
+    }
+    let rescale = (zoom - 1.0).abs() > 0.001;
+    // Laid out before touching the paint lists: both need the context's lock.
+    let sharp: Vec<(usize, Pos2, Option<std::sync::Arc<egui::Galley>>)> = texts
+        .into_iter()
+        .map(|(i, pos, galley)| {
+            let screen = to_global * pos;
+            let snapped = to_global.inverse() * pos2((screen.x * ppp).round() / ppp, (screen.y * ppp).round() / ppp);
+            let big = rescale.then(|| ctx.fonts_mut(|f| f.layout_job(scaled_job(&galley.job, zoom))));
+            (i, snapped, big)
+        })
+        .collect();
+    ctx.graphics_mut(|g| {
+        let list = g.entry(layer);
+        for (i, pos, big) in sharp {
+            list.mutate_shape(egui::layers::ShapeIdx(i), |c| {
+                if let egui::Shape::Text(t) = &mut c.shape {
+                    if let Some(big) = big {
+                        t.galley = big;
+                        t.transform(TSTransform::from_scaling(1.0 / zoom));
+                    }
+                    t.pos = pos;
+                }
+            });
+        }
+    });
+}
+
+/// A copy of a layout job with every size multiplied by `k`.
+fn scaled_job(job: &egui::text::LayoutJob, k: f32) -> egui::text::LayoutJob {
+    let mut job = job.clone();
+    if job.wrap.max_width.is_finite() {
+        job.wrap.max_width *= k;
+    }
+    job.first_row_min_height *= k;
+    for s in &mut job.sections {
+        s.leading_space *= k;
+        let f = &mut s.format;
+        f.font_id.size *= k;
+        f.extra_letter_spacing *= k;
+        f.line_height = f.line_height.map(|h| h * k);
+        f.expand_bg *= k;
+        f.underline.width *= k;
+        f.strikethrough.width *= k;
+    }
+    job
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wire_hit_test() {
+        let (a, b) = (pos2(0.0, 0.0), pos2(200.0, 100.0));
+        assert!(wire_distance(a, b, pos2(2.0, 1.0)) < 3.0, "near the start");
+        assert!(wire_distance(a, b, pos2(100.0, 50.0)) < 3.0, "the middle of an S curve");
+        assert!(wire_distance(a, b, pos2(100.0, 0.0)) > 10.0);
+        assert_eq!(wire_distance(a, b, pos2(500.0, 500.0)), f32::INFINITY);
     }
 }

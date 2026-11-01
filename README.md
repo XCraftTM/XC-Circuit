@@ -22,6 +22,7 @@ The first start opens `examples/DemoBot`. Windows and Linux are supported.
 | Field as pin | Click a field's faint pin, or "pin" in the Inspector |
 | Select several | Shift-drag a box on empty canvas, or Ctrl+click blocks; Ctrl+A selects all |
 | Delete | Select blocks, press Delete (or right-click › Delete) |
+| Remove a wire | Click it and press Delete, or right-click it › Delete wire; or drag it off its input and drop it on empty canvas |
 | Undo / Redo | Ctrl+Z / Ctrl+Y (per workspace) |
 | Copy / Paste / Duplicate | Ctrl+C / Ctrl+V (at the mouse) / Ctrl+D; works across workspaces and projects |
 | Command palette | Ctrl+P or the search box in the title bar: run any command, open a workspace, or jump to a block |
