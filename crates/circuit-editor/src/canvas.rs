@@ -65,6 +65,13 @@ pub struct CanvasView {
     pub drag_zones: Vec<(String, Rect)>,
     /// The wire whose right-click menu is open, and where (screen position).
     pub wire_menu: Option<(Link, Pos2)>,
+    /// Text fields that open a bigger editor while being edited: (block, field) → editor size.
+    pub expanded: HashMap<(String, String), Vec2>,
+    /// Screen rectangles of the text fields drawn last frame.
+    pub text_fields: Vec<((String, String), Rect)>,
+    /// The expanded editor that is open now, and for how many more frames it
+    /// claims the keyboard focus (the click that opened it can still take it away).
+    pub overlay: Option<(String, String, u8)>,
 }
 
 impl CanvasView {
@@ -521,6 +528,9 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     let mut open_embed_for: Option<(String, String)> = None;
     let mut dropped: Option<String> = None;
     let mut drag_zones: Option<Vec<(String, Rect)>> = None;
+    // Where the open expanded editor's field is on screen.
+    let mut overlay_anchor: Option<Rect> = None;
+    view.text_fields.clear();
     for layout in &layouts[..node_count] {
         let id = &layout.id;
         let is_selected = selected.as_ref().is_some_and(|(w, n)| w == ws_key && (n == id || multi.contains(id)));
@@ -630,6 +640,53 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                         if !connected {
                             painter.text(r.right_center() - vec2(16.0, 0.0), Align2::RIGHT_CENTER, "connect", FontId::proportional(11.0), with_alpha(theme.text_muted, 140));
                         }
+                    } else if widgets::is_plain_text(f) {
+                        // Free text: right-click to make it open a bigger editor while editing.
+                        let wr = Rect::from_min_max(pos2(r.left() + 16.0 + label_w + 6.0, r.top() + 3.0), pos2(r.right() - 12.0, r.bottom() - 3.0));
+                        let field_key = (id.clone(), key.clone());
+                        let expands = view.expanded.contains_key(&field_key);
+                        let open_here = view.overlay.as_ref().is_some_and(|(n, k, _)| n == id && k == key);
+                        let mut text = widgets::as_text(ws.nodes[id].values.get(key).or(f.default.as_ref()).unwrap_or(&Value::Null));
+                        let resp = cui.put(
+                            wr,
+                            egui::TextEdit::singleline(&mut text)
+                                .id(cui.id().with(("field", id, key)))
+                                .hint_text(f.placeholder.clone().unwrap_or_default())
+                                .desired_width(wr.width()),
+                        );
+                        if resp.changed() {
+                            ws.nodes.get_mut(id).unwrap().values.insert(key.clone(), Value::String(text));
+                            *dirty = true;
+                        }
+                        if expands && resp.has_focus() && !open_here {
+                            view.overlay = Some((id.clone(), key.clone(), OVERLAY_FOCUS_FRAMES));
+                        }
+                        resp.context_menu(|ui| {
+                            if !expands {
+                                if ui.button("Expand when editing").on_hover_text("Edit this field in a bigger box that opens over the block").clicked() {
+                                    view.expanded.insert(field_key.clone(), Vec2::ZERO);
+                                    view.overlay = Some((id.clone(), key.clone(), OVERLAY_FOCUS_FRAMES));
+                                    ui.close();
+                                }
+                            } else {
+                                if ui.button("Stop expanding").clicked() {
+                                    view.expanded.remove(&field_key);
+                                    if open_here {
+                                        view.overlay = None;
+                                    }
+                                    ui.close();
+                                }
+                                if ui.button("Reset size").clicked() {
+                                    view.expanded.insert(field_key.clone(), Vec2::ZERO);
+                                    ui.close();
+                                }
+                            }
+                        });
+                        // Recorded last: the menu or the focus above may just have opened it.
+                        if view.overlay.as_ref().is_some_and(|(n, k, _)| n == id && k == key) {
+                            overlay_anchor = Some(to_global * wr);
+                        }
+                        view.text_fields.push((field_key, to_global * wr));
                     } else if widgets::is_inline_editable(f) {
                         let wr = Rect::from_min_max(pos2(r.left() + 16.0 + label_w + 6.0, r.top() + 3.0), pos2(r.right() - 12.0, r.bottom() - 3.0));
                         let mut value = ws.nodes[id].values.get(key).cloned().or_else(|| f.default.clone()).unwrap_or(Value::Null);
@@ -930,6 +987,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         painter.rect(b, 4.0, with_alpha(theme.accent, 30), Stroke::new(1.0, theme.accent), StrokeKind::Inside);
     }
     sharpen_text(&ctx, layer, to_global);
+    expanded_editor(&ctx, cui.id(), view, ws, overlay_anchor, theme, dirty);
 
     // Zoom readout.
     let label = format!("{:.0}%", view.zoom * 100.0);
@@ -1083,6 +1141,74 @@ fn pin_tooltip(ui: &mut Ui, spot: &PinSpot, reg: &Registry, theme: &Theme) {
     }
 }
 
+const OVERLAY_FOCUS_FRAMES: u8 = 3;
+
+/// The bigger editor of an expanded text field. It opens over the field (and
+/// the block) without changing the block, can be resized from its corner, and
+/// closes when the focus moves elsewhere.
+fn expanded_editor(ctx: &egui::Context, base: egui::Id, view: &mut CanvasView, ws: &mut Workspace, anchor: Option<Rect>, theme: &Theme, dirty: &mut bool) {
+    if view.overlay.is_some() || !view.expanded.is_empty() { eprintln!("DBG overlay={:?} anchor={:?} expanded={:?}", view.overlay, anchor, view.expanded); }
+    let Some((node, key, fresh)) = view.overlay.clone() else { return };
+    let (Some(anchor), Some(n)) = (anchor, ws.nodes.get_mut(&node)) else {
+        view.overlay = None;
+        return;
+    };
+    let field_key = (node.clone(), key.clone());
+    let stored = view.expanded.get(&field_key).copied().unwrap_or(Vec2::ZERO);
+    let size = if stored == Vec2::ZERO { vec2(anchor.width().max(340.0), 150.0) } else { stored };
+    let edit_id = base.with(("expanded", &node, &key));
+    let mut text = widgets::as_text(n.values.get(&key).unwrap_or(&Value::Null));
+    let mut resized: Option<Vec2> = None;
+    let mut resizing = false;
+
+    let area = egui::Area::new(base.with("expanded-editor")).order(egui::Order::Foreground).fixed_pos(anchor.min - vec2(6.0, 6.0)).show(ctx, |ui| {
+        egui::Frame::new()
+            .fill(theme.panel)
+            .stroke(Stroke::new(1.0, theme.accent))
+            .corner_radius(8)
+            .inner_margin(6)
+            .shadow(ctx.global_style().visuals.popup_shadow)
+            .show(ui, |ui| {
+                egui::ScrollArea::vertical().max_height(size.y).max_width(size.x).show(ui, |ui| {
+                    let resp = ui.add_sized(size, egui::TextEdit::multiline(&mut text).id(edit_id).frame(egui::Frame::NONE).desired_width(size.x));
+                    if resp.changed() {
+                        n.values.insert(key.clone(), Value::String(text.clone()));
+                        *dirty = true;
+                    }
+                });
+            });
+        // Resize grip in the bottom-right corner.
+        let frame = ui.min_rect();
+        let grip = Rect::from_min_size(frame.right_bottom() - vec2(16.0, 16.0), vec2(14.0, 14.0));
+        let g = ui.interact(grip, base.with(("expanded-grip", &node, &key)), Sense::drag()).on_hover_cursor(CursorIcon::ResizeNwSe);
+        let c = if g.hovered() || g.dragged() { theme.accent } else { theme.text_muted };
+        for i in 1..=3 {
+            let o = i as f32 * 4.0;
+            ui.painter().line_segment([grip.right_bottom() - vec2(o, 1.0), grip.right_bottom() - vec2(1.0, o)], Stroke::new(1.2, c));
+        }
+        if g.dragged() {
+            resizing = true;
+            let d = g.drag_delta();
+            resized = Some(vec2((size.x + d.x).clamp(180.0, 1000.0), (size.y + d.y).clamp(60.0, 800.0)));
+        }
+    });
+
+    if let Some(s) = resized {
+        view.expanded.insert(field_key, s);
+    }
+    let focused = ctx.memory(|m| m.has_focus(edit_id));
+    let pointer_inside = ctx.input(|i| i.pointer.interact_pos()).is_some_and(|p| area.response.rect.contains(p));
+    if fresh > 0 || resizing || (!focused && pointer_inside && ctx.input(|i| i.pointer.any_down())) {
+        // Keep (or put) the text cursor in the big editor.
+        ctx.memory_mut(|m| m.request_focus(edit_id));
+        view.overlay = Some((node, key, fresh.saturating_sub(1)));
+        ctx.request_repaint();
+    } else if !focused {
+        eprintln!("DBG closing: focused={focused} inside={pointer_inside} focus={:?}", ctx.memory(|m| m.focused()));
+        view.overlay = None;
+    }
+}
+
 /// egui draws text in a zoomed layer from glyphs rendered for 100% and then
 /// scales them, which blurs them (at 65% the letters are shrunken bitmaps).
 /// This lays every text in the canvas out again at the size it appears on
@@ -1149,6 +1275,62 @@ fn scaled_job(job: &egui::text::LayoutJob, k: f32) -> egui::text::LayoutJob {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Runs one frame of a workspace canvas headlessly.
+    fn frame(ctx: &egui::Context, ed: &mut Editor, ws: &str, events: Vec<egui::Event>) {
+        let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1400.0, 900.0))), events, ..Default::default() };
+        let mut out = ctx.run_ui(raw, |ui| show(ui, ed, ws));
+        out.textures_delta.clear();
+    }
+
+    #[test]
+    fn expanded_text_field() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&root.join("examples/DemoBot"));
+        let ctx = egui::Context::default();
+        for _ in 0..3 {
+            frame(&ctx, &mut ed, "rank-command", vec![]);
+        }
+        let field = ("4".to_string(), "text".to_string());
+        let rect = ed.views["rank-command"].text_fields.iter().find(|(k, _)| *k == field).map(|(_, r)| *r).unwrap();
+        let click = |p: Pos2| {
+            vec![
+                egui::Event::PointerMoved(p),
+                egui::Event::PointerButton { pos: p, button: PointerButton::Primary, pressed: true, modifiers: Default::default() },
+                egui::Event::PointerButton { pos: p, button: PointerButton::Primary, pressed: false, modifiers: Default::default() },
+            ]
+        };
+        let open = |ed: &Editor| ed.views["rank-command"].overlay.is_some();
+        let settle = |ed: &mut Editor| {
+            for _ in 0..6 {
+                frame(&ctx, ed, "rank-command", vec![]);
+            }
+        };
+
+        // Without expanding, clicking the field just edits it in place.
+        frame(&ctx, &mut ed, "rank-command", click(rect.center()));
+        settle(&mut ed);
+        assert!(!open(&ed));
+
+        // "Expand when editing" is on: clicking into the field opens the big editor.
+        ed.views.get_mut("rank-command").unwrap().expanded.insert(field.clone(), Vec2::ZERO);
+        frame(&ctx, &mut ed, "rank-command", click(pos2(300.0, 850.0)));
+        frame(&ctx, &mut ed, "rank-command", click(rect.center()));
+        settle(&mut ed);
+        assert!(open(&ed), "clicking the field opens the expanded editor");
+        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::Text("!!".into())]);
+        let text = ed.workspace("rank-command").unwrap().nodes["4"].values["text"].clone();
+        assert!(text.as_str().unwrap().ends_with("!!"), "typing goes into the expanded editor: {text}");
+
+        // Clicking elsewhere hides it; clicking the field again brings it back.
+        frame(&ctx, &mut ed, "rank-command", click(pos2(300.0, 850.0)));
+        settle(&mut ed);
+        assert!(!open(&ed), "leaving hides it");
+        frame(&ctx, &mut ed, "rank-command", click(rect.center()));
+        settle(&mut ed);
+        assert!(open(&ed), "going back in expands it again");
+    }
 
     #[test]
     fn wire_hit_test() {

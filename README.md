@@ -19,6 +19,8 @@ The first start opens `examples/DemoBot`. Windows and Linux are supported.
 | Add a connected block | Drag a wire into empty space; the picker shows only compatible blocks |
 | Move a block | Drag its title bar |
 | Pan / zoom | Drag empty canvas or middle mouse / mouse wheel |
+| Long text | Right-click a text field on a block › Expand when editing: clicking into it then opens a bigger editor over the block (resize it from its corner); right-click again to stop |
+| Colors | Click a color swatch for the picker: square and hue bar, hex and RGB, Discord colors and your recent ones |
 | Field as pin | Click a field's faint pin, or "pin" in the Inspector |
 | Select several | Shift-drag a box on empty canvas, or Ctrl+click blocks; Ctrl+A selects all |
 | Delete | Select blocks, press Delete (or right-click › Delete) |

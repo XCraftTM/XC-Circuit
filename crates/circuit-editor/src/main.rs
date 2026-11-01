@@ -3,6 +3,7 @@
 mod app;
 mod bot;
 mod canvas;
+mod color;
 mod dialog;
 mod editor;
 mod embed;

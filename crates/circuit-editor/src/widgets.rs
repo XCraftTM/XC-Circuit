@@ -13,13 +13,27 @@ pub fn is_inline_editable(field: &FieldDef) -> bool {
         || matches!(field.ty.required(), PinType::Text | PinType::Number | PinType::Boolean | PinType::Any | PinType::Date)
 }
 
+/// Whether a field is edited as free text (and so can be expanded on the canvas).
+pub fn is_plain_text(field: &FieldDef) -> bool {
+    !field.is_select() && field.type_name != "color" && is_inline_editable(field) && !matches!(field.ty.required(), PinType::Boolean | PinType::Number)
+}
+
+/// A field value as the text a text box shows.
+pub fn as_text(value: &Value) -> String {
+    match value {
+        Value::String(s) => s.clone(),
+        Value::Null => String::new(),
+        other => other.to_string(),
+    }
+}
+
 /// Draws an editor for one field value. Returns true when the value changed.
 pub fn value_editor(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width: f32, multiline: bool, theme: &Theme) -> bool {
     if field.is_select() {
         return select(ui, id, field, value, width);
     }
     if field.type_name == "color" {
-        return color(ui, value);
+        return color(ui, id, value, width, theme);
     }
     match field.ty.required() {
         PinType::Boolean => {
@@ -95,11 +109,11 @@ fn select(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width:
     }
 }
 
-fn color(ui: &mut Ui, value: &mut Value) -> bool {
+fn color(ui: &mut Ui, id: egui::Id, value: &mut Value, width: f32, theme: &Theme) -> bool {
     let mut c = value.as_str().and_then(hex_color).unwrap_or(Color32::WHITE);
-    let changed = egui::color_picker::color_edit_button_srgba(ui, &mut c, egui::color_picker::Alpha::Opaque).changed();
+    let changed = crate::color::color_button(ui, id, &mut c, theme, Some(width.clamp(96.0, 180.0)));
     if changed {
-        *value = Value::String(format!("#{:02X}{:02X}{:02X}", c.r(), c.g(), c.b()));
+        *value = Value::String(crate::color::to_hex(c));
     }
     changed
 }

@@ -241,8 +241,8 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
     dialog::section(ui, theme, "Color");
     ui.horizontal(|ui| {
         let mut c = hex_color(&e.color).unwrap_or(Color32::from_rgb(0, 0xD8, 0xF0));
-        if egui::color_picker::color_edit_button_srgba(ui, &mut c, egui::color_picker::Alpha::Opaque).changed() {
-            e.color = format!("#{:02X}{:02X}{:02X}", c.r(), c.g(), c.b());
+        if crate::color::color_button(ui, ui.id().with("embed-color"), &mut c, theme, None) {
+            e.color = crate::color::to_hex(c);
         }
         for preset in ["#00D8F0", "#3DFF6E", "#5865F2", "#FEE75C", "#ED4245", "#EB459E"] {
             let col = hex_color(preset).unwrap();
