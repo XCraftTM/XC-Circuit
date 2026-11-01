@@ -16,6 +16,8 @@ circuit-plugins.workspace = true
 circuit-runner.workspace = true
 anyhow.workspace = true
 arboard = "3"
+libloading = "0.8"
+xc-circuit-plugin = { path = "../xc-circuit-plugin" }
 notify = "8"
 dirs.workspace = true
 eframe.workspace = true

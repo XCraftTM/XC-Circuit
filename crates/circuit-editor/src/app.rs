@@ -21,6 +21,8 @@ pub enum Tab {
     Console,
     Problems,
     StoredData,
+    /// A native plugin's panel: plugin id, panel id.
+    Plugin(String, String),
 }
 
 impl Tab {
@@ -37,6 +39,9 @@ const KEY_DOCK: &str = "dock";
 const KEY_THEME: &str = "theme";
 const KEY_PROJECT: &str = "project";
 const KEY_SYSTEM_TITLEBAR: &str = "system_titlebar";
+const KEY_NATIVE_ALLOW: &str = "native_allow";
+const KEY_NATIVE_TRUSTED: &str = "native_trusted";
+const KEY_NATIVE_STORAGE: &str = "native_storage";
 
 pub struct CircuitApp {
     ed: Editor,
@@ -53,6 +58,10 @@ pub struct CircuitApp {
     palette: Option<palette::Palette>,
     /// Use the operating system's title bar instead of ours.
     system_titlebar: bool,
+    native: crate::native::NativeHost,
+    /// The app's own plugins folder.
+    bundled_plugins: Option<PathBuf>,
+    show_plugins: bool,
 }
 
 impl CircuitApp {
@@ -73,7 +82,8 @@ impl CircuitApp {
         };
         ed.theme.apply(&cc.egui_ctx);
 
-        let examples_dir = bundled_root.map(|r| r.join("examples"));
+        let examples_dir = bundled_root.as_ref().map(|r| r.join("examples"));
+        let bundled_plugins = bundled_root.map(|r| r.join("plugins"));
         let project = last_project
             .filter(|p| p.join(circuit_core::project::PROJECT_FILE).is_file())
             .or_else(|| examples_dir.as_ref().map(|e| e.join("DemoBot")).filter(|p| p.is_dir()));
@@ -89,6 +99,13 @@ impl CircuitApp {
             }
             None => default_layout(),
         };
+
+        let mut native = crate::native::NativeHost::new(
+            cc.storage.and_then(|s| eframe::get_value(s, KEY_NATIVE_ALLOW)).unwrap_or(false),
+            cc.storage.and_then(|s| eframe::get_value(s, KEY_NATIVE_TRUSTED)).unwrap_or_default(),
+            cc.storage.and_then(|s| eframe::get_value(s, KEY_NATIVE_STORAGE)).unwrap_or_default(),
+        );
+        native.sync(&mut ed, bundled_plugins.as_deref());
 
         let repaint = cc.egui_ctx.clone();
         let mut watcher = crate::watch::PluginWatcher::new(move || repaint.request_repaint());
@@ -107,6 +124,9 @@ impl CircuitApp {
             watcher,
             palette: None,
             system_titlebar,
+            native,
+            bundled_plugins,
+            show_plugins: false,
         }
     }
 
@@ -133,12 +153,19 @@ impl CircuitApp {
             self.dock.retain_tabs(|t| *t != tab);
             return;
         }
+        if matches!(tab, Tab::Plugin(..))
+            && let Some(path) = self.dock.find_tab(&Tab::Inspector)
+        {
+            self.dock.set_focused_node_and_surface(path.node_path());
+            self.dock.push_to_focused_leaf(tab);
+            return;
+        }
         let surface = self.dock.main_surface_mut();
         match tab {
             Tab::Workspaces => {
                 surface.split_left(NodeIndex::root(), 0.17, vec![tab]);
             }
-            Tab::Inspector => {
+            Tab::Inspector | Tab::Plugin(..) => {
                 surface.split_right(NodeIndex::root(), 0.78, vec![tab]);
             }
             _ => {
@@ -170,6 +197,7 @@ impl CircuitApp {
         self.bot.stop(&mut self.ed);
         self.dock.retain_tabs(|t| !matches!(t, Tab::Canvas(_)));
         self.ed.open_project(dir);
+        self.native.sync(&mut self.ed, self.bundled_plugins.as_deref());
         self.watcher.watch(&self.ed.watch_dirs());
         self.stored = Default::default();
     }
@@ -213,8 +241,7 @@ impl CircuitApp {
                     self.bot.restart_if_running(&mut self.ed, ui.ctx());
                 }
                 if ui.button("Reload Plugins").clicked() {
-                    self.ed.reload_plugins();
-                    self.ed.theme.apply(ui.ctx());
+                    self.reload_plugins(ui.ctx());
                 }
                 ui.separator();
                 if ui.button("Exit").clicked() {
@@ -301,6 +328,42 @@ impl CircuitApp {
                     self.bot.open_export(&self.ed);
                 }
             });
+            ui.menu_button("Plugins", |ui| {
+                let mut any = false;
+                for i in 0..self.native.plugins.len() {
+                    let p = &self.native.plugins[i];
+                    if p.commands().is_empty() && p.panels().is_empty() {
+                        continue;
+                    }
+                    any = true;
+                    ui.label(RichText::new(p.name.to_uppercase()).size(10.5).color(theme.text_muted));
+                    let (id, commands, panels) = (p.id.clone(), p.commands().to_vec(), p.panels().to_vec());
+                    for c in commands {
+                        let mut b = ui.button(&c.title);
+                        if !c.description.is_empty() {
+                            b = b.on_hover_text(&c.description);
+                        }
+                        if b.clicked() {
+                            self.native.queued.push(c.id.clone());
+                        }
+                    }
+                    for panel in panels {
+                        let tab = Tab::Plugin(id.clone(), panel.id.clone());
+                        let mut open = self.dock.find_tab(&tab).is_some();
+                        if ui.checkbox(&mut open, format!("{} panel", panel.title)).clicked() {
+                            self.toggle_panel(tab);
+                        }
+                    }
+                    ui.separator();
+                }
+                if !any {
+                    ui.label(RichText::new("No native plugins are running").color(theme.text_muted));
+                    ui.separator();
+                }
+                if ui.button("Manage Plugins…").clicked() {
+                    self.show_plugins = true;
+                }
+            });
             ui.menu_button("Help", |ui| {
                 if ui.button("About XC™ Circuit").clicked() {
                     self.show_about = true;
@@ -328,6 +391,37 @@ impl CircuitApp {
         let run = egui::Button::new(RichText::new(label).strong().color(egui::Color32::from_rgb(4, 33, 13))).fill(theme.action);
         if ui.add_enabled(self.ed.project.is_some(), run).on_hover_text("Run the bot (F5)").clicked() {
             self.bot.start(&mut self.ed, ui.ctx());
+        }
+    }
+
+    fn reload_plugins(&mut self, ctx: &egui::Context) {
+        self.ed.reload_plugins();
+        self.ed.refresh_define_ctx();
+        self.ed.theme.apply(ctx);
+        self.native.sync(&mut self.ed, self.bundled_plugins.as_deref());
+    }
+
+    /// Bot events, checks and queued commands for native plugins.
+    fn run_native(&mut self, ctx: &egui::Context) {
+        let running = self.bot.state != BotState::Stopped;
+        for ev in std::mem::take(&mut self.bot.events) {
+            self.native.bot_event(&mut self.ed, &ev, running);
+        }
+        self.native.tick(&mut self.ed, running);
+        for id in std::mem::take(&mut self.native.queued) {
+            match id.as_str() {
+                "bot.run" => self.run_command(Cmd::Run, ctx),
+                "bot.stop" => self.run_command(Cmd::Stop, ctx),
+                "file.save" => self.run_command(Cmd::Save, ctx),
+                _ => {
+                    if !self.native.run_command(&mut self.ed, &id, running) {
+                        self.ed.log(Level::Warn, format!("No command `{id}`"));
+                    }
+                }
+            }
+        }
+        if self.native.plugins.iter().any(|p| p.status == crate::native::Status::Loaded) {
+            ctx.request_repaint_after(std::time::Duration::from_secs(1));
         }
     }
 
@@ -390,6 +484,17 @@ impl CircuitApp {
         }
         items.push(Item::new("View", "Reset layout", Cmd::ResetLayout));
         items.push(Item::new("Help", "About XC™ Circuit", Cmd::About));
+        items.push(Item::new("Plugins", "Manage Plugins…", Cmd::ManagePlugins));
+        for p in &self.native.plugins {
+            for c in p.commands() {
+                items.push(Item::new("Plugin", c.title.clone(), Cmd::PluginCommand(c.id.clone())).detail(p.name.clone()));
+            }
+            for panel in p.panels() {
+                let tab = Tab::Plugin(p.id.clone(), panel.id.clone());
+                let verb = if self.dock.find_tab(&tab).is_some() { "Close" } else { "Show" };
+                items.push(Item::new("Plugin", format!("{verb} {} panel", panel.title), Cmd::TogglePluginPanel(p.id.clone(), panel.id.clone())).detail(p.name.clone()));
+            }
+        }
         if let Some(p) = &self.ed.project {
             for (wk, ws) in &p.workspaces {
                 items.push(Item::new("Workspace", ws.name.clone(), Cmd::OpenWorkspace(wk.clone())));
@@ -418,10 +523,7 @@ impl CircuitApp {
                 self.ed.save();
                 self.bot.restart_if_running(&mut self.ed, ctx);
             }
-            Cmd::ReloadPlugins => {
-                self.ed.reload_plugins();
-                self.ed.theme.apply(ctx);
-            }
+            Cmd::ReloadPlugins => self.reload_plugins(ctx),
             Cmd::Undo => self.ed.undo(),
             Cmd::Redo => self.ed.redo(),
             Cmd::Duplicate => self.ed.duplicate(),
@@ -439,6 +541,9 @@ impl CircuitApp {
             Cmd::Settings => self.bot.open_settings(&self.ed),
             Cmd::Export => self.bot.open_export(&self.ed),
             Cmd::About => self.show_about = true,
+            Cmd::ManagePlugins => self.show_plugins = true,
+            Cmd::PluginCommand(id) => self.native.queued.push(id),
+            Cmd::TogglePluginPanel(plugin, panel) => self.toggle_panel(Tab::Plugin(plugin, panel)),
             Cmd::OpenWorkspace(key) => self.ed.actions.push(Action::OpenWorkspace(key)),
             Cmd::RevealBlock(ws, id) => self.ed.reveal(&ws, &id),
         }
@@ -618,11 +723,10 @@ impl eframe::App for CircuitApp {
             self.ed.picker = None;
         }
         self.bot.poll(&mut self.ed);
+        self.run_native(&ctx);
         if self.watcher.poll() {
             self.ed.log(Level::Info, "Plugin files changed, reloading");
-            self.ed.reload_plugins();
-            self.ed.refresh_define_ctx();
-            self.ed.theme.apply(&ctx);
+            self.reload_plugins(&ctx);
         } else if self.watcher.waiting() {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
@@ -652,12 +756,13 @@ impl eframe::App for CircuitApp {
             .exact_size(24.0)
             .frame(Frame::new().fill(theme.status_bar).inner_margin(Margin::symmetric(12, 0)))
             .show(ui, |ui| self.status_bar(ui));
-        let problems = panels::collect_problems(&self.ed);
+        let mut problems = panels::collect_problems(&self.ed);
+        problems.extend(self.native.problems());
         self.problem_count = problems.len();
         egui::CentralPanel::no_frame().show(ui, |ui| {
             let style = theme.dock_style(ui.style());
             let running = self.bot.state != BotState::Stopped;
-            let mut viewer = Viewer { ed: &mut self.ed, problem_count: self.problem_count, problems, stored: &mut self.stored, running };
+            let mut viewer = Viewer { ed: &mut self.ed, problem_count: self.problem_count, problems, stored: &mut self.stored, running, native: &mut self.native };
             DockArea::new(&mut self.dock)
                 .style(style)
                 .show_add_buttons(false)
@@ -682,6 +787,18 @@ impl eframe::App for CircuitApp {
         self.bot.windows(&ctx, &mut self.ed);
         crate::embed::window(&ctx, &mut self.ed);
         crate::slash::window(&ctx, &mut self.ed);
+        if self.show_plugins {
+            use crate::plugin_manager::Ask;
+            match crate::plugin_manager::window(&ctx, &theme, &self.ed, &self.native) {
+                Some(Ask::SetAllow(on)) => {
+                    self.native.allow = on;
+                    self.native.sync(&mut self.ed, self.bundled_plugins.as_deref());
+                }
+                Some(Ask::Trust(id)) => self.native.trust(&id, &mut self.ed),
+                Some(Ask::Close) => self.show_plugins = false,
+                None => {}
+            }
+        }
         if !self.system_titlebar {
             crate::titlebar::frame_edges(&ctx, &theme);
         }
@@ -701,6 +818,9 @@ impl eframe::App for CircuitApp {
         eframe::set_value(storage, KEY_DOCK, &self.dock);
         eframe::set_value(storage, KEY_THEME, &self.ed.theme.id);
         eframe::set_value(storage, KEY_SYSTEM_TITLEBAR, &self.system_titlebar);
+        eframe::set_value(storage, KEY_NATIVE_ALLOW, &self.native.allow);
+        eframe::set_value(storage, KEY_NATIVE_TRUSTED, &self.native.trusted);
+        eframe::set_value(storage, KEY_NATIVE_STORAGE, &self.native.storage);
         if let Some(p) = &self.ed.project {
             eframe::set_value(storage, KEY_PROJECT, &p.root);
         }
@@ -713,6 +833,7 @@ struct Viewer<'a> {
     running: bool,
     problem_count: usize,
     problems: Vec<panels::ProblemItem>,
+    native: &'a mut crate::native::NativeHost,
 }
 
 impl TabViewer for Viewer<'_> {
@@ -729,6 +850,7 @@ impl TabViewer for Viewer<'_> {
             Tab::Console => "Console".into(),
             Tab::Problems => format!("Problems  {}", self.problem_count).into(),
             Tab::StoredData => "Stored Data".into(),
+            Tab::Plugin(plugin, panel) => self.native.panel_title(plugin, panel).unwrap_or_else(|| panel.clone()).into(),
             Tab::Canvas(key) => self.ed.workspace(key).map(|w| w.name.clone()).unwrap_or_else(|| key.clone()).into(),
         }
     }
@@ -740,6 +862,10 @@ impl TabViewer for Viewer<'_> {
             Tab::Console => panels::console(ui, self.ed),
             Tab::Problems => panels::problems(ui, self.ed, std::mem::take(&mut self.problems)),
             Tab::StoredData => crate::stored::panel(ui, self.ed, self.stored, self.running),
+            Tab::Plugin(plugin, panel) => {
+                let (plugin, panel) = (plugin.clone(), panel.clone());
+                self.native.panel_ui(ui, self.ed, &plugin, &panel, self.running);
+            }
             Tab::Canvas(key) => {
                 let key = key.clone();
                 canvas::show(ui, self.ed, &key);

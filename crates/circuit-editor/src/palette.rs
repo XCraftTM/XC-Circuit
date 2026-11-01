@@ -28,6 +28,9 @@ pub enum Cmd {
     About,
     OpenWorkspace(String),
     RevealBlock(String, String),
+    PluginCommand(String),
+    TogglePluginPanel(String, String),
+    ManagePlugins,
 }
 
 pub struct Item {

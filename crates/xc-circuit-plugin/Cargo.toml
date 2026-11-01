@@ -1,0 +1,15 @@
+[package]
+name = "xc-circuit-plugin"
+description = "Write native XC Circuit editor plugins in Rust: panels drawn with egui, commands, checks and bot event hooks"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+
+[dependencies]
+# These must be exactly the egui features the editor builds with, so a plugin
+# built on its own lays out egui's types the same way the editor does.
+egui = { version = "0.36", default-features = false, features = ["bytemuck", "default_fonts", "persistence", "ron", "serde"] }
+
+[build-dependencies]
+toml.workspace = true

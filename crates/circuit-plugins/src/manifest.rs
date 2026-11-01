@@ -18,6 +18,15 @@ pub struct PluginManifest {
     pub overrides: Vec<String>,
     pub permissions: Permissions,
     pub contributes: Contributes,
+    /// A native Rust part, loaded by the editor (see the xc-circuit-plugin crate).
+    pub native: Option<NativeManifest>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct NativeManifest {
+    /// Library name without prefix or extension: `xc_stats` means `xc_stats.dll` or `libxc_stats.so`.
+    pub library: String,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]

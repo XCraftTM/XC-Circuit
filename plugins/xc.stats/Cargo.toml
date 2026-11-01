@@ -1,0 +1,15 @@
+[package]
+name = "xc-stats"
+description = "Project Stats: an example native XC Circuit plugin"
+version = "1.0.0"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+xc-circuit-plugin = { path = "../../crates/xc-circuit-plugin" }
+serde_json.workspace = true

@@ -61,11 +61,13 @@ pub struct BotUi {
     settings: Option<SettingsDraft>,
     export: Option<ExportDraft>,
     jobs: Vec<Receiver<(Level, String)>>,
+    /// What the bot did since the last frame, for native plugins.
+    pub events: Vec<xc_circuit_plugin::BotEvent>,
 }
 
 impl BotUi {
     pub fn new() -> Self {
-        BotUi { state: BotState::Stopped, session: None, settings: None, export: None, jobs: Vec::new() }
+        BotUi { state: BotState::Stopped, session: None, settings: None, export: None, jobs: Vec::new(), events: Vec::new() }
     }
 
     pub fn start(&mut self, ed: &mut Editor, ctx: &egui::Context) {
@@ -121,16 +123,25 @@ impl BotUi {
             match m {
                 Msg::Info(t) => ed.log(Level::Info, t),
                 Msg::Error(t) => ed.log(Level::Error, t),
-                Msg::Started => self.state = BotState::Running,
+                Msg::Started => {
+                    self.state = BotState::Running;
+                    self.events.push(xc_circuit_plugin::BotEvent::Started);
+                }
                 Msg::Exited(code) => {
                     self.state = BotState::Stopped;
                     self.session = None;
+                    self.events.push(xc_circuit_plugin::BotEvent::Stopped);
                     match code {
                         Some(0) | None => {}
                         Some(c) => ed.log(Level::Warn, format!("Bot process ended (exit code {c})")),
                     }
                 }
-                Msg::Bot(ev) => handle_event(ed, ev),
+                Msg::Bot(ev) => {
+                    if let Some(e) = plugin_event(&ev) {
+                        self.events.push(e);
+                    }
+                    handle_event(ed, ev);
+                }
             }
         }
         self.jobs.retain(|rx| {
@@ -375,6 +386,24 @@ impl BotUi {
             }
         });
     }
+}
+
+/// The bot's events in the shape native plugins get them.
+fn plugin_event(ev: &BotEvent) -> Option<xc_circuit_plugin::BotEvent> {
+    use xc_circuit_plugin::{BotEvent as P, Level as L};
+    Some(match ev {
+        BotEvent::Log { level, text, .. } => P::Log {
+            level: match level.as_str() {
+                "error" => L::Error,
+                "warn" => L::Warn,
+                "success" => L::Success,
+                _ => L::Info,
+            },
+            text: text.clone(),
+        },
+        BotEvent::Node { ws, node, phase, ms, error } => P::Block { workspace: ws.clone(), node: node.clone(), phase: phase.clone(), ms: *ms, error: error.clone() },
+        _ => return None,
+    })
 }
 
 fn handle_event(ed: &mut Editor, ev: BotEvent) {

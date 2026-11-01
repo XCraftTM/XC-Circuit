@@ -24,7 +24,8 @@ The first start opens `examples/DemoBot`. Windows and Linux are supported.
 | Delete | Select blocks, press Delete (or right-click › Delete) |
 | Undo / Redo | Ctrl+Z / Ctrl+Y (per workspace) |
 | Copy / Paste / Duplicate | Ctrl+C / Ctrl+V (at the mouse) / Ctrl+D; works across workspaces and projects |
-| Command palette | Ctrl+P: run any command, open a workspace, or jump to a block |
+| Command palette | Ctrl+P or the search box in the title bar: run any command, open a workspace, or jump to a block |
+| Title bar | Drag to move, double-click to maximize, drag the window edges to resize; View › Use system title bar switches to the system one |
 | Save | Ctrl+S (restarts a running bot) |
 | Panels | Drag tabs to dock anywhere; reopen closed ones from View › Panels |
 | Try Zone | Right-click a block › Wrap in Try Zone; drop blocks in or out; right-click the zone's title for retries and timeout |
@@ -52,9 +53,11 @@ crates/circuit-core      graph model, pin types, block definitions, project form
 crates/circuit-plugins   plugin.toml, contributions, QuickJS sandbox for block files
 crates/circuit-runner    bundles, npm packages, the bot process, debug protocol, secrets, export
 crates/circuit-editor    the egui app (bin: xc-circuit)
+crates/xc-circuit-plugin the crate native Rust plugins are written with
 runtime/                 the Node.js runtime that executes block graphs (also inside exports)
 plugins/xc.core          flow/text/math/logic/data/debug blocks, icons, themes
 plugins/xc.discord       Discord build mode, pin types and blocks
+plugins/xc.stats         example native Rust plugin (Project Stats panel)
 examples/DemoBot         example project (with a TypeScript block in its own plugins/ folder)
 sdk/                     @xc-circuit/sdk: types for writing blocks
 ```
@@ -82,8 +85,37 @@ export default defineBlock({
 
 See `examples/DemoBot/plugins/demo.custom` and `sdk/index.d.ts`.
 
+## Native Rust plugins
+
+A plugin can include a compiled Rust library. It adds dockable panels drawn directly with egui, commands (in the Plugins menu and the command palette), checks that show in the Problems panel, and hooks for saves and for what the running bot does. It can read and change the project, select blocks, log to the Console and keep its own small key-value store.
+
+```rust
+use xc_circuit_plugin::{egui, Command, Host, Level, PanelInfo, Plugin};
+
+#[derive(Default)]
+struct Hello { clicks: u32 }
+
+impl Plugin for Hello {
+    fn commands(&self) -> Vec<Command> { vec![Command::new("hello.greet", "Say hello")] }
+    fn run_command(&mut self, _id: &str, host: &mut dyn Host) { host.log(Level::Info, "Hello from Rust!"); }
+    fn panels(&self) -> Vec<PanelInfo> { vec![PanelInfo::new("hello", "Hello")] }
+    fn panel_ui(&mut self, _id: &str, ui: &mut egui::Ui, _host: &mut dyn Host) {
+        if ui.button(format!("Clicked {} times", self.clicks)).clicked() { self.clicks += 1; }
+    }
+}
+
+xc_circuit_plugin::export_plugin!(Hello);
+```
+
+The plugin folder has a `plugin.toml` with `[native] library = "my_plugin"` and a Cargo crate with `crate-type = ["cdylib"]`. See `plugins/xc.stats`.
+
+- **Build it with the editor.** A native plugin shares egui with the editor, so it must come from the same build: add the crate to the workspace `members` and build with `cargo plugin <crate>` (an alias for building it together with the editor; add `--release` for a release editor). XC Circuit compares a fingerprint (compiler, crate versions, type ids, debug/release) before loading and refuses a plugin that differs, saying why.
+- **Turned off by default.** Plugins › Manage Plugins › Allow native plugins. Plugins outside the app's own `plugins/` folder (for example in a project you downloaded) must also be allowed one by one.
+- **Rebuilds reload.** The editor loads a copy of the library and notices when the original changes, so rebuilding while it runs swaps the plugin in. A plugin that panics is switched off until it is rebuilt.
+- The editor looks for the library in the plugin folder, its `native/` folder, then next to the editor executable (where `cargo plugin` puts it).
+
 ## Status
 
-Done: editor foundation, running and exporting bots, Try Zones, undo/redo, multi-select and clipboard, Embed and Slash Command builders, 49 bundled blocks, plugin hot reload, Stored Data panel, TypeScript blocks, command palette, and the Windows/Linux build workflow (`.github/workflows/build.yml`, releases on `v*` tags).
+Done: editor foundation, running and exporting bots, Try Zones, undo/redo, multi-select and clipboard, Embed and Slash Command builders, 49 bundled blocks, plugin hot reload, Stored Data panel, TypeScript blocks, command palette, custom title bar with search, native Rust plugins, and the Windows/Linux build workflow (`.github/workflows/build.yml`, releases on `v*` tags).
 
-Not done yet: custom window title bar, native Rust plugins, sharing plugins from GitHub inside the editor, the web dashboard blocks, and converting a project to a TypeScript bot.
+Not done yet: sandboxed WebAssembly plugins (the safer plugin tier from the spec), sharing plugins from GitHub inside the editor, the web dashboard blocks, and converting a project to a TypeScript bot.

@@ -71,6 +71,8 @@ pub struct Editor {
     /// Every selected block in the selected workspace (includes `selected`).
     pub multi: HashSet<String>,
     pub history: Histories,
+    /// Successful saves so far, so others can react to a save.
+    pub saves: u64,
     /// What blocks see as `project` in `define()`: `{ data }` of the open project.
     pub define_ctx: Value,
     pub embed_edit: Option<crate::embed::EmbedEdit>,
@@ -98,6 +100,7 @@ impl Editor {
             activity: HashMap::new(),
             multi: HashSet::new(),
             history: Histories::default(),
+            saves: 0,
             define_ctx: Value::Object(Map::new()),
             embed_edit: None,
             slash_edit: None,
@@ -191,6 +194,7 @@ impl Editor {
         match project.save() {
             Ok(()) => {
                 self.dirty = false;
+                self.saves += 1;
                 let msg = format!("Saved {}", project.meta.name);
                 self.log(Level::Success, msg);
             }
