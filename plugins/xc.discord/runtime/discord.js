@@ -42,14 +42,47 @@ module.exports = {
   },
 };
 
+// Discord's numbers for option types.
+const OPTION_TYPES = { string: 3, integer: 4, boolean: 5, user: 6, channel: 7, role: 8, mentionable: 9, number: 10, attachment: 11 };
+
+/** A Slash Command Builder command in the shape Discord's API expects. */
+function toDiscordCommand(c) {
+  const options = (c.options || [])
+    // Discord requires required options before optional ones.
+    .slice()
+    .sort((a, b) => Number(Boolean(b.required)) - Number(Boolean(a.required)))
+    .map((o) => {
+      const out = {
+        type: OPTION_TYPES[o.type] || 3,
+        name: o.name,
+        description: String(o.description || o.name).slice(0, 100),
+        required: Boolean(o.required),
+      };
+      const numeric = o.type === "integer" || o.type === "number";
+      if ((o.choices || []).length && (o.type === "string" || numeric)) {
+        out.choices = o.choices.slice(0, 25).map((ch) => ({ name: String(ch.name), value: numeric ? Number(ch.value) : String(ch.value) }));
+      }
+      if (numeric && o.min != null) out.min_value = Number(o.min);
+      if (numeric && o.max != null) out.max_value = Number(o.max);
+      if (o.type === "string" && o.max != null) out.max_length = Number(o.max);
+      return out;
+    });
+  return { name: c.name, description: String(c.description || "A command made with XC Circuit").slice(0, 100), options };
+}
+
+module.exports.toDiscordCommand = toDiscordCommand;
+
 /** Registers every Slash Command block's command, on the dev server or globally. */
 async function registerCommands(rt, client) {
   const commands = new Map();
+  // Commands from the Slash Command Builder, with their options.
+  for (const c of (rt.bundle.project.data && rt.bundle.project.data.slashCommands) || []) {
+    if (c.name) commands.set(c.name, toDiscordCommand(c));
+  }
+  // Commands only named on a block still register, without options.
   for (const node of rt.nodesOf("discord.on_slash_command")) {
-    const v = node.inline();
-    const name = String(v.command || "").trim().toLowerCase();
-    if (!name) continue;
-    commands.set(name, { name, description: String(v.description || "A command made with XC Circuit").slice(0, 100) });
+    const name = String(node.inline().command || "").trim().toLowerCase();
+    if (name && !commands.has(name)) commands.set(name, { name, description: "A command made with XC Circuit" });
   }
   if (!commands.size) return;
   const list = [...commands.values()];

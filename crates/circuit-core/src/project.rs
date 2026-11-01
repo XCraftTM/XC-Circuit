@@ -23,6 +23,9 @@ pub struct ProjectMeta {
     pub mode: String,
     pub plugins: IndexMap<String, String>,
     pub settings: Map<String, Value>,
+    /// Project-wide data owned by project editors, such as `slashCommands`.
+    #[serde(skip_serializing_if = "Map::is_empty")]
+    pub data: Map<String, Value>,
 }
 
 impl Default for ProjectMeta {
@@ -33,6 +36,7 @@ impl Default for ProjectMeta {
             mode: "discord-bot".into(),
             plugins: IndexMap::new(),
             settings: Map::new(),
+            data: Map::new(),
         }
     }
 }

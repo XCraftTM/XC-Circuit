@@ -51,7 +51,7 @@ pub fn build_bundle(project: &Project, reg: &Registry, mode: Option<&BuildMode>)
         .collect::<Result<_>>()?;
 
     let value = json!({
-        "project": { "name": project.meta.name, "mode": project.meta.mode, "settings": project.meta.settings },
+        "project": { "name": project.meta.name, "mode": project.meta.mode, "settings": project.meta.settings, "data": project.meta.data },
         "blocks": blocks,
         "libs": libs,
         "workspaces": workspaces,

@@ -17,6 +17,9 @@ use crate::theme::{Theme, mix, with_alpha};
 use crate::widgets;
 
 pub const NODE_W: f32 = 240.0;
+/// Blocks with an embed preview are wider, so the preview stays readable.
+const EMBED_NODE_W: f32 = 300.0;
+const EMBED_SCALE: f32 = 0.86;
 pub const HEADER_H: f32 = 34.0;
 pub const VALUE_HEADER_H: f32 = 30.0;
 pub const ROW_H: f32 = 28.0;
@@ -97,14 +100,15 @@ struct NodeLayout {
     pins: Vec<PinSpot>,
 }
 
-fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], def: Option<&BlockDef>, shape: Option<&BlockShape>) -> NodeLayout {
+/// `tall` gives rows that need more room than one line (embed previews), by field key.
+fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], def: Option<&BlockDef>, shape: Option<&BlockShape>, tall: &HashMap<String, f32>) -> NodeLayout {
     let (Some(def), Some(shape)) = (def, shape) else {
         let rect = Rect::from_min_size(pos2(at[0], at[1]), vec2(NODE_W, HEADER_H + ROW_H + PAD_BOTTOM));
         let header = Rect::from_min_size(rect.min, vec2(NODE_W, HEADER_H));
         return NodeLayout { id: id.into(), rect, header, value_block: false, rows: Vec::new(), pins: Vec::new() };
     };
     let value_block = def.kind == BlockKind::Value;
-    let width = def.width.unwrap_or(NODE_W);
+    let width = def.width.unwrap_or(if def.preview.as_deref() == Some("embed") { EMBED_NODE_W } else { NODE_W });
     let header_h = if value_block { VALUE_HEADER_H } else { HEADER_H };
     let origin = pos2(at[0], at[1]);
     let header = Rect::from_min_size(origin, vec2(width, header_h));
@@ -123,7 +127,11 @@ fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], def: Option<&BlockDef
     }
     rows.extend(shape.outputs.iter().map(|(k, _)| RowKind::Output(k.clone())));
 
-    let height = header_h + PAD_TOP + rows.len() as f32 * ROW_H + PAD_BOTTOM;
+    let row_h = |row: &RowKind| match row {
+        RowKind::Field { key, .. } => tall.get(key).copied().unwrap_or(ROW_H),
+        _ => ROW_H,
+    };
+    let height = header_h + PAD_TOP + rows.iter().map(row_h).sum::<f32>() + PAD_BOTTOM;
     let rect = Rect::from_min_size(origin, vec2(width, height));
     let mut pins = Vec::new();
     let header_y = header.center().y;
@@ -153,9 +161,13 @@ fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], def: Option<&BlockDef
     }
 
     let mut laid = Vec::new();
-    for (i, row) in rows.into_iter().enumerate() {
-        let r = Rect::from_min_size(pos2(rect.left(), header.bottom() + PAD_TOP + i as f32 * ROW_H), vec2(width, ROW_H));
-        let y = r.center().y;
+    let mut top = header.bottom() + PAD_TOP;
+    for row in rows.into_iter() {
+        let h = row_h(&row);
+        let r = Rect::from_min_size(pos2(rect.left(), top), vec2(width, h));
+        top += h;
+        // Pins sit at the middle of the first line, even on tall rows.
+        let y = r.top() + ROW_H / 2.0;
         match &row {
             RowKind::Flow(f) => pins.push(PinSpot {
                 pin: f.clone(),
@@ -258,7 +270,7 @@ fn zone_layout(zid: &str, rect: Rect) -> NodeLayout {
 }
 
 pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
-    let Editor { reg, engine, theme, project, shapes, views, selected, dirty, picker, active_workspace, activity, multi, .. } = ed;
+    let Editor { reg, engine, theme, project, shapes, views, selected, dirty, picker, active_workspace, activity, multi, define_ctx, embed_edit, .. } = ed;
     let Some(project) = project.as_mut() else { return };
     let mode = reg.mode(&project.meta.mode).or_else(|| reg.modes.first());
     let Some(ws) = project.workspaces.get_mut(ws_key) else {
@@ -268,14 +280,23 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     let view = views.entry(ws_key.to_string()).or_insert_with(|| CanvasView { zoom: 1.0, ..Default::default() });
 
     // Shapes and layouts for every node, in scene coordinates.
+    let measure = ui.painter().clone();
     let ids: Vec<String> = ws.nodes.keys().cloned().collect();
     let mut layouts: Vec<NodeLayout> = Vec::with_capacity(ids.len());
     let mut node_shapes: HashMap<String, BlockShape> = HashMap::new();
     for id in &ids {
         let node = &ws.nodes[id];
         let def = reg.block(&node.block);
-        let shape = node_shape(reg, engine, shapes, ws_key, ws, id);
-        layouts.push(layout_node(id, node.at, &node.pins, def, shape.as_ref()));
+        let shape = node_shape(reg, engine, shapes, ws_key, ws, id, define_ctx);
+        let mut tall = HashMap::new();
+        if let (Some(s), Some(d)) = (&shape, def) {
+            for (key, f) in s.visible_fields().filter(|(_, f)| f.type_name == "embed") {
+                let data = crate::embed::EmbedData::from_value(node.values.get(key).or(f.default.as_ref()).unwrap_or(&Value::Null));
+                let w = d.width.unwrap_or(EMBED_NODE_W) - 28.0;
+                tall.insert(key.clone(), crate::embed::layout(&measure, &data, w, Some(4), EMBED_SCALE).height + 44.0);
+            }
+        }
+        layouts.push(layout_node(id, node.at, &node.pins, def, shape.as_ref(), &tall));
         if let Some(s) = shape {
             node_shapes.insert(id.clone(), s);
         }
@@ -461,6 +482,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
 
     // Blocks.
     let mut toggle_pin: Option<(String, String)> = None;
+    let mut open_embed_for: Option<(String, String)> = None;
     let mut dropped: Option<String> = None;
     for layout in &layouts[..node_count] {
         let id = &layout.id;
@@ -535,6 +557,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
 
         // Rows.
         let shape = node_shapes.get(id);
+        let mut open_embed: Option<String> = None;
         for (row, r) in &layout.rows {
             match row {
                 RowKind::Flow(f) => {
@@ -544,6 +567,17 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     let o = shape.and_then(|s| s.output(k));
                     let label = o.map(|o| o.label(k)).unwrap_or_else(|| k.clone());
                     painter.text(r.right_center() - vec2(16.0, 0.0), Align2::RIGHT_CENTER, label, FontId::proportional(12.5), theme.text_muted);
+                }
+                RowKind::Field { key, .. } if shape.and_then(|s| s.field(key)).is_some_and(|f| f.type_name == "embed") => {
+                    let f = shape.and_then(|s| s.field(key)).unwrap();
+                    let data = crate::embed::EmbedData::from_value(ws.nodes[id].values.get(key).or(f.default.as_ref()).unwrap_or(&Value::Null));
+                    let w = r.width() - 28.0;
+                    let l = crate::embed::layout(&painter, &data, w, Some(4), EMBED_SCALE);
+                    crate::embed::paint(&painter, r.min + vec2(14.0, 4.0), w, &l);
+                    let button = Rect::from_min_size(pos2(r.left() + 14.0, r.top() + 4.0 + l.height + 8.0), vec2(w, 26.0));
+                    if cui.put(button, egui::Button::new("Edit embed…")).clicked() {
+                        open_embed = Some(key.clone());
+                    }
                 }
                 RowKind::Field { key, pinned } => {
                     let Some(f) = shape.and_then(|s| s.field(key)) else { continue };
@@ -575,6 +609,10 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     }
                 }
             }
+        }
+
+        if let Some(k) = open_embed {
+            open_embed_for = Some((id.clone(), k));
         }
 
         // Header interaction: the only place a block can be dragged.
@@ -667,6 +705,10 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
 
     if let Some(d) = start_drag {
         view.drag = Some(d);
+    }
+    if let Some((node, key)) = open_embed_for {
+        let value = ws.nodes.get(&node).and_then(|n| n.values.get(&key).cloned()).unwrap_or(Value::Null);
+        *embed_edit = Some(crate::embed::EmbedEdit { ws: ws_key.to_string(), node, key, draft: crate::embed::EmbedData::from_value(&value) });
     }
     if let Some((node, pin)) = toggle_pin {
         let n = ws.nodes.get_mut(&node).unwrap();

@@ -307,4 +307,39 @@ mod tests {
         assert!(reg.mode("discord-bot").is_some());
         assert!(reg.theme("graphite").is_some());
     }
+
+    /// The Discord blocks' define() and migrate() as the editor calls them.
+    #[test]
+    fn discord_blocks_define_and_migrate() {
+        use circuit_core::BlockShape;
+        use serde_json::{Map, json};
+
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+        let engine = BlockEngine::new().unwrap();
+        let reg = Registry::load(&[root], &engine);
+        let key = |id: &str| reg.engine_keys[id].clone();
+
+        // Placeholders in an embed become input pins; event names do not.
+        let values = json!({ "embed": { "title": "Rank of {user}", "description": "{xp} XP", "fields": [{ "name": "L", "value": "{level}" }] } });
+        let values = values.as_object().unwrap();
+        let d = engine.define(&key("discord.build_embed"), values, &Map::new(), &json!({})).unwrap();
+        assert!(d.add.contains_key("xp") && d.add.contains_key("level") && !d.add.contains_key("user"));
+
+        // Version 1 values move into the embed object.
+        let old = json!({ "title": "Hi", "description": "There", "color": "#FF0000" });
+        let migrated = engine.migrate(&key("discord.build_embed"), old.as_object().unwrap(), "1").unwrap();
+        assert_eq!(migrated["embed"]["title"], "Hi");
+        assert_eq!(migrated["embed"]["color"], "#FF0000");
+
+        // Slash command options become typed outputs.
+        let project = json!({ "data": { "slashCommands": [
+            { "name": "rank", "description": "d", "options": [{ "name": "target", "type": "user", "description": "x", "required": false }] }
+        ] } });
+        let values = json!({ "command": "rank" });
+        let def = reg.block("discord.on_slash_command").unwrap();
+        let d = engine.define(&key("discord.on_slash_command"), values.as_object().unwrap(), &Map::new(), &project).unwrap();
+        let shape = BlockShape::build(def, values.as_object().unwrap(), Some(&d));
+        assert_eq!(shape.output("target").unwrap().type_name, "discord.user?");
+        assert_eq!(shape.field("command").unwrap().choice_list().len(), 1);
+    }
 }

@@ -5,9 +5,11 @@ mod bot;
 mod canvas;
 mod dialog;
 mod editor;
+mod embed;
 mod history;
 mod panels;
 mod picker;
+mod slash;
 mod theme;
 mod widgets;
 

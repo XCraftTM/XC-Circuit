@@ -1,34 +1,90 @@
+// Option types of the Slash Command Builder and the pin type each one gives.
+const PIN_TYPES = {
+  string: "text",
+  integer: "number",
+  number: "number",
+  boolean: "boolean",
+  user: "discord.user",
+  channel: "discord.channel",
+  role: "discord.role",
+  mentionable: "any",
+  attachment: "object",
+};
+
+const commandsOf = (project) => (project && project.data && project.data.slashCommands) || [];
+
+// An option named like a built-in output (such as "user") gets "Option" added.
+const BUILT_IN = ["interaction", "user", "member", "channel", "server"];
+const outputKey = (name) => (BUILT_IN.includes(name) ? `${name}Option` : name);
+
 module.exports = {
   id: "discord.on_slash_command",
   name: "Slash Command",
-  description: "Runs when someone uses one of your slash commands.",
+  description: "Runs when someone uses one of your slash commands. Build them in Bot › Slash Commands.",
   author: "XC Team",
-  version: "1.0.0",
+  version: "2.0.0",
   category: "events",
   icon: "slash",
   kind: "event",
   intents: ["Guilds"],
   fields: {
-    command: { type: "text", pin: false, required: true, default: "rank", description: "The command name, without the slash." },
-    description: {
-      type: "text",
+    command: {
+      type: "slash-command-ref",
       pin: false,
-      advanced: true,
-      default: "A command made with XC Circuit",
-      description: "Shown under the command in Discord's command list (up to 100 characters).",
+      required: true,
+      default: "",
+      description: "Which command runs this block.",
     },
   },
   outputs: {
-    interaction: { type: "discord.interaction", description: "The command use. Connect it to Reply." },
+    interaction: { type: "discord.interaction", description: "The command use. Connect it to Send Message." },
     user: { type: "discord.user", description: "Who used the command." },
     member: { type: "discord.member?", description: "Who used it, as a server member. Empty in DMs." },
     channel: { type: "discord.channel", description: "Where it was used." },
     server: { type: "discord.guild?", description: "The server it was used in. Empty in DMs." },
   },
+
+  define({ values, project }) {
+    const commands = commandsOf(project);
+    const choices = Object.fromEntries(commands.map((c) => [c.name, `/${c.name}`]));
+    if (values.command && !(values.command in choices)) choices[values.command] = `/${values.command} (not in the builder)`;
+    const command = commands.find((c) => c.name === values.command);
+    const outputs = {};
+    for (const o of (command && command.options) || []) {
+      const optional = o.required ? "" : "?";
+      outputs[outputKey(o.name)] = {
+        type: (PIN_TYPES[o.type] || "any") + optional,
+        label: outputKey(o.name) === o.name ? o.name : `${o.name} (option)`,
+        description: o.description || `The ${o.name} option.`,
+      };
+    }
+    return { set: { command: { choices } }, outputs };
+  },
+
+  migrate(values, from) {
+    // 1.x kept a description on the block; it now lives in the Slash Command Builder.
+    if (from === "1") return { command: values.command || "" };
+    return values;
+  },
+
   listen(ctx, emit) {
+    const name = String(ctx.fields.command || "").toLowerCase();
+    const command = commandsOf(ctx.project).find((c) => c.name === name);
     ctx.discord.client.on("interactionCreate", (interaction) => {
-      if (!interaction.isChatInputCommand() || interaction.commandName !== ctx.fields.command) return;
+      if (!interaction.isChatInputCommand() || interaction.commandName !== name) return;
+      const options = {};
+      for (const o of (command && command.options) || []) {
+        const read = {
+          user: () => interaction.options.getUser(o.name),
+          channel: () => interaction.options.getChannel(o.name),
+          role: () => interaction.options.getRole(o.name),
+          mentionable: () => interaction.options.getMentionable(o.name),
+          attachment: () => interaction.options.getAttachment(o.name),
+        }[o.type];
+        options[outputKey(o.name)] = read ? read() : interaction.options.get(o.name)?.value ?? null;
+      }
       emit({
+        ...options,
         interaction,
         user: interaction.user,
         member: interaction.member ?? null,

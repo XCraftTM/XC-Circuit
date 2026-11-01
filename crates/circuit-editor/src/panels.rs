@@ -73,7 +73,23 @@ pub fn workspaces(ui: &mut Ui, ed: &mut Editor) {
     }
 }
 
+/// Something the Inspector asks for that needs the whole editor.
+enum InspectorAsk {
+    EmbedBuilder(String, String, String),
+    SlashCommands,
+}
+
 pub fn inspector(ui: &mut Ui, ed: &mut Editor) {
+    let mut ask = None;
+    inspector_body(ui, ed, &mut ask);
+    match ask {
+        Some(InspectorAsk::EmbedBuilder(ws, node, key)) => crate::embed::open(ed, &ws, &node, &key),
+        Some(InspectorAsk::SlashCommands) => crate::slash::open(ed),
+        None => {}
+    }
+}
+
+fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) {
     let theme = ed.theme.clone();
     let Some((ws_key, node_id)) = ed.selected.clone() else {
         padded(ui, |ui| {
@@ -81,10 +97,10 @@ pub fn inspector(ui: &mut Ui, ed: &mut Editor) {
         });
         return;
     };
-    let Editor { reg, engine, project, shapes, dirty, .. } = ed;
+    let Editor { reg, engine, project, shapes, dirty, define_ctx, .. } = ed;
     let mode = project.as_ref().and_then(|p| reg.mode(&p.meta.mode));
     let Some(ws) = project.as_mut().and_then(|p| p.workspaces.get_mut(&ws_key)) else { return };
-    let Some(shape) = node_shape(reg, engine, shapes, &ws_key, ws, &node_id) else {
+    let Some(shape) = node_shape(reg, engine, shapes, &ws_key, ws, &node_id, define_ctx) else {
         padded(ui, |ui| {
             ui.label(RichText::new("This block's plugin is not loaded.").color(theme.error));
         });
@@ -141,6 +157,10 @@ pub fn inspector(ui: &mut Ui, ed: &mut Editor) {
                         });
                     } else if pinned {
                         ui.label(RichText::new(format!("Waiting for a {} wire", f.ty.display(reg))).italics().color(theme.text_muted));
+                    } else if f.type_name == "embed" {
+                        if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Open Embed Builder")).clicked() {
+                            *ask = Some(InspectorAsk::EmbedBuilder(ws_key.clone(), node_id.clone(), key.clone()));
+                        }
                     } else {
                         let mut value = ws.nodes[&node_id].values.get(key).cloned().or_else(|| f.default.clone()).unwrap_or(Value::Null);
                         let id = ui.id().with(("inspector", &node_id, key));
@@ -150,6 +170,9 @@ pub fn inspector(ui: &mut Ui, ed: &mut Editor) {
                         }
                         if f.template {
                             ui.label(RichText::new("Type {name} to insert a connected value").size(11.0).color(theme.text_muted));
+                        }
+                        if f.type_name == "slash-command-ref" && ui.link("Edit slash commands…").clicked() {
+                            *ask = Some(InspectorAsk::SlashCommands);
                         }
                     }
                 });

@@ -1,33 +1,91 @@
+// Every text in the embed may contain {placeholders}.
+const TEXTS = (e) => [
+  e.title,
+  e.description,
+  e.url,
+  e.author?.name,
+  e.author?.icon,
+  e.footer?.text,
+  e.footer?.icon,
+  e.image,
+  e.thumbnail,
+  ...(e.fields || []).flatMap((f) => [f.name, f.value]),
+];
+
+const EVENT_NAMES = ["user", "member", "channel", "server", "interaction", "message", "content", "author"];
+
 module.exports = {
   id: "discord.build_embed",
   name: "Build Embed",
-  description: "Creates a rich embed to attach to a message.",
+  description: "Creates a rich embed. Design it in the Embed Builder; every {placeholder} you type becomes an input.",
   author: "XC Team",
-  version: "1.0.0",
+  version: "2.0.0",
   category: "messages",
   icon: "embed",
   kind: "action",
+  preview: "embed",
   fields: {
-    title: { type: "text", template: true, default: "", description: "Bold heading at the top." },
-    description: { type: "textarea", template: true, default: "", description: "The main text." },
-    color: { type: "color", pin: false, default: "#00D8F0", description: "The colored bar on the left." },
-    footer: { type: "text", template: true, default: "", advanced: true, description: "Small text at the bottom." },
-    image: { type: "text", default: "", advanced: true, label: "Image URL", description: "A large image under the text." },
-    thumbnail: { type: "text", default: "", advanced: true, label: "Thumbnail URL", description: "A small image in the top right." },
-    timestamp: { type: "boolean", pin: false, default: false, advanced: true, description: "Show the current time in the footer." },
+    embed: {
+      type: "embed",
+      pin: false,
+      label: "Embed",
+      default: { color: "#00D8F0", title: "", description: "", fields: [] },
+      description: "The embed design. Open the Embed Builder to edit it.",
+    },
   },
   outputs: {
     embed: { type: "discord.embed", description: "The finished embed. Connect it to Send Message." },
   },
-  run({ fields }) {
+
+  define({ values }) {
+    // {xp} in any text becomes an input pin called xp. Names the event already
+    // provides (such as {user}) are filled automatically and get no pin.
+    const add = {};
+    const embed = values.embed || {};
+    for (const text of TEXTS(embed)) {
+      for (const [, name] of String(text || "").matchAll(/\{([A-Za-z_$][\w$]*)/g)) {
+        if (EVENT_NAMES.includes(name) || add[name]) continue;
+        add[name] = { type: "any", pin: true, label: `{${name}}`, description: `Fills {${name}} in the embed.` };
+      }
+    }
+    return { add };
+  },
+
+  migrate(values, from) {
+    // 1.x had one field per part of the embed.
+    if (from === "1") {
+      const embed = {
+        color: values.color || "#00D8F0",
+        title: values.title || "",
+        description: values.description || "",
+        footer: values.footer ? { text: values.footer } : undefined,
+        image: values.image || "",
+        thumbnail: values.thumbnail || "",
+        timestamp: Boolean(values.timestamp),
+        fields: [],
+      };
+      return { embed };
+    }
+    return values;
+  },
+
+  run({ fields, ctx }) {
     const { EmbedBuilder } = require("discord.js");
-    const embed = new EmbedBuilder().setColor(fields.color || null);
-    if (fields.title) embed.setTitle(fields.title);
-    if (fields.description) embed.setDescription(fields.description);
-    if (fields.footer) embed.setFooter({ text: fields.footer });
-    if (fields.image) embed.setImage(fields.image);
-    if (fields.thumbnail) embed.setThumbnail(fields.thumbnail);
-    if (fields.timestamp) embed.setTimestamp();
+    const e = fields.embed || {};
+    const fill = (s) => ctx.fill(s, fields);
+    const embed = new EmbedBuilder();
+    if (e.color) embed.setColor(e.color);
+    if (e.title) embed.setTitle(fill(e.title).slice(0, 256));
+    if (e.url) embed.setURL(fill(e.url));
+    if (e.description) embed.setDescription(fill(e.description).slice(0, 4096));
+    if (e.author?.name) embed.setAuthor({ name: fill(e.author.name), iconURL: e.author.icon ? fill(e.author.icon) : undefined });
+    for (const f of (e.fields || []).slice(0, 25)) {
+      if (f.name || f.value) embed.addFields({ name: fill(f.name) || "​", value: fill(f.value) || "​", inline: Boolean(f.inline) });
+    }
+    if (e.footer?.text) embed.setFooter({ text: fill(e.footer.text), iconURL: e.footer.icon ? fill(e.footer.icon) : undefined });
+    if (e.image) embed.setImage(fill(e.image));
+    if (e.thumbnail) embed.setThumbnail(fill(e.thumbnail));
+    if (e.timestamp) embed.setTimestamp();
     return { embed };
   },
 };

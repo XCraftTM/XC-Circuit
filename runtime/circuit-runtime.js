@@ -177,6 +177,10 @@ class Runtime {
       },
       util: UTIL,
       require: (name) => rt.require(name),
+      /** Project info: name, settings and project-editor data such as slashCommands. */
+      project: rt.bundle.project,
+      /** Fills {placeholders} in text from the event, run variables and `vars`. */
+      fill: (text, vars) => fillTemplate(String(text ?? ""), run, vars || {}),
     };
     for (const [id, api] of rt.libs) ctx[id] = api;
     return ctx;

@@ -71,6 +71,10 @@ pub struct Editor {
     /// Every selected block in the selected workspace (includes `selected`).
     pub multi: HashSet<String>,
     pub history: Histories,
+    /// What blocks see as `project` in `define()`: `{ data }` of the open project.
+    pub define_ctx: Value,
+    pub embed_edit: Option<crate::embed::EmbedEdit>,
+    pub slash_edit: Option<crate::slash::SlashEdit>,
 }
 
 impl Editor {
@@ -94,6 +98,9 @@ impl Editor {
             activity: HashMap::new(),
             multi: HashSet::new(),
             history: Histories::default(),
+            define_ctx: Value::Object(Map::new()),
+            embed_edit: None,
+            slash_edit: None,
         };
         ed.set_theme(theme_id.unwrap_or("graphite"));
         ed.log_plugin_summary();
@@ -160,6 +167,8 @@ impl Editor {
                 self.history.clear();
                 self.views.clear();
                 self.reload_plugins();
+                self.refresh_define_ctx();
+                self.upgrade_blocks();
                 if let Some(first) = first {
                     self.actions.push(Action::OpenWorkspace(first));
                 }
@@ -201,6 +210,45 @@ impl Editor {
         self.dirty = true;
         self.select_only(ws_key, &id);
         Some(id)
+    }
+
+    /// Call after project data (such as slash commands) changes.
+    pub fn refresh_define_ctx(&mut self) {
+        let data = self.project.as_ref().map(|p| p.meta.data.clone()).unwrap_or_default();
+        self.define_ctx = serde_json::json!({ "data": data });
+        self.shapes.clear();
+    }
+
+    /// Upgrades blocks saved with an older major version, using the block's `migrate()`.
+    fn upgrade_blocks(&mut self) {
+        let Some(project) = self.project.as_mut() else { return };
+        let mut upgraded = 0;
+        for ws in project.workspaces.values_mut() {
+            for node in ws.nodes.values_mut() {
+                let Some(def) = self.reg.block(&node.block) else { continue };
+                let saved: u64 = node.block.split('@').nth(1).and_then(|v| v.parse().ok()).unwrap_or(def.major_version());
+                if saved >= def.major_version() {
+                    continue;
+                }
+                if def.has_migrate
+                    && let Some(key) = self.reg.engine_keys.get(&def.id)
+                {
+                    match self.engine.migrate(key, &node.values, &saved.to_string()) {
+                        Ok(values) => node.values = values,
+                        Err(e) => {
+                            self.log.push(LogLine::new(Level::Warn, format!("Could not upgrade {}: {e:#}", def.name)));
+                            continue;
+                        }
+                    }
+                }
+                node.block = def.reference();
+                upgraded += 1;
+            }
+        }
+        if upgraded > 0 {
+            self.dirty = true;
+            self.log(Level::Info, format!("Upgraded {upgraded} blocks to newer versions (save to keep)"));
+        }
     }
 
     pub fn select_only(&mut self, ws_key: &str, id: &str) {
@@ -335,6 +383,7 @@ pub fn node_shape(
     ws_key: &str,
     ws: &Workspace,
     node_id: &str,
+    project: &Value,
 ) -> Option<BlockShape> {
     let node = ws.nodes.get(node_id)?;
     let def = reg.block(&node.block)?;
@@ -344,6 +393,9 @@ pub fn node_shape(
     node.block.hash(&mut h);
     Value::Object(node.values.clone()).to_string().hash(&mut h);
     Value::Object(connected.clone()).to_string().hash(&mut h);
+    if def.has_define {
+        project.to_string().hash(&mut h);
+    }
     let hash = h.finish();
 
     let key = (ws_key.to_string(), node_id.to_string());
@@ -355,7 +407,7 @@ pub fn node_shape(
 
     let define = if def.has_define {
         let engine_key = reg.engine_keys.get(&def.id)?;
-        engine.define(engine_key, &node.values, &connected).ok()
+        engine.define(engine_key, &node.values, &connected, project).ok()
     } else {
         None
     };

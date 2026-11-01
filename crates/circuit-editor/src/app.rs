@@ -249,6 +249,9 @@ impl CircuitApp {
                     self.bot.stop(&mut self.ed);
                 }
                 ui.separator();
+                if ui.add_enabled(has_project, egui::Button::new("Slash Commands…")).clicked() {
+                    crate::slash::open(&mut self.ed);
+                }
                 if ui.add_enabled(has_project, egui::Button::new("Settings…")).clicked() {
                     self.bot.open_settings(&self.ed);
                 }
@@ -491,6 +494,8 @@ impl eframe::App for CircuitApp {
         self.apply_actions();
         self.dialogs(&ctx);
         self.bot.windows(&ctx, &mut self.ed);
+        crate::embed::window(&ctx, &mut self.ed);
+        crate::slash::window(&ctx, &mut self.ed);
 
         // Record an undo step once an edit has settled.
         let settled = !ctx.input(|i| i.pointer.any_down()) && !ctx.text_edit_focused();

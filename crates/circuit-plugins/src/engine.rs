@@ -51,10 +51,19 @@ globalThis.__load = function (key, src) {
   }
 };
 
-globalThis.__define = function (key, values, connected) {
+globalThis.__define = function (key, values, connected, project) {
   try {
     const block = __blocks[key];
-    const result = block.define({ values: JSON.parse(values), connected: JSON.parse(connected), project: {} });
+    const result = block.define({ values: JSON.parse(values), connected: JSON.parse(connected), project: JSON.parse(project) });
+    return JSON.stringify({ ok: result || {} });
+  } catch (e) {
+    return __error(e);
+  }
+};
+
+globalThis.__migrate = function (key, values, from) {
+  try {
+    const result = __blocks[key].migrate(JSON.parse(values), from);
     return JSON.stringify({ ok: result || {} });
   } catch (e) {
     return __error(e);
@@ -122,13 +131,28 @@ impl BlockEngine {
         Ok(serde_json::from_value(value)?)
     }
 
-    /// Runs a block's `define()`.
-    pub fn define(&self, key: &str, values: &Map<String, Value>, connected: &Map<String, Value>) -> Result<DefineResult> {
+    /// Runs a block's `define()`. `project` is what blocks see as `project`
+    /// (currently `{ data }`, such as the slash commands).
+    pub fn define(&self, key: &str, values: &Map<String, Value>, connected: &Map<String, Value>, project: &Value) -> Result<DefineResult> {
         let value = self.call(
             "__define",
-            (key.to_string(), Value::Object(values.clone()).to_string(), Value::Object(connected.clone()).to_string()),
+            (
+                key.to_string(),
+                Value::Object(values.clone()).to_string(),
+                Value::Object(connected.clone()).to_string(),
+                project.to_string(),
+            ),
         )?;
         Ok(serde_json::from_value(value)?)
+    }
+
+    /// Runs a block's `migrate(values, fromVersion)` to upgrade saved values.
+    pub fn migrate(&self, key: &str, values: &Map<String, Value>, from: &str) -> Result<Map<String, Value>> {
+        let value = self.call("__migrate", (key.to_string(), Value::Object(values.clone()).to_string(), from.to_string()))?;
+        match value {
+            Value::Object(m) => Ok(m),
+            _ => Ok(values.clone()),
+        }
     }
 
     fn call<A>(&self, function: &str, args: A) -> Result<Value>
@@ -195,7 +219,7 @@ mod tests {
         assert!(def.has_define && def.has_run);
 
         let connected = json!({ "list": "list<discord.role>" });
-        let result = engine.define("for_each", &Map::new(), connected.as_object().unwrap()).unwrap();
+        let result = engine.define("for_each", &Map::new(), connected.as_object().unwrap(), &json!({})).unwrap();
         let shape = BlockShape::build(&def, &Map::new(), Some(&result));
         assert_eq!(shape.output("item").unwrap().type_name, "discord.role");
         assert_eq!(shape.flows, vec!["each", "done"]);
@@ -209,6 +233,6 @@ mod tests {
         engine
             .load_block("loop", "module.exports = { define() { while (true) {} } }")
             .unwrap();
-        assert!(engine.define("loop", &Map::new(), &Map::new()).is_err());
+        assert!(engine.define("loop", &Map::new(), &Map::new(), &json!({})).is_err());
     }
 }
