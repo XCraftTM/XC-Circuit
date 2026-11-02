@@ -289,6 +289,13 @@ pub struct BlockShape {
 
 impl BlockShape {
     pub fn build(def: &BlockDef, values: &Map<String, Value>, define: Option<&DefineResult>) -> BlockShape {
+        BlockShape::build_with(def, values, define, &HashSet::new())
+    }
+
+    /// [`BlockShape::build`], where the names in `known` are values the block
+    /// gets from earlier blocks (the event's outputs, run variables): a `{name}`
+    /// typed for one of them needs no input.
+    pub fn build_with(def: &BlockDef, values: &Map<String, Value>, define: Option<&DefineResult>, known: &HashSet<String>) -> BlockShape {
         let mut fields: IndexMap<String, FieldDef> = def.fields.clone();
         let mut outputs = def.outputs.clone();
         let mut flows = def.base_flows();
@@ -326,17 +333,20 @@ impl BlockShape {
             }
         }
 
-        // Each {name} typed into a text field gets an input right below it, to
-        // connect the value that goes there. Unconnected, the name is looked up
-        // in the event, variables and earlier outputs as before.
+        // Each {name} typed into a text field (or any text of a design such as
+        // an embed) gets an input right below it, to connect the value that goes
+        // there, unless the block gets that name from earlier blocks anyway.
+        // Unconnected, the name is looked up in the event, variables and
+        // earlier outputs as before.
         let mut extra: Vec<(usize, String, FieldDef)> = Vec::new();
         for (i, (k, f)) in fields.iter().enumerate() {
             if hidden.contains(k) || !f.templated() || f.pin == PinMode::Only {
                 continue;
             }
-            let text = values.get(k).or(f.default.as_ref()).and_then(Value::as_str).unwrap_or_default();
-            for name in placeholders(text) {
-                if fields.contains_key(&name) || extra.iter().any(|(_, n, _)| *n == name) {
+            let mut texts = Vec::new();
+            strings_in(values.get(k).or(f.default.as_ref()).unwrap_or(&Value::Null), &mut texts);
+            for name in texts.iter().flat_map(|t| placeholders(t)) {
+                if fields.contains_key(&name) || known.contains(&name) || extra.iter().any(|(_, n, _)| *n == name) {
                     continue;
                 }
                 let mut input = FieldDef {
@@ -397,6 +407,16 @@ fn merge_field(field: &FieldDef, patch: &Value) -> FieldDef {
 }
 
 /// Evaluates `show: { mode: ["edit", "reply"], private: true }`.
+/// Every string in a value, nested ones included, in order.
+fn strings_in<'a>(v: &'a Value, out: &mut Vec<&'a str>) {
+    match v {
+        Value::String(s) => out.push(s),
+        Value::Array(a) => a.iter().for_each(|x| strings_in(x, out)),
+        Value::Object(m) => m.values().for_each(|x| strings_in(x, out)),
+        _ => {}
+    }
+}
+
 /// The names of the `{name}` placeholders in a text, in order and once each.
 /// `{user.name}` gives `user`; `{3}` and other non-names are left alone.
 pub fn placeholders(text: &str) -> Vec<String> {
@@ -457,6 +477,23 @@ pub fn title_case(key: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn known_names_need_no_input() {
+        let def: BlockDef = serde_json::from_value(json!({
+            "id": "t.b", "name": "B", "kind": "action",
+            "fields": {
+                "text": { "type": "textarea" },
+                "card": { "type": "embed", "template": true }
+            }
+        }))
+        .unwrap();
+        let values = json!({ "text": "Hi {user}, {xp} XP", "card": { "title": "{user}", "fields": [{ "value": "{level}" }] } });
+        let known: HashSet<String> = ["user".to_string()].into();
+        let shape = BlockShape::build_with(&def, values.as_object().unwrap(), None, &known);
+        let keys: Vec<&str> = shape.fields.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(keys, ["text", "xp", "card", "level"], "user comes from earlier blocks; the design's texts count too");
+    }
 
     #[test]
     fn finds_placeholders() {

@@ -540,11 +540,23 @@ pub fn node_shape(
     let node = ws.nodes.get(node_id)?;
     let def = reg.block(&node.block)?;
     let connected = connected_types(reg, cache, ws_key, ws, node_id);
+    // Names it gets from earlier blocks need no {name} input (unless one is
+    // wired already). Only event blocks' shapes are needed for them, and events
+    // have nothing before them, so this goes one level deep.
+    let upstream = crate::values::upstream(ws, node_id, reg);
+    let mut known = crate::values::known_names(ws, &upstream, reg, &mut |id| {
+        let is_event = ws.nodes.get(id).and_then(|n| reg.block(&n.block)).is_some_and(|d| d.kind == circuit_core::BlockKind::Event);
+        if is_event { node_shape(reg, engine, cache, ws_key, ws, id, project) } else { None }
+    });
+    known.retain(|name| ws.links_into(node_id, name).next().is_none());
+    let mut known: Vec<String> = known.into_iter().collect();
+    known.sort();
 
     let mut h = DefaultHasher::new();
     node.block.hash(&mut h);
     Value::Object(node.values.clone()).to_string().hash(&mut h);
     Value::Object(connected.clone()).to_string().hash(&mut h);
+    known.hash(&mut h);
     if def.has_define {
         project.to_string().hash(&mut h);
     }
@@ -563,7 +575,7 @@ pub fn node_shape(
     } else {
         None
     };
-    let shape = BlockShape::build(def, &node.values, define.as_ref());
+    let shape = BlockShape::build_with(def, &node.values, define.as_ref(), &known.into_iter().collect());
     cache.insert(key, (hash, shape.clone()));
     Some(shape)
 }

@@ -345,11 +345,11 @@ mod tests {
         let reg = Registry::load(&[root], &engine);
         let key = |id: &str| reg.engine_keys[id].clone();
 
-        // Placeholders in an embed become input pins; event names do not.
+        // Placeholders in an embed become input pins, except names earlier blocks give.
         let values = json!({ "embed": { "title": "Rank of {user}", "description": "{xp} XP", "fields": [{ "name": "L", "value": "{level}" }] } });
-        let values = values.as_object().unwrap();
-        let d = engine.define(&key("discord.build_embed"), values, &Map::new(), &json!({})).unwrap();
-        assert!(d.add.contains_key("xp") && d.add.contains_key("level") && !d.add.contains_key("user"));
+        let known = ["user".to_string()].into_iter().collect();
+        let shape = BlockShape::build_with(reg.block("discord.build_embed").unwrap(), values.as_object().unwrap(), None, &known);
+        assert!(shape.field("xp").is_some() && shape.field("level").is_some() && shape.field("user").is_none());
 
         // Version 1 values move into the embed object.
         let old = json!({ "title": "Hi", "description": "There", "color": "#FF0000" });

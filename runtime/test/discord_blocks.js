@@ -62,8 +62,6 @@ assert.strictEqual(fmt("escape", "*not bold*"), "\\*not bold\\*");
   assert.strictEqual(out.components[1].items[1].media.url, "attachment://1-cat.png", "two files with one name");
   assert.deepStrictEqual(out.files.map((f) => f.name), ["cat.png", "1-cat.png"]);
   assert.strictEqual(layout.components[0].components[0].content, "Hi {who}", "the design itself is unchanged");
-  const placeholders = Object.keys(all["discord.build_layout"].define({ values: { layout } }).add);
-  assert.deepStrictEqual(placeholders, ["who"]);
 }
 
 // Slash commands: names with spaces are subcommands and groups.

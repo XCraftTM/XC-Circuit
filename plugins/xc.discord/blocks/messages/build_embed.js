@@ -1,21 +1,3 @@
-// Every text in the embed may contain {placeholders}.
-const TEXTS = (e) => [
-  e.title,
-  e.description,
-  e.url,
-  e.author?.name,
-  e.author?.icon,
-  e.author?.url,
-  e.footer?.text,
-  e.footer?.icon,
-  e.image,
-  e.thumbnail,
-  e.time,
-  ...(e.fields || []).flatMap((f) => [f.name, f.value]),
-];
-
-const EVENT_NAMES = ["user", "member", "channel", "server", "interaction", "message", "content", "author"];
-
 module.exports = {
   id: "discord.build_embed",
   name: "Build Embed",
@@ -30,6 +12,8 @@ module.exports = {
     embed: {
       type: "embed",
       pin: false,
+      // Every {name} in the design's texts gets an input, unless earlier blocks provide it.
+      template: true,
       label: "Embed",
       default: { color: "#00D8F0", title: "", description: "", fields: [] },
       description: "The embed design. Open the Embed Builder to edit it.",
@@ -37,20 +21,6 @@ module.exports = {
   },
   outputs: {
     embed: { type: "discord.embed", description: "The finished embed. Connect it to Send Message." },
-  },
-
-  define({ values }) {
-    // {xp} in any text becomes an input pin called xp. Names the event already
-    // provides (such as {user}) are filled automatically and get no pin.
-    const add = {};
-    const embed = values.embed || {};
-    for (const text of TEXTS(embed)) {
-      for (const [, name] of String(text || "").matchAll(/\{([A-Za-z_$][\w$]*)/g)) {
-        if (EVENT_NAMES.includes(name) || add[name]) continue;
-        add[name] = { type: "any", pin: true, label: `{${name}}`, description: `Fills {${name}} in the embed.` };
-      }
-    }
-    return { add };
   },
 
   migrate(values, from) {

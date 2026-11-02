@@ -1,16 +1,7 @@
 // Components V2: a whole message built from components. The design is kept as
 // Discord's own JSON (made in the Layout Builder), so every component and
-// setting Discord has can be used. Every {placeholder} in a text becomes an input.
-
-const EVENT_NAMES = ["user", "member", "channel", "server", "interaction", "message", "content", "author"];
-
-/** Every string in a JSON value. */
-function strings(v, out = []) {
-  if (typeof v === "string") out.push(v);
-  else if (Array.isArray(v)) v.forEach((x) => strings(x, out));
-  else if (v && typeof v === "object") Object.values(v).forEach((x) => strings(x, out));
-  return out;
-}
+// setting Discord has can be used. Every {placeholder} in a text becomes an input,
+// unless earlier blocks provide that name.
 
 /** A copy of a JSON value with `fn` applied to every string. */
 function mapStrings(v, fn) {
@@ -47,6 +38,8 @@ module.exports = {
     layout: {
       type: "layout",
       pin: false,
+      // Every {name} in the design's texts gets an input, unless earlier blocks provide it.
+      template: true,
       label: "Layout",
       default: {
         components: [
@@ -65,19 +58,6 @@ module.exports = {
   },
   outputs: {
     layout: { type: "discord.layout", description: "The finished message. Connect it to Send Message › Layout." },
-  },
-
-  define({ values }) {
-    // {xp} in any text becomes an input pin called xp. Names the event already
-    // provides (such as {user}) are filled automatically and get no pin.
-    const add = {};
-    for (const text of strings(values.layout || {})) {
-      for (const [, name] of String(text).matchAll(/\{([A-Za-z_$][\w$]*)/g)) {
-        if (EVENT_NAMES.includes(name) || add[name]) continue;
-        add[name] = { type: "any", pin: true, label: `{${name}}`, description: `Fills {${name}} in the layout.` };
-      }
-    }
-    return { add };
   },
 
   run({ fields, ctx }) {

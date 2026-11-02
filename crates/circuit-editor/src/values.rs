@@ -33,10 +33,9 @@ pub struct Avail {
     pub kind: String,
 }
 
-/// The values block `node` can use, the event's first, then the blocks on the
-/// way to it in the order they run, then run variables. `shape_of` gives a
-/// placed block's shape.
-pub fn available(ws: &Workspace, node: &str, reg: &Registry, shape_of: &mut dyn FnMut(&str) -> Option<BlockShape>) -> Vec<Avail> {
+/// The blocks that run before `node` on its action path, first to last
+/// (for a value block: before the blocks it feeds).
+pub fn upstream(ws: &Workspace, node: &str, reg: &Registry) -> Vec<String> {
     // A value block (no Action wire into it) runs for the blocks it feeds,
     // through other value blocks if need be.
     let is_value = |id: &str| ws.nodes.get(id).and_then(|n| reg.block(&n.block)).is_some_and(|d| d.kind == BlockKind::Value);
@@ -76,6 +75,30 @@ pub fn available(ws: &Workspace, node: &str, reg: &Registry, shape_of: &mut dyn 
     }
     order.retain(|id| !start.contains(id) && id != node);
     order.reverse();
+    order
+}
+
+/// Names a block gets from earlier blocks without an input: the event's
+/// outputs and run variables. `shape_of` gives a placed block's shape.
+pub fn known_names(ws: &Workspace, upstream: &[String], reg: &Registry, shape_of: &mut dyn FnMut(&str) -> Option<BlockShape>) -> HashSet<String> {
+    let mut out = HashSet::new();
+    for id in upstream {
+        let Some(n) = ws.nodes.get(id) else { continue };
+        let Some(def) = reg.block(&n.block) else { continue };
+        if def.kind == BlockKind::Event {
+            out.extend(shape_of(id).into_iter().flat_map(|s| s.outputs.into_iter().map(|(k, _)| k)));
+        } else if n.block_id() == "core.set_variable" && n.values.get("scope").and_then(|v| v.as_str()).is_none_or(|s| s == "run") {
+            out.extend(n.values.get("name").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(str::to_string));
+        }
+    }
+    out
+}
+
+/// The values block `node` can use, the event's first, then the blocks on the
+/// way to it in the order they run, then run variables. `shape_of` gives a
+/// placed block's shape.
+pub fn available(ws: &Workspace, node: &str, reg: &Registry, shape_of: &mut dyn FnMut(&str) -> Option<BlockShape>) -> Vec<Avail> {
+    let order = upstream(ws, node, reg);
 
     let mut events = Vec::new();
     let mut steps = Vec::new();
@@ -403,6 +426,35 @@ pub fn list(ui: &mut Ui, theme: &Theme, values: &[Avail]) {
 
 #[cfg(test)]
 mod tests {
+
+    /// The {name} inputs a block's shape has, by name.
+    fn inputs(ed: &mut crate::editor::Editor, ws_key: &str, node: &str) -> Vec<String> {
+        let crate::editor::Editor { reg, engine, project, shapes, define_ctx, .. } = ed;
+        let ws = &project.as_ref().unwrap().workspaces[ws_key];
+        let shape = crate::editor::node_shape(reg, engine, shapes, ws_key, ws, node, define_ctx).unwrap();
+        shape.fields.into_iter().filter(|(_, f)| f.label.as_deref().is_some_and(|l| l.starts_with('{'))).map(|(k, _)| k).collect()
+    }
+
+    #[test]
+    fn names_from_earlier_blocks_need_no_input() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = crate::editor::Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&root.join("examples/DemoBot"));
+        let set = |ed: &mut crate::editor::Editor, ws: &str, node: &str, key: &str, text: &str| {
+            ed.project.as_mut().unwrap().workspaces.get_mut(ws).unwrap().nodes.get_mut(node).unwrap().values.insert(key.into(), text.into());
+        };
+        // After a Slash Command, {user} and {interaction} come from the event; {score} doesn't.
+        set(&mut ed, "rank-command", "4", "text", "Hi {user} {interaction} {score}");
+        let send = inputs(&mut ed, "rank-command", "4");
+        assert_eq!(send, ["score"]);
+        // The same in an embed's texts; {xp} and {level} are wired, so they stay.
+        let embed = inputs(&mut ed, "rank-command", "3");
+        assert_eq!(embed, ["xp", "level"]);
+        // After Member Joins there is no interaction, so it gets an input there.
+        set(&mut ed, "welcome", "3", "message", "Welcome {member} {interaction}");
+        let log = inputs(&mut ed, "welcome", "3");
+        assert_eq!(log, ["interaction"]);
+    }
 
     #[test]
     fn values_come_from_the_action_path() {
