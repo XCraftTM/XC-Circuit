@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, channel};
 use std::thread;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use circuit_runner::{BotEvent, ExportOptions, Msg, Session, SessionConfig, build_bundle, secrets};
 use eframe::egui::{self, RichText};
@@ -33,13 +33,45 @@ struct SettingField {
     label: String,
     description: Option<String>,
     placeholder: String,
+    /// Kept in the system keyring instead of the project.
     secret: bool,
+    /// Typed like a password, with an eye button to show it (every secret is).
+    masked: bool,
     required: bool,
+    /// The value must match this, when not empty (`pattern` in the build mode).
+    pattern: Option<regex::Regex>,
+    /// Shown when the value doesn't match (`patternHint`).
+    pattern_hint: Option<String>,
     value: String,
-    /// Secrets only: whether one is already stored, and whether to show it while typing.
+    /// Secrets only: whether one is already stored.
     saved: bool,
     reveal: bool,
     remove: bool,
+    /// When the Copy button was last used, to show that it worked.
+    copied: Option<Instant>,
+}
+
+/// How long the Copy button shows a check mark.
+const COPIED_FOR: Duration = Duration::from_millis(1500);
+
+/// A field pattern must match the whole value.
+fn compile_pattern(pattern: &str) -> Result<regex::Regex, regex::Error> {
+    regex::Regex::new(&format!("^(?:{pattern})$"))
+}
+
+/// Why a typed value isn't accepted, if it isn't. Empty values are left to `required`.
+fn pattern_problem(pattern: Option<&regex::Regex>, hint: Option<&str>, value: &str) -> Option<String> {
+    let value = value.trim();
+    match pattern {
+        Some(re) if !value.is_empty() && !re.is_match(value) => Some(hint.unwrap_or("This doesn't look right.").to_string()),
+        _ => None,
+    }
+}
+
+impl SettingField {
+    fn problem(&self) -> Option<String> {
+        pattern_problem(self.pattern.as_ref(), self.pattern_hint.as_deref(), &self.value)
+    }
 }
 
 pub struct SettingsDraft {
@@ -162,14 +194,22 @@ impl BotUi {
         });
     }
 
-    pub fn open_settings(&mut self, ed: &Editor) {
+    pub fn open_settings(&mut self, ed: &mut Editor) {
         let (Some(project), Some(mode)) = (&ed.project, ed.mode()) else { return };
         let text = |spec: &Value, key: &str| spec.get(key).and_then(Value::as_str).map(str::to_string);
+        let mut bad_patterns = Vec::new();
         let fields = mode
             .settings
             .iter()
             .map(|(key, spec)| {
                 let secret = text(spec, "type").as_deref() == Some("secret");
+                let pattern = text(spec, "pattern").and_then(|p| match compile_pattern(&p) {
+                    Ok(re) => Some(re),
+                    Err(e) => {
+                        bad_patterns.push(format!("The build mode's pattern for setting {key} doesn't work, so it isn't checked: {e}"));
+                        None
+                    }
+                });
                 let value = if secret {
                     String::new()
                 } else {
@@ -182,15 +222,22 @@ impl BotUi {
                     description: text(spec, "description"),
                     placeholder: text(spec, "placeholder").unwrap_or_default(),
                     secret,
+                    masked: secret || spec.get("sensitive").and_then(Value::as_bool).unwrap_or(false),
                     required: spec.get("required").and_then(Value::as_bool).unwrap_or(false),
+                    pattern,
+                    pattern_hint: text(spec, "patternHint"),
                     value,
                     saved: secret && secrets::get(&project.root, key).is_some(),
                     reveal: false,
                     remove: false,
+                    copied: None,
                 }
             })
             .collect();
         self.settings = Some(SettingsDraft { fields, project_name: project.meta.name.clone() });
+        for line in bad_patterns {
+            ed.log(Level::Warn, line);
+        }
     }
 
     pub fn open_export(&mut self, ed: &Editor) {
@@ -257,6 +304,10 @@ impl BotUi {
         let icon = ed.reg.icons.get("settings").cloned();
         let subtitle = format!("{} · stored per project", draft.project_name);
         let store = if cfg!(windows) { "Windows Credential Manager" } else { "the system keyring" };
+        let root = ed.project.as_ref().map(|p| p.root.clone());
+        let icon_of = |name: &str| ed.reg.icons.get(name).cloned();
+        let (eye, eye_off, copy, check) = (icon_of("eye"), icon_of("eye-off"), icon_of("copy"), icon_of("check"));
+        let problems = draft.fields.iter().filter(|f| f.problem().is_some()).count();
         let (mut save, mut cancel) = (false, false);
         dialog::tab(
             ui,
@@ -271,22 +322,43 @@ impl BotUi {
                             group = Some(f.group.clone());
                         }
                         let label = if f.required { format!("{} *", f.label) } else { f.label.clone() };
-                        dialog::field(ui, &theme, &label, f.description.as_deref(), |ui| {
-                            if !f.secret {
+                        let description = f.description.clone();
+                        dialog::field(ui, &theme, &label, description.as_deref(), |ui| {
+                            if !f.masked {
                                 dialog::text_input(ui, &mut f.value, &f.placeholder, false);
+                            } else {
+                                ui.horizontal(|ui| {
+                                    ui.spacing_mut().item_spacing.x = 6.0;
+                                    let hint = if f.saved && !f.remove { "•••••••• saved · type to replace" } else { f.placeholder.as_str() };
+                                    ui.allocate_ui(egui::vec2(ui.available_width() - 80.0, 34.0), |ui| {
+                                        dialog::text_input(ui, &mut f.value, hint, !f.reveal);
+                                    });
+                                    let (icon, tip) = if f.reveal { (eye_off.as_deref(), "Hide") } else { (eye.as_deref(), "Show what you typed") };
+                                    if dialog::icon_button(ui, &theme, icon, if f.reveal { "Hide" } else { "Show" }, tip).clicked() {
+                                        f.reveal = !f.reveal;
+                                    }
+                                    // Copies what was typed, or else the saved value, without showing it.
+                                    let saved_value = || if f.secret && f.saved { root.as_deref().and_then(|r| secrets::get(r, &f.key)) } else { None };
+                                    let can_copy = !f.value.is_empty() || (f.saved && !f.remove);
+                                    let copied = f.copied.is_some_and(|t| t.elapsed() < COPIED_FOR);
+                                    let (icon, tip) = if copied { (check.as_deref(), "Copied") } else { (copy.as_deref(), "Copy without showing it") };
+                                    if ui.add_enabled_ui(can_copy, |ui| dialog::icon_button(ui, &theme, icon, "Copy", tip)).inner.clicked() {
+                                        let value = if f.value.is_empty() { saved_value() } else { Some(f.value.trim().to_string()) };
+                                        if let Some(v) = value {
+                                            ui.ctx().copy_text(v);
+                                            f.copied = Some(Instant::now());
+                                            ui.ctx().request_repaint_after(COPIED_FOR);
+                                        }
+                                    }
+                                });
+                            }
+                            if let Some(p) = f.problem() {
+                                ui.add_space(2.0);
+                                ui.label(RichText::new(p).size(11.5).color(theme.error));
+                            }
+                            if !f.secret {
                                 return;
                             }
-                            ui.horizontal(|ui| {
-                                ui.spacing_mut().item_spacing.x = 8.0;
-                                let hint = if f.saved && !f.remove { "•••••••• saved · type to replace" } else { f.placeholder.as_str() };
-                                ui.allocate_ui(egui::vec2(ui.available_width() - 92.0, 34.0), |ui| {
-                                    dialog::text_input(ui, &mut f.value, hint, !f.reveal);
-                                });
-                                let eye = if f.reveal { "Hide" } else { "Show" };
-                                if dialog::secondary_button(ui, &theme, eye).clicked() {
-                                    f.reveal = !f.reveal;
-                                }
-                            });
                             ui.add_space(4.0);
                             ui.horizontal(|ui| {
                                 if f.remove {
@@ -296,7 +368,7 @@ impl BotUi {
                                 } else {
                                     dialog::pill(ui, "Not set", theme.warning);
                                 }
-                                if f.saved && ui.link(RichText::new(if f.remove { "Keep it" } else { "Remove saved value" }).size(11.5)).clicked() {
+                                if f.saved && dialog::small_button(ui, &theme, if f.remove { "Keep it" } else { "Remove saved value" }).clicked() {
                                     f.remove = !f.remove;
                                 }
                             });
@@ -306,12 +378,15 @@ impl BotUi {
                     }
                 }
                 Part::Footer => {
-                    save = dialog::primary_button(ui, &theme, "Save and close").clicked();
+                    save = ui.add_enabled_ui(problems == 0, |ui| dialog::primary_button(ui, &theme, "Save and close")).inner.clicked();
                     cancel = dialog::secondary_button(ui, &theme, "Cancel").clicked();
+                    if problems > 0 {
+                        ui.label(RichText::new(format!("{problems} to fix")).size(12.0).color(theme.warning));
+                    }
                 }
             },
         );
-        if save {
+        if save && problems == 0 {
             if let Some(project) = ed.project.as_mut() {
                 let mut errors = Vec::new();
                 for f in &draft.fields {
@@ -506,4 +581,40 @@ pub fn app_data_dir() -> PathBuf {
     }
     let name = if cfg!(windows) { "XC Circuit" } else { "xc-circuit" };
     dirs::data_dir().unwrap_or_else(std::env::temp_dir).join(name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn patterns_match_the_whole_value() {
+        let re = compile_pattern(r"\d{3}").unwrap();
+        assert_eq!(pattern_problem(Some(&re), None, "123"), None);
+        assert_eq!(pattern_problem(Some(&re), None, " 123 "), None, "surrounding spaces are trimmed, as on save");
+        assert!(pattern_problem(Some(&re), None, "1234").is_some(), "anchored at both ends");
+        assert_eq!(pattern_problem(Some(&re), Some("Three digits"), "12").as_deref(), Some("Three digits"));
+        assert_eq!(pattern_problem(Some(&re), None, ""), None, "empty is left to required");
+        assert!(compile_pattern("(").is_err());
+    }
+
+    #[test]
+    fn discord_settings_check_their_values() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../plugins/xc.discord/modes/discord.toml");
+        let mode: circuit_plugins::BuildMode = toml::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let check = |key: &str, value: &str| {
+            let spec = &mode.settings[key];
+            let re = compile_pattern(spec["pattern"].as_str().unwrap()).unwrap();
+            pattern_problem(Some(&re), spec.get("patternHint").and_then(Value::as_str), value)
+        };
+        // Made-up values in the shape Discord uses.
+        assert_eq!(check("token", "MTIzNDU2Nzg5MDEyMzQ1Njc4OQ.GhIjKl.abcdefghijklmnopqrstuvwxyz0123456789AB"), None);
+        assert!(check("token", "not a token").is_some());
+        assert!(check("token", "abc.def").is_some());
+        assert_eq!(check("devServer", "123456789012345678"), None);
+        assert!(check("devServer", "12345").is_some());
+        assert!(check("devServer", "my server").is_some());
+        assert_eq!(check("prefix", "!"), None);
+        assert!(check("prefix", "a b").is_some());
+    }
 }

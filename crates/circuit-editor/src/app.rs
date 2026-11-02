@@ -403,7 +403,7 @@ impl CircuitApp {
                     crate::slash::open(&mut self.ed);
                 }
                 if ui.add_enabled(has_project, egui::Button::new("Settings…")).clicked() {
-                    self.bot.open_settings(&self.ed);
+                    self.bot.open_settings(&mut self.ed);
                 }
                 if ui.add_enabled(has_project, egui::Button::new("Export…")).clicked() {
                     self.bot.open_export(&self.ed);
@@ -623,7 +623,7 @@ impl CircuitApp {
         use crate::settings::Ask;
         for ask in asks {
             match ask {
-                Ask::BotSettings => self.bot.open_settings(&self.ed),
+                Ask::BotSettings => self.bot.open_settings(&mut self.ed),
                 Ask::SlashCommands => crate::slash::open(&mut self.ed),
                 Ask::Export => self.bot.open_export(&self.ed),
                 Ask::ManagePlugins => self.open_plugins(),
@@ -808,7 +808,7 @@ impl CircuitApp {
             Cmd::Run => self.bot.start(&mut self.ed, ctx),
             Cmd::Stop => self.bot.stop(&mut self.ed),
             Cmd::SlashCommands => crate::slash::open(&mut self.ed),
-            Cmd::Settings => self.bot.open_settings(&self.ed),
+            Cmd::Settings => self.bot.open_settings(&mut self.ed),
             Cmd::Export => self.bot.open_export(&self.ed),
             Cmd::About => self.show_about = true,
             Cmd::OpenSettings => self.open_settings(),
@@ -842,7 +842,7 @@ impl CircuitApp {
         match self.ed.project.as_ref().map(|p| (p.meta.name.clone(), p.meta.mode.clone())) {
             Some((name, mode_id)) => {
                 if status_item(&mut left, &t, None, &name).on_hover_text("Bot settings").clicked() {
-                    self.bot.open_settings(&self.ed);
+                    self.bot.open_settings(&mut self.ed);
                 }
                 let mode = self.ed.reg.mode(&mode_id).map(|m| (m.name.clone(), m.description.clone()));
                 let (mode_name, about) = match mode {

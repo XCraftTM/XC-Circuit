@@ -27,6 +27,10 @@ egui_extras.workspace = true
 image.workspace = true
 indexmap.workspace = true
 open.workspace = true
+regex = "1"
 rfd.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+toml.workspace = true

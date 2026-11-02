@@ -198,6 +198,43 @@ pub fn primary_button(ui: &mut Ui, theme: &Theme, text: &str) -> Response {
     )
 }
 
+/// A small framed button, for secondary actions inside a row (where a text
+/// link was used before: it is easier to see and to hit with a finger).
+pub fn small_button(ui: &mut Ui, theme: &Theme, text: &str) -> Response {
+    ui.add(
+        egui::Button::new(RichText::new(text).size(11.5).color(theme.text))
+            .fill(theme.panel)
+            .stroke(Stroke::new(1.0, theme.node_border))
+            .corner_radius(6)
+            .min_size(vec2(0.0, 26.0)),
+    )
+}
+
+/// A framed square button showing an icon (or `fallback` text when the icon is
+/// missing), the same height as a text input. `tip` is shown on hover.
+pub fn icon_button(ui: &mut Ui, theme: &Theme, icon: Option<&Path>, fallback: &str, tip: &str) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(34.0, 34.0), Sense::click());
+    let fill = if resp.is_pointer_button_down_on() {
+        mix(theme.panel, theme.text, 0.14)
+    } else if resp.hovered() {
+        mix(theme.panel, theme.text, 0.07)
+    } else {
+        theme.panel
+    };
+    let ink = if ui.is_enabled() { theme.text } else { theme.text_muted };
+    ui.painter().rect(rect, 7.0, fill, Stroke::new(1.0, theme.node_border), egui::StrokeKind::Inside);
+    match icon {
+        Some(path) => egui::Image::from_uri(file_uri(path)).tint(ink).paint_at(ui, rect.shrink(9.0)),
+        None => {
+            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, fallback, egui::FontId::proportional(13.0), ink);
+        }
+    }
+    if resp.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    resp.on_hover_text(tip)
+}
+
 pub fn secondary_button(ui: &mut Ui, theme: &Theme, text: &str) -> Response {
     ui.add(
         egui::Button::new(RichText::new(text).color(theme.text))

@@ -812,9 +812,11 @@ dependencies = [
  "libloading",
  "notify",
  "open",
+ "regex",
  "rfd",
  "serde",
  "serde_json",
+ "toml",
  "xc-circuit-plugin",
 ]
 

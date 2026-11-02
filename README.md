@@ -43,7 +43,7 @@ The first start opens `examples/DemoBot`. Windows and Linux are supported.
 | Embeds | Select a Build Embed block › Open Embed Builder; the block shows a live preview |
 | Slash commands | Bot › Slash Commands… (options, choices, permissions); registered when the bot starts |
 | Stored data | View › Panels › Stored Data shows what `ctx.store` saved while running |
-| Bot token | Bot › Settings (kept in Windows Credential Manager / Linux Secret Service) |
+| Bot token | Bot › Settings (kept in Windows Credential Manager / Linux Secret Service). The eye button shows what you typed, Copy copies the saved token without showing it, and values are checked as you type (a build mode's settings can set `pattern`, a regular expression, and `patternHint`; `sensitive = true` hides a text setting behind the eye button) |
 | Run / Stop | F5 / Shift+F5, or Run in the title bar. Running blocks glow; failures show on the block |
 | Export | Bot › Export… writes a folder that runs with `node index.js` |
 
