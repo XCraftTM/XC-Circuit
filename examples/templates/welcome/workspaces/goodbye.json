@@ -13,7 +13,7 @@
       "block": "discord.server_info@1",
       "at": [
         360,
-        404
+        446
       ],
       "values": {
         "info": "systemChannel"
@@ -23,7 +23,7 @@
       "block": "discord.member_info@1",
       "at": [
         360,
-        562
+        611
       ],
       "values": {
         "info": "displayName"

@@ -395,6 +395,7 @@ impl BotUi {
             },
         );
         if save && problems == 0 {
+            let mut token_changed = false;
             if let Some(project) = ed.project.as_mut() {
                 let mut errors = Vec::new();
                 for f in &draft.fields {
@@ -408,6 +409,8 @@ impl BotUi {
                         };
                         if let Err(e) = result {
                             errors.push(format!("{}: {e:#}", f.label));
+                        } else if f.key == "token" {
+                            token_changed = true;
                         }
                     } else if project.meta.settings.get(&f.key).and_then(Value::as_str) != Some(f.value.as_str()) {
                         project.meta.settings.insert(f.key.clone(), Value::String(f.value.trim().to_string()));
@@ -419,6 +422,10 @@ impl BotUi {
                 }
             }
             ed.log(Level::Success, t!("Settings saved"));
+            // The previews show the bot of the token saved now.
+            if token_changed {
+                ed.fetch_bot_profile();
+            }
             if close {
                 self.settings = None;
             } else {

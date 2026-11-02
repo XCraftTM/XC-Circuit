@@ -28,6 +28,7 @@ image.workspace = true
 indexmap.workspace = true
 open.workspace = true
 regex = "1"
+ureq = "3"
 rfd.workspace = true
 serde.workspace = true
 serde_json.workspace = true

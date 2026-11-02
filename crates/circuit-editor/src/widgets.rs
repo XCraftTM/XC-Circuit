@@ -134,9 +134,10 @@ fn color(ui: &mut Ui, id: egui::Id, value: &mut Value, width: f32, theme: &Theme
     changed
 }
 
-/// A pill-shaped on/off switch in the theme's Action green.
+/// A pill-shaped on/off switch in the theme's Action green, one size
+/// everywhere: big enough to hit with a finger.
 pub fn toggle(ui: &mut Ui, on: &mut bool, theme: &Theme) -> Response {
-    let size = if theme.touch { Vec2::new(44.0, 24.0) } else { Vec2::new(30.0, 17.0) };
+    let size = Vec2::new(44.0, 24.0);
     let (rect, mut response) = ui.allocate_exact_size(size, Sense::click());
     if response.clicked() {
         *on = !*on;

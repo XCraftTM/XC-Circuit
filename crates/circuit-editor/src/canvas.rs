@@ -75,6 +75,9 @@ pub struct CanvasView {
     pub drag_zones: Vec<(String, Rect)>,
     /// Screen rectangles of the text boxes drawn last frame: (block, field) → box.
     pub text_fields: Vec<((String, String), Rect)>,
+    /// How tall each field's control was last drawn, so its row fits it:
+    /// (block, field) → height.
+    pub field_heights: HashMap<(String, String), f32>,
 }
 
 impl CanvasView {
@@ -119,9 +122,13 @@ struct NodeLayout {
     pins: Vec<PinSpot>,
 }
 
-/// `tall` gives rows that need more room than one line (embed previews), by field key.
-/// `width` is the block's own width when it was resized.
-fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], width: Option<f32>, def: Option<&BlockDef>, shape: Option<&BlockShape>, tall: &HashMap<String, f32>) -> NodeLayout {
+/// `tall` gives rows that need more room than one line (text boxes, embed
+/// previews), by field key: their label and pin stay on the first line.
+/// `fit` gives rows made as tall as their control (a dropdown, say): their
+/// label and pin are centered on it. `width` is the block's own width when it
+/// was resized.
+#[allow(clippy::too_many_arguments)]
+fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], width: Option<f32>, def: Option<&BlockDef>, shape: Option<&BlockShape>, tall: &HashMap<String, f32>, fit: &HashMap<String, f32>) -> NodeLayout {
     let (Some(def), Some(shape)) = (def, shape) else {
         let rect = Rect::from_min_size(pos2(at[0], at[1]), vec2(NODE_W, HEADER_H + ROW_H + PAD_BOTTOM));
         let header = Rect::from_min_size(rect.min, vec2(NODE_W, HEADER_H));
@@ -148,7 +155,7 @@ fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], width: Option<f32>, d
     rows.extend(shape.outputs.iter().map(|(k, _)| RowKind::Output(k.clone())));
 
     let row_h = |row: &RowKind| match row {
-        RowKind::Field { key, .. } => tall.get(key).copied().unwrap_or(ROW_H),
+        RowKind::Field { key, .. } => tall.get(key).or_else(|| fit.get(key)).copied().unwrap_or(ROW_H),
         _ => ROW_H,
     };
     let height = header_h + PAD_TOP + rows.iter().map(row_h).sum::<f32>() + PAD_BOTTOM;
@@ -186,8 +193,10 @@ fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], width: Option<f32>, d
         let h = row_h(&row);
         let r = Rect::from_min_size(pos2(rect.left(), top), vec2(width, h));
         top += h;
-        // Pins sit at the middle of the first line, even on tall rows.
-        let y = r.top() + ROW_H / 2.0;
+        // Pins sit at the middle of the first line, even on tall rows; on rows
+        // as tall as their control, at its middle.
+        let centered = matches!(&row, RowKind::Field { key, .. } if fit.contains_key(key));
+        let y = if centered { r.center().y } else { r.top() + ROW_H / 2.0 };
         match &row {
             RowKind::Flow(f) => pins.push(PinSpot {
                 pin: f.clone(),
@@ -327,7 +336,14 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                 tall.insert(key.clone(), crate::embed::layout(&measure, &data, w, Some(4), EMBED_SCALE).height + 44.0);
             }
         }
-        layouts.push(layout_node(id, node.at, &node.pins, node.width, def, shape.as_ref(), &tall));
+        // Rows as tall as their control, measured when last drawn.
+        let mut fit = HashMap::new();
+        for (key, h) in view.field_heights.iter().filter(|((n, _), _)| n == id) {
+            if !tall.contains_key(&key.1) && *h + 8.0 > ROW_H {
+                fit.insert(key.1.clone(), h + 8.0);
+            }
+        }
+        layouts.push(layout_node(id, node.at, &node.pins, node.width, def, shape.as_ref(), &tall, &fit));
         if let Some(s) = shape {
             node_shapes.insert(id.clone(), s);
         }
@@ -677,7 +693,9 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     let label_color = if missing { theme.warning } else { theme.text_muted };
                     let label = f.label(key);
                     let label_w = (r.width() * 0.4).min(label.len() as f32 * 7.0 + 8.0);
-                    painter.text(pos2(r.left() + 16.0, r.top() + ROW_H / 2.0), Align2::LEFT_CENTER, &label, FontId::proportional(12.5), label_color);
+                    // On the first line above a text box, else centered on the row's control.
+                    let label_y = if widgets::is_plain_text(f) && !*pinned { r.top() + ROW_H / 2.0 } else { r.center().y };
+                    painter.text(pos2(r.left() + 16.0, label_y), Align2::LEFT_CENTER, &label, FontId::proportional(12.5), label_color);
                     if *pinned {
                         if !connected {
                             painter.text(r.right_center() - vec2(16.0, 0.0), Align2::RIGHT_CENTER, "connect", FontId::proportional(11.0), with_alpha(theme.text_muted, 140));
@@ -757,12 +775,17 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                         let wr = Rect::from_min_max(pos2(r.left() + 16.0 + label_w + 6.0, r.top() + 3.0), pos2(r.right() - 12.0, r.bottom() - 3.0));
                         let mut value = ws.nodes[id].values.get(key).cloned().or_else(|| f.default.clone()).unwrap_or(Value::Null);
                         let wid = cui.id().with(("field", id, key));
-                        let changed = cui
-                            // A fixed id: number boxes keep their editing state while typing.
-                            .scope_builder(UiBuilder::new().id_salt(("field-ui", id, key)).max_rect(wr).layout(egui::Layout::right_to_left(egui::Align::Center)), |ui| {
-                                widgets::value_editor(ui, wid, f, &mut value, wr.width(), false, theme)
-                            })
-                            .inner;
+                        // A fixed id: number boxes keep their editing state while typing.
+                        let drawn = cui.scope_builder(UiBuilder::new().id_salt(("field-ui", id, key)).max_rect(wr).layout(egui::Layout::right_to_left(egui::Align::Center)), |ui| {
+                            widgets::value_editor(ui, wid, f, &mut value, wr.width(), false, theme)
+                        });
+                        // A control taller than its row (a dropdown, say) gets a row as tall as
+                        // it from the next frame on. (Smaller ones report the whole row.)
+                        let h = drawn.response.rect.height();
+                        if h > wr.height() + 0.5 {
+                            view.field_heights.insert((id.clone(), key.clone()), h);
+                        }
+                        let changed = drawn.inner;
                         if changed {
                             ws.nodes.get_mut(id).unwrap().values.insert(key.clone(), value);
                             *dirty = true;

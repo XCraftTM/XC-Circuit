@@ -1136,6 +1136,12 @@ impl eframe::App for CircuitApp {
             self.ed.picker = None;
         }
         self.bot.poll(&mut self.ed);
+        if let Some(Err(e)) = self.ed.bot_profile.poll() {
+            self.ed.log(crate::editor::Level::Warn, tf!("Couldn't load the bot's name and picture: {error}", error = e));
+        }
+        if self.ed.bot_profile.busy() {
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
+        }
         self.run_native(&ctx);
         if self.watcher.poll() {
             self.ed.log(Level::Info, t!("Plugin files changed, reloading"));

@@ -90,6 +90,8 @@ pub struct Editor {
     pub define_ctx: Value,
     pub embed_edit: Option<crate::embed::EmbedEdit>,
     pub layout_edit: Option<crate::layout::LayoutEdit>,
+    /// The bot's name and picture, for message previews.
+    pub bot_profile: crate::bot_profile::Profile,
     pub slash_edit: Option<crate::slash::SlashEdit>,
 }
 
@@ -123,6 +125,7 @@ impl Editor {
             define_ctx: Value::Object(Map::new()),
             embed_edit: None,
             layout_edit: None,
+            bot_profile: Default::default(),
             slash_edit: None,
         };
         ed.set_theme(theme_id.unwrap_or("graphite"));
@@ -219,6 +222,7 @@ impl Editor {
                 self.refresh_define_ctx();
                 self.upgrade_blocks();
                 self.upgrade_texts();
+                self.fetch_bot_profile();
                 if let Some(first) = first {
                     self.actions.push(Action::OpenWorkspace(first));
                 }
@@ -352,6 +356,14 @@ impl Editor {
         let data = self.project.as_ref().map(|p| p.meta.data.clone()).unwrap_or_default();
         self.define_ctx = serde_json::json!({ "data": data });
         self.shapes.clear();
+    }
+
+    /// Reads the bot's name and picture from Discord for the previews (when the
+    /// project has a bot token).
+    pub fn fetch_bot_profile(&mut self) {
+        if let Some(p) = &self.project {
+            self.bot_profile.fetch(&p.root, &p.meta.mode);
+        }
     }
 
     /// Texts written with `{name}` placeholders use `${name}` now (`${…}` holds

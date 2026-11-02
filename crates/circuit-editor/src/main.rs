@@ -4,7 +4,9 @@
 mod i18n;
 mod app;
 mod bot;
+mod bot_profile;
 mod canvas;
+mod chips;
 mod color;
 mod dialog;
 mod editor;

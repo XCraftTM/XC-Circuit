@@ -181,7 +181,7 @@ pub fn layout(painter: &Painter, e: &EmbedData, width: f32, max_desc_lines: Opti
         if s.trim().is_empty() {
             return;
         }
-        let g = painter.layout(s.to_string(), FontId::proportional(size * scale), color, wrap);
+        let g = painter.layout_job(crate::chips::job(s, FontId::proportional(size * scale), color, wrap));
         pieces.push((pos2(x, *y), g.clone()));
         *y += g.size().y + gap * scale;
     };
@@ -213,8 +213,8 @@ pub fn layout(painter: &Painter, e: &EmbedData, width: f32, max_desc_lines: Opti
         let mut tallest: f32 = 0.0;
         for (i, f) in row.iter().enumerate() {
             let x = x0 + col_w * i as f32;
-            let n = painter.layout(f.name.clone(), FontId::proportional(12.0 * scale), STRONG, col_w - 8.0);
-            let v = painter.layout(f.value.clone(), FontId::proportional(12.0 * scale), TEXT, col_w - 8.0);
+            let n = painter.layout_job(crate::chips::job(&f.name, FontId::proportional(12.0 * scale), STRONG, col_w - 8.0));
+            let v = painter.layout_job(crate::chips::job(&f.value, FontId::proportional(12.0 * scale), TEXT, col_w - 8.0));
             let h = n.size().y + 2.0 + v.size().y;
             pieces.push((pos2(x, *y), n.clone()));
             pieces.push((pos2(x, *y + n.size().y + 2.0), v));
@@ -291,6 +291,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
     // Texts offer the values of earlier blocks after `{`, and list them on the right.
     let values = std::sync::Arc::new(ed.values_for(&ws, &node));
     crate::values::set_scope(ui.ctx(), Some(values.clone()));
+    let bot = ed.bot_profile.shown.clone();
     let Some(edit) = &mut ed.embed_edit else { return };
     let theme = ed.theme.clone();
     let icon = ed.reg.icons.get("embed").cloned();
@@ -336,7 +337,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
                     ui.add_space(14.0);
                     ui.vertical(|ui| {
                         dialog::section(ui, &theme, t!("Preview"));
-                        preview_message(ui, &theme, &edit.draft);
+                        preview_message(ui, &theme, &edit.draft, bot.as_ref());
                         ui.add_space(10.0);
                         dialog::section(ui, &theme, t!("Values from earlier blocks"));
                         ScrollArea::vertical().id_salt("embed-values").max_height(dialog::remaining_height(ui, 140.0)).auto_shrink([false, true]).show(ui, |ui| crate::values::list(ui, &theme, &values));
@@ -495,7 +496,7 @@ fn two(ui: &mut Ui, theme: &Theme, a: (&str, &mut String, &str), b: (&str, &mut 
 }
 
 /// The embed as it appears in a Discord message, with the bot's name above it.
-fn preview_message(ui: &mut Ui, theme: &Theme, e: &EmbedData) {
+fn preview_message(ui: &mut Ui, theme: &Theme, e: &EmbedData, bot: Option<&crate::bot_profile::BotProfile>) {
     let width = ui.available_width().min(500.0);
     let painter = ui.painter().clone();
     let card_w = width - 76.0;
@@ -503,9 +504,9 @@ fn preview_message(ui: &mut Ui, theme: &Theme, e: &EmbedData) {
     let (rect, _) = ui.allocate_exact_size(vec2(width, l.height + 70.0), egui::Sense::hover());
     painter.rect_filled(rect, 8.0, Color32::from_rgb(0x31, 0x33, 0x38));
     let avatar = rect.min + vec2(14.0, 16.0);
-    painter.circle_filled(avatar + vec2(18.0, 18.0), 18.0, theme.accent);
-    painter.text(avatar + vec2(48.0, 2.0), egui::Align2::LEFT_TOP, t!("Your Bot"), FontId::proportional(14.0), STRONG);
-    painter.text(avatar + vec2(118.0, 4.0), egui::Align2::LEFT_TOP, "APP · Today at 12:00", FontId::proportional(11.0), MUTED);
+    crate::bot_profile::paint_avatar(ui, Rect::from_min_size(avatar, vec2(36.0, 36.0)), bot, theme.accent);
+    let name = painter.text(avatar + vec2(48.0, 2.0), egui::Align2::LEFT_TOP, crate::bot_profile::name(bot), FontId::proportional(14.0), STRONG);
+    painter.text(pos2(name.right() + 8.0, avatar.y + 4.0), egui::Align2::LEFT_TOP, "APP · Today at 12:00", FontId::proportional(11.0), MUTED);
     paint(&painter, rect.min + vec2(62.0, 44.0), card_w, &l);
 }
 

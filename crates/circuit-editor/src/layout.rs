@@ -336,6 +336,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
     // Texts offer the values of earlier blocks after `{`, and list them on the right.
     let values = std::sync::Arc::new(ed.values_for(&ws, &node));
     crate::values::set_scope(ui.ctx(), Some(values.clone()));
+    let bot = ed.bot_profile.shown.clone();
     let Some(edit) = &mut ed.layout_edit else { return };
     let theme = ed.theme.clone();
     let icon = ed.reg.icons.get("layers").cloned();
@@ -359,7 +360,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
                     ui.vertical(|ui| {
                         dialog::section(ui, &theme, t!("Preview"));
                         let h = (dialog::remaining_height(ui, 300.0) * 0.55).max(200.0);
-                        ScrollArea::vertical().id_salt("layout-preview").max_height(h).auto_shrink([false, true]).show(ui, |ui| preview(ui, &theme, &edit.draft));
+                        ScrollArea::vertical().id_salt("layout-preview").max_height(h).auto_shrink([false, true]).show(ui, |ui| preview(ui, &theme, &edit.draft, bot.as_ref()));
                         ui.add_space(10.0);
                         dialog::section(ui, &theme, t!("Values from earlier blocks"));
                         ScrollArea::vertical().id_salt("layout-values").max_height(dialog::remaining_height(ui, 140.0)).auto_shrink([false, true]).show(ui, |ui| crate::values::list(ui, &theme, &values));
@@ -922,16 +923,16 @@ mod discord {
 }
 
 /// The message as Discord shows it, with the bot's name above it.
-pub fn preview(ui: &mut Ui, theme: &Theme, layout: &Value) {
+pub fn preview(ui: &mut Ui, theme: &Theme, layout: &Value, bot: Option<&crate::bot_profile::BotProfile>) {
     Frame::new().fill(discord::CHAT).corner_radius(8).inner_margin(Margin::same(14)).show(ui, |ui| {
         ui.set_width(ui.available_width().min(520.0));
         ui.horizontal_top(|ui| {
             let (r, _) = ui.allocate_exact_size(vec2(40.0, 40.0), egui::Sense::hover());
-            ui.painter().circle_filled(r.center(), 20.0, theme.accent);
+            crate::bot_profile::paint_avatar(ui, r, bot, theme.accent);
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 6.0;
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(t!("Your Bot")).size(14.5).strong().color(discord::STRONG));
+                    ui.label(RichText::new(crate::bot_profile::name(bot)).size(14.5).strong().color(discord::STRONG));
                     ui.label(RichText::new("APP · Today at 12:00").size(11.0).color(discord::MUTED));
                 });
                 let w = ui.available_width();
@@ -1066,11 +1067,10 @@ fn markdown(ui: &mut Ui, text: &str, width: f32) {
                 (raw.to_string(), 14.0, false, discord::TEXT)
             };
             let plain = body.replace("**", "").replace("__", "").replace('`', "");
-            let mut rt = RichText::new(if plain.is_empty() { " ".to_string() } else { plain }).size(size).color(color);
-            if strong {
-                rt = rt.strong();
-            }
-            ui.add(egui::Label::new(rt).wrap());
+            let plain = if plain.is_empty() { " ".to_string() } else { plain };
+            // Headings in the brightest text; ${…} as chips.
+            let color = if strong { discord::STRONG } else { color };
+            ui.add(egui::Label::new(crate::chips::job(&plain, egui::FontId::proportional(size), color, width)).wrap());
         }
     });
 }
