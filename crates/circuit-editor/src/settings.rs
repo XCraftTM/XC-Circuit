@@ -160,7 +160,7 @@ pub fn language_buttons(ui: &mut Ui, ed: &mut Editor, theme: &Theme) {
 fn appearance(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView) {
     let ctx = ui.ctx().clone();
     group(ui, theme, t!("Language"));
-    row(ui, theme, t!("Interface language"), t!("Menus, settings and block names. More languages come with plugins."), |ui| {
+    row(ui, theme, t!("Interface language"), t!("Menus and settings; blocks stay in English. More languages come with plugins."), |ui| {
         ui.with_layout(Layout::left_to_right(Align::Center), |ui| language_buttons(ui, ed, theme));
     });
     row(ui, theme, t!("Translate XC Circuit"), t!("Makes a file with every text to translate, saved as a plugin you can share. Changes show while you edit it."), |ui| {
@@ -535,7 +535,7 @@ fn new_translation(ctx: &egui::Context, ed: &mut Editor, theme: &Theme, view: &m
         let dir = crate::bot::app_data_dir().join("plugins");
         let fallback = code.trim().to_string();
         let name = if name.trim().is_empty() { fallback.clone() } else { name.trim().to_string() };
-        match crate::i18n::create_translation(&dir, &ed.reg, &ed.block_english, code.trim(), &name, english.trim()) {
+        match crate::i18n::create_translation(&dir, &ed.reg, code.trim(), &name, english.trim()) {
             Ok(file) => {
                 ed.log(crate::editor::Level::Success, tf!("Translation file ready: {file}", file = file.display()));
                 let _ = open::that(&file);

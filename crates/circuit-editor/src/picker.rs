@@ -263,8 +263,8 @@ fn details(ui: &mut egui::Ui, def: &BlockDef, reg: &Registry, theme: &Theme) {
     ui.label(RichText::new(&def.name).strong().size(16.0));
     ui.label(RichText::new(format!("by {} · v{} · {}", def.author, def.version, def.plugin)).size(12.0).color(theme.text_muted));
     ui.label(&def.description);
-    let fields: Vec<String> = def.fields.iter().filter(|(_, f)| !f.advanced).map(|(k, f)| crate::i18n::label(&f.label(k)).into_owned()).collect();
-    let outputs: Vec<String> = def.outputs.iter().map(|(k, o)| format!("{} ({})", crate::i18n::label(&o.label(k)), o.ty.display(reg))).collect();
+    let fields: Vec<String> = def.fields.iter().filter(|(_, f)| !f.advanced).map(|(k, f)| f.label(k)).collect();
+    let outputs: Vec<String> = def.outputs.iter().map(|(k, o)| format!("{} ({})", o.label(k), o.ty.display(reg))).collect();
     if !fields.is_empty() {
         ui.label(RichText::new(format!("In: {}", fields.join(", "))).size(12.5).color(theme.text_muted));
     }

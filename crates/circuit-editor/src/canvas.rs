@@ -194,7 +194,7 @@ fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], width: Option<f32>, d
                 dir: Dir::Out,
                 ty: PinType::Action,
                 pos: pos2(rect.right(), y),
-                label: crate::i18n::label(&circuit_core::block::title_case(f)).into_owned(),
+                label: circuit_core::block::title_case(f),
                 description: None,
                 faint: false,
                 multi: true,
@@ -207,7 +207,7 @@ fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], width: Option<f32>, d
                         dir: Dir::In,
                         ty: f.ty.clone(),
                         pos: pos2(rect.left(), y),
-                        label: crate::i18n::label(&f.label(key)).into_owned(),
+                        label: f.label(key),
                         description: f.description.clone(),
                         faint: !*pinned,
                         multi: f.multi,
@@ -221,7 +221,7 @@ fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], width: Option<f32>, d
                     dir: Dir::Out,
                     ty: o.ty.clone(),
                     pos: pos2(rect.right(), y),
-                    label: crate::i18n::label(&o.label(k)).into_owned(),
+                    label: o.label(k),
                     description: o.description.clone(),
                     faint: false,
                     multi: true,
@@ -279,7 +279,7 @@ fn zone_layout(zid: &str, rect: Rect) -> NodeLayout {
             dir: Dir::Out,
             ty,
             pos: pos2(rect.right(), top + ZONE_ROW_H * (i as f32 + 0.5)),
-            label: crate::i18n::label(label).into_owned(),
+            label: label.into(),
             description: Some(description.into()),
             faint: false,
             multi: true,
@@ -621,7 +621,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                 RowKind::Flow(f) => (f, Dir::Out, *r),
                 RowKind::Output(k) => (k, Dir::Out, *r),
                 RowKind::Field { key, .. } => {
-                    let label = shape.and_then(|s| s.field(key)).map(|f| crate::i18n::label(&f.label(key)).into_owned()).unwrap_or_else(|| key.clone());
+                    let label = shape.and_then(|s| s.field(key)).map(|f| f.label(key)).unwrap_or_else(|| key.clone());
                     let w = (r.width() * 0.4).min(label.len() as f32 * 7.0 + 8.0);
                     (key, Dir::In, Rect::from_min_max(r.min, pos2(r.left() + 16.0 + w, r.bottom())))
                 }
@@ -631,11 +631,11 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             }
             match row {
                 RowKind::Flow(f) => {
-                    painter.text(r.right_center() - vec2(16.0, 0.0), Align2::RIGHT_CENTER, crate::i18n::label(&circuit_core::block::title_case(f)), FontId::proportional(12.5), theme.text);
+                    painter.text(r.right_center() - vec2(16.0, 0.0), Align2::RIGHT_CENTER, circuit_core::block::title_case(f), FontId::proportional(12.5), theme.text);
                 }
                 RowKind::Output(k) => {
                     let o = shape.and_then(|s| s.output(k));
-                    let label = o.map(|o| crate::i18n::label(&o.label(k)).into_owned()).unwrap_or_else(|| k.clone());
+                    let label = o.map(|o| o.label(k)).unwrap_or_else(|| k.clone());
                     painter.text(r.right_center() - vec2(16.0, 0.0), Align2::RIGHT_CENTER, label, FontId::proportional(12.5), theme.text_muted);
                 }
                 RowKind::Field { key, .. } if shape.and_then(|s| s.field(key)).is_some_and(|f| f.type_name == "embed") => {
@@ -675,7 +675,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     let empty = node_values.get(key).or(f.default.as_ref()).is_none_or(|v| v.is_null() || v == &Value::String(String::new()));
                     let missing = f.required && empty && !connected;
                     let label_color = if missing { theme.warning } else { theme.text_muted };
-                    let label = crate::i18n::label(&f.label(key)).into_owned();
+                    let label = f.label(key);
                     let label_w = (r.width() * 0.4).min(label.len() as f32 * 7.0 + 8.0);
                     painter.text(pos2(r.left() + 16.0, r.top() + ROW_H / 2.0), Align2::LEFT_CENTER, &label, FontId::proportional(12.5), label_color);
                     if *pinned {

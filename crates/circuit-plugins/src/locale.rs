@@ -1,5 +1,5 @@
-//! Translation files (`contributes.locales`): the editor's texts and a
-//! plugin's block names in another language, keyed by the English text.
+//! Translation files (`contributes.locales`): the editor's interface texts in
+//! another language, keyed by the English text. Blocks are not translated.
 
 use indexmap::IndexMap;
 use serde::Deserialize;
@@ -10,10 +10,6 @@ pub struct LocaleDef {
     pub meta: LocaleMeta,
     /// Interface texts: English → translation. Empty translations are skipped.
     pub strings: IndexMap<String, String>,
-    /// Block field, input and output labels: English → translation.
-    pub labels: IndexMap<String, String>,
-    /// Block names and descriptions, by block id (`core.math`).
-    pub blocks: IndexMap<String, BlockText>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -27,13 +23,6 @@ pub struct LocaleMeta {
     pub english_name: String,
 }
 
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(default)]
-pub struct BlockText {
-    pub name: String,
-    pub description: String,
-}
-
 impl LocaleDef {
     /// Adds another file's entries for the same language; later files win.
     pub fn merge(&mut self, other: LocaleDef) {
@@ -45,8 +34,6 @@ impl LocaleDef {
         }
         let filled = |map: IndexMap<String, String>| map.into_iter().filter(|(_, v)| !v.trim().is_empty());
         self.strings.extend(filled(other.strings));
-        self.labels.extend(filled(other.labels));
-        self.blocks.extend(other.blocks);
     }
 }
 
@@ -75,10 +62,6 @@ mod tests {
             [strings]
             "Cancel" = "Abbruch"
             "Open" = ""
-            [labels]
-            "Message" = "Nachricht"
-            [blocks."core.math"]
-            name = "Mathe"
             "#,
         )
         .unwrap();
@@ -87,8 +70,5 @@ mod tests {
         assert_eq!(a.meta.english_name, "German");
         assert_eq!(a.strings["Cancel"], "Abbruch", "later files win");
         assert!(!a.strings.contains_key("Open"), "empty entries stay English");
-        assert_eq!(a.labels["Message"], "Nachricht");
-        assert_eq!(a.blocks["core.math"].name, "Mathe");
-        assert_eq!(a.blocks["core.math"].description, "");
     }
 }

@@ -2,7 +2,8 @@
 //! in `t!("…")` (or `tf!` when they have `{placeholders}`, or `n("…")` where
 //! a macro can't run, such as in constants, then `t()` where shown), and
 //! looked up in the chosen language. Languages come from plugin locale files
-//! (`contributes.locales`); a missing entry shows the English text.
+//! (`contributes.locales`); a missing entry shows the English text. Blocks
+//! (their names, descriptions and labels) are not translated.
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -37,7 +38,6 @@ struct Catalog {
     /// Values are leaked: `t` hands out `&'static str`. Only a language change
     /// loads new ones, so this stays small.
     strings: HashMap<String, &'static str>,
-    labels: HashMap<String, String>,
 }
 
 static CURRENT: RwLock<Option<Catalog>> = RwLock::new(None);
@@ -76,17 +76,6 @@ pub fn tr(english: &str) -> Cow<'_, str> {
     }
 }
 
-/// A block's field, input or output label.
-pub fn label(english: &str) -> Cow<'_, str> {
-    match CURRENT.read() {
-        Ok(guard) => match guard.as_ref().and_then(|c| c.labels.get(english)) {
-            Some(s) => Cow::Owned(s.clone()),
-            None => Cow::Borrowed(english),
-        },
-        Err(_) => Cow::Borrowed(english),
-    }
-}
-
 /// The languages to choose from: English, then every language a plugin
 /// translates to, as (code, name in that language).
 pub fn languages(reg: &Registry) -> Vec<(String, String)> {
@@ -100,38 +89,21 @@ pub fn languages(reg: &Registry) -> Vec<(String, String)> {
     list
 }
 
-/// Block names and descriptions as the plugins wrote them, to switch back to.
-pub type BlockEnglish = HashMap<String, (String, String)>;
-
-pub fn block_english(reg: &Registry) -> BlockEnglish {
-    reg.blocks.iter().map(|(id, b)| (id.clone(), (b.name.clone(), b.description.clone()))).collect()
-}
-
-/// Switches the interface and the registry's block texts to `code`. An
-/// unknown code means English.
-pub fn set_language(reg: &mut Registry, english: &BlockEnglish, code: &str) {
+/// Switches the interface to `code`. An unknown code means English.
+pub fn set_language(reg: &Registry, code: &str) {
     let locale = reg.locales.iter().find(|l| l.meta.code == code && code != ENGLISH).cloned();
-    for (id, block) in reg.blocks.iter_mut() {
-        let Some((name, description)) = english.get(id) else { continue };
-        let text = locale.as_ref().and_then(|l| l.blocks.get(id));
-        let pick = |translated: Option<&String>, original: &String| translated.filter(|s| !s.trim().is_empty()).unwrap_or(original).clone();
-        block.name = pick(text.map(|t| &t.name), name);
-        block.description = pick(text.map(|t| &t.description), description);
-    }
     let catalog = locale.map(|l| Catalog {
         strings: l.strings.into_iter().filter(|(_, v)| !v.trim().is_empty()).map(|(k, v)| (k, &*Box::leak(v.into_boxed_str()))).collect(),
-        labels: l.labels.into_iter().filter(|(_, v)| !v.trim().is_empty()).collect(),
     });
     if let Ok(mut current) = CURRENT.write() {
         *current = catalog;
     }
 }
 
-/// Writes a translation file with every text to fill in: the interface, the
-/// block labels and each block's name and description. Entries of `base`
-/// (a language being extended) are filled in already; the rest are empty
-/// and show in English until translated.
-pub fn template(reg: &Registry, english: &BlockEnglish, code: &str, name: &str, english_name: &str) -> String {
+/// Writes a translation file with every interface text to fill in. Entries of
+/// `base` (a language being extended) are filled in already; the rest are
+/// empty and show in English until translated.
+pub fn template(reg: &Registry, code: &str, name: &str, english_name: &str) -> String {
     let base = reg.locales.iter().find(|l| l.meta.code == code);
     let q = |s: &str| toml_quote(s);
     let mut out = String::new();
@@ -158,37 +130,6 @@ pub fn template(reg: &Registry, english: &BlockEnglish, code: &str, name: &str, 
         out.push_str(&format!("{} = {}\n", q(&s), q(have)));
     }
 
-    out.push_str("\n[labels]\n");
-    let mut labels: Vec<String> = Vec::new();
-    for b in reg.blocks.values() {
-        for (key, f) in &b.fields {
-            labels.push(f.label(key));
-            for (group, _, text) in f.choice_list() {
-                labels.extend(group);
-                labels.push(text);
-            }
-        }
-        for (key, o) in &b.outputs {
-            labels.push(o.label(key));
-        }
-    }
-    labels.sort();
-    labels.dedup();
-    for l in labels {
-        let have = base.and_then(|b| b.labels.get(&l)).map(String::as_str).unwrap_or("");
-        out.push_str(&format!("{} = {}\n", q(&l), q(have)));
-    }
-
-    let mut ids: Vec<&String> = english.keys().collect();
-    ids.sort();
-    for id in ids {
-        let (en_name, en_desc) = &english[id];
-        let have = base.and_then(|b| b.blocks.get(id));
-        out.push_str(&format!("\n# {en_name}: {}\n", en_desc.replace('\n', " ")));
-        out.push_str(&format!("[blocks.{}]\n", q(id)));
-        out.push_str(&format!("name = {}\n", q(have.map(|h| h.name.as_str()).unwrap_or(""))));
-        out.push_str(&format!("description = {}\n", q(have.map(|h| h.description.as_str()).unwrap_or(""))));
-    }
     out
 }
 
@@ -209,7 +150,7 @@ fn toml_quote(s: &str) -> String {
 
 /// Creates a plugin that holds a new translation in the user's plugin
 /// folder and returns the file to edit. An existing file is kept.
-pub fn create_translation(plugins_dir: &Path, reg: &Registry, english: &BlockEnglish, code: &str, name: &str, english_name: &str) -> anyhow::Result<PathBuf> {
+pub fn create_translation(plugins_dir: &Path, reg: &Registry, code: &str, name: &str, english_name: &str) -> anyhow::Result<PathBuf> {
     let code = code.trim();
     anyhow::ensure!(!code.is_empty() && code.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'), "a language code is letters such as de, fr or pt-BR");
     let dir = plugins_dir.join(format!("translation-{}", code.to_lowercase()));
@@ -226,7 +167,7 @@ pub fn create_translation(plugins_dir: &Path, reg: &Registry, english: &BlockEng
         toml_quote(&format!("XC Circuit in {title}")),
     );
     std::fs::write(dir.join("plugin.toml"), manifest)?;
-    std::fs::write(&file, template(reg, english, code, name, english_name))?;
+    std::fs::write(&file, template(reg, code, name, english_name))?;
     Ok(file)
 }
 
@@ -322,17 +263,12 @@ mod tests {
         }
     }
 
-    /// Every block's field, output and choice label, and every block's name, has German.
+    /// Every interface text, the Build Modes' ones included, has German.
     #[test]
-    fn german_covers_every_block() {
+    fn german_covers_the_build_modes() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let ed = crate::editor::Editor::new(vec![root.join("plugins")], None).unwrap();
-        let english = block_english(&ed.reg);
-        let full: LocaleDef = toml::from_str(&template(&ed.reg, &english, "de", "Deutsch", "German")).unwrap();
-        let labels: Vec<&String> = full.labels.iter().filter(|(_, v)| v.trim().is_empty()).map(|(k, _)| k).collect();
-        assert!(labels.is_empty(), "German is missing {} labels:\n{}", labels.len(), labels.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("\n"));
-        let blocks: Vec<&String> = full.blocks.iter().filter(|(_, b)| b.name.trim().is_empty() || b.description.trim().is_empty()).map(|(k, _)| k).collect();
-        assert!(blocks.is_empty(), "German is missing blocks: {blocks:?}");
+        let full: LocaleDef = toml::from_str(&template(&ed.reg, "de", "Deutsch", "German")).unwrap();
         let strings: Vec<&String> = full.strings.iter().filter(|(_, v)| v.trim().is_empty()).map(|(k, _)| k).collect();
         assert!(strings.is_empty(), "German is missing texts: {strings:?}");
     }
@@ -340,16 +276,14 @@ mod tests {
     #[test]
     fn switching_language_and_back() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let mut ed = crate::editor::Editor::new(vec![root.join("plugins")], None).unwrap();
-        let english = block_english(&ed.reg);
+        let ed = crate::editor::Editor::new(vec![root.join("plugins")], None).unwrap();
         assert!(languages(&ed.reg).iter().any(|(c, n)| c == "de" && n == "Deutsch"));
-        set_language(&mut ed.reg, &english, "de");
+        set_language(&ed.reg, "de");
         assert_eq!(t("Save and close"), "Speichern und schließen");
         assert_eq!(tf("{count} to fix", &[("count", &3)]), "3 zu beheben");
-        assert_ne!(ed.reg.block("core.math").unwrap().name, "Math", "block names are translated");
-        set_language(&mut ed.reg, &english, ENGLISH);
+        assert_eq!(ed.reg.block("core.math").unwrap().name, "Math", "blocks stay as they are written");
+        set_language(&ed.reg, ENGLISH);
         assert_eq!(t("Save and close"), "Save and close");
-        assert_eq!(ed.reg.block("core.math").unwrap().name, "Math");
     }
 
     /// Writes a full template for `XC_TEMPLATE_CODE` (default `de`) to `XC_TEMPLATE_OUT`:
@@ -361,27 +295,25 @@ mod tests {
         let ed = crate::editor::Editor::new(vec![root.join("plugins")], None).unwrap();
         let code = std::env::var("XC_TEMPLATE_CODE").unwrap_or_else(|_| "de".into());
         let out = std::env::var("XC_TEMPLATE_OUT").expect("XC_TEMPLATE_OUT");
-        std::fs::write(out, template(&ed.reg, &block_english(&ed.reg), &code, "", "")).unwrap();
+        std::fs::write(out, template(&ed.reg, &code, "", "")).unwrap();
     }
 
     #[test]
     fn templates_list_everything_and_keep_existing_entries() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let ed = crate::editor::Editor::new(vec![root.join("plugins")], None).unwrap();
-        let english = block_english(&ed.reg);
-        let fresh: LocaleDef = toml::from_str(&template(&ed.reg, &english, "fr", "Français", "French")).unwrap();
+        let fresh: LocaleDef = toml::from_str(&template(&ed.reg, "fr", "Français", "French")).unwrap();
         assert_eq!(fresh.meta.code, "fr");
         assert!(fresh.strings.len() >= UI_STRINGS.len(), "every interface text is listed");
         assert!(fresh.strings.values().all(String::is_empty));
-        assert!(fresh.blocks.contains_key("core.math"));
-        let german: LocaleDef = toml::from_str(&template(&ed.reg, &english, "de", "Deutsch", "German")).unwrap();
+        let german: LocaleDef = toml::from_str(&template(&ed.reg, "de", "Deutsch", "German")).unwrap();
         assert_eq!(german.strings["Save and close"], "Speichern und schließen", "extending a language starts from what it has");
 
         let dir = std::env::temp_dir().join(format!("xc-translation-{}", std::process::id()));
-        let file = create_translation(&dir, &ed.reg, &english, "fr", "Français", "French").unwrap();
+        let file = create_translation(&dir, &ed.reg, "fr", "Français", "French").unwrap();
         assert!(file.ends_with("translation-fr/locales/fr.toml"));
         assert!(dir.join("translation-fr/plugin.toml").is_file());
-        assert!(create_translation(&dir, &ed.reg, &english, "../x", "", "").is_err());
+        assert!(create_translation(&dir, &ed.reg, "../x", "", "").is_err());
         let _ = std::fs::remove_dir_all(dir);
     }
 }

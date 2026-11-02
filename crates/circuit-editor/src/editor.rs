@@ -54,7 +54,6 @@ pub const NO_MODE: &str = "none";
 
 pub struct Editor {
     /// Block names and descriptions in English, to translate from.
-    pub block_english: crate::i18n::BlockEnglish,
     pub reg: Registry,
     pub engine: BlockEngine,
     pub plugin_dirs: Vec<PathBuf>,
@@ -99,7 +98,6 @@ impl Editor {
         let engine = BlockEngine::new()?;
         let reg = Registry::load(&plugin_dirs, &engine);
         let mut ed = Editor {
-            block_english: crate::i18n::block_english(&reg),
             reg,
             engine,
             plugin_dirs,
@@ -180,9 +178,9 @@ impl Editor {
     }
 
     /// Reloads every plugin, including the open project's own `plugins/` folder.
-    /// Shows the interface and the block names in `prefs.language`.
+    /// Shows the interface in `prefs.language`.
     pub fn apply_language(&mut self) {
-        crate::i18n::set_language(&mut self.reg, &self.block_english, &self.prefs.language);
+        crate::i18n::set_language(&self.reg, &self.prefs.language);
     }
 
     pub fn reload_plugins(&mut self) {
@@ -195,7 +193,6 @@ impl Editor {
             Err(e) => return self.log(Level::Error, format!("could not restart the block sandbox: {e:#}")),
         }
         self.reg = Registry::load(&dirs, &self.engine);
-        self.block_english = crate::i18n::block_english(&self.reg);
         self.apply_language();
         self.shapes.clear();
         let theme = self.theme.id.clone();

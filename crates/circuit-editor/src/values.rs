@@ -95,13 +95,13 @@ pub fn available(ws: &Workspace, node: &str, reg: &Registry, shape_of: &mut dyn 
         let target = if def.kind == BlockKind::Event { &mut events } else { &mut steps };
         for (key, o) in &shape.outputs {
             let token = if def.kind == BlockKind::Event { key.clone() } else { format!("#{id}.{key}") };
-            let label = crate::i18n::label(&o.label(key)).into_owned();
+            let label = o.label(key);
             let type_id = o.type_name.trim_end_matches('?');
-            let kind = reg.types.get(type_id).map(|t| crate::i18n::label(&t.name).into_owned()).unwrap_or_else(|| crate::i18n::label(&circuit_core::block::title_case(type_id)).into_owned());
+            let kind = reg.types.get(type_id).map(|t| t.name.clone()).unwrap_or_else(|| circuit_core::block::title_case(type_id));
             target.push(Avail { token: token.clone(), label: label.clone(), source: source.clone(), kind });
             for p in reg.types.get(type_id).map(|t| t.properties.as_slice()).unwrap_or_default() {
-                let pkind = crate::i18n::label(&circuit_core::block::title_case(&p.ty)).into_owned();
-                target.push(Avail { token: format!("{token}.{}", p.path), label: format!("{label} › {}", crate::i18n::label(&p.name)), source: source.clone(), kind: pkind });
+                let pkind = circuit_core::block::title_case(&p.ty);
+                target.push(Avail { token: format!("{token}.{}", p.path), label: format!("{label} › {}", p.name), source: source.clone(), kind: pkind });
             }
         }
     }

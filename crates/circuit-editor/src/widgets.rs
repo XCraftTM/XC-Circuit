@@ -98,12 +98,7 @@ pub fn dropdown<R>(ui: &mut Ui, id_salt: egui::Id, width: f32, selected: impl In
 }
 
 fn select(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width: f32) -> bool {
-    // Choice texts are block labels: translated like field names.
-    let choices: Vec<(Option<String>, String, String)> = field
-        .choice_list()
-        .into_iter()
-        .map(|(g, k, l)| (g.map(|g| crate::i18n::label(&g).into_owned()), k, crate::i18n::label(&l).into_owned()))
-        .collect();
+    let choices: Vec<(Option<String>, String, String)> = field.choice_list();
     let current = value.as_str().unwrap_or_default().to_string();
     let label = choices.iter().find(|(_, k, _)| *k == current).map(|(_, _, l)| l.clone()).unwrap_or(current.clone());
     let mut picked = None;

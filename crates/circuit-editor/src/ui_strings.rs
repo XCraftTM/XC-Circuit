@@ -433,7 +433,7 @@ pub const UI_STRINGS: &[&str] = &[
     "SETTINGS",
     "Language",
     "Interface language",
-    "Menus, settings and block names. More languages come with plugins.",
+    "Menus and settings; blocks stay in English. More languages come with plugins.",
     "Translate XC Circuit",
     "Makes a file with every text to translate, saved as a plugin you can share. Changes show while you edit it.",
     "Create a translation…",

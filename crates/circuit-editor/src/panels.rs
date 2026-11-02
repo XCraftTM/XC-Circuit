@@ -81,7 +81,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                 let source = ws.links_into(&node_id, key).next().map(|l| l.from.clone());
                 padded(ui, |ui| {
                     ui.horizontal(|ui| {
-                        let label = ui.label(RichText::new(crate::i18n::label(&f.label(key))).color(theme.text_muted));
+                        let label = ui.label(RichText::new(f.label(key)).color(theme.text_muted));
                         if let Some(d) = &f.description {
                             label.on_hover_text(d);
                         }
@@ -156,7 +156,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                     ui.horizontal(|ui| {
                         let color = theme.pin_color(&o.ty, reg);
                         ui.label(RichText::new("●").color(color));
-                        let l = ui.label(crate::i18n::label(&o.label(k)));
+                        let l = ui.label(o.label(k));
                         if let Some(d) = &o.description {
                             l.on_hover_text(d);
                         }
