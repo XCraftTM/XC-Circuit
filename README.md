@@ -22,7 +22,7 @@ The first start opens `examples/DemoBot`. Windows and Linux are supported.
 | Templates | File › New Project starts empty or from a working bot: Welcome & auto role, Moderation, Levels & XP, Tickets, Role menu (in `examples/templates/`) |
 | Merge text | Type `{name}` in any text field (Send Message, Log, Text …): an input named `{name}` appears below it to connect a value to. Left unconnected, the name is filled from the event, variables or an earlier block's output |
 | Yes/no inputs | Switches like Private reply can be connected too: click their pin toggle in the Inspector |
-| Long text | Text fields on blocks are boxes of a few lines; drag a box's corner to make it taller or shorter (the block saves that height in the project), double-click the corner to reset it |
+| Long text | Text fields on blocks are boxes of a few lines; drag a box's corner down to make it taller or shorter and sideways to make the whole block wider or narrower (the block saves both in the project), double-click the corner to reset them |
 | Colors | Click a color swatch for the picker: square and hue bar, hex and RGB, Discord colors and your recent ones |
 | Field as pin | Click a field's faint pin, or "pin" in the Inspector |
 | Select several | Shift-drag a box on empty canvas, or Ctrl+click blocks; Ctrl+A selects all |

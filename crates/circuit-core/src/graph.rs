@@ -44,6 +44,9 @@ pub struct Node {
     /// Heights of the text boxes on the block that were resized, by field.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub heights: BTreeMap<String, f32>,
+    /// The block's width, when a text box's grip made it wider or narrower.
+    #[serde(skip_serializing_if = "Option::is_none", serialize_with = "round_width")]
+    pub width: Option<f32>,
 }
 
 impl Node {
@@ -223,6 +226,10 @@ impl Workspace {
 
 fn round_point<S: Serializer>(p: &[f32; 2], s: S) -> Result<S::Ok, S::Error> {
     [p[0].round() as i64, p[1].round() as i64].serialize(s)
+}
+
+fn round_width<S: Serializer>(w: &Option<f32>, s: S) -> Result<S::Ok, S::Error> {
+    w.map(|w| w.round() as i64).serialize(s)
 }
 
 fn round_rect<S: Serializer>(r: &[f32; 4], s: S) -> Result<S::Ok, S::Error> {

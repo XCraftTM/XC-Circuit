@@ -31,6 +31,8 @@ const PIN_R: f32 = 5.5;
 const TEXT_BOX_H: f32 = 42.0;
 const TEXT_AREA_H: f32 = 94.0;
 const TEXT_BOX_RANGE: (f32, f32) = (30.0, 900.0);
+/// How narrow and wide a block can be made with a text box's grip.
+const NODE_WIDTH_RANGE: (f32, f32) = (200.0, 1400.0);
 /// A layout field lists up to this many parts, a line each.
 const LAYOUT_LINES: usize = 6;
 const LAYOUT_LINE_H: f32 = 17.0;
@@ -118,14 +120,15 @@ struct NodeLayout {
 }
 
 /// `tall` gives rows that need more room than one line (embed previews), by field key.
-fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], def: Option<&BlockDef>, shape: Option<&BlockShape>, tall: &HashMap<String, f32>) -> NodeLayout {
+/// `width` is the block's own width when it was resized.
+fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], width: Option<f32>, def: Option<&BlockDef>, shape: Option<&BlockShape>, tall: &HashMap<String, f32>) -> NodeLayout {
     let (Some(def), Some(shape)) = (def, shape) else {
         let rect = Rect::from_min_size(pos2(at[0], at[1]), vec2(NODE_W, HEADER_H + ROW_H + PAD_BOTTOM));
         let header = Rect::from_min_size(rect.min, vec2(NODE_W, HEADER_H));
         return NodeLayout { id: id.into(), rect, header, value_block: false, rows: Vec::new(), pins: Vec::new() };
     };
     let value_block = def.kind == BlockKind::Value;
-    let width = def.width.unwrap_or(if def.preview.as_deref() == Some("embed") { EMBED_NODE_W } else { NODE_W });
+    let width = width.unwrap_or_else(|| default_width(def));
     let header_h = if value_block { VALUE_HEADER_H } else { HEADER_H };
     let origin = pos2(at[0], at[1]);
     let header = Rect::from_min_size(origin, vec2(width, header_h));
@@ -320,11 +323,11 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         if let (Some(s), Some(d)) = (&shape, def) {
             for (key, f) in s.visible_fields().filter(|(_, f)| f.type_name == "embed") {
                 let data = crate::embed::EmbedData::from_value(node.values.get(key).or(f.default.as_ref()).unwrap_or(&Value::Null));
-                let w = d.width.unwrap_or(EMBED_NODE_W) - 28.0;
+                let w = node.width.unwrap_or_else(|| default_width(d)) - 28.0;
                 tall.insert(key.clone(), crate::embed::layout(&measure, &data, w, Some(4), EMBED_SCALE).height + 44.0);
             }
         }
-        layouts.push(layout_node(id, node.at, &node.pins, def, shape.as_ref(), &tall));
+        layouts.push(layout_node(id, node.at, &node.pins, node.width, def, shape.as_ref(), &tall));
         if let Some(s) = shape {
             node_shapes.insert(id.clone(), s);
         }
@@ -707,10 +710,11 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                             ws.nodes.get_mut(id).unwrap().values.insert(key.clone(), Value::String(text));
                             *dirty = true;
                         }
-                        // The grip in its corner resizes it; a double-click puts the size back.
+                        // The grip in its corner resizes it: down for the box, sideways for
+                        // the whole block. A double-click puts both back.
                         let side = if theme.touch { 24.0 } else { 14.0 };
                         let grip = Rect::from_min_size(bx.right_bottom() - vec2(side + 2.0, side + 2.0), vec2(side, side));
-                        let g = cui.interact(grip, cui.id().with(("text-grip", id, key)), Sense::click_and_drag()).on_hover_cursor(CursorIcon::ResizeVertical);
+                        let g = cui.interact(grip, cui.id().with(("text-grip", id, key)), Sense::click_and_drag()).on_hover_cursor(CursorIcon::ResizeNwSe);
                         let c = if g.hovered() || g.dragged() { theme.accent } else { theme.text_muted };
                         for i in 1..=3 {
                             let o = i as f32 * side / 4.0;
@@ -719,11 +723,19 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                         let node = ws.nodes.get_mut(id).unwrap();
                         if g.double_clicked() {
                             node.heights.remove(key);
+                            node.width = None;
                             *dirty = true;
-                        } else if g.dragged() && g.drag_delta().y != 0.0 {
-                            let h = (text_box_h(node, key, f) + g.drag_delta().y).clamp(TEXT_BOX_RANGE.0, TEXT_BOX_RANGE.1);
-                            node.heights.insert(key.clone(), h.round());
-                            *dirty = true;
+                        } else if g.dragged() {
+                            let d = g.drag_delta();
+                            if d.y != 0.0 {
+                                let h = (text_box_h(node, key, f) + d.y).clamp(TEXT_BOX_RANGE.0, TEXT_BOX_RANGE.1);
+                                node.heights.insert(key.clone(), h.round());
+                            }
+                            if d.x != 0.0 {
+                                let w = (node.width.unwrap_or(layout.rect.width()) + d.x).clamp(NODE_WIDTH_RANGE.0, NODE_WIDTH_RANGE.1);
+                                node.width = Some(w);
+                            }
+                            *dirty |= d != Vec2::ZERO;
                         }
                         view.text_fields.push(((id.clone(), key.clone()), to_global * bx));
                     } else if widgets::is_inline_editable(f) {
@@ -1316,6 +1328,11 @@ fn pin_tooltip(ui: &mut Ui, spot: &PinSpot, reg: &Registry, theme: &Theme) {
     }
 }
 
+/// How wide a block is before it is resized.
+fn default_width(def: &BlockDef) -> f32 {
+    def.width.unwrap_or(if def.preview.as_deref() == Some("embed") { EMBED_NODE_W } else { NODE_W })
+}
+
 /// How tall a text box on a block is: as it was resized, or as it starts.
 fn text_box_h(node: &circuit_core::Node, key: &str, f: &circuit_core::FieldDef) -> f32 {
     node.heights.get(key).copied().unwrap_or(if f.type_name == "textarea" { TEXT_AREA_H } else { TEXT_BOX_H })
@@ -1502,21 +1519,23 @@ mod tests {
         frame(&ctx, &mut ed, "rank-command", vec![egui::Event::Text("?".into())]);
         assert!(text(&ed).ends_with("!!?"), "typing stays in the box: {}", text(&ed));
 
-        // Dragging the corner grip down makes it taller, and the block with it.
+        // Dragging the corner grip down and right makes it taller and wider, and the block with it.
         let grip = before.right_bottom() - vec2(8.0, 8.0);
         for _ in 0..60 {
             frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerMoved(grip)]);
         }
         frame(&ctx, &mut ed, "rank-command", vec![press(grip, true)]);
         for step in 1..=10 {
-            frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerMoved(grip + vec2(0.0, 12.0 * step as f32))]);
+            frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerMoved(grip + vec2(8.0 * step as f32, 12.0 * step as f32))]);
         }
-        frame(&ctx, &mut ed, "rank-command", vec![press(grip + vec2(0.0, 120.0), false)]);
+        frame(&ctx, &mut ed, "rank-command", vec![press(grip + vec2(80.0, 120.0), false)]);
         settle(&mut ed);
         let after = box_of(&ed);
         assert!((after.height() - before.height() - 120.0).abs() < 3.0, "grew {} px", after.height() - before.height());
-        let stored = ed.workspace("rank-command").unwrap().nodes["4"].heights["text"];
-        assert!((stored * zoom - after.height()).abs() < 2.0, "the height is kept with the block: {stored}");
+        assert!((after.width() - before.width() - 80.0).abs() < 3.0, "grew {} px wider", after.width() - before.width());
+        let node = &ed.workspace("rank-command").unwrap().nodes["4"];
+        assert!((node.heights["text"] * zoom - after.height()).abs() < 2.0, "the height is kept with the block: {}", node.heights["text"]);
+        assert!(node.width.is_some_and(|w| (w - NODE_W - 80.0 / zoom).abs() < 3.0), "so is the width: {:?}", node.width);
 
         // Double-clicking the grip puts the size back.
         let grip = after.right_bottom() - vec2(8.0, 8.0);
@@ -1527,8 +1546,9 @@ mod tests {
             frame(&ctx, &mut ed, "rank-command", vec![press(grip, pressed)]);
         }
         settle(&mut ed);
-        assert!(!ed.workspace("rank-command").unwrap().nodes["4"].heights.contains_key("text"), "the size is reset");
-        assert!((box_of(&ed).height() - before.height()).abs() < 1.0);
+        let node = &ed.workspace("rank-command").unwrap().nodes["4"];
+        assert!(!node.heights.contains_key("text") && node.width.is_none(), "the size is reset");
+        assert!((box_of(&ed).size() - before.size()).length() < 1.0);
     }
 
     #[test]
