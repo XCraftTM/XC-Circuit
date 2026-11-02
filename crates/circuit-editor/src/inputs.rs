@@ -4,6 +4,11 @@
 use eframe::egui::{self, CursorIcon, Id, Margin, Rect, Response, ScrollArea, Sense, Stroke, StrokeKind, TextEdit, Ui, UiBuilder, Vec2, Widget, vec2};
 
 const PAD: Vec2 = vec2(10.0, 8.0);
+
+/// The height of a TextLine, for controls that sit in a row with one.
+pub fn input_height(ui: &Ui) -> f32 {
+    ui.text_style_height(&egui::TextStyle::Body) + 2.0 * PAD.y
+}
 const MIN_ROWS: f32 = 2.0;
 const MAX_HEIGHT: f32 = 1200.0;
 

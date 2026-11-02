@@ -88,6 +88,15 @@ fn editor(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width:
     }
 }
 
+/// A dropdown as tall as a text box, so the two line up in a row.
+pub fn dropdown<R>(ui: &mut Ui, id_salt: egui::Id, width: f32, selected: impl Into<egui::WidgetText>, contents: impl FnOnce(&mut Ui) -> R) -> Response {
+    ui.scope(|ui| {
+        ui.spacing_mut().interact_size.y = crate::inputs::input_height(ui);
+        ComboBox::from_id_salt(id_salt).width(width).selected_text(selected).show_ui(ui, contents).response
+    })
+    .inner
+}
+
 fn select(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width: f32) -> bool {
     // Choice texts are block labels: translated like field names.
     let choices: Vec<(Option<String>, String, String)> = field

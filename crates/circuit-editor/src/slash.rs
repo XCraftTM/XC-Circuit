@@ -1,6 +1,6 @@
 //! The Slash Command Builder: edits `circuit.json` › `data.slashCommands`.
 
-use eframe::egui::{self, Color32, ComboBox, Frame, Margin, RichText, ScrollArea, Stroke, Ui, vec2};
+use eframe::egui::{self, Color32, Frame, Margin, RichText, ScrollArea, Stroke, Ui, vec2};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -296,14 +296,15 @@ fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], tra
                 });
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
+                    // As tall as a text box, so everything in the row centers on one line.
+                    ui.set_min_height(crate::inputs::input_height(ui));
                     ui.label(RichText::new(t!("Who can use it")).color(theme.text));
                     let current = PERMISSIONS.iter().find(|(k, _)| *k == cmd.permission).map(|(_, l)| crate::i18n::t(l)).unwrap_or(t!("Everyone"));
-                    ComboBox::from_id_salt(ui.id().with("permission")).width(180.0).selected_text(current).show_ui(ui, |ui| {
+                    crate::widgets::dropdown(ui, ui.id().with("permission"), 180.0, current, |ui| {
                         for (k, l) in PERMISSIONS {
                             ui.selectable_value(&mut cmd.permission, k.to_string(), crate::i18n::t(l));
                         }
                     })
-                    .response
                     .on_hover_text(t!("People without this permission don't see the command. Server admins can change it in Server Settings › Integrations."));
                     ui.add_space(16.0);
                     ui.label(RichText::new(t!("Works in DMs")).color(theme.text));
@@ -339,9 +340,11 @@ fn option_card(ui: &mut Ui, theme: &Theme, o: &mut SlashOption, choices: &mut St
     Frame::new().fill(theme.panel_header).stroke(Stroke::new(1.0, theme.line)).corner_radius(9).inner_margin(Margin::same(12)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.horizontal(|ui| {
-            ui.allocate_ui(vec2(170.0, 32.0), |ui| dialog::text_input(ui, &mut o.name, "name", false));
+            let h = crate::inputs::input_height(ui);
+            ui.set_min_height(h);
+            ui.allocate_ui(vec2(170.0, h), |ui| dialog::text_input(ui, &mut o.name, "name", false));
             let current = KINDS.iter().find(|(k, _)| *k == o.kind).map(|(_, l)| crate::i18n::t(l)).unwrap_or(t!("Text"));
-            ComboBox::from_id_salt(ui.id().with("kind")).width(140.0).selected_text(current).show_ui(ui, |ui| {
+            crate::widgets::dropdown(ui, ui.id().with("kind"), 140.0, current, |ui| {
                 for (k, l) in KINDS {
                     ui.selectable_value(&mut o.kind, k.to_string(), crate::i18n::t(l));
                 }
@@ -352,6 +355,7 @@ fn option_card(ui: &mut Ui, theme: &Theme, o: &mut SlashOption, choices: &mut St
                 ui.label(RichText::new(t!("Autocomplete")).size(12.0).color(theme.text_muted));
                 crate::widgets::toggle(ui, &mut o.autocomplete, theme).on_hover_text(t!("Suggest values while people type, from an Autocomplete block."));
             }
+            ui.add_space(12.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.add(egui::Button::new(RichText::new(t!("Remove")).color(theme.error)).small()).clicked() {
                     on_remove();
