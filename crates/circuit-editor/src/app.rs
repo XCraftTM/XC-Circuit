@@ -839,7 +839,9 @@ impl eframe::App for CircuitApp {
         let mut problems = panels::collect_problems(&self.ed);
         problems.extend(self.native.problems());
         self.problem_count = problems.len();
-        egui::CentralPanel::no_frame().show(ui, |ui| {
+        // Filled, so the dock's rounded panel corners show the frame color and not
+        // whatever is behind the window's content.
+        egui::CentralPanel::default().frame(Frame::new().fill(theme.frame)).show(ui, |ui| {
             let style = theme.dock_style(ui.style());
             let running = self.bot.state != BotState::Stopped;
             let mut viewer = Viewer { ed: &mut self.ed, problem_count: self.problem_count, problems, stored: &mut self.stored, running, native: &mut self.native };
@@ -888,6 +890,10 @@ impl eframe::App for CircuitApp {
         if let Some(p) = &self.ed.project {
             self.ed.history.track(p, settled);
         }
+    }
+
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        self.ed.theme.frame.to_normalized_gamma_f32()
     }
 
     fn on_exit(&mut self) {
