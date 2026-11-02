@@ -891,12 +891,6 @@ fn option_card(ui: &mut Ui, theme: &Theme, o: &mut SlashOption, i: usize, count:
                     ui.selectable_value(&mut o.kind, k.to_string(), crate::i18n::t(l));
                 }
             });
-            ui.label(RichText::new(t!("Required")).size(12.0).color(theme.text_muted));
-            crate::widgets::toggle(ui, &mut o.required, theme);
-            if (texty || numeric) && o.choices.is_empty() {
-                ui.label(RichText::new(t!("Autocomplete")).size(12.0).color(theme.text_muted));
-                crate::widgets::toggle(ui, &mut o.autocomplete, theme).on_hover_text(t!("Suggest values while people type, from an Autocomplete block."));
-            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if dialog::danger_button(ui, theme, t!("Remove")).clicked() {
                     *remove = Some(i);
@@ -912,14 +906,27 @@ fn option_card(ui: &mut Ui, theme: &Theme, o: &mut SlashOption, i: usize, count:
         ui.add_space(6.0);
         dialog::text_input(ui, &mut o.description, t!("What this option is for"), false);
         ui.add_space(6.0);
+        // The switches on a row of their own, so the row above never runs out of room.
+        ui.horizontal(|ui| {
+            ui.set_min_height(crate::inputs::input_height(ui));
+            ui.label(RichText::new(t!("Required")).size(12.0).color(theme.text_muted));
+            crate::widgets::toggle(ui, &mut o.required, theme);
+            if (texty || numeric) && o.choices.is_empty() {
+                ui.add_space(16.0);
+                ui.label(RichText::new(t!("Autocomplete")).size(12.0).color(theme.text_muted));
+                crate::widgets::toggle(ui, &mut o.autocomplete, theme).on_hover_text(t!("Suggest values while people type, from an Autocomplete block."));
+            }
+        });
         if texty {
             ui.horizontal(|ui| {
+                ui.set_min_height(crate::inputs::input_height(ui));
                 ui.label(RichText::new(t!("Length")).size(12.0).color(theme.text_muted));
                 length_box(ui, t!("Shortest"), &mut o.min_length);
                 length_box(ui, t!("Longest"), &mut o.max_length);
             });
         } else if numeric {
             ui.horizontal(|ui| {
+                ui.set_min_height(crate::inputs::input_height(ui));
                 ui.label(RichText::new(t!("Value")).size(12.0).color(theme.text_muted));
                 number_box(ui, t!("Smallest"), &mut o.min);
                 number_box(ui, t!("Largest"), &mut o.max);

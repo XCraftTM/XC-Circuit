@@ -418,24 +418,31 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
     // Every row gets the same width, measured once: sizing each row from what is
     // left after the previous one made every row a little wider than the last.
     let inner_w = ui.available_width() - 2.0 * 10.0 - 2.0;
-    let inputs_w = (inner_w - FIELD_CONTROLS_W).max(160.0);
-    let name_w = (inputs_w * 0.38).floor();
+    let name_w = (inner_w * 0.38).floor();
     for (i, f) in e.fields.iter_mut().enumerate() {
         egui::Frame::new().fill(theme.panel_header).stroke(Stroke::new(1.0, theme.line)).corner_radius(8).inner_margin(10).show(ui, |ui| {
             ui.set_width(inner_w);
             ui.horizontal(|ui| {
                 ui.add(crate::inputs::TextLine::new(&mut f.name).hint(t!("Name")).width(name_w));
-                ui.add(crate::inputs::TextLine::new(&mut f.value).hint(t!("Value")).width(inputs_w - name_w - 8.0));
+                ui.add(crate::inputs::TextLine::new(&mut f.value).hint(t!("Value")).width(inner_w - name_w - 8.0));
+            });
+            ui.add_space(4.0);
+            // The switch and buttons below, so the texts get the whole width.
+            ui.horizontal(|ui| {
+                ui.set_min_height(crate::inputs::input_height(ui));
+                ui.label(RichText::new(t!("Inline")).size(12.0).color(theme.text_muted));
                 crate::widgets::toggle(ui, &mut f.inline, theme).on_hover_text(t!("Inline: share a row with other inline fields"));
-                if ui.add_enabled_ui(i > 0, |ui| dialog::button(ui, theme, t!("Up"))).inner.clicked() {
-                    swap = Some((i, i - 1));
-                }
-                if ui.add_enabled_ui(i + 1 < count, |ui| dialog::button(ui, theme, t!("Down"))).inner.clicked() {
-                    swap = Some((i, i + 1));
-                }
-                if dialog::danger_button(ui, theme, t!("Remove")).clicked() {
-                    remove = Some(i);
-                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if dialog::danger_button(ui, theme, t!("Remove")).clicked() {
+                        remove = Some(i);
+                    }
+                    if ui.add_enabled_ui(i + 1 < count, |ui| dialog::button(ui, theme, t!("Down"))).inner.clicked() {
+                        swap = Some((i, i + 1));
+                    }
+                    if ui.add_enabled_ui(i > 0, |ui| dialog::button(ui, theme, t!("Up"))).inner.clicked() {
+                        swap = Some((i, i - 1));
+                    }
+                });
             });
         });
         ui.add_space(6.0);
@@ -452,7 +459,7 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
     ui.add_space(12.0);
 
     dialog::section(ui, theme, t!("Images"));
-    two(ui, theme, (t!("Image URL"), &mut e.image, "https://…"), (t!("Thumbnail URL"), &mut e.thumbnail, "https://… or {avatar}"));
+    two(ui, theme, (t!("Image URL"), &mut e.image, "https://…"), (t!("Thumbnail URL"), &mut e.thumbnail, "https://… or ${avatar}"));
 
     dialog::section(ui, theme, t!("Footer"));
     let footer = e.footer.get_or_insert_with(FooterData::default);
@@ -484,9 +491,6 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
     });
     ui.label(RichText::new(t!("Shown next to the footer, in each reader's own time zone.")).size(11.5).color(theme.text_muted));
 }
-
-/// Room for a field row's inline switch and its Up, Down and Remove buttons.
-const FIELD_CONTROLS_W: f32 = 250.0;
 
 fn two(ui: &mut Ui, theme: &Theme, a: (&str, &mut String, &str), b: (&str, &mut String, &str)) {
     ui.columns(2, |cols| {
