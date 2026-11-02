@@ -65,6 +65,7 @@ function toDiscordCommand(c) {
       if (numeric && o.min != null) out.min_value = Number(o.min);
       if (numeric && o.max != null) out.max_value = Number(o.max);
       if (o.type === "string" && o.max != null) out.max_length = Number(o.max);
+      if (o.autocomplete && !out.choices && (o.type === "string" || numeric)) out.autocomplete = true;
       return out;
     });
   return { name: c.name, description: String(c.description || "A command made with XC Circuit").slice(0, 100), options };
@@ -83,6 +84,13 @@ async function registerCommands(rt, client) {
   for (const node of rt.nodesOf("discord.on_slash_command")) {
     const name = String(node.inline().command || "").trim().toLowerCase();
     if (name && !commands.has(name)) commands.set(name, { name, description: "A command made with XC Circuit" });
+  }
+  // Context Menu Used blocks add right-click entries (type 2: users, 3: messages).
+  for (const node of rt.nodesOf("discord.on_context_menu")) {
+    const v = node.inline();
+    const name = String(v.name || "").trim().slice(0, 32);
+    const type = v.target === "message" ? 3 : 2;
+    if (name) commands.set(`menu:${type}:${name}`, { name, type });
   }
   if (!commands.size) return;
   const list = [...commands.values()];

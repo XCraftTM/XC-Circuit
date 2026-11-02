@@ -24,9 +24,34 @@ name = "Members"
 icon = "user"
 
 [[categories]]
+id = "interactions"
+name = "Menus & Forms"
+icon = "pointer"
+
+[[categories]]
+id = "roles"
+name = "Roles"
+icon = "tag"
+
+[[categories]]
 id = "channels"
 name = "Channels & Bot"
 icon = "hash"
+
+[[categories]]
+id = "server"
+name = "Server"
+icon = "layers"
+
+[[categories]]
+id = "voice"
+name = "Voice"
+icon = "bolt"
+
+[[categories]]
+id = "format"
+name = "Formatting"
+icon = "text"
 
 [[categories]]
 id = "flow"

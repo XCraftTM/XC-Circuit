@@ -37,6 +37,8 @@ class Runtime {
     this.workspaceVars = new Map();
     this.errorHandlers = [];
     this.signalHandlers = new Map();
+    /** Call Workspace: name -> handlers that start a run and resolve to its return value. */
+    this.callHandlers = new Map();
     this.startHandlers = [];
     // Opened in start(), after the saved data was checked and backed up.
     this.store = null;
@@ -170,6 +172,12 @@ class Runtime {
       set: (output, value) => {
         if (run) run.setOutputs(node.id, { [output]: value });
       },
+      /** Reads the block's inputs again (for loops whose condition changes). */
+      resolve: async () => (run ? node.resolve(run) : node.inline()),
+      /** Sets what this run gives back to a Call Workspace block. */
+      returnValue: (value) => {
+        if (run) run.returned = value;
+      },
       bot: {
         get uptime() {
           return Date.now() - rt.startedAt;
@@ -180,6 +188,15 @@ class Runtime {
       runtime: {
         onError: (h) => rt.errorHandlers.push(h),
         onSignal: (name, h) => getOr(rt.signalHandlers, name, () => []).push(h),
+        /** `h(data)` starts a run and resolves to what it returns. */
+        onCall: (name, h) => getOr(rt.callHandlers, name, () => []).push(h),
+        /** Runs the workspace(s) listening for `name` and resolves to the first one's return value. */
+        call: async (name, data) => {
+          const handlers = rt.callHandlers.get(name) || [];
+          if (!handlers.length) throw new Error(`Nothing is listening for the call "${name}" (add a When Called block)`);
+          const results = await Promise.all(handlers.map((h) => h(data || {})));
+          return results[0];
+        },
         onStart: (h) => rt.startHandlers.push(h),
         setting: (name) => rt.setting(name),
       },
@@ -241,6 +258,7 @@ class Graph {
     for (const node of this.nodes.values()) {
       if (node.def.kind !== "event" || !node.def.listen) continue;
       const ctx = this.rt.ctxFor(null, node);
+      // Resolves to the run's return value once it has finished.
       const emit = (outputs) => this.trigger(node, outputs || {});
       try {
         node.def.listen(ctx, emit);
@@ -255,7 +273,13 @@ class Graph {
     run.setOutputs(node.id, outputs);
     this.rt.emit("node", { ws: this.key, node: node.id, phase: "enter", run: run.id });
     this.rt.emit("node", { ws: this.key, node: node.id, phase: "exit", run: run.id, ms: 0 });
-    this.follow(run, node.id, "next").catch((e) => this.rt.uncaught(e, e.__xcNode || node));
+    return this.follow(run, node.id, "next").then(
+      () => run.returned,
+      (e) => {
+        this.rt.uncaught(e, e.__xcNode || node);
+        return undefined;
+      },
+    );
   }
 
   async follow(run, nodeId, flow) {
@@ -721,7 +745,16 @@ class Store {
         this.save();
         return b[k];
       },
+      keys: async () => Object.keys(bucket()),
     };
+  }
+
+  /** Every saved bucket of a scope, as { id, values }: all users, or one server's members. */
+  each(scope, serverId) {
+    const prefix = scope === "member" ? `member:${String(serverId?.id ?? serverId)}:` : `${scope}:`;
+    return Object.entries(this.data)
+      .filter(([k]) => k.startsWith(prefix))
+      .map(([k, values]) => ({ id: k.slice(prefix.length), values }));
   }
 
   api() {
@@ -732,6 +765,7 @@ class Store {
       member: (serverId, userId) => this.scope("member", serverId, userId),
       channel: (id) => this.scope("channel", id),
       ns: (name) => this.scope("ns", name),
+      each: (scope, serverId) => this.each(scope, serverId),
     };
   }
 }

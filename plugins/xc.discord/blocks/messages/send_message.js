@@ -1,15 +1,16 @@
 const MODES = {
-  Interaction: { reply: "Reply", edit: "Edit reply", followup: "Follow-up", defer: "Defer (think…)" },
+  Interaction: { reply: "Reply", edit: "Edit reply", followup: "Follow-up", defer: "Defer (think…)", update: "Update the message (button or menu)" },
   Message: { send: "Send to channel", msgReply: "Reply to message", msgEdit: "Edit message" },
+  User: { dm: "Direct message" },
 };
-const INTERACTION_MODES = ["reply", "edit", "followup", "defer"];
+const INTERACTION_MODES = ["reply", "edit", "followup", "defer", "update"];
 
 module.exports = {
   id: "discord.send_message",
   name: "Send Message",
   description: "Replies to a command or button, or sends, replies to and edits messages in channels.",
   author: "XC Team",
-  version: "3.0.0",
+  version: "3.1.0",
   category: "messages",
   icon: "send",
   kind: "action",
@@ -32,6 +33,7 @@ module.exports = {
       show: { mode: ["reply", "followup", "defer"] },
     },
     split: { type: "boolean", default: false, advanced: true, label: "Split long text", description: "Send text over 2000 characters as several messages." },
+    files: { type: "list<any>", pin: "only", multi: true, advanced: true, description: "Attachments: web addresses, file paths or Discord attachments." },
   },
   outputs: {
     message: { type: "discord.message", description: "The message that was sent." },
@@ -41,6 +43,8 @@ module.exports = {
     const add = {};
     if (INTERACTION_MODES.includes(mode)) {
       add.interaction = { type: "discord.interaction", pin: "only", required: true, description: "The command use or button press to answer." };
+    } else if (mode === "dm") {
+      add.user = { type: "discord.user", pin: "only", required: true, description: "Who gets the direct message (a member works too)." };
     } else if (mode === "send") {
       add.channel = { type: "discord.channel", pin: "only", required: true, description: "Where to send the message." };
     } else {
@@ -51,7 +55,8 @@ module.exports = {
   },
   async run({ fields, ctx }) {
     const flags = fields.private ? ["Ephemeral"] : undefined;
-    const payload = { content: fields.text || undefined, embeds: fields.embeds?.length ? fields.embeds : undefined, flags };
+    const files = (fields.files || []).flat().filter(Boolean).map((f) => f.url ?? f.attachment ?? f);
+    const payload = { content: fields.text || undefined, embeds: fields.embeds?.length ? fields.embeds : undefined, flags, files: files.length ? files : undefined };
     const parts = (fields.components || []).filter(Boolean);
     if (parts.length) {
       // Buttons share a row (up to 5); a select menu takes a row of its own.
@@ -65,12 +70,14 @@ module.exports = {
       }
       payload.components = rows.slice(0, 5).map((r) => new ActionRowBuilder().addComponents(...r.items));
     }
-    const target = fields.interaction ?? fields.channel ?? fields.message;
+    const target = fields.interaction ?? fields.channel ?? fields.message ?? (fields.user?.user ?? fields.user);
     const send = {
       reply: () => (target.deferred ? target.editReply(payload) : target.reply({ ...payload, withResponse: true })),
       edit: () => target.editReply(payload),
       followup: () => target.followUp(payload),
       defer: () => target.deferReply({ flags }),
+      update: () => target.update({ ...payload, flags: undefined, withResponse: true }),
+      dm: () => target.send(payload),
       send: () => target.send(payload),
       msgReply: () => target.reply(payload),
       msgEdit: () => target.edit(payload),

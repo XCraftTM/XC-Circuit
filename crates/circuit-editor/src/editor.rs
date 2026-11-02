@@ -612,3 +612,45 @@ pub fn ago(ms: u64) -> String {
     };
     format!("{n} {unit}{} ago", if n == 1 { "" } else { "s" })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every bundled block's define() runs in the sandbox with its defaults
+    /// and with each choice of its select fields, and gives a usable shape.
+    #[test]
+    fn every_block_defines_cleanly() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        assert!(ed.reg.problems.is_empty(), "{:?}", ed.reg.problems);
+        let project = serde_json::json!({ "name": "Test", "mode": "discord-bot", "settings": {}, "data": { "slashCommands": [{ "name": "ping", "description": "Pong", "options": [] }] } });
+        let mut failures = Vec::new();
+        for def in ed.reg.blocks.values() {
+            let defaults: Map<String, Value> = def.fields.iter().filter_map(|(k, f)| f.default.clone().map(|d| (k.clone(), d))).collect();
+            let mut cases = vec![defaults.clone()];
+            for (k, f) in &def.fields {
+                for (_, choice, _) in f.choice_list() {
+                    let mut v = defaults.clone();
+                    v.insert(k.clone(), Value::String(choice));
+                    cases.push(v);
+                }
+            }
+            for values in cases {
+                if def.has_define {
+                    let key = &ed.reg.engine_keys[&def.id];
+                    match ed.engine.define(key, &values, &Map::new(), &project) {
+                        Ok(d) => {
+                            let shape = circuit_core::BlockShape::build(def, &values, Some(&d));
+                            assert!(!shape.fields.is_empty() || !shape.outputs.is_empty() || def.kind != circuit_core::BlockKind::Value, "{} has no shape", def.id);
+                        }
+                        Err(e) => failures.push(format!("{} with {:?}: {e:#}", def.id, values)),
+                    }
+                } else {
+                    circuit_core::BlockShape::build(def, &values, None);
+                }
+            }
+        }
+        assert!(failures.is_empty(), "define() failed:\n{}", failures.join("\n"));
+    }
+}
