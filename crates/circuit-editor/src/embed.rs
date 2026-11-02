@@ -189,13 +189,14 @@ pub fn open(ed: &mut Editor, ws: &str, node: &str, key: &str) {
     ed.embed_edit = Some(EmbedEdit { ws: ws.into(), node: node.into(), key: key.into(), draft: EmbedData::from_value(&value) });
 }
 
-pub fn window(ctx: &egui::Context, ed: &mut Editor) {
+/// The Embed Builder tab.
+pub fn tab(ui: &mut Ui, ed: &mut Editor) {
     let Some(edit) = &mut ed.embed_edit else { return };
     let theme = ed.theme.clone();
     let icon = ed.reg.icons.get("embed").cloned();
     let (mut apply, mut cancel) = (false, false);
-    let close = dialog::window(
-        ctx,
+    dialog::tab(
+        ui,
         &theme,
         dialog::Spec {
             id: "embed-builder",
@@ -232,7 +233,7 @@ pub fn window(ctx: &egui::Context, ed: &mut Editor) {
             n.values.insert(edit.key, edit.draft.to_value());
             ed.dirty = true;
         }
-    } else if cancel || close {
+    } else if cancel {
         ed.embed_edit = None;
     }
 }

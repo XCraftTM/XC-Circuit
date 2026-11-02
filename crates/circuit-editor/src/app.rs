@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use circuit_core::Project;
 use eframe::egui::{self, Frame, Id, Margin, RichText, ViewportCommand, WidgetText};
+use egui_dock::tab_viewer::OnCloseResponse;
 use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
 use serde::{Deserialize, Serialize};
 
@@ -27,6 +28,12 @@ pub enum Tab {
     Backups,
     /// A native plugin's panel: plugin id, panel id.
     Plugin(String, String),
+    /// Editors that used to be dialogs. Each is open while its draft exists.
+    EmbedBuilder,
+    SlashCommands,
+    BotSettings,
+    Export,
+    Plugins,
 }
 
 impl Tab {
@@ -66,7 +73,8 @@ pub struct CircuitApp {
     native: crate::native::NativeHost,
     /// The app's own plugins folder.
     bundled_plugins: Option<PathBuf>,
-    show_plugins: bool,
+    /// The Plugins tab's unsaved changes, while it is open.
+    plugins: Option<crate::plugin_manager::Draft>,
     settings: crate::settings::SettingsView,
     restore: crate::restore::RestoreView,
     /// When unsaved changes were last copied for crash recovery.
@@ -149,13 +157,44 @@ impl CircuitApp {
             palette: None,
             native,
             bundled_plugins,
-            show_plugins: false,
+            plugins: None,
             setup,
             tour: None,
             dock_before_tour: None,
             settings: Default::default(),
             restore: Default::default(),
             last_recovery: std::time::Instant::now(),
+        }
+    }
+
+    /// The editors that used to be dialogs are tabs: one is shown while its
+    /// draft exists, and closed once it is saved or cancelled.
+    fn sync_dialog_tabs(&mut self, ctx: &egui::Context) {
+        let wanted = [
+            (Tab::EmbedBuilder, self.ed.embed_edit.is_some(), egui::vec2(1060.0, 760.0)),
+            (Tab::SlashCommands, self.ed.slash_edit.is_some(), egui::vec2(1000.0, 700.0)),
+            (Tab::BotSettings, self.bot.settings.is_some(), egui::vec2(540.0, 600.0)),
+            (Tab::Export, self.bot.export.is_some(), egui::vec2(560.0, 620.0)),
+            (Tab::Plugins, self.plugins.is_some(), egui::vec2(580.0, 560.0)),
+        ];
+        for (tab, open, size) in wanted {
+            match (open, self.dock.find_tab(&tab)) {
+                (true, None) => open_floating(&mut self.dock, ctx, tab, size),
+                (false, Some(path)) => {
+                    self.dock.remove_tab(path);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Opens the Plugins tab, or focuses it.
+    fn open_plugins(&mut self) {
+        match self.dock.find_tab(&Tab::Plugins) {
+            Some(path) => {
+                let _ = self.dock.set_active_tab(path);
+            }
+            None => self.plugins = Some(crate::plugin_manager::Draft::new(&self.native)),
         }
     }
 
@@ -403,7 +442,7 @@ impl CircuitApp {
                     ui.separator();
                 }
                 if ui.button("Manage Plugins…").clicked() {
-                    self.show_plugins = true;
+                    self.open_plugins();
                 }
             });
             ui.menu_button("Help", |ui| {
@@ -490,8 +529,11 @@ impl CircuitApp {
         if self.activity_item(ui, "database", "Stored Data", open(&self.dock, &Tab::StoredData)) {
             self.toggle_panel(Tab::StoredData);
         }
-        if self.activity_item(ui, "plug", "Plugins", self.show_plugins) {
-            self.show_plugins = !self.show_plugins;
+        if self.activity_item(ui, "plug", "Plugins", self.plugins.is_some()) {
+            match self.plugins {
+                Some(_) => self.plugins = None,
+                None => self.open_plugins(),
+            }
         }
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
             if self.activity_item(ui, "settings", "Settings (Ctrl+,)", open(&self.dock, &Tab::Settings)) {
@@ -584,7 +626,7 @@ impl CircuitApp {
                 Ask::BotSettings => self.bot.open_settings(&self.ed),
                 Ask::SlashCommands => crate::slash::open(&mut self.ed),
                 Ask::Export => self.bot.open_export(&self.ed),
-                Ask::ManagePlugins => self.show_plugins = true,
+                Ask::ManagePlugins => self.open_plugins(),
                 Ask::ReloadPlugins => self.reload_plugins(ctx),
                 Ask::AllowNative(on) => {
                     self.native.allow = on;
@@ -772,7 +814,7 @@ impl CircuitApp {
             Cmd::OpenSettings => self.open_settings(),
             Cmd::Tour => self.start_tour(),
             Cmd::Backups => open_center(&mut self.dock, Tab::Backups),
-            Cmd::ManagePlugins => self.show_plugins = true,
+            Cmd::ManagePlugins => self.open_plugins(),
             Cmd::PluginCommand(id) => self.native.queued.push(id),
             Cmd::TogglePluginPanel(plugin, panel) => self.toggle_panel(Tab::Plugin(plugin, panel)),
             Cmd::OpenWorkspace(key) => self.ed.actions.push(Action::OpenWorkspace(key)),
@@ -821,7 +863,7 @@ impl CircuitApp {
         }
         let counts = format!("{} plugins · {} blocks", self.ed.reg.plugins.len(), self.ed.reg.blocks.len());
         if status_item(&mut left, &t, None, &counts).on_hover_text("Manage plugins").clicked() {
-            self.show_plugins = true;
+            self.open_plugins();
         }
         if self.problem_count > 0 {
             let label = format!("⚠ {} problem{}", self.problem_count, if self.problem_count == 1 { "" } else { "s" });
@@ -1059,7 +1101,11 @@ impl eframe::App for CircuitApp {
         egui::CentralPanel::default().frame(Frame::new().fill(theme.frame)).show(ui, |ui| {
             let style = theme.dock_style(ui.style());
             let running = self.bot.state != BotState::Stopped;
+            self.sync_dialog_tabs(ui.ctx());
             let mut viewer = Viewer {
+                bot: &mut self.bot,
+                bundled_plugins: self.bundled_plugins.as_deref(),
+                plugins: &mut self.plugins,
                 ed: &mut self.ed,
                 problem_count: self.problem_count,
                 problems,
@@ -1108,20 +1154,6 @@ impl eframe::App for CircuitApp {
         self.apply_actions();
         self.dialogs(&ctx);
         self.bot.windows(&ctx, &mut self.ed);
-        crate::embed::window(&ctx, &mut self.ed);
-        crate::slash::window(&ctx, &mut self.ed);
-        if self.show_plugins {
-            use crate::plugin_manager::Ask;
-            match crate::plugin_manager::window(&ctx, &theme, &self.ed, &self.native) {
-                Some(Ask::SetAllow(on)) => {
-                    self.native.allow = on;
-                    self.native.sync(&mut self.ed, self.bundled_plugins.as_deref());
-                }
-                Some(Ask::Trust(id)) => self.native.trust(&id, &mut self.ed),
-                Some(Ask::Close) => self.show_plugins = false,
-                None => {}
-            }
-        }
         if !self.ed.prefs.system_titlebar {
             crate::titlebar::frame_edges(&ctx, &theme);
         }
@@ -1178,6 +1210,9 @@ const RECOVERY_EVERY: std::time::Duration = std::time::Duration::from_secs(30);
 
 struct Viewer<'a> {
     ed: &'a mut Editor,
+    bot: &'a mut BotUi,
+    bundled_plugins: Option<&'a Path>,
+    plugins: &'a mut Option<crate::plugin_manager::Draft>,
     stored: &'a mut crate::stored::StoredView,
     running: bool,
     problem_count: usize,
@@ -1206,7 +1241,25 @@ impl TabViewer for Viewer<'_> {
             Tab::Backups => "Backups".into(),
             Tab::Plugin(plugin, panel) => self.native.panel_title(plugin, panel).unwrap_or_else(|| panel.clone()).into(),
             Tab::Canvas(key) => self.ed.workspace(key).map(|w| w.name.clone()).unwrap_or_else(|| key.clone()).into(),
+            Tab::EmbedBuilder => "Embed Builder".into(),
+            Tab::SlashCommands => "Slash Commands".into(),
+            Tab::BotSettings => "Bot settings".into(),
+            Tab::Export => "Export bot".into(),
+            Tab::Plugins => "Plugins".into(),
         }
+    }
+
+    fn on_close(&mut self, tab: &mut Tab) -> OnCloseResponse {
+        // Closing an editor's tab cancels it.
+        match tab {
+            Tab::EmbedBuilder => self.ed.embed_edit = None,
+            Tab::SlashCommands => self.ed.slash_edit = None,
+            Tab::BotSettings => self.bot.settings = None,
+            Tab::Export => self.bot.export = None,
+            Tab::Plugins => *self.plugins = None,
+            _ => {}
+        }
+        OnCloseResponse::Close
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Tab) {
@@ -1235,6 +1288,27 @@ impl TabViewer for Viewer<'_> {
                 let key = key.clone();
                 canvas::show(ui, self.ed, &key);
             }
+            Tab::EmbedBuilder => crate::embed::tab(ui, self.ed),
+            Tab::SlashCommands => crate::slash::tab(ui, self.ed),
+            Tab::BotSettings => self.bot.settings_tab(ui, self.ed),
+            Tab::Export => self.bot.export_tab(ui, self.ed),
+            Tab::Plugins => {
+                use crate::plugin_manager::Ask;
+                let theme = self.ed.theme.clone();
+                let Some(draft) = self.plugins.as_mut() else { return };
+                match crate::plugin_manager::tab(ui, &theme, self.ed, self.native, draft) {
+                    Some(Ask::Save) => {
+                        let draft = self.plugins.take().unwrap();
+                        self.native.allow = draft.allow;
+                        self.native.sync(self.ed, self.bundled_plugins);
+                        for id in &draft.trust {
+                            self.native.trust(id, self.ed);
+                        }
+                    }
+                    Some(Ask::Cancel) => *self.plugins = None,
+                    None => {}
+                }
+            }
         }
     }
 
@@ -1260,6 +1334,17 @@ fn default_layout() -> DockState<Tab> {
     let [_bottom, top] = surface.split_above(NodeIndex::root(), 0.76, vec![Tab::Inspector]);
     surface.split_left(top, 0.17, vec![Tab::Workspaces]);
     dock
+}
+
+/// Opens a tab in a window of its own over the middle of the app. It can be
+/// docked from there like any other tab.
+fn open_floating(dock: &mut DockState<Tab>, ctx: &egui::Context, tab: Tab, size: egui::Vec2) {
+    let area = ctx.content_rect();
+    let size = size.min(area.size() - egui::vec2(48.0, 48.0)).max(egui::vec2(320.0, 240.0));
+    let surface = dock.add_window(vec![tab]);
+    if let Some(w) = dock.get_window_state_mut(surface) {
+        w.set_position(area.center() - size / 2.0).set_size(size);
+    }
 }
 
 /// Focuses a workspace's canvas tab, or opens it next to the other canvases.

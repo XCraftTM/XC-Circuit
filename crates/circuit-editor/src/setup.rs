@@ -158,7 +158,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, setup: &mut Setup) -> Option<Done> {
     let mut f = col.new_child(egui::UiBuilder::new().max_rect(footer).layout(Layout::left_to_right(Align::Center)));
     if setup.node_only {
         f.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if crate::dialog::primary_button(ui, &theme, "Done").clicked() && setup.job.is_none() {
+            if crate::dialog::primary_button(ui, &theme, "Save and close").clicked() && setup.job.is_none() {
                 done = Some(Done::Closed);
             }
         });

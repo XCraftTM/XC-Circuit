@@ -42,12 +42,12 @@ struct SettingField {
     remove: bool,
 }
 
-struct SettingsDraft {
+pub struct SettingsDraft {
     fields: Vec<SettingField>,
     project_name: String,
 }
 
-struct ExportDraft {
+pub struct ExportDraft {
     dir: PathBuf,
     include_token: bool,
     install: bool,
@@ -58,8 +58,8 @@ struct ExportDraft {
 pub struct BotUi {
     pub state: BotState,
     session: Option<Session>,
-    settings: Option<SettingsDraft>,
-    export: Option<ExportDraft>,
+    pub settings: Option<SettingsDraft>,
+    pub export: Option<ExportDraft>,
     jobs: Vec<Receiver<(Level, String)>>,
     /// What the bot did since the last frame, for native plugins.
     pub events: Vec<xc_circuit_plugin::BotEvent>,
@@ -202,8 +202,6 @@ impl BotUi {
     }
 
     pub fn windows(&mut self, ctx: &egui::Context, ed: &mut Editor) {
-        self.settings_window(ctx, ed);
-        self.export_window(ctx, ed);
         self.question_window(ctx, ed);
     }
 
@@ -252,15 +250,16 @@ impl BotUi {
         }
     }
 
-    fn settings_window(&mut self, ctx: &egui::Context, ed: &mut Editor) {
+    /// The Bot settings tab.
+    pub fn settings_tab(&mut self, ui: &mut egui::Ui, ed: &mut Editor) {
         let Some(draft) = &mut self.settings else { return };
         let theme = ed.theme.clone();
         let icon = ed.reg.icons.get("settings").cloned();
         let subtitle = format!("{} · stored per project", draft.project_name);
         let store = if cfg!(windows) { "Windows Credential Manager" } else { "the system keyring" };
         let (mut save, mut cancel) = (false, false);
-        let close = dialog::window(
-            ctx,
+        dialog::tab(
+            ui,
             &theme,
             dialog::Spec { id: "bot-settings", title: "Bot settings", subtitle: Some(&subtitle), icon: icon.as_deref(), width: 520.0 },
             |ui, part| match part {
@@ -307,7 +306,7 @@ impl BotUi {
                     }
                 }
                 Part::Footer => {
-                    save = dialog::primary_button(ui, &theme, "Save").clicked();
+                    save = dialog::primary_button(ui, &theme, "Save and close").clicked();
                     cancel = dialog::secondary_button(ui, &theme, "Cancel").clicked();
                 }
             },
@@ -338,18 +337,19 @@ impl BotUi {
             }
             ed.log(Level::Success, "Settings saved");
             self.settings = None;
-        } else if cancel || close {
+        } else if cancel {
             self.settings = None;
         }
     }
 
-    fn export_window(&mut self, ctx: &egui::Context, ed: &mut Editor) {
+    /// The Export bot tab.
+    pub fn export_tab(&mut self, ui: &mut egui::Ui, ed: &mut Editor) {
         let Some(draft) = &mut self.export else { return };
         let theme = ed.theme.clone();
         let icon = ed.reg.icons.get("package").cloned();
         let (mut go, mut cancel) = (false, false);
-        let close = dialog::window(
-            ctx,
+        dialog::tab(
+            ui,
             &theme,
             dialog::Spec {
                 id: "export-bot",
@@ -408,7 +408,7 @@ impl BotUi {
         if go {
             let draft = self.export.take().unwrap();
             self.run_export(ed, draft);
-        } else if cancel || close {
+        } else if cancel {
             self.export = None;
         }
     }

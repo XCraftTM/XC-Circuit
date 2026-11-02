@@ -1,6 +1,6 @@
-//! A small kit for dialogs: a card with a title bar, body and footer, shown as a
-//! movable window or (for short questions) a modal over a dimmed backdrop, and
-//! the controls that go in it, all drawn from the theme.
+//! A small kit for dialogs: a title, body and footer, shown in a dock tab or
+//! (for short questions) as a modal card over a dimmed backdrop, and the
+//! controls that go in it, all drawn from the theme.
 
 use std::path::Path;
 
@@ -38,31 +38,53 @@ pub fn show(ctx: &egui::Context, theme: &Theme, spec: Spec, mut content: impl Fn
     close || response.should_close()
 }
 
-/// Shows a dialog as a window: it can be dragged by its title bar and placed
-/// anywhere, and the rest of the app keeps working. For editors and settings.
-/// Returns true when its × was pressed.
-pub fn window(ctx: &egui::Context, theme: &Theme, spec: Spec, mut content: impl FnMut(&mut Ui, Part)) -> bool {
-    let mut close = false;
-    let card = Frame::new()
-        .fill(theme.panel)
-        .stroke(Stroke::new(1.0, theme.node_border))
-        .corner_radius(12)
-        .shadow(egui::Shadow { offset: [0, 10], blur: 32, spread: 0, color: Color32::from_black_alpha(110) });
-    egui::Window::new(spec.title)
-        .id(Id::new(spec.id))
-        .title_bar(false)
-        .collapsible(false)
+/// Shows a dialog inside a dock tab: it can be docked on any side, stacked with
+/// other tabs or dragged out into its own window. For editors and settings. The
+/// tab's own × closes it. The body scrolls; the footer stays at the bottom.
+pub fn tab(ui: &mut Ui, theme: &Theme, spec: Spec, mut content: impl FnMut(&mut Ui, Part)) {
+    let id = Id::new(("dialog-tab", spec.id));
+    egui::Panel::bottom(id.with("footer"))
         .resizable(false)
-        .constrain(true)
-        .pivot(egui::Align2::CENTER_CENTER)
-        .default_pos(ctx.content_rect().center())
-        .frame(card)
-        .show(ctx, |ui| {
-            // Dragging the title moves the window instead of selecting its text.
-            ui.style_mut().interaction.selectable_labels = false;
-            card_contents(ui, theme, &spec, &mut close, &mut content)
+        .frame(Frame::new().fill(theme.panel_header).stroke(Stroke::new(1.0, theme.line)).inner_margin(Margin::symmetric(16, 12)))
+        .show(ui, |ui| {
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
+                content(ui, Part::Footer);
+            });
         });
-    close
+    egui::CentralPanel::default().frame(Frame::new().fill(theme.panel)).show(ui, |ui| {
+        egui::ScrollArea::both().id_salt(id.with("body")).auto_shrink([false, false]).show(ui, |ui| {
+            // The body is as wide as it was designed for, centred when there is
+            // room; in a narrow panel it narrows, and scrolls sideways past that.
+            let width = (spec.width - 40.0).min(ui.available_width() - 40.0).max(280.0);
+            let side = ((ui.available_width() - width - 40.0) / 2.0).max(0.0);
+            ui.horizontal_top(|ui| {
+                ui.add_space(side);
+                Frame::new().inner_margin(Margin::symmetric(20, 18)).show(ui, |ui| ui.with_layout(Layout::top_down(Align::Min), |ui| {
+                    ui.set_width(width);
+                    ui.set_max_width(width);
+                    ui.horizontal(|ui| {
+                        if let Some(icon) = spec.icon {
+                            let (rect, _) = ui.allocate_exact_size(vec2(34.0, 34.0), Sense::hover());
+                            ui.painter().rect_filled(rect, 8.0, with_alpha(theme.accent, 34));
+                            egui::Image::from_uri(file_uri(icon)).tint(theme.accent).paint_at(ui, rect.shrink(8.0));
+                            ui.add_space(6.0);
+                        }
+                        ui.vertical(|ui| {
+                            ui.spacing_mut().item_spacing.y = 2.0;
+                            ui.label(RichText::new(spec.title).size(15.5).strong().color(theme.text));
+                            if let Some(sub) = spec.subtitle {
+                                ui.label(RichText::new(sub).size(12.0).color(theme.text_muted));
+                            }
+                        });
+                    });
+                    ui.add_space(14.0);
+                    ui.spacing_mut().item_spacing = vec2(8.0, 6.0);
+                    content(ui, Part::Body);
+                }));
+            });
+        });
+    });
 }
 
 /// The title bar, body and footer of a dialog card.

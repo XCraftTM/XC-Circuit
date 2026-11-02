@@ -122,14 +122,15 @@ fn problems(cmds: &[SlashCommand]) -> Vec<String> {
     out
 }
 
-pub fn window(ctx: &egui::Context, ed: &mut Editor) {
+/// The Slash Commands tab.
+pub fn tab(ui: &mut Ui, ed: &mut Editor) {
     let Some(edit) = &mut ed.slash_edit else { return };
     let theme = ed.theme.clone();
     let icon = ed.reg.icons.get("slash").cloned();
     let issues = problems(&edit.commands);
     let (mut save, mut cancel) = (false, false);
-    let close = dialog::window(
-        ctx,
+    dialog::tab(
+        ui,
         &theme,
         dialog::Spec {
             id: "slash-builder",
@@ -178,7 +179,7 @@ pub fn window(ctx: &egui::Context, ed: &mut Editor) {
         }
         ed.refresh_define_ctx();
         ed.log(Level::Success, format!("Saved {} slash commands", commands.len()));
-    } else if cancel || close {
+    } else if cancel {
         ed.slash_edit = None;
     }
 }
