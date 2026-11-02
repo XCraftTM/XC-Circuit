@@ -11,7 +11,7 @@ module.exports = {
   fields: {
     input: { type: "any", pin: true, description: "Text to parse, or a value to turn into text." },
     direction: { type: "select", pin: false, default: "parse", choices: { parse: "Text → object", stringify: "Object → text" }, description: "Turn JSON text into an object, or an object into JSON text." },
-    pretty: { type: "boolean", pin: false, default: true, show: { direction: ["stringify"] }, description: "Spread the text over several indented lines, easier to read." },
+    pretty: { type: "boolean", default: true, show: { direction: ["stringify"] }, description: "Spread the text over several indented lines, easier to read." },
   },
   outputs: {
     result: { type: "any", description: "The result." },

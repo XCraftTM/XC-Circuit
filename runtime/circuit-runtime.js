@@ -392,9 +392,12 @@ class GraphNode {
       fields[pin] = def && def.multi ? values.flat() : values[0];
       wired.add(pin);
     }
+    // Values wired into a text field's {name} inputs (pins that aren't fields).
+    const placed = {};
+    for (const pin of wired) if (!(pin in (this.def.fields || {}))) placed[pin] = fields[pin];
     for (const [k, f] of Object.entries(this.def.fields || {})) {
       if (!f) continue;
-      if (f.template && !wired.has(k) && typeof fields[k] === "string") fields[k] = fillTemplate(fields[k], run, fields);
+      if (templated(f) && !wired.has(k) && typeof fields[k] === "string") fields[k] = fillTemplate(fields[k], run, fields, placed);
       fields[k] = coerce(fields[k], f.type);
     }
     return fields;
@@ -418,11 +421,23 @@ class Run {
 }
 
 /** Fills {name} and {name.path} from the event, run variables and this block's other fields. */
-function fillTemplate(text, run, fields) {
+/** Whether {name} placeholders in a field are filled in: plain text fields, unless `template: false`. */
+function templated(f) {
+  if (typeof f.template === "boolean") return f.template;
+  return ["text", "textarea", "string"].includes(String(f.type || "").replace(/\?$/, "")) && !f.choices;
+}
+
+/**
+ * Fills {name} placeholders: from `placed` (values wired into the field's
+ * {name} inputs), then the event, run variables, the block's fields and the
+ * latest output of that name earlier in the run.
+ */
+function fillTemplate(text, run, fields, placed = {}) {
   return text.replace(/\{([\w$.]+)\}/g, (whole, expr) => {
     const [head, ...rest] = expr.split(".");
     let value;
-    if (run && run.event && head in run.event) value = run.event[head];
+    if (head in placed) value = placed[head];
+    else if (run && run.event && head in run.event) value = run.event[head];
     else if (run && run.vars.has(head)) value = run.vars.get(head);
     else if (head in fields) value = fields[head];
     else if (run && lastOutput(run, head) !== NOT_FOUND) value = lastOutput(run, head);

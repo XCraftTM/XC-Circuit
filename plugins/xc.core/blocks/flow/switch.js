@@ -12,7 +12,7 @@ module.exports = {
   fields: {
     value: { type: "any", pin: true, description: "The value to check." },
     cases: { type: "textarea", pin: false, default: "a\nb", description: "One case per line. Each becomes an Action output." },
-    ignoreCase: { type: "boolean", pin: false, default: true, advanced: true, label: "Ignore upper/lower case", description: "Treat \"Yes\" and \"yes\" as the same when comparing." },
+    ignoreCase: { type: "boolean", default: true, advanced: true, label: "Ignore upper/lower case", description: "Treat \"Yes\" and \"yes\" as the same when comparing." },
   },
   define({ values }) {
     const cases = String(values.cases || "")

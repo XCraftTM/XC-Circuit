@@ -80,7 +80,10 @@ pub struct FieldDef {
     pub show: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub choices: Option<Value>,
-    pub template: bool,
+    /// Whether `{name}` placeholders in the text are filled in. Unset: yes for
+    /// plain text fields (see `templated`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub template: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub min: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -100,6 +103,13 @@ impl FieldDef {
 
     pub fn label(&self, key: &str) -> String {
         self.label.clone().unwrap_or_else(|| title_case(key))
+    }
+
+    /// Whether `{name}` placeholders in this field's text are filled in, each
+    /// with an input of its own: plain text fields, unless the block sets
+    /// `template: false`.
+    pub fn templated(&self) -> bool {
+        self.template.unwrap_or_else(|| matches!(self.type_name.trim_end_matches('?'), "text" | "textarea" | "string") && self.choices.is_none())
     }
 
     /// Choices of a `select` field as `(group, id, label)`.
@@ -316,6 +326,41 @@ impl BlockShape {
             }
         }
 
+        // Each {name} typed into a text field gets an input right below it, to
+        // connect the value that goes there. Unconnected, the name is looked up
+        // in the event, variables and earlier outputs as before.
+        let mut extra: Vec<(usize, String, FieldDef)> = Vec::new();
+        for (i, (k, f)) in fields.iter().enumerate() {
+            if hidden.contains(k) || !f.templated() || f.pin == PinMode::Only {
+                continue;
+            }
+            let text = values.get(k).or(f.default.as_ref()).and_then(Value::as_str).unwrap_or_default();
+            for name in placeholders(text) {
+                if fields.contains_key(&name) || extra.iter().any(|(_, n, _)| *n == name) {
+                    continue;
+                }
+                let mut input = FieldDef {
+                    type_name: "any".into(),
+                    label: Some(format!("{{{name}}}")),
+                    description: Some(format!("Goes where {{{name}}} is in {}.", f.label(k))),
+                    pin: PinMode::Only,
+                    ..Default::default()
+                };
+                input.finish();
+                extra.push((i, name, input));
+            }
+        }
+        if !extra.is_empty() {
+            let mut placed = IndexMap::with_capacity(fields.len() + extra.len());
+            for (i, (k, f)) in fields.into_iter().enumerate() {
+                placed.insert(k, f);
+                for (_, name, input) in extra.iter().filter(|(at, ..)| *at == i) {
+                    placed.insert(name.clone(), input.clone());
+                }
+            }
+            fields = placed;
+        }
+
         BlockShape {
             fields: fields.into_iter().collect(),
             hidden,
@@ -352,6 +397,25 @@ fn merge_field(field: &FieldDef, patch: &Value) -> FieldDef {
 }
 
 /// Evaluates `show: { mode: ["edit", "reply"], private: true }`.
+/// The names of the `{name}` placeholders in a text, in order and once each.
+/// `{user.name}` gives `user`; `{3}` and other non-names are left alone.
+pub fn placeholders(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut rest = text;
+    while let Some(open) = rest.find('{') {
+        rest = &rest[open + 1..];
+        let Some(close) = rest.find('}') else { break };
+        let inner = &rest[..close];
+        let head = inner.split('.').next().unwrap_or_default();
+        let is_name = head.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_') && inner.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.' || c == '$');
+        if is_name && !out.iter().any(|n| n == head) {
+            out.push(head.to_string());
+        }
+        rest = &rest[close + 1..];
+    }
+    out
+}
+
 fn show_matches(cond: &Value, values: &Map<String, Value>, fields: &IndexMap<String, FieldDef>) -> bool {
     let Value::Object(cond) = cond else {
         return true;
@@ -393,6 +457,38 @@ pub fn title_case(key: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn finds_placeholders() {
+        assert_eq!(placeholders("Hi {user}, you have {xp} XP ({user.name})"), vec!["user", "xp"]);
+        assert!(placeholders("\\d{3} {a,b} {} { x }").is_empty(), "regex counts and other braces aren't names");
+        assert_eq!(placeholders("{_x}{y2}"), vec!["_x", "y2"]);
+    }
+
+    #[test]
+    fn text_fields_get_an_input_per_placeholder() {
+        let def: BlockDef = serde_json::from_value(serde_json::json!({
+            "id": "t.send", "name": "Send", "kind": "action",
+            "fields": {
+                "text": { "type": "textarea" },
+                "code": { "type": "text", "template": false },
+                "mode": { "type": "select", "choices": { "a": "A" } },
+                "after": { "type": "number" }
+            }
+        }))
+        .unwrap();
+        let mut def = def;
+        def.finish();
+        let values = serde_json::json!({ "text": "Hi {name}, {name} has {count} {after}", "code": "{skip}" });
+        let shape = BlockShape::build(&def, values.as_object().unwrap(), None);
+        let keys: Vec<&str> = shape.fields.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(keys, vec!["text", "name", "count", "code", "mode", "after"], "inputs right after their text, once each; existing fields aren't doubled");
+        let name = shape.field("name").unwrap();
+        assert_eq!(name.pin, PinMode::Only);
+        assert_eq!(name.label("name"), "{name}");
+        assert!(!shape.field("code").unwrap().templated() && !shape.field("mode").unwrap().templated());
+    }
+
     use super::*;
     use serde_json::json;
 

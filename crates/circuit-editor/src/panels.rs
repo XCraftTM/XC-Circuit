@@ -98,8 +98,11 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                             ui.set_width(ui.available_width());
                             ui.label(tf!("Connected · {block} ({pin})", block = from, pin = src.pin));
                         });
+                    } else if pinned && f.label.as_deref().is_some_and(|l| l.starts_with('{')) {
+                        // A text's {name} input: connecting it is up to you.
+                        ui.label(RichText::new(t!("Optional: connect what goes there. Unconnected, the name is looked up in the event and earlier blocks.")).size(11.5).color(theme.text_muted));
                     } else if pinned {
-                        ui.label(RichText::new(format!("Waiting for a {} wire", f.ty.display(reg))).italics().color(theme.text_muted));
+                        ui.label(RichText::new(tf!("Waiting for a {type} wire", type = f.ty.display(reg))).italics().color(theme.text_muted));
                     } else if f.type_name == "embed" {
                         if ui.add_sized([ui.available_width(), 30.0], egui::Button::new(t!("Open Embed Builder"))).clicked() {
                             *ask = Some(InspectorAsk::EmbedBuilder(ws_key.clone(), node_id.clone(), key.clone()));
@@ -111,7 +114,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                             ws.nodes.get_mut(&node_id).unwrap().values.insert(key.clone(), value);
                             *dirty = true;
                         }
-                        if f.template {
+                        if f.templated() {
                             ui.label(RichText::new(t!("Type {name} to insert a connected value")).size(11.0).color(theme.text_muted));
                         }
                         if f.type_name == "slash-command-ref" && crate::dialog::small_button(ui, &theme, t!("Edit slash commands…")).clicked() {

@@ -19,6 +19,8 @@ The first start opens `examples/DemoBot`. Windows and Linux are supported.
 | Add a connected block | Drag a wire into empty space; the picker shows only compatible blocks |
 | Move a block | Drag its title bar |
 | Pan / zoom | Drag empty canvas or middle mouse / mouse wheel |
+| Merge text | Type `{name}` in any text field (Send Message, Log, Text …): an input named `{name}` appears below it to connect a value to. Left unconnected, the name is filled from the event, variables or an earlier block's output |
+| Yes/no inputs | Switches like Private reply can be connected too: click their pin toggle in the Inspector |
 | Long text | Clicking into a text field on a block opens a bigger editor over it; drag its corner to resize, double-click the corner to reset the size |
 | Colors | Click a color swatch for the picker: square and hue bar, hex and RGB, Discord colors and your recent ones |
 | Field as pin | Click a field's faint pin, or "pin" in the Inspector |
@@ -58,6 +60,7 @@ Running needs Node.js 22 or newer; the first start page (or Settings › Bot ›
 cargo test
 node runtime/test/smoke.js
 node runtime/test/library.js
+node runtime/test/template.js
 node runtime/test/store.js
 node runtime/test/backups.js
 ```
@@ -159,5 +162,7 @@ In the editor's code, interface texts are wrapped in `t!("…")` (or `tf!("… {
 ## Status
 
 Done: editor foundation, running and exporting bots, Try Zones, undo/redo, multi-select and clipboard, Embed and Slash Command builders, 49 bundled blocks, plugin hot reload, Stored Data panel, TypeScript blocks, command palette, custom title bar with search, native Rust plugins, and the Windows/Linux build workflow (`.github/workflows/build.yml`, releases on `v*` tags).
+
+The plan for the remaining Discord blocks is in [docs/discord-blocks-plan.md](docs/discord-blocks-plan.md).
 
 Not done yet: sandboxed WebAssembly plugins (the safer plugin tier from the spec), sharing plugins from GitHub inside the editor, the web dashboard blocks, and converting a project to a TypeScript bot.

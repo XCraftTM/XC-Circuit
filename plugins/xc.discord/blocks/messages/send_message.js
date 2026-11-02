@@ -26,13 +26,12 @@ module.exports = {
     },
     private: {
       type: "boolean",
-      pin: false,
       default: false,
       label: "Private reply",
       description: "Only the person who used the command sees it.",
       show: { mode: ["reply", "followup", "defer"] },
     },
-    split: { type: "boolean", pin: false, default: false, advanced: true, label: "Split long text", description: "Send text over 2000 characters as several messages." },
+    split: { type: "boolean", default: false, advanced: true, label: "Split long text", description: "Send text over 2000 characters as several messages." },
   },
   outputs: {
     message: { type: "discord.message", description: "The message that was sent." },

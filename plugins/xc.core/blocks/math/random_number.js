@@ -12,7 +12,7 @@ module.exports = {
   fields: {
     min: { type: "number", default: 1, description: "The smallest possible number." },
     max: { type: "number", default: 100, description: "The largest possible number." },
-    whole: { type: "boolean", pin: false, default: true, label: "Whole numbers", description: "Off gives decimals." },
+    whole: { type: "boolean", default: true, label: "Whole numbers", description: "Off gives decimals." },
   },
   outputs: {
     number: { type: "number", description: "The random number." },
