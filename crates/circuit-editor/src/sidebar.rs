@@ -379,8 +379,8 @@ fn apply(ed: &mut Editor, ctx: &egui::Context, todo: Vec<Do>, renaming: &mut Opt
                 }
             }
             Do::DeleteWorkspace(key) => {
-                project.workspaces.shift_remove(&key);
-                let _ = std::fs::remove_file(project.workspace_path(&key));
+                // The file goes on save, so Don't save brings the workspace back.
+                project.remove_workspace(&key);
                 ed.actions.push(Action::CloseWorkspaceTabs(key));
                 ed.dirty = true;
             }

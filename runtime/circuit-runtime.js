@@ -41,6 +41,7 @@ class Runtime {
     this.store = new Store(opts.dataDir, this);
     this.runCounter = 0;
     this.log = makeLogger(this, null);
+    if (this.store.note) this.log.warn(this.store.note);
   }
 
   emit(type, data) {
@@ -458,33 +459,69 @@ function describeError(err, node) {
   };
 }
 
+/** Every store, so pending changes can be written when the process ends. */
+const openStores = new Set();
+
 /** Saved data (ctx.store): one JSON file, written safely and in batches. */
 class Store {
   constructor(dir, rt) {
     this.rt = rt;
     this.file = path.join(dir, "store.json");
     this.data = {};
+    /** A message for the log once it exists, e.g. about a damaged file. */
+    this.note = null;
+    let text = null;
     try {
-      this.data = JSON.parse(fs.readFileSync(this.file, "utf8"));
+      text = fs.readFileSync(this.file, "utf8");
     } catch {
-      this.data = {};
+      // No saved data yet.
+    }
+    if (text !== null) {
+      try {
+        const parsed = JSON.parse(text);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("not an object");
+        this.data = parsed;
+      } catch (e) {
+        // Never overwrite data that can't be read: keep it next to the new file.
+        let backup = this.file.replace(/\.json$/, `.damaged-${Date.now()}.json`);
+        for (let i = 2; fs.existsSync(backup); i++) backup = this.file.replace(/\.json$/, `.damaged-${Date.now()}-${i}.json`);
+        try {
+          fs.renameSync(this.file, backup);
+          this.note = `Saved data couldn't be read (${e.message}), so it starts empty. The old file was kept as ${path.basename(backup)}.`;
+        } catch (err) {
+          this.note = `Saved data couldn't be read (${e.message}) or moved aside (${err.message}); it won't be saved over.`;
+          this.readOnly = true;
+        }
+      }
     }
     this.timer = null;
+    openStores.add(this);
   }
 
   save() {
-    if (this.timer) return;
-    this.timer = setTimeout(() => {
-      this.timer = null;
-      try {
-        fs.mkdirSync(path.dirname(this.file), { recursive: true });
-        const tmp = this.file + ".tmp";
-        fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2));
-        fs.renameSync(tmp, this.file);
-      } catch (e) {
-        this.rt.log.error(`Could not save stored data: ${e.message}`);
-      }
-    }, 250);
+    if (this.timer || this.readOnly) return;
+    this.timer = setTimeout(() => this.flush(), 250);
+  }
+
+  /** Writes pending changes now. */
+  flush() {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    if (this.readOnly) return;
+    try {
+      fs.mkdirSync(path.dirname(this.file), { recursive: true });
+      const tmp = this.file + ".tmp";
+      fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2));
+      fs.renameSync(tmp, this.file);
+    } catch (e) {
+      if (this.rt.log) this.rt.log.error(`Could not save stored data: ${e.message}`);
+      else console.error(`Could not save stored data: ${e.message}`);
+    }
+  }
+
+  /** Writes only if a save was waiting. */
+  flushPending() {
+    if (this.timer) this.flush();
   }
 
   scope(...parts) {
@@ -615,6 +652,7 @@ function cli() {
     process.exit(2);
   }
   const bundle = JSON.parse(fs.readFileSync(bundlePath, "utf8"));
+  if (args.includes("--stop-on-input")) listenForStop();
   start(bundle, {
     debug: args.includes("--debug"),
     depsRoot: path.resolve(arg("--deps") || process.cwd()),
@@ -622,11 +660,36 @@ function cli() {
   });
 }
 
-process.on("unhandledRejection", (e) => {
-  const text = `Unhandled error: ${e && e.stack ? e.stack : e}`;
+function reportFatal(text) {
   if (process.argv.includes("--debug")) process.stdout.write(PROTOCOL + JSON.stringify({ t: "log", level: "error", text }) + "\n");
   else console.error(text);
+}
+
+process.on("unhandledRejection", (e) => {
+  reportFatal(`Unhandled error: ${e && e.stack ? e.stack : e}`);
 });
+
+// Pending saved data is written however the bot ends.
+process.on("exit", () => {
+  for (const s of openStores) s.flushPending();
+});
+process.on("uncaughtException", (e) => {
+  reportFatal(`Bot crashed: ${e && e.stack ? e.stack : e}`);
+  process.exit(1);
+});
+for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(0));
+
+/** XC Circuit stops a running bot by writing "stop" to it (or by closing its input). */
+function listenForStop() {
+  process.stdin.setEncoding("utf8");
+  let buffer = "";
+  process.stdin.on("data", (chunk) => {
+    buffer += chunk;
+    if (buffer.split(/\r?\n/).some((l) => l.trim() === "stop")) process.exit(0);
+  });
+  process.stdin.on("end", () => process.exit(0));
+  process.stdin.on("error", () => {});
+}
 
 if (typeof __XC_BUNDLE__ !== "undefined") {
   loadDotEnv(path.join(__dirname, ".env"));
@@ -635,4 +698,4 @@ if (typeof __XC_BUNDLE__ !== "undefined") {
   cli();
 }
 
-module.exports = { start, fillTemplate, coerce };
+module.exports = { start, fillTemplate, coerce, Store };

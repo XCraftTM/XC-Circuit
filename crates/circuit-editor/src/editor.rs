@@ -184,6 +184,9 @@ impl Editor {
         match Project::load(root) {
             Ok(project) => {
                 self.log(Level::Success, format!("Opened {}", project.root.display()));
+                for (stem, why) in &project.unreadable {
+                    self.log(Level::Error, format!("Couldn't read workspaces/{stem}.json, so it isn't open. The file is left as it is: {why}"));
+                }
                 let first = project.workspaces.keys().next().cloned();
                 self.project = Some(project);
                 self.dirty = false;
@@ -203,7 +206,7 @@ impl Editor {
     }
 
     pub fn save(&mut self) {
-        let Some(project) = &self.project else { return };
+        let Some(project) = self.project.as_mut() else { return };
         match project.save() {
             Ok(()) => {
                 self.dirty = false;

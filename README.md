@@ -50,6 +50,7 @@ Running needs Node.js 22 or newer. The first run installs the mode's npm package
 cargo test
 node runtime/test/smoke.js
 node runtime/test/library.js
+node runtime/test/store.js
 ```
 
 ## Layout

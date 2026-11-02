@@ -47,6 +47,7 @@ jobs:
         run: |
           node runtime/test/smoke.js
           node runtime/test/library.js
+          node runtime/test/store.js
 
       # Native plugins are built together with the editor so they share one build of egui.
       - name: Release build

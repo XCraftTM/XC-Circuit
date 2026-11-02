@@ -189,7 +189,7 @@ impl BotUi {
 
     pub fn open_export(&mut self, ed: &Editor) {
         let Some(project) = &ed.project else { return };
-        let folder = format!("{}-bot", project.meta.name.replace(' ', "-"));
+        let folder = circuit_runner::export::folder_name(&project.meta.name);
         let base = dirs::document_dir().unwrap_or_else(|| project.root.clone()).join("XC Circuit Exports");
         let token_saved = secrets::get(&project.root, "token").is_some();
         self.export = Some(ExportDraft { dir: base.join(folder), include_token: token_saved, install: true, token_saved, name: project.meta.name.clone() });
@@ -309,13 +309,13 @@ impl BotUi {
             |ui, part| match part {
                 Part::Body => {
                     dialog::section(ui, &theme, "Destination");
-                    dialog::field(ui, &theme, "Folder", Some("Created if it doesn't exist. Existing files with the same names are replaced."), |ui| {
+                    dialog::field(ui, &theme, "Folder", Some("Created if it doesn't exist. It must be empty, or a folder you exported a bot to before."), |ui| {
                         ui.horizontal(|ui| {
                             ui.allocate_ui(egui::vec2(ui.available_width() - 104.0, 34.0), |ui| dialog::readout(ui, &theme, &draft.dir.display().to_string()));
                             if dialog::secondary_button(ui, &theme, "Change…").clicked()
                                 && let Some(parent) = rfd::FileDialog::new().set_title("Choose where to export the bot").pick_folder()
                             {
-                                draft.dir = parent.join(format!("{}-bot", draft.name.replace(' ', "-")));
+                                draft.dir = parent.join(circuit_runner::export::folder_name(&draft.name));
                             }
                         });
                     });

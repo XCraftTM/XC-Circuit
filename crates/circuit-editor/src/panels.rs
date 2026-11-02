@@ -212,6 +212,9 @@ pub type ProblemItem = (String, String, Option<(String, String)>);
 pub fn collect_problems(ed: &Editor) -> Vec<ProblemItem> {
     let mut items: Vec<ProblemItem> = ed.reg.problems.iter().map(|p| (p.source.clone(), p.message.clone(), None)).collect();
     if let Some(project) = &ed.project {
+        for (stem, why) in &project.unreadable {
+            items.push((format!("workspaces/{stem}.json"), format!("couldn't be read, so it isn't open (the file is kept as it is): {why}"), None));
+        }
         for (key, ws) in &project.workspaces {
             for (id, node) in &ws.nodes {
                 let Some(def) = ed.reg.block(&node.block) else {

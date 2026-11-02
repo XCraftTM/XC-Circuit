@@ -32,8 +32,11 @@ impl StoredView {
 
     fn write(&self, ed: &mut Editor) {
         let Some(f) = file(ed) else { return };
-        let _ = std::fs::create_dir_all(f.parent().unwrap());
-        match std::fs::write(&f, serde_json::to_string_pretty(&Value::Object(self.data.clone())).unwrap_or_default()) {
+        let _ = std::fs::create_dir_all(f.parent().unwrap_or(&f));
+        // Through a temporary file, like the bot itself, so a crash can't leave half a file.
+        let tmp = f.with_extension("json.tmp");
+        let text = serde_json::to_string_pretty(&Value::Object(self.data.clone())).unwrap_or_default();
+        match std::fs::write(&tmp, text).and_then(|_| std::fs::rename(&tmp, &f)) {
             Ok(()) => ed.log(Level::Success, "Stored data saved"),
             Err(e) => ed.log(Level::Error, format!("Could not save stored data: {e}")),
         }

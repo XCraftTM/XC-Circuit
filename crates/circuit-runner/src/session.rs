@@ -2,12 +2,13 @@
 //! delivered as messages the editor polls each frame.
 
 use std::fs;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{Receiver, channel};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 
 use anyhow::Result;
 use indexmap::IndexMap;
@@ -16,6 +17,9 @@ use serde_json::Value;
 use crate::RUNTIME_SOURCE;
 use crate::node::{check_node, ensure_packages, quiet};
 use crate::protocol::{BotEvent, parse_line};
+
+/// How long a bot gets to stop by itself before it is ended.
+const STOP_GRACE: Duration = Duration::from_millis(1500);
 
 pub struct SessionConfig {
     pub bundle: Value,
@@ -109,11 +113,24 @@ impl Session {
         self.rx.try_iter().collect()
     }
 
+    /// Asks the bot to stop, so it can write its saved data, and ends it after
+    /// a moment if it hasn't.
     pub fn stop(&self) {
         *self.stopping.lock().unwrap() = true;
-        if let Some(c) = self.child.lock().unwrap().as_mut() {
+        let mut guard = self.child.lock().unwrap();
+        let Some(c) = guard.as_mut() else { return };
+        let asked = c.stdin.as_mut().is_some_and(|i| i.write_all(b"stop\n").and_then(|_| i.flush()).is_ok());
+        if !asked {
             let _ = c.kill();
+            return;
         }
+        let child = self.child.clone();
+        thread::spawn(move || {
+            thread::sleep(STOP_GRACE);
+            if let Some(c) = child.lock().unwrap().as_mut() {
+                let _ = c.kill();
+            }
+        });
     }
 }
 
@@ -144,8 +161,9 @@ fn prepare_and_spawn(cfg: &SessionConfig, send: &dyn Fn(Msg)) -> Result<Child> {
         .arg("--data")
         .arg(&cfg.data_dir)
         .arg("--debug")
+        .arg("--stop-on-input")
         .current_dir(&cfg.run_dir)
-        .stdin(Stdio::null())
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     for (k, v) in &cfg.env {
@@ -198,6 +216,55 @@ mod tests {
             thread::sleep(Duration::from_millis(50));
         }
         panic!("never saw {want:?}; got:\n{}", seen.join("\n"));
+    }
+
+    /// Stopping the bot lets it write its saved data first: a value stored just
+    /// before Stop is on disk afterwards.
+    #[test]
+    fn stopping_keeps_saved_data() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let engine = BlockEngine::new().unwrap();
+        let reg = Registry::load(&[root.join("plugins")], &engine);
+        let dir = std::env::temp_dir().join(format!("xc-stop-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let mut project = Project::create(&dir, "Stop Test", "none").unwrap();
+        let ws: Workspace = serde_json::from_value(serde_json::json!({
+            "name": "Main",
+            "nodes": {
+                "1": { "block": "core.on_start@1", "at": [0, 0] },
+                "2": { "block": "core.increase_stored@1", "at": [0, 0], "values": { "scope": "global", "key": "starts", "by": 1 } },
+                "3": { "block": "core.log@1", "at": [0, 0], "values": { "message": "counted", "level": "info" } }
+            },
+            "links": ["1.next > 2.in", "2.next > 3.in"]
+        }))
+        .unwrap();
+        project.workspaces.insert("main".into(), ws);
+        let bundle = build_bundle(&project, &reg, None).unwrap();
+        let data_dir = dir.join(".circuit/data");
+        let session = Session::start(
+            SessionConfig { bundle: bundle.value, dependencies: bundle.dependencies, packages_dir: dir.join("packages"), run_dir: dir.join(".circuit/run"), data_dir: data_dir.clone(), env: vec![] },
+            || {},
+        );
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut stopped = false;
+        let mut exited = false;
+        while Instant::now() < deadline && !exited {
+            for m in session.poll() {
+                match m {
+                    Msg::Bot(BotEvent::Log { text, .. }) if text == "counted" && !stopped => {
+                        // At once: the store's batched write hasn't happened yet.
+                        session.stop();
+                        stopped = true;
+                    }
+                    Msg::Exited(_) => exited = true,
+                    _ => {}
+                }
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(stopped && exited, "the bot ran and stopped");
+        let saved: serde_json::Value = serde_json::from_str(&fs::read_to_string(data_dir.join("store.json")).expect("store.json written on stop")).unwrap();
+        assert_eq!(saved["global"]["starts"], 1);
     }
 
     /// A TypeScript block from a project's own plugins/ folder runs in the bot.

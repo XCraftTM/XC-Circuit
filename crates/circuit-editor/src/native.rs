@@ -125,7 +125,9 @@ fn map_level(l: api::Level) -> Level {
 
 impl NativeHost {
     pub fn new(allow: bool, trusted: BTreeSet<String>, storage: BTreeMap<String, BTreeMap<String, String>>) -> NativeHost {
-        let copies = std::env::temp_dir().join("xc-circuit-native");
+        // A per-user folder: in a shared one (/tmp on Linux) someone else could
+        // swap a library between copying and loading it.
+        let copies = dirs::cache_dir().unwrap_or_else(std::env::temp_dir).join("xc-circuit").join("native");
         // Copies left by earlier sessions; ones still in use by another window stay.
         if let Ok(entries) = std::fs::read_dir(&copies) {
             for e in entries.flatten() {

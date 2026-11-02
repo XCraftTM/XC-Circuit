@@ -51,6 +51,11 @@ pub struct Project {
     pub meta: ProjectMeta,
     /// Keyed by file stem, so `workspaces/rank-command.json` is `rank-command`.
     pub workspaces: IndexMap<String, Workspace>,
+    /// Workspace files that couldn't be read, with the reason. They are never
+    /// overwritten or deleted, so nothing in them is lost.
+    pub unreadable: Vec<(String, String)>,
+    /// Workspaces deleted since the last save; their files go when saving.
+    pub removed: Vec<String>,
 }
 
 impl Project {
@@ -63,6 +68,7 @@ impl Project {
         .with_context(|| format!("parsing {}", meta_path.display()))?;
 
         let mut workspaces = IndexMap::new();
+        let mut unreadable = Vec::new();
         let dir = root.join(WORKSPACE_DIR);
         if dir.is_dir() {
             let mut files: Vec<_> = fs::read_dir(&dir)?
@@ -72,12 +78,17 @@ impl Project {
             files.sort();
             for path in files {
                 let stem = path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
-                let ws: Workspace = serde_json::from_str(&fs::read_to_string(&path)?)
-                    .with_context(|| format!("parsing {}", path.display()))?;
-                workspaces.insert(stem, ws);
+                // One damaged file shouldn't keep the whole project from opening.
+                let read = fs::read_to_string(&path).map_err(anyhow::Error::from).and_then(|text| Ok(serde_json::from_str::<Workspace>(&text)?));
+                match read {
+                    Ok(ws) => {
+                        workspaces.insert(stem, ws);
+                    }
+                    Err(e) => unreadable.push((stem, format!("{e:#}"))),
+                }
             }
         }
-        Ok(Project { root, meta, workspaces })
+        Ok(Project { root, meta, workspaces, unreadable, removed: Vec::new() })
     }
 
     /// Creates a new project folder with one empty workspace.
@@ -87,7 +98,7 @@ impl Project {
         let meta = ProjectMeta { name: name.into(), mode: mode.into(), ..Default::default() };
         let mut workspaces = IndexMap::new();
         workspaces.insert("main".to_string(), Workspace::new("Main"));
-        let project = Project { root, meta, workspaces };
+        let mut project = Project { root, meta, workspaces, unreadable: Vec::new(), removed: Vec::new() };
         project.save()?;
         // Run output and test data stay out of version control.
         let ignore = project.root.join(".gitignore");
@@ -97,13 +108,30 @@ impl Project {
         Ok(project)
     }
 
-    pub fn save(&self) -> Result<()> {
+    pub fn save(&mut self) -> Result<()> {
         fs::create_dir_all(self.root.join(WORKSPACE_DIR))?;
         write_json(&self.root.join(PROJECT_FILE), &self.meta)?;
         for (stem, ws) in &self.workspaces {
             write_json(&self.workspace_path(stem), ws)?;
         }
+        for stem in std::mem::take(&mut self.removed) {
+            let unsafe_to_delete = self.workspaces.contains_key(&stem) || self.unreadable.iter().any(|(s, _)| *s == stem);
+            if !unsafe_to_delete {
+                match fs::remove_file(self.workspace_path(&stem)) {
+                    Ok(()) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(e).with_context(|| format!("deleting {}", self.workspace_path(&stem).display())),
+                }
+            }
+        }
         Ok(())
+    }
+
+    /// Takes a workspace out of the project; its file is deleted on the next save.
+    pub fn remove_workspace(&mut self, key: &str) {
+        if self.workspaces.shift_remove(key).is_some() {
+            self.removed.push(key.to_string());
+        }
     }
 
     pub fn workspace_path(&self, stem: &str) -> PathBuf {
@@ -122,10 +150,15 @@ impl Project {
             .collect::<Vec<_>>()
             .join("-");
         let base = if base.is_empty() { "workspace".to_string() } else { base };
-        if !self.workspaces.contains_key(&base) {
+        // Case-insensitive, like file names on Windows, and never the file of a
+        // workspace that couldn't be read or is about to be deleted.
+        let taken = |k: &str| {
+            self.workspaces.keys().chain(self.unreadable.iter().map(|(s, _)| s)).chain(self.removed.iter()).any(|t| t.eq_ignore_ascii_case(k))
+        };
+        if !taken(&base) {
             return base;
         }
-        (2..).map(|i| format!("{base}-{i}")).find(|k| !self.workspaces.contains_key(k)).expect("unbounded range")
+        (2..).map(|i| format!("{base}-{i}")).find(|k| !taken(k)).expect("unbounded range")
     }
 }
 
@@ -137,4 +170,55 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     fs::write(&tmp, text).with_context(|| format!("writing {}", tmp.display()))?;
     fs::rename(&tmp, path).with_context(|| format!("replacing {}", path.display()))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("xc-project-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        dir
+    }
+
+    #[test]
+    fn a_damaged_workspace_is_kept_and_the_rest_opens() {
+        let dir = temp("damaged");
+        let mut p = Project::create(&dir, "Test", "none").unwrap();
+        p.workspaces.insert("other".into(), Workspace::new("Other"));
+        p.save().unwrap();
+        let broken = dir.join(WORKSPACE_DIR).join("broken.json");
+        fs::write(&broken, "{ this is not json").unwrap();
+
+        let mut p = Project::load(&dir).unwrap();
+        assert_eq!(p.workspaces.len(), 2, "the readable ones open");
+        assert_eq!(p.unreadable.len(), 1);
+        assert_eq!(p.unreadable[0].0, "broken");
+        // Saving never touches it, and a new workspace can't take its file name.
+        assert_eq!(p.new_workspace_key("Broken"), "broken-2");
+        p.save().unwrap();
+        assert_eq!(fs::read_to_string(&broken).unwrap(), "{ this is not json");
+    }
+
+    #[test]
+    fn deleted_workspaces_lose_their_file_only_on_save() {
+        let dir = temp("delete");
+        let mut p = Project::create(&dir, "Test", "none").unwrap();
+        let file = p.workspace_path("main");
+        p.remove_workspace("main");
+        assert!(file.is_file(), "still there until saved, so Don't save keeps it");
+        p.save().unwrap();
+        assert!(!file.is_file());
+        assert!(Project::load(&dir).unwrap().workspaces.is_empty());
+    }
+
+    #[test]
+    fn workspace_keys_ignore_case() {
+        let dir = temp("case");
+        let mut p = Project::create(&dir, "Test", "none").unwrap();
+        p.workspaces.insert("Rank".into(), Workspace::new("Rank"));
+        assert_eq!(p.new_workspace_key("rank"), "rank-2", "rank.json would overwrite Rank.json on Windows");
+        assert_eq!(p.new_workspace_key("../../etc/passwd"), "etc-passwd");
+    }
 }
