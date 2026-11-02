@@ -1,5 +1,5 @@
 //! Plugins › Manage Plugins: every loaded plugin, and the switch and
-//! approvals for native Rust plugins. Changes wait for "Save and close".
+//! approvals for native Rust plugins. Changes wait for Save.
 
 use eframe::egui::{self, Frame, Margin, RichText};
 
@@ -22,7 +22,8 @@ impl Draft {
 }
 
 pub enum Ask {
-    Save,
+    /// Apply the changes; true also closes the tab.
+    Save(bool),
     Cancel,
 }
 
@@ -85,7 +86,10 @@ pub fn tab(ui: &mut egui::Ui, theme: &Theme, ed: &Editor, native: &NativeHost, d
             }
             Part::Footer => {
                 if dialog::primary_button(ui, theme, t!("Save and close")).clicked() {
-                    ask = Some(Ask::Save);
+                    ask = Some(Ask::Save(true));
+                }
+                if dialog::secondary_button(ui, theme, t!("Save")).clicked() {
+                    ask = Some(Ask::Save(false));
                 }
                 if dialog::secondary_button(ui, theme, t!("Cancel")).clicked() {
                     ask = Some(Ask::Cancel);

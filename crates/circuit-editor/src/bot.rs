@@ -309,7 +309,7 @@ impl BotUi {
         let icon_of = |name: &str| ed.reg.icons.get(name).cloned();
         let (eye, eye_off, copy, check) = (icon_of("eye"), icon_of("eye-off"), icon_of("copy"), icon_of("check"));
         let problems = draft.fields.iter().filter(|f| f.problem().is_some()).count();
-        let (mut save, mut cancel) = (false, false);
+        let (mut save, mut close, mut cancel) = (false, false, false);
         dialog::tab(
             ui,
             &theme,
@@ -379,7 +379,14 @@ impl BotUi {
                     }
                 }
                 Part::Footer => {
-                    save = ui.add_enabled_ui(problems == 0, |ui| dialog::primary_button(ui, &theme, t!("Save and close"))).inner.clicked();
+                    ui.add_enabled_ui(problems == 0, |ui| {
+                        if dialog::primary_button(ui, &theme, t!("Save and close")).clicked() {
+                            (save, close) = (true, true);
+                        }
+                        if dialog::secondary_button(ui, &theme, t!("Save")).clicked() {
+                            save = true;
+                        }
+                    });
                     cancel = dialog::secondary_button(ui, &theme, t!("Cancel")).clicked();
                     if problems > 0 {
                         ui.label(RichText::new(tf!("{count} to fix", count = problems)).size(12.0).color(theme.warning));
@@ -412,7 +419,12 @@ impl BotUi {
                 }
             }
             ed.log(Level::Success, t!("Settings saved"));
-            self.settings = None;
+            if close {
+                self.settings = None;
+            } else {
+                // Stay open, showing what is stored now (a typed token becomes "Saved").
+                self.open_settings(ed);
+            }
         } else if cancel {
             self.settings = None;
         }

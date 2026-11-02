@@ -194,7 +194,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
     let Some(edit) = &mut ed.embed_edit else { return };
     let theme = ed.theme.clone();
     let icon = ed.reg.icons.get("embed").cloned();
-    let (mut apply, mut cancel) = (false, false);
+    let (mut apply, mut close, mut cancel) = (false, false, false);
     dialog::tab(
         ui,
         &theme,
@@ -222,15 +222,22 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
                 });
             }
             Part::Footer => {
-                apply = dialog::primary_button(ui, &theme, t!("Apply to block")).clicked();
+                if dialog::primary_button(ui, &theme, t!("Apply and close")).clicked() {
+                    (apply, close) = (true, true);
+                }
+                apply |= dialog::secondary_button(ui, &theme, t!("Apply")).on_hover_text(t!("Put it on the block and keep editing")).clicked();
                 cancel = dialog::secondary_button(ui, &theme, t!("Cancel")).clicked();
             }
         },
     );
     if apply {
-        let edit = ed.embed_edit.take().unwrap();
-        if let Some(n) = ed.project.as_mut().and_then(|p| p.workspaces.get_mut(&edit.ws)).and_then(|w| w.nodes.get_mut(&edit.node)) {
-            n.values.insert(edit.key, edit.draft.to_value());
+        let edit = ed.embed_edit.as_ref().unwrap();
+        let (ws, node, key, value) = (edit.ws.clone(), edit.node.clone(), edit.key.clone(), edit.draft.to_value());
+        if close {
+            ed.embed_edit = None;
+        }
+        if let Some(n) = ed.project.as_mut().and_then(|p| p.workspaces.get_mut(&ws)).and_then(|w| w.nodes.get_mut(&node)) {
+            n.values.insert(key, value);
             ed.dirty = true;
         }
     } else if cancel {

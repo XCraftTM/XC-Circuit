@@ -130,7 +130,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
     let icon = ed.reg.icons.get("slash").cloned();
     let trash = ed.reg.icons.get("trash").cloned();
     let issues = problems(&edit.commands);
-    let (mut save, mut cancel) = (false, false);
+    let (mut save, mut close, mut cancel) = (false, false, false);
     dialog::tab(
         ui,
         &theme,
@@ -144,19 +144,30 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
         |ui, part| match part {
             Part::Body => body(ui, &theme, edit, &issues, trash.as_deref()),
             Part::Footer => {
-                save = ui.add_enabled_ui(issues.is_empty(), |ui| dialog::primary_button(ui, &theme, t!("Save commands"))).inner.clicked();
+                ui.add_enabled_ui(issues.is_empty(), |ui| {
+                    if dialog::primary_button(ui, &theme, t!("Save and close")).clicked() {
+                        (save, close) = (true, true);
+                    }
+                    if dialog::secondary_button(ui, &theme, t!("Save")).clicked() {
+                        save = true;
+                    }
+                });
                 cancel = dialog::secondary_button(ui, &theme, t!("Cancel")).clicked();
                 if !issues.is_empty() {
-                    ui.label(RichText::new(format!("{} to fix", issues.len())).size(12.0).color(theme.warning));
+                    ui.label(RichText::new(tf!("{count} to fix", count = issues.len())).size(12.0).color(theme.warning));
                 }
             }
         },
     );
     if save {
-        let edit = ed.slash_edit.take().unwrap();
-        let mut commands = edit.commands;
+        // Save keeps the editor open with the same draft; Save and close ends it.
+        let edit = ed.slash_edit.as_ref().unwrap();
+        let (mut commands, choice_text) = (edit.commands.clone(), edit.choice_text.clone());
+        if close {
+            ed.slash_edit = None;
+        }
         // Turn the typed choice lists into choices.
-        for (c, texts) in commands.iter_mut().zip(edit.choice_text) {
+        for (c, texts) in commands.iter_mut().zip(choice_text) {
             for (o, text) in c.options.iter_mut().zip(texts) {
                 let numeric = o.kind == "integer" || o.kind == "number";
                 o.choices = text
@@ -180,7 +191,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
             ed.dirty = true;
         }
         ed.refresh_define_ctx();
-        ed.log(Level::Success, format!("Saved {} slash commands", commands.len()));
+        ed.log(Level::Success, tf!("Saved {count} slash commands", count = commands.len()));
     } else if cancel {
         ed.slash_edit = None;
     }

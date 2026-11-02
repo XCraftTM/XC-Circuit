@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use circuit_core::Project;
 use eframe::egui::{self, Frame, Id, Margin, RichText, ViewportCommand, WidgetText};
 use egui_dock::tab_viewer::OnCloseResponse;
-use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
+use egui_dock::{DockArea, DockState, NodeIndex, TabViewer, Tree};
 use serde::{Deserialize, Serialize};
 
 use crate::bot::{BotState, BotUi};
@@ -37,7 +37,30 @@ pub enum Tab {
     Plugins,
 }
 
+/// Where a tab belongs in the window.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Side {
+    Left,
+    Right,
+    Bottom,
+    Center,
+}
+
 impl Tab {
+    fn side(&self) -> Side {
+        match self {
+            Tab::Workspaces => Side::Left,
+            Tab::Inspector | Tab::Plugin(..) => Side::Right,
+            Tab::Console | Tab::Problems | Tab::StoredData => Side::Bottom,
+            _ => Side::Center,
+        }
+    }
+
+    /// The editors that open in their own floating window.
+    fn floats(&self) -> bool {
+        matches!(self, Tab::EmbedBuilder | Tab::SlashCommands | Tab::BotSettings | Tab::Export | Tab::Plugins)
+    }
+
     const PANELS: [(Tab, &'static str); 5] = [
         (Tab::Workspaces, n("Workspaces")),
         (Tab::Inspector, n("Inspector")),
@@ -127,7 +150,10 @@ impl CircuitApp {
         let dock = match saved_dock {
             Some(mut d) => {
                 let keys: Vec<String> = ed.project.as_ref().map(|p| p.workspaces.keys().cloned().collect()).unwrap_or_default();
-                d.retain_tabs(|t| !matches!(t, Tab::Canvas(k) if !keys.contains(k)));
+                if repair_layout(&mut d) {
+                    ed.log(Level::Warn, t!("The panel layout was damaged, so it was put back together."));
+                }
+                close_tabs(&mut d, |t| matches!(t, Tab::Canvas(k) if !keys.contains(k)));
                 d
             }
             None => default_layout(),
@@ -208,7 +234,7 @@ impl CircuitApp {
                     open_canvas(&mut self.dock, key);
                 }
                 Action::CloseWorkspaceTabs(key) => {
-                    self.dock.retain_tabs(|t| *t != Tab::Canvas(key.clone()));
+                    close_tabs(&mut self.dock, |t| *t == Tab::Canvas(key.clone()));
                     self.ed.views.remove(&key);
                     if self.ed.selected.as_ref().is_some_and(|(w, _)| *w == key) {
                         self.ed.selected = None;
@@ -220,28 +246,10 @@ impl CircuitApp {
 
     fn toggle_panel(&mut self, tab: Tab) {
         if self.dock.find_tab(&tab).is_some() {
-            self.dock.retain_tabs(|t| *t != tab);
+            close_tabs(&mut self.dock, |t| *t == tab);
             return;
         }
-        if matches!(tab, Tab::Plugin(..))
-            && let Some(path) = self.dock.find_tab(&Tab::Inspector)
-        {
-            self.dock.set_focused_node_and_surface(path.node_path());
-            self.dock.push_to_focused_leaf(tab);
-            return;
-        }
-        let surface = self.dock.main_surface_mut();
-        match tab {
-            Tab::Workspaces => {
-                surface.split_left(NodeIndex::root(), 0.17, vec![tab]);
-            }
-            Tab::Inspector | Tab::Plugin(..) => {
-                surface.split_right(NodeIndex::root(), 0.78, vec![tab]);
-            }
-            _ => {
-                surface.split_below(NodeIndex::root(), 0.75, vec![tab]);
-            }
-        }
+        place_panel(&mut self.dock, tab);
     }
 
     fn open_project_dialog(&mut self) {
@@ -265,7 +273,7 @@ impl CircuitApp {
             self.ed.save();
         }
         self.bot.stop(&mut self.ed);
-        self.dock.retain_tabs(|t| !matches!(t, Tab::Canvas(_)));
+        close_tabs(&mut self.dock, |t| matches!(t, Tab::Canvas(_)));
         self.ed.open_project(dir);
         self.native.sync(&mut self.ed, self.bundled_plugins.as_deref());
         self.watcher.watch(&self.ed.watch_dirs());
@@ -592,13 +600,13 @@ impl CircuitApp {
         match target {
             Some(dir) => self.switch_project(&dir),
             None => {
-                self.dock.retain_tabs(|t| !matches!(t, Tab::Canvas(_)));
+                close_tabs(&mut self.dock, |t| matches!(t, Tab::Canvas(_)));
             }
         }
         if let Some(dock) = self.dock_before_tour.take() {
             let keys: Vec<String> = self.ed.project.as_ref().map(|p| p.workspaces.keys().cloned().collect()).unwrap_or_default();
             self.dock = dock;
-            self.dock.retain_tabs(|t| !matches!(t, Tab::Canvas(k) if !keys.contains(k)));
+            close_tabs(&mut self.dock, |t| matches!(t, Tab::Canvas(k) if !keys.contains(k)));
             if let Some(first) = keys.first() {
                 open_canvas(&mut self.dock, first.clone());
             }
@@ -616,7 +624,7 @@ impl CircuitApp {
     fn toggle_settings(&mut self) {
         let focused = self.dock.find_active_focused().is_some_and(|(_, t)| *t == Tab::Settings);
         if focused {
-            self.dock.retain_tabs(|t| *t != Tab::Settings);
+            close_tabs(&mut self.dock, |t| *t == Tab::Settings);
         } else {
             self.open_settings();
         }
@@ -1126,6 +1134,9 @@ impl eframe::App for CircuitApp {
                 .show_leaf_collapse_buttons(false)
                 .show_inside(ui, &mut viewer);
             let asks = std::mem::take(&mut viewer.asks);
+            if repair_layout(&mut self.dock) {
+                self.ed.log(Level::Warn, t!("The panel layout was damaged, so it was put back together."));
+            }
             self.settings_asks(asks, ui.ctx());
         });
         }
@@ -1310,12 +1321,15 @@ impl TabViewer for Viewer<'_> {
                 let theme = self.ed.theme.clone();
                 let Some(draft) = self.plugins.as_mut() else { return };
                 match crate::plugin_manager::tab(ui, &theme, self.ed, self.native, draft) {
-                    Some(Ask::Save) => {
+                    Some(Ask::Save(close)) => {
                         let draft = self.plugins.take().unwrap();
                         self.native.allow = draft.allow;
                         self.native.sync(self.ed, self.bundled_plugins);
                         for id in &draft.trust {
                             self.native.trust(id, self.ed);
+                        }
+                        if !close {
+                            *self.plugins = Some(crate::plugin_manager::Draft::new(self.native));
                         }
                     }
                     Some(Ask::Cancel) => *self.plugins = None,
@@ -1358,6 +1372,84 @@ fn open_floating(dock: &mut DockState<Tab>, ctx: &egui::Context, tab: Tab, size:
     if let Some(w) = dock.get_window_state_mut(surface) {
         w.set_position(area.center() - size / 2.0).set_size(size);
     }
+}
+
+/// Opens a side panel next to the open tabs of its kind (the bottom panels
+/// together, Inspector with plugin panels, …). Only when none is open does it
+/// get a new area on its side.
+fn place_panel(dock: &mut DockState<Tab>, tab: Tab) {
+    let side = tab.side();
+    if side == Side::Center {
+        return open_center(dock, tab);
+    }
+    let group = dock.find_tab_from(|t| t.side() == side).map(|p| p.node_path());
+    match group {
+        Some(np) if dock.leaf_mut(np).is_ok() => {
+            if let Ok(leaf) = dock.leaf_mut(np) {
+                leaf.append_tab(tab.clone());
+            }
+        }
+        _ if dock.main_surface().is_empty() => *dock.main_surface_mut() = Tree::new(vec![tab.clone()]),
+        _ => {
+            let surface = dock.main_surface_mut();
+            match side {
+                Side::Left => {
+                    surface.split_left(NodeIndex::root(), 0.17, vec![tab.clone()]);
+                }
+                Side::Right => {
+                    surface.split_right(NodeIndex::root(), 0.78, vec![tab.clone()]);
+                }
+                _ => {
+                    surface.split_below(NodeIndex::root(), 0.75, vec![tab.clone()]);
+                }
+            }
+        }
+    }
+    if let Some(path) = dock.find_tab(&tab) {
+        let _ = dock.set_active_tab(path);
+        dock.set_focused_node_and_surface(path.node_path());
+    }
+}
+
+/// Closes every tab that matches, one at a time. (egui_dock's `retain_tabs`
+/// can break the layout: when an area empties and its neighbour is split,
+/// it moves only the neighbour's top node and leaves its parts behind.)
+fn close_tabs(dock: &mut DockState<Tab>, matches: impl Fn(&Tab) -> bool) {
+    while let Some(path) = dock.find_tab_from(&matches) {
+        dock.remove_tab(path);
+    }
+}
+
+/// Whether a layout tree is whole: every split has two halves, every part
+/// hangs off a split, and every area has a tab.
+fn tree_ok(tree: &Tree<Tab>) -> bool {
+    let nodes: Vec<_> = tree.iter().collect();
+    let at = |i: NodeIndex| nodes.get(i.0).copied();
+    nodes.iter().enumerate().all(|(i, node)| {
+        let index = NodeIndex(i);
+        node.is_empty()
+            || (index.parent().is_none_or(|p| at(p).is_some_and(|p| p.is_parent()))
+                && (!node.is_parent() || (at(index.left()).is_some_and(|n| !n.is_empty()) && at(index.right()).is_some_and(|n| !n.is_empty())))
+                && (!node.is_leaf() || node.tabs_count() > 0))
+    })
+}
+
+/// Rebuilds a broken layout from the default one, with the same tabs open.
+/// Returns whether it had to.
+fn repair_layout(dock: &mut DockState<Tab>) -> bool {
+    if dock.iter_surfaces().all(|s| s.node_tree().is_none_or(tree_ok)) {
+        return false;
+    }
+    let tabs: Vec<Tab> = dock.iter_all_tabs().map(|(_, t)| t.clone()).filter(|t| !t.floats()).collect();
+    let mut fresh = default_layout();
+    close_tabs(&mut fresh, |t| !tabs.contains(t));
+    for tab in tabs {
+        if fresh.find_tab(&tab).is_none() {
+            place_panel(&mut fresh, tab);
+        }
+    }
+    *dock = fresh;
+    true
 }
 
 /// Focuses a workspace's canvas tab, or opens it next to the other canvases.
@@ -1437,4 +1529,49 @@ fn status_item(ui: &mut egui::Ui, theme: &crate::theme::Theme, dot: Option<egui:
     }
     ui.painter().galley(egui::pos2(x, rect.center().y - galley.size().y / 2.0), galley, theme.status_text);
     resp
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn leaves(dock: &DockState<Tab>) -> Vec<Vec<Tab>> {
+        dock.main_surface().iter().filter_map(|n| n.tabs().map(|t| t.to_vec())).collect()
+    }
+
+    #[test]
+    fn panels_open_next_to_their_kind() {
+        let mut dock = default_layout();
+        close_tabs(&mut dock, |t| *t == Tab::StoredData);
+        place_panel(&mut dock, Tab::StoredData);
+        let bottom = leaves(&dock).into_iter().find(|l| l.contains(&Tab::Console)).unwrap();
+        assert!(bottom.contains(&Tab::StoredData), "it joins Console and Problems: {bottom:?}");
+        assert_eq!(leaves(&dock).len(), 3, "no new area");
+
+        // With the whole bottom group closed, it gets a new area below.
+        close_tabs(&mut dock, |t| t.side() == Side::Bottom);
+        assert_eq!(leaves(&dock).len(), 2);
+        place_panel(&mut dock, Tab::Problems);
+        assert_eq!(leaves(&dock).len(), 3);
+        assert!(tree_ok(dock.main_surface()));
+    }
+
+    #[test]
+    fn closing_every_bottom_tab_keeps_the_layout_whole() {
+        // The bottom area's neighbour is a split (Workspaces | Inspector), the
+        // case where retain_tabs breaks the tree.
+        let mut dock = default_layout();
+        close_tabs(&mut dock, |t| t.side() == Side::Bottom);
+        assert!(tree_ok(dock.main_surface()));
+        let mut broken = default_layout();
+        broken.retain_tabs(|t| t.side() != Side::Bottom);
+        if !tree_ok(broken.main_surface()) {
+            assert!(repair_layout(&mut broken), "a broken layout is rebuilt");
+            assert!(tree_ok(broken.main_surface()));
+            let open: Vec<Tab> = broken.iter_all_tabs().map(|(_, t)| t.clone()).collect();
+            assert!(open.contains(&Tab::Workspaces) && open.contains(&Tab::Inspector));
+            assert!(!open.contains(&Tab::Console), "with the same tabs open");
+        }
+        assert!(!repair_layout(&mut dock), "a whole layout is left alone");
+    }
 }

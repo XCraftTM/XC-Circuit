@@ -2,6 +2,7 @@
 //! templates and checks. Generated: run the tests with XC_UPDATE_STRINGS=1.
 
 pub const UI_STRINGS: &[&str] = &[
+    "The panel layout was damaged, so it was put back together.",
     "Open a Circuit project folder",
     "Choose an empty folder for the new project",
     "Search",
@@ -173,7 +174,9 @@ pub const UI_STRINGS: &[&str] = &[
     "Close (Esc)",
     "Type {name} anywhere to add an input with that name",
     "Preview",
-    "Apply to block",
+    "Apply and close",
+    "Apply",
+    "Put it on the block and keep editing",
     "Color",
     "Author",
     "Name",
@@ -445,7 +448,6 @@ pub const UI_STRINGS: &[&str] = &[
     "name is longer than 32 characters",
     "use lowercase letters, numbers, - and _ only",
     "Registered automatically when the bot starts",
-    "Save commands",
     "Commands",
     "Delete this command",
     "+ New command",
@@ -464,6 +466,7 @@ pub const UI_STRINGS: &[&str] = &[
     "Max length",
     "Min",
     "Max",
+    "Saved {count} slash commands",
     "Whole number",
     "Number",
     "Yes / no",
