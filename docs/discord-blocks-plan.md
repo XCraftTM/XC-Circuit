@@ -1,8 +1,15 @@
 # Blocks for complete Discord bots
 
-What a bot built in XC Circuit should be able to do, as blocks: what exists, what is
-missing, and in which order to build it. ✅ exists, 🟢 next (P1), 🟡 after that (P2),
-⚪ later (P3).
+What a bot built in XC Circuit can do, as blocks. Everything planned here is built (✅);
+the few things that aren't are listed under "Not built yet". Block names in the editor may
+differ slightly from this list (Call Workspace is **Call**, Set Bot Name / Avatar is **Set Bot
+Profile**, Voice: Move / Disconnect … is **Voice Member**).
+
+For anything the blocks don't cover, two blocks reach everything discord.js can do:
+
+- **Run Code** runs your own JavaScript with named inputs and outputs.
+- **Use Method** calls any method, or reads or sets any property, of any object or of the
+  Discord client, with typed or connected arguments.
 
 Blocks fall into three kinds: **events** start a flow, **actions** do something in order
 (green wires), **values** compute something when an action needs it. Every text field takes
@@ -41,27 +48,27 @@ The blocks below are chosen so these common bots can be built without code:
 | Message Sent | ✅ | message, author, channel, content | MessageContent intent |
 | Member Joins / Leaves | ✅ | member, server | GuildMembers intent |
 | Reaction Added | ✅ | reaction, message, user, emoji | |
-| Select Menu Used | 🟢 | interaction, custom id, values (list), user | string, user, role, channel menus |
-| Modal Submitted | 🟢 | interaction, custom id, fields (object), user | answers by input id |
-| Autocomplete | 🟢 | interaction, option, typed text | answered with Respond to Autocomplete |
-| Context Menu Used | 🟢 | interaction, target user or message | needs context menus in the Slash Commands editor |
-| Message Edited | 🟢 | before, after, author | before only when cached |
-| Message Deleted | 🟢 | message (partial), channel | also bulk deletes |
-| Reaction Removed | 🟢 | reaction, message, user, emoji | |
-| Member Updated | 🟢 | before, after, roles added, roles removed, nickname, timed out, boosting | GuildMembers |
-| Member Banned / Unbanned | 🟢 | user, server, reason | GuildModeration |
-| Every / At Time | 🟢 | time | interval or daily/weekly time; core block |
-| Voice State Changed | 🟡 | member, before channel, after channel, joined/left/moved | GuildVoiceStates |
-| Channel Created / Deleted / Updated | 🟡 | channel, before | |
-| Role Created / Deleted / Updated | 🟡 | role, before | |
-| Thread Created | 🟡 | thread, owner | |
-| Bot Added to / Removed from Server | 🟡 | server | |
-| Invite Created / Deleted | 🟡 | invite | GuildInvites |
-| Poll Vote | 🟡 | poll, answer, user | GuildMessagePolls |
-| Presence Changed | ⚪ | member, status, activity | privileged GuildPresences |
-| AutoMod Action | ⚪ | rule, action, member, content | |
-| Scheduled Event Started / User Interested | ⚪ | event, user | |
-| Web Request Received | ⚪ | method, path, body | for dashboards and webhooks from other services |
+| Select Menu Used | ✅ | interaction, custom id, values (list), user | string, user, role, channel menus |
+| Modal Submitted | ✅ | interaction, custom id, fields (object), user | answers by input id |
+| Autocomplete | ✅ | interaction, option, typed text | answered with Respond to Autocomplete |
+| Context Menu Used | ✅ | interaction, target user or message | needs context menus in the Slash Commands editor |
+| Message Edited | ✅ | before, after, author | before only when cached |
+| Message Deleted | ✅ | message (partial), channel | also bulk deletes |
+| Reaction Removed | ✅ | reaction, message, user, emoji | |
+| Member Updated | ✅ | before, after, roles added, roles removed, nickname, timed out, boosting | GuildMembers |
+| Member Banned / Unbanned | ✅ | user, server, reason | GuildModeration |
+| Every / At Time | ✅ | time | interval or daily/weekly time; core block |
+| Voice State Changed | ✅ | member, before channel, after channel, joined/left/moved | GuildVoiceStates |
+| Channel Created / Deleted / Updated | ✅ | channel, before | |
+| Role Created / Deleted / Updated | ✅ | role, before | |
+| Thread Created | ✅ | thread, owner | |
+| Bot Added to / Removed from Server | ✅ | server | |
+| Invite Created / Deleted | ✅ | invite | GuildInvites |
+| Poll Vote | ✅ | poll, answer, user | GuildMessagePolls |
+| Presence Changed | ✅ | member, status, activity | privileged GuildPresences |
+| AutoMod Action | ✅ | rule, action, member, content | |
+| Scheduled Event Started / User Interested | ✅ | event, user | |
+| Web Request Received | ✅ | method, path, body | for dashboards and webhooks from other services |
 
 ## Messages
 
@@ -73,24 +80,24 @@ The blocks below are chosen so these common bots can be built without code:
 | Add Reaction | ✅ | message, emoji | |
 | Delete Message | ✅ | message, delay | |
 | Message Info | ✅ | message, info → value | |
-| Send Message: Update message | 🟢 | new mode for button and menu presses | edits the message the button is on |
-| Send Message: Direct message | 🟢 | new mode with a user input | |
-| Send Message: files | 🟢 | attachments (URL or text as file) | |
-| Select Menu | 🟢 | custom id, placeholder, options or user/role/channel type, min/max → component | |
-| Show Modal | 🟢 | interaction, custom id, title, text inputs | answer is Modal Submitted |
-| Text Input | 🟢 | id, label, short/paragraph, required, min/max, value → component | for Show Modal |
-| Respond to Autocomplete | 🟢 | interaction, choices (list) | up to 25 |
-| Wait for Reply | 🟢 | channel or message, from user, timeout → message or timed out | message, button or reaction collector |
-| Bulk Delete | 🟢 | channel, count, only from user → deleted count | messages under 14 days |
-| Get Messages | 🟢 | channel, count, before/after → list | history, transcripts |
-| Find Message | 🟢 | channel, id → message | |
-| Pin / Unpin Message | 🟡 | message | |
-| Remove Reaction | 🟡 | message, emoji, user (or all) | |
-| Get Reactions | 🟡 | message, emoji → users, count | starboards, giveaways |
-| Create Poll | 🟡 | channel, question, answers, duration, multi → message | |
-| End Poll / Poll Results | 🟡 | message → answers with counts | |
-| Send via Webhook | 🟡 | channel or webhook URL, name, avatar, text, embeds | |
-| Publish Message | ⚪ | message | announcement channels |
+| Send Message: Update message | ✅ | new mode for button and menu presses | edits the message the button is on |
+| Send Message: Direct message | ✅ | new mode with a user input | |
+| Send Message: files | ✅ | attachments (URL or text as file) | |
+| Select Menu | ✅ | custom id, placeholder, options or user/role/channel type, min/max → component | |
+| Show Modal | ✅ | interaction, custom id, title, text inputs | answer is Modal Submitted |
+| Text Input | ✅ | id, label, short/paragraph, required, min/max, value → component | for Show Modal |
+| Respond to Autocomplete | ✅ | interaction, choices (list) | up to 25 |
+| Wait for Reply | ✅ | channel or message, from user, timeout → message or timed out | message, button or reaction collector |
+| Bulk Delete | ✅ | channel, count, only from user → deleted count | messages under 14 days |
+| Get Messages | ✅ | channel, count, before/after → list | history, transcripts |
+| Find Message | ✅ | channel, id → message | |
+| Pin / Unpin Message | ✅ | message | |
+| Remove Reaction | ✅ | message, emoji, user (or all) | |
+| Get Reactions | ✅ | message, emoji → users, count | starboards, giveaways |
+| Create Poll | ✅ | channel, question, answers, duration, multi → message | |
+| End Poll / Poll Results | ✅ | message → answers with counts | |
+| Send via Webhook | ✅ | channel or webhook URL, name, avatar, text, embeds | |
+| Publish Message | ✅ | message | announcement channels |
 
 ## Members and users
 
@@ -101,61 +108,61 @@ The blocks below are chosen so these common bots can be built without code:
 | Has Role | ✅ | |
 | Add Role | ✅ | |
 | Moderate Member | ✅ | time out, kick, ban, unban, remove role, nickname |
-| Check Permission | 🟢 | member (or the bot) has a permission, optionally in a channel → yes/no |
-| List Members | 🟡 | server, has role, limit → list (GuildMembers) |
-| Voice: Move / Disconnect / Mute / Deafen | 🟡 | member, channel |
-| Warnings | 🟡 | add, list, clear warnings kept in stored data (a moderation helper, or a template) |
+| Check Permission | ✅ | member (or the bot) has a permission, optionally in a channel → yes/no |
+| List Members | ✅ | server, has role, limit → list (GuildMembers) |
+| Voice: Move / Disconnect / Mute / Deafen | ✅ | member, channel |
+| Warnings | ✅ | add, list, clear warnings kept in stored data (a moderation helper, or a template) |
 
 ## Roles
 
 | Block | Status | Notes |
 |---|---|---|
-| Find Role | 🟢 | by id or name → role |
-| Create Role | 🟢 | name, color, hoist, mentionable, permissions → role |
-| Edit Role | 🟢 | role, the same fields |
-| Delete Role | 🟢 | |
-| List Roles | 🟡 | server → list |
-| Role Info | 🟡 | members count, color, position, permissions |
+| Find Role | ✅ | by id or name → role |
+| Create Role | ✅ | name, color, hoist, mentionable, permissions → role |
+| Edit Role | ✅ | role, the same fields |
+| Delete Role | ✅ | |
+| List Roles | ✅ | server → list |
+| Role Info | ✅ | members count, color, position, permissions |
 
 ## Channels, threads and the server
 
 | Block | Status | Notes |
 |---|---|---|
 | Find Channel | ✅ | by id or name |
-| Create Channel | 🟢 | type (text, voice, category, announcement, forum, stage), name, category, topic → channel |
-| Edit Channel | 🟢 | name, topic, slowmode, NSFW, category, position |
-| Delete Channel | 🟢 | |
-| Set Channel Permissions | 🟢 | channel, role or member, allow/deny permissions |
-| Lock / Unlock Channel | 🟢 | shortcut for denying Send Messages to everyone |
-| Create Thread | 🟢 | from message or in channel, name, private, auto-archive → thread |
-| Thread actions | 🟡 | archive, lock, add or remove member |
-| Create Forum Post | 🟡 | forum, title, text, tags |
-| Server Info | 🟢 | member count, owner, created, boosts, icon |
-| Create Invite | 🟡 | channel, max uses, max age → invite URL |
-| Audit Log | 🟡 | server, action type, limit → entries (who did it) |
-| Scheduled Events | ⚪ | create, edit, list |
-| Emojis and stickers | ⚪ | create, delete, list |
-| AutoMod Rules | ⚪ | create, list |
-| Edit Server | ⚪ | name, icon, system channel |
+| Create Channel | ✅ | type (text, voice, category, announcement, forum, stage), name, category, topic → channel |
+| Edit Channel | ✅ | name, topic, slowmode, NSFW, category, position |
+| Delete Channel | ✅ | |
+| Set Channel Permissions | ✅ | channel, role or member, allow/deny permissions |
+| Lock / Unlock Channel | ✅ | shortcut for denying Send Messages to everyone |
+| Create Thread | ✅ | from message or in channel, name, private, auto-archive → thread |
+| Thread actions | ✅ | archive, lock, add or remove member |
+| Create Forum Post | ✅ | forum, title, text, tags |
+| Server Info | ✅ | member count, owner, created, boosts, icon |
+| Create Invite | ✅ | channel, max uses, max age → invite URL |
+| Audit Log | ✅ | server, action type, limit → entries (who did it) |
+| Scheduled Events | ✅ | create, edit, list |
+| Emojis and stickers | ✅ | create, delete, list |
+| AutoMod Rules | ✅ | create, list |
+| Edit Server | ✅ | name, icon, system channel |
 
 ## Bot
 
 | Block | Status | Notes |
 |---|---|---|
 | Set Bot Status | ✅ | status, activity |
-| Bot Info | 🟢 | ping, uptime, server count, user |
-| Set Bot Name / Avatar | ⚪ | rate limited by Discord |
+| Bot Info | ✅ | ping, uptime, server count, user |
+| Set Bot Name / Avatar | ✅ | rate limited by Discord |
 
 ## Formatting (values)
 
 | Block | Status | Notes |
 |---|---|---|
-| Mention | 🟢 | user, member, role or channel → `<@id>` text |
-| Timestamp | 🟢 | date, style (relative, short, long) → `<t:…:R>` text |
-| Discord Text | 🟢 | bold, italic, code, code block, spoiler, quote, escape markdown |
-| Emoji | 🟡 | custom emoji by name → text |
-| Format Number | 🟢 | thousands separators, decimals, currency, ordinal (1st) — core |
-| Duration | 🟢 | "10m" → milliseconds, milliseconds → "2 h 5 min" — core |
+| Mention | ✅ | user, member, role or channel → `<@id>` text |
+| Timestamp | ✅ | date, style (relative, short, long) → `<t:…:R>` text |
+| Discord Text | ✅ | bold, italic, code, code block, spoiler, quote, escape markdown |
+| Emoji | ✅ | custom emoji by name → text |
+| Format Number | ✅ | thousands separators, decimals, currency, ordinal (1st) — core |
+| Duration | ✅ | "10m" → milliseconds, milliseconds → "2 h 5 min" — core |
 
 ## Data, flow and logic (core)
 
@@ -171,43 +178,33 @@ The blocks below are chosen so these common bots can be built without code:
 | Math, Random Number | ✅ | |
 | Make List, List Tools, Get Property, JSON, Date & Time | ✅ | |
 | Web Request | ✅ | |
-| Cooldown | 🟢 | key (user, member, channel or text), seconds → ready or wait, seconds left |
-| Delete Stored Value | 🟢 | |
-| Leaderboard | 🟢 | scope, key, top N, server → ranked list with user and value |
-| List Stored Keys | 🟡 | scope, prefix → list |
-| Call Workspace | 🟡 | runs another workspace like a function, with inputs and a return value |
-| Loop While | 🟡 | with a safety limit |
-| Make Object / Set Property | 🟡 | build objects for JSON and web requests |
-| Regex Match | 🟡 | pattern → matches, groups |
+| Cooldown | ✅ | key (user, member, channel or text), seconds → ready or wait, seconds left |
+| Delete Stored Value | ✅ | |
+| Leaderboard | ✅ | scope, key, top N, server → ranked list with user and value |
+| List Stored Keys | ✅ | scope, prefix → list |
+| Call Workspace | ✅ | runs another workspace like a function, with inputs and a return value |
+| Loop While | ✅ | with a safety limit |
+| Make Object / Set Property | ✅ | build objects for JSON and web requests |
+| Regex Match | ✅ | pattern → matches, groups |
 
-## What the editor and runtime need for these
+## Editor and runtime
 
-- **Slash Commands editor:** subcommands and groups, context menu commands, autocomplete
-  ("from a block"), who can use a command (default permissions), servers/DMs, and register on
-  a dev server or globally. All in the concept.
-- **Custom id routing:** buttons, menus and modals with ids like `vote:{poll}`. The event matches
-  the prefix and gives the rest as a value.
-- **New pin types:** thread, voice channel, attachment, invite, poll, webhook, permission
-  list, and a typed "list of members/roles".
-- **Intents:** each new event declares its intents (as now). Privileged ones (members, message
-  content, presences) are listed in Bot settings with a link to turn them on in the developer
-  portal.
-- **Friendly errors:** missing permissions, roles above the bot's own and rate limits name
-  the block and say what to change.
-- **Templates:** starter projects built from these blocks (moderation, tickets, levels, welcome,
-  reaction roles), opened from File › New Project.
+- ✅ **Slash Commands editor:** subcommands and groups (names with spaces: `ticket open`),
+  who can use a command, DMs, autocomplete options, a Discord preview. Context menu commands
+  come from their Context Menu Used blocks.
+- ✅ **Custom id routing:** button, menu and modal events match a prefix (`vote:`) or a pattern
+  and give the rest of the id.
+- ✅ **Intents** are collected from every block in the project.
+- ✅ **Templates:** File › New Project starts from Welcome & auto role, Moderation, Levels & XP,
+  Tickets or Role menu.
+- ✅ **Text merging:** every text field takes `{name}` placeholders, each with an input.
+
+## Not built yet
+
+- **Dedicated pin types** for threads, voice channels, invites, polls and webhooks: these use
+  Channel and Object pins for now.
+- **Privileged intents in Bot settings:** a list with a link to turn them on in the developer
+  portal (today the login error explains it).
+- **Friendlier errors** that name the missing permission for every block.
+- **Creating stickers** (listing them works).
 - **Music** (voice playback) needs `@discordjs/voice` and ffmpeg; it belongs in its own plugin.
-
-## Order of work
-
-1. **Interactions:** Select Menu, Show Modal, Text Input, Modal Submitted, Select Menu Used,
-   Update message, Direct message, Respond to Autocomplete with Autocomplete, custom id
-   routing.
-2. **Server management:** roles (find, create, edit, delete), channels (create, edit, delete,
-   permissions, lock), Create Thread, Check Permission, Server Info, Bot Info.
-3. **Events for logs and moderation:** message edited/deleted, reaction removed, member
-   updated, banned/unbanned. Then Bulk Delete, Get Messages, Find Message.
-4. **Everyday helpers:** Cooldown, Leaderboard, Delete Stored Value, Every / At Time, Wait
-   for Reply, Mention, Timestamp, Discord Text, Format Number, Duration.
-5. **Slash Commands editor:** subcommands, context menus, permissions; starter templates.
-6. **P2 and P3 blocks** as listed above.

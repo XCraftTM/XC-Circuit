@@ -164,7 +164,7 @@ In the editor's code, interface texts are wrapped in `t!("…")` (or `tf!("… {
 
 ## Status
 
-Done: editor foundation, running and exporting bots, Try Zones, undo/redo, multi-select and clipboard, Embed and Slash Command builders, 49 bundled blocks, plugin hot reload, Stored Data panel, TypeScript blocks, command palette, custom title bar with search, native Rust plugins, and the Windows/Linux build workflow (`.github/workflows/build.yml`, releases on `v*` tags).
+Done: editor foundation, running and exporting bots, Try Zones, undo/redo, multi-select and clipboard, Embed and Slash Command builders, 138 bundled blocks (with Run Code and Use Method for anything else), plugin hot reload, Stored Data panel, TypeScript blocks, command palette, custom title bar with search, native Rust plugins, and the Windows/Linux build workflow (`.github/workflows/build.yml`, releases on `v*` tags).
 
 The plan for the remaining Discord blocks is in [docs/discord-blocks-plan.md](docs/discord-blocks-plan.md).
 

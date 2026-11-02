@@ -322,6 +322,21 @@ mod tests {
         }
     }
 
+    /// Every block's field, output and choice label, and every block's name, has German.
+    #[test]
+    fn german_covers_every_block() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let ed = crate::editor::Editor::new(vec![root.join("plugins")], None).unwrap();
+        let english = block_english(&ed.reg);
+        let full: LocaleDef = toml::from_str(&template(&ed.reg, &english, "de", "Deutsch", "German")).unwrap();
+        let labels: Vec<&String> = full.labels.iter().filter(|(_, v)| v.trim().is_empty()).map(|(k, _)| k).collect();
+        assert!(labels.is_empty(), "German is missing {} labels:\n{}", labels.len(), labels.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("\n"));
+        let blocks: Vec<&String> = full.blocks.iter().filter(|(_, b)| b.name.trim().is_empty() || b.description.trim().is_empty()).map(|(k, _)| k).collect();
+        assert!(blocks.is_empty(), "German is missing blocks: {blocks:?}");
+        let strings: Vec<&String> = full.strings.iter().filter(|(_, v)| v.trim().is_empty()).map(|(k, _)| k).collect();
+        assert!(strings.is_empty(), "German is missing texts: {strings:?}");
+    }
+
     #[test]
     fn switching_language_and_back() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
