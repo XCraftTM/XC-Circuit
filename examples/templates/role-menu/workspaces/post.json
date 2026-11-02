@@ -1,0 +1,47 @@
+{
+  "name": "Post role menu",
+  "folder": "Commands",
+  "nodes": {
+    "1": {
+      "block": "discord.on_slash_command@2",
+      "at": [
+        40,
+        60
+      ],
+      "values": {
+        "command": "roles"
+      }
+    },
+    "2": {
+      "block": "discord.select_menu@1",
+      "at": [
+        360,
+        300
+      ],
+      "values": {
+        "customId": "roles",
+        "options": "ROLE_ID_1 | Gamer | Game nights\nROLE_ID_2 | Artist | Art channel",
+        "placeholder": "Pick your roles",
+        "min": 0,
+        "max": 2
+      }
+    },
+    "3": {
+      "block": "discord.send_message@3",
+      "at": [
+        360,
+        60
+      ],
+      "values": {
+        "mode": "reply",
+        "text": "Pick the roles you want:",
+        "private": false
+      }
+    }
+  },
+  "links": [
+    "1.next > 3.in",
+    "1.interaction > 3.interaction",
+    "2.menu > 3.components"
+  ]
+}

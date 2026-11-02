@@ -1,0 +1,43 @@
+{
+  "name": "Close ticket",
+  "folder": "Events",
+  "nodes": {
+    "1": {
+      "block": "discord.on_button@1",
+      "at": [
+        40,
+        60
+      ],
+      "values": {
+        "customId": "ticket:close"
+      }
+    },
+    "2": {
+      "block": "discord.send_message@3",
+      "at": [
+        360,
+        60
+      ],
+      "values": {
+        "mode": "reply",
+        "text": "Closing this ticket in 5 seconds …"
+      }
+    },
+    "3": {
+      "block": "discord.delete_channel@1",
+      "at": [
+        680,
+        60
+      ],
+      "values": {
+        "after": 5
+      }
+    }
+  },
+  "links": [
+    "1.next > 2.in",
+    "1.interaction > 2.interaction",
+    "2.next > 3.in",
+    "1.channel > 3.channel"
+  ]
+}

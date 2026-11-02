@@ -1,0 +1,46 @@
+{
+  "name": "Purge",
+  "folder": "Commands",
+  "nodes": {
+    "1": {
+      "block": "discord.on_slash_command@2",
+      "at": [
+        40,
+        60
+      ],
+      "values": {
+        "command": "purge"
+      }
+    },
+    "2": {
+      "block": "discord.bulk_delete@1",
+      "at": [
+        360,
+        60
+      ],
+      "pins": [
+        "count"
+      ]
+    },
+    "3": {
+      "block": "discord.send_message@3",
+      "at": [
+        680,
+        60
+      ],
+      "values": {
+        "mode": "reply",
+        "text": "Deleted {count} messages. 🧹",
+        "private": true
+      }
+    }
+  },
+  "links": [
+    "1.next > 2.in",
+    "1.channel > 2.channel",
+    "1.count > 2.count",
+    "2.next > 3.in",
+    "1.interaction > 3.interaction",
+    "2.deleted > 3.count"
+  ]
+}

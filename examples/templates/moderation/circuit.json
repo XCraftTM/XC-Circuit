@@ -1,0 +1,101 @@
+{
+  "format": 1,
+  "name": "Moderation",
+  "mode": "discord-bot",
+  "plugins": {
+    "xc.core": "1.0.0",
+    "xc.discord": "1.0.0"
+  },
+  "settings": {
+    "prefix": "!"
+  },
+  "data": {
+    "slashCommands": [
+      {
+        "name": "mod kick",
+        "description": "Kick a member",
+        "options": [
+          {
+            "name": "target",
+            "type": "user",
+            "description": "Who",
+            "required": true
+          },
+          {
+            "name": "reason",
+            "type": "string",
+            "description": "Why (shown in the audit log)",
+            "required": false
+          }
+        ],
+        "permission": "KickMembers",
+        "dm": false
+      },
+      {
+        "name": "mod ban",
+        "description": "Ban a member",
+        "options": [
+          {
+            "name": "target",
+            "type": "user",
+            "description": "Who",
+            "required": true
+          },
+          {
+            "name": "reason",
+            "type": "string",
+            "description": "Why (shown in the audit log)",
+            "required": false
+          }
+        ],
+        "dm": false
+      },
+      {
+        "name": "mod timeout",
+        "description": "Time out a member",
+        "options": [
+          {
+            "name": "target",
+            "type": "user",
+            "description": "Who",
+            "required": true
+          },
+          {
+            "name": "minutes",
+            "type": "integer",
+            "description": "How long",
+            "required": true,
+            "min": 1,
+            "max": 40320
+          },
+          {
+            "name": "reason",
+            "type": "string",
+            "description": "Why (shown in the audit log)",
+            "required": false
+          }
+        ],
+        "dm": false
+      },
+      {
+        "name": "purge",
+        "description": "Delete recent messages",
+        "options": [
+          {
+            "name": "count",
+            "type": "integer",
+            "description": "How many (up to 100)",
+            "required": true,
+            "min": 1,
+            "max": 100
+          }
+        ],
+        "permission": "ManageMessages",
+        "dm": false
+      }
+    ]
+  },
+  "folders": [
+    "Commands"
+  ]
+}

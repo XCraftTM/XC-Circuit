@@ -86,6 +86,8 @@ pub struct CircuitApp {
     examples_dir: Option<PathBuf>,
     title: String,
     show_about: bool,
+    /// File › New Project: the starter to begin from (0 = empty), while choosing.
+    new_project: Option<usize>,
     confirm_close: bool,
     allow_close: bool,
     problem_count: usize,
@@ -176,6 +178,7 @@ impl CircuitApp {
             examples_dir,
             title: String::new(),
             show_about: false,
+            new_project: None,
             confirm_close: false,
             allow_close: false,
             problem_count: 0,
@@ -258,13 +261,92 @@ impl CircuitApp {
         }
     }
 
+    /// File › New Project: first a starter (empty or a template), then a folder.
     fn new_project_dialog(&mut self) {
+        self.new_project = Some(0);
+    }
+
+    /// The starter templates next to the examples: (folder, name, description).
+    fn templates(&self) -> Vec<(PathBuf, String, String)> {
+        let Some(dir) = self.examples_dir.as_ref().map(|e| e.join("templates")) else { return Vec::new() };
+        let mut list: Vec<(PathBuf, String, String)> = std::fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|e| {
+                let info: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(e.path().join("template.json")).ok()?).ok()?;
+                let text = |k: &str| info.get(k).and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                Some((e.path(), text("name"), text("description")))
+            })
+            .collect();
+        list.sort_by(|a, b| a.1.cmp(&b.1));
+        list
+    }
+
+    /// Asks for an empty folder and creates the project there, from `template` or empty.
+    fn create_project(&mut self, template: Option<PathBuf>) {
         let Some(dir) = rfd::FileDialog::new().set_title(t!("Choose an empty folder for the new project")).pick_folder() else { return };
         let name = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "New Bot".into());
-        let mode = self.ed.reg.modes.first().map(|m| m.id.clone()).unwrap_or_else(|| "discord-bot".into());
-        match Project::create(&dir, &name, &mode) {
-            Ok(_) => self.switch_project(&dir),
+        let made = match template {
+            Some(from) => create_from_template(&from, &dir, &name),
+            None => {
+                let mode = self.ed.reg.modes.first().map(|m| m.id.clone()).unwrap_or_else(|| "discord-bot".into());
+                Project::create(&dir, &name, &mode).map(|_| ())
+            }
+        };
+        match made {
+            Ok(()) => self.switch_project(&dir),
             Err(e) => self.ed.log(Level::Error, format!("Could not create the project: {e:#}")),
+        }
+    }
+
+    fn new_project_chooser(&mut self, ctx: &egui::Context, theme: &crate::theme::Theme) {
+        let Some(mut picked) = self.new_project else { return };
+        let templates = self.templates();
+        let (mut create, mut cancel) = (false, false);
+        let close = dialog::show(
+            ctx,
+            theme,
+            dialog::Spec { id: "new-project", title: t!("New project"), subtitle: Some(t!("Start empty, or from a working bot to change")), icon: None, width: 560.0 },
+            |ui, part| match part {
+                dialog::Part::Body => {
+                    let empty = (t!("Empty project").to_string(), t!("One empty workspace.").to_string());
+                    let rows = std::iter::once(empty).chain(templates.iter().map(|(_, n, d)| (crate::i18n::tr(n).into_owned(), crate::i18n::tr(d).into_owned())));
+                    for (i, (name, description)) in rows.enumerate() {
+                        let selected = picked == i;
+                        let frame = egui::Frame::new()
+                            .fill(if selected { crate::theme::with_alpha(theme.accent, 30) } else { theme.panel_header })
+                            .stroke(egui::Stroke::new(1.0, if selected { theme.accent } else { theme.line }))
+                            .corner_radius(8)
+                            .inner_margin(egui::Margin::symmetric(14, 10));
+                        let r = frame.show(ui, |ui| {
+                            ui.set_width(ui.available_width());
+                            ui.label(RichText::new(&name).size(14.0).strong().color(theme.text));
+                            ui.label(RichText::new(&description).size(12.0).color(theme.text_muted));
+                        });
+                        let click = ui.interact(r.response.rect, egui::Id::new(("new-project-row", i)), egui::Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
+                        if click.clicked() {
+                            picked = i;
+                        }
+                        if click.double_clicked() {
+                            create = true;
+                        }
+                        ui.add_space(4.0);
+                    }
+                }
+                dialog::Part::Footer => {
+                    create |= dialog::primary_button(ui, theme, t!("Choose folder…")).clicked();
+                    cancel = dialog::secondary_button(ui, theme, t!("Cancel")).clicked();
+                }
+            },
+        );
+        self.new_project = Some(picked);
+        if create {
+            self.new_project = None;
+            let template = picked.checked_sub(1).and_then(|i| templates.get(i)).map(|t| t.0.clone());
+            self.create_project(template);
+        } else if cancel || close {
+            self.new_project = None;
         }
     }
 
@@ -955,6 +1037,7 @@ impl CircuitApp {
         if self.setup.is_none() && self.tour.is_none() {
             self.recovery_dialog(ctx, &theme);
         }
+        self.new_project_chooser(ctx, &theme);
         if self.show_about {
             let info = tf!("{plugins} plugins · {blocks} blocks · {themes} themes loaded", plugins = self.ed.reg.plugins.len(), blocks = self.ed.reg.blocks.len(), themes = self.ed.reg.themes.len());
             let mut ok = false;
@@ -1491,6 +1574,21 @@ fn open_center(dock: &mut DockState<Tab>, tab: Tab) {
     }
 }
 
+/// A new project at `dir` from a template folder: its workspaces, slash
+/// commands and settings, under the folder's name.
+fn create_from_template(template: &Path, dir: &Path, name: &str) -> anyhow::Result<()> {
+    anyhow::ensure!(!dir.join(circuit_core::project::PROJECT_FILE).exists(), "there is already a project in that folder");
+    let mut project = Project::load(template)?;
+    project.root = dir.to_path_buf();
+    project.meta.name = name.to_string();
+    project.save()?;
+    let ignore = dir.join(".gitignore");
+    if !ignore.exists() {
+        std::fs::write(ignore, ".circuit/\n")?;
+    }
+    Ok(())
+}
+
 /// Plugin folders: `XC_CIRCUIT_PLUGINS`, the bundled `plugins/` next to the program
 /// (or in a parent folder while developing), and the user's plugin folder.
 /// Also returns the folder that holds the bundled `plugins/`.
@@ -1578,5 +1676,24 @@ mod tests {
             assert!(!open.contains(&Tab::Console), "with the same tabs open");
         }
         assert!(!repair_layout(&mut dock), "a whole layout is left alone");
+    }
+
+    #[test]
+    fn projects_start_from_templates() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let base = std::env::temp_dir().join(format!("xc-templates-{}", std::process::id()));
+        for entry in std::fs::read_dir(root.join("examples/templates")).unwrap().flatten() {
+            let dir = base.join(entry.file_name());
+            std::fs::create_dir_all(&dir).unwrap();
+            create_from_template(&entry.path(), &dir, "My Bot").unwrap();
+            let made = Project::load(&dir).unwrap();
+            let template = Project::load(entry.path()).unwrap();
+            assert_eq!(made.meta.name, "My Bot");
+            assert_eq!(made.workspaces.len(), template.workspaces.len());
+            assert_eq!(made.meta.data, template.meta.data, "slash commands come along");
+            assert!(dir.join(".gitignore").is_file());
+            assert!(create_from_template(&entry.path(), &dir, "Again").is_err(), "an existing project isn't overwritten");
+        }
+        let _ = std::fs::remove_dir_all(base);
     }
 }

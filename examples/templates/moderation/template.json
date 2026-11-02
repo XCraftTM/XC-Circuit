@@ -1,0 +1,4 @@
+{
+  "name": "Moderation",
+  "description": "Slash commands for moderators: /mod kick, /mod ban, /mod timeout and /purge, with friendly errors when the bot lacks a permission."
+}

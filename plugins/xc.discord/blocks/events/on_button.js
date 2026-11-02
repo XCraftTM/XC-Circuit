@@ -34,6 +34,7 @@ module.exports = {
     member: { type: "discord.member?", description: "Who pressed it, as a server member. Empty in DMs." },
     customId: { type: "text", label: "Custom id", description: "The full id of the pressed button." },
     rest: { type: "text", label: "Rest of id", description: "With Starts with: what comes after the prefix (vote:42 gives 42). With a pattern: its first group." },
+    channel: { type: "discord.channel", description: "Where it was used." },
     message: { type: "discord.message", description: "The message the button is on." },
   },
   listen(ctx, emit) {
@@ -42,7 +43,7 @@ module.exports = {
       if (!interaction.isButton()) return;
       const rest = test(interaction.customId);
       if (rest === null) return;
-      emit({ interaction, user: interaction.user, member: interaction.member ?? null, customId: interaction.customId, rest, message: interaction.message });
+      emit({ interaction, user: interaction.user, member: interaction.member ?? null, customId: interaction.customId, rest, channel: interaction.channel, message: interaction.message });
     });
   },
 };

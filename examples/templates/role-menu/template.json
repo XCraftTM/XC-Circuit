@@ -1,0 +1,4 @@
+{
+  "name": "Role menu",
+  "description": "/roles posts a menu where members pick roles. Replace ROLE_ID_1 and ROLE_ID_2 in Select Menu with your role ids (right-click a role › Copy Role ID)."
+}

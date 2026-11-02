@@ -1,0 +1,91 @@
+{
+  "name": "Ban",
+  "folder": "Commands",
+  "nodes": {
+    "1": {
+      "block": "discord.on_slash_command@2",
+      "at": [
+        40,
+        60
+      ],
+      "values": {
+        "command": "mod ban"
+      }
+    },
+    "2": {
+      "block": "discord.find_member@1",
+      "at": [
+        360,
+        60
+      ],
+      "zone": "z1"
+    },
+    "3": {
+      "block": "discord.moderate@1",
+      "at": [
+        680,
+        60
+      ],
+      "values": {
+        "action": "ban"
+      },
+      "zone": "z1",
+      "pins": [
+        "reason"
+      ]
+    },
+    "4": {
+      "block": "discord.mention@1",
+      "at": [
+        680,
+        360
+      ]
+    },
+    "5": {
+      "block": "discord.send_message@3",
+      "at": [
+        1000,
+        60
+      ],
+      "values": {
+        "mode": "reply",
+        "text": "Done: {who} (ban).",
+        "private": true
+      },
+      "zone": "z1"
+    },
+    "6": {
+      "block": "discord.send_message@3",
+      "at": [
+        1000,
+        360
+      ],
+      "values": {
+        "mode": "reply",
+        "text": "Couldn't do that: {error}",
+        "private": true
+      }
+    }
+  },
+  "zones": {
+    "z1": {
+      "title": "Ban",
+      "retry": 0
+    }
+  },
+  "links": [
+    "1.next > 2.in",
+    "1.server > 2.server",
+    "1.target > 2.user",
+    "2.next > 3.in",
+    "2.member > 3.member",
+    "1.reason > 3.reason",
+    "3.next > 5.in",
+    "1.interaction > 5.interaction",
+    "1.target > 4.target",
+    "4.text > 5.who",
+    "z1.error > 6.in",
+    "1.interaction > 6.interaction",
+    "z1.message > 6.error"
+  ]
+}

@@ -38,6 +38,7 @@ module.exports = {
     picked: { type: "list<any>", description: "The picked users, roles or channels themselves (for those menus)." },
     customId: { type: "text", label: "Custom id", description: "The menu's full id." },
     rest: { type: "text", label: "Rest of id", description: "With Starts with: what comes after the prefix (vote:42 gives 42). With a pattern: its first group." },
+    channel: { type: "discord.channel", description: "Where it was used." },
     message: { type: "discord.message", description: "The message the menu is on." },
   },
   listen(ctx, emit) {
@@ -57,6 +58,7 @@ module.exports = {
         picked,
         customId: interaction.customId,
         rest,
+        channel: interaction.channel,
         message: interaction.message,
       });
     });

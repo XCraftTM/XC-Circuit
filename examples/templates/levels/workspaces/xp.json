@@ -1,0 +1,42 @@
+{
+  "name": "Earn XP",
+  "folder": "Events",
+  "nodes": {
+    "1": {
+      "block": "discord.on_message@1",
+      "at": [
+        40,
+        60
+      ]
+    },
+    "2": {
+      "block": "core.cooldown@1",
+      "at": [
+        360,
+        60
+      ],
+      "values": {
+        "name": "xp",
+        "seconds": 60
+      }
+    },
+    "3": {
+      "block": "core.increase_stored@1",
+      "at": [
+        680,
+        60
+      ],
+      "values": {
+        "scope": "user",
+        "key": "xp",
+        "by": 10
+      }
+    }
+  },
+  "links": [
+    "1.next > 2.in",
+    "1.author > 2.who",
+    "2.ready > 3.in",
+    "1.author > 3.target"
+  ]
+}

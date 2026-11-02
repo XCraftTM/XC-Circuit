@@ -1,0 +1,45 @@
+{
+  "name": "Leaderboard",
+  "folder": "Commands",
+  "nodes": {
+    "1": {
+      "block": "discord.on_slash_command@2",
+      "at": [
+        40,
+        60
+      ],
+      "values": {
+        "command": "leaderboard"
+      }
+    },
+    "2": {
+      "block": "core.leaderboard@1",
+      "at": [
+        360,
+        260
+      ],
+      "values": {
+        "scope": "user",
+        "key": "xp",
+        "top": 10
+      }
+    },
+    "3": {
+      "block": "discord.send_message@3",
+      "at": [
+        360,
+        60
+      ],
+      "values": {
+        "mode": "reply",
+        "text": "🏆 **Top 10**\n{board}",
+        "private": false
+      }
+    }
+  },
+  "links": [
+    "1.next > 3.in",
+    "1.interaction > 3.interaction",
+    "2.text > 3.board"
+  ]
+}

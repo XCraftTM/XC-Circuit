@@ -19,6 +19,7 @@ The first start opens `examples/DemoBot`. Windows and Linux are supported.
 | Add a connected block | Drag a wire into empty space; the picker shows only compatible blocks |
 | Move a block | Drag its title bar |
 | Pan / zoom | Drag empty canvas or middle mouse / mouse wheel |
+| Templates | File › New Project starts empty or from a working bot: Welcome & auto role, Moderation, Levels & XP, Tickets, Role menu (in `examples/templates/`) |
 | Merge text | Type `{name}` in any text field (Send Message, Log, Text …): an input named `{name}` appears below it to connect a value to. Left unconnected, the name is filled from the event, variables or an earlier block's output |
 | Yes/no inputs | Switches like Private reply can be connected too: click their pin toggle in the Inspector |
 | Long text | Clicking into a text field on a block opens a bigger editor over it; drag its corner to resize, double-click the corner to reset the size |

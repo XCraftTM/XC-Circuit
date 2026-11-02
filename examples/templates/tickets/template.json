@@ -1,0 +1,4 @@
+{
+  "name": "Tickets",
+  "description": "/ticket opens a private thread for the member with a Close button that deletes it. Use it in a channel where the bot can create private threads."
+}

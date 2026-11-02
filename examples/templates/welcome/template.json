@@ -1,0 +1,4 @@
+{
+  "name": "Welcome & auto role",
+  "description": "Greets new members in the server's system channel, gives them a role, and says goodbye. Set the role id in Add Role."
+}

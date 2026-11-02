@@ -654,4 +654,46 @@ mod tests {
         }
         assert!(failures.is_empty(), "define() failed:\n{}", failures.join("\n"));
     }
+
+    /// The starter templates and the example load, use blocks that exist, and
+    /// every wire connects an output (or flow) to an input that the block has.
+    #[test]
+    fn templates_are_wired_correctly() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        let mut dirs: Vec<PathBuf> = std::fs::read_dir(root.join("examples/templates")).unwrap().flatten().map(|e| e.path()).collect();
+        dirs.push(root.join("examples/DemoBot"));
+        assert!(dirs.len() >= 6, "five templates and the example");
+        let mut wrong = Vec::new();
+        for dir in dirs {
+            let project = Project::load(&dir).unwrap();
+            assert!(project.unreadable.is_empty(), "{}: {:?}", dir.display(), project.unreadable);
+            let meta = serde_json::to_value(&project.meta).unwrap();
+            let mut cache = HashMap::new();
+            for (key, ws) in &project.workspaces {
+                let place = format!("{} › {key}", dir.file_name().unwrap().to_string_lossy());
+                let mut shapes = HashMap::new();
+                for id in ws.nodes.keys() {
+                    match node_shape(&ed.reg, &ed.engine, &mut cache, key, ws, id, &meta) {
+                        Some(s) => {
+                            shapes.insert(id.clone(), s);
+                        }
+                        None => wrong.push(format!("{place}: #{id} uses a missing block {}", ws.nodes[id].block)),
+                    }
+                }
+                for link in &ws.links {
+                    let from_ok = if ws.zones.contains_key(&link.from.node) {
+                        ["done", "error", "message", "details"].contains(&link.from.pin.as_str())
+                    } else {
+                        shapes.get(&link.from.node).is_some_and(|s| s.output(&link.from.pin).is_some() || s.flows.contains(&link.from.pin))
+                    };
+                    let to_ok = shapes.get(&link.to.node).is_some_and(|s| link.to.pin == circuit_core::graph::ACTION_IN || s.field(&link.to.pin).is_some());
+                    if !from_ok || !to_ok {
+                        wrong.push(format!("{place}: {}.{} > {}.{}", link.from.node, link.from.pin, link.to.node, link.to.pin));
+                    }
+                }
+            }
+        }
+        assert!(wrong.is_empty(), "wrong wires:\n{}", wrong.join("\n"));
+    }
 }

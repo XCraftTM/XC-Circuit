@@ -1,0 +1,51 @@
+{
+  "name": "Goodbye",
+  "folder": "Events",
+  "nodes": {
+    "1": {
+      "block": "discord.on_member_leave@1",
+      "at": [
+        40,
+        60
+      ]
+    },
+    "2": {
+      "block": "discord.server_info@1",
+      "at": [
+        360,
+        260
+      ],
+      "values": {
+        "info": "systemChannel"
+      }
+    },
+    "3": {
+      "block": "discord.member_info@1",
+      "at": [
+        360,
+        400
+      ],
+      "values": {
+        "info": "displayName"
+      }
+    },
+    "4": {
+      "block": "discord.send_message@3",
+      "at": [
+        360,
+        60
+      ],
+      "values": {
+        "mode": "send",
+        "text": "{name} left the server. 👋"
+      }
+    }
+  },
+  "links": [
+    "1.next > 4.in",
+    "1.server > 2.server",
+    "2.result > 4.channel",
+    "1.member > 3.member",
+    "3.result > 4.name"
+  ]
+}
