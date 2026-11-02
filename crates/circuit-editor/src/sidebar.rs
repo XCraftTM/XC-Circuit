@@ -121,7 +121,7 @@ fn row_button(ui: &mut Ui, theme: &Theme, icons: &Icons, rect: Rect, id: Id, ico
 /// one right-click opens).
 fn more_button(ui: &mut Ui, theme: &Theme, icons: &Icons, row: Rect, id: Id) -> egui::Response {
     let size = if theme.touch { vec2(36.0, 34.0) } else { vec2(24.0, 22.0) };
-    row_button(ui, theme, icons, Rect::from_center_size(pos2(row.right() - size.x / 2.0 - 4.0, row.center().y), size), id, "more", "More")
+    row_button(ui, theme, icons, Rect::from_center_size(pos2(row.right() - size.x / 2.0 - 4.0, row.center().y), size), id, "more", t!("More"))
 }
 
 /// The name editor shown in place of a row's label.
@@ -147,8 +147,8 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
     let icons = Icons::new(ed);
     let Some(project) = ed.project.as_ref() else {
         egui::Frame::new().inner_margin(egui::Margin::symmetric(12, 10)).show(ui, |ui| {
-            ui.label(RichText::new("No project open").color(theme.text_muted));
-            ui.label("Use File › Open Project or File › New Project.");
+            ui.label(RichText::new(t!("No project open")).color(theme.text_muted));
+            ui.label(t!("Use File › Open Project or File › New Project."));
         });
         return;
     };
@@ -176,9 +176,9 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
         // The project: collapses everything; dropping a workspace here takes it out of its folder.
         let (resp, _) = row(ui, &theme, &icons, Id::new("sidebar-project"), 0, Some(is_open(PROJECT_ROW)), None, &project.meta.name, false, true);
         let buttons = resp.rect;
-        if row_button(ui, &theme, &icons, Rect::from_center_size(pos2(buttons.right() - 16.0, buttons.center().y), vec2(22.0, 22.0)), Id::new("sidebar-new-folder"), "folder-plus", "New folder").clicked() {
+        if row_button(ui, &theme, &icons, Rect::from_center_size(pos2(buttons.right() - 16.0, buttons.center().y), vec2(22.0, 22.0)), Id::new("sidebar-new-folder"), "folder-plus", t!("New folder")).clicked() {
             todo.push(Do::NewFolder);
-        } else if row_button(ui, &theme, &icons, Rect::from_center_size(pos2(buttons.right() - 40.0, buttons.center().y), vec2(22.0, 22.0)), Id::new("sidebar-new-ws"), "plus", "New workspace").clicked() {
+        } else if row_button(ui, &theme, &icons, Rect::from_center_size(pos2(buttons.right() - 40.0, buttons.center().y), vec2(22.0, 22.0)), Id::new("sidebar-new-ws"), "plus", t!("New workspace")).clicked() {
             todo.push(Do::NewWorkspace(None));
         } else if resp.clicked() {
             todo.push(Do::Toggle(PROJECT_ROW.into()));
@@ -209,16 +209,16 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
                     todo.push(Do::Open(key.clone()));
                 }
                 let mut menu = |ui: &mut Ui| {
-                    if ui.button("Open").clicked() {
+                    if ui.button(t!("Open")).clicked() {
                         todo.push(Do::Open(key.clone()));
                         ui.close();
                     }
-                    if ui.button("Rename").clicked() {
+                    if ui.button(t!("Rename")).clicked() {
                         todo.push(Do::StartRename(target.clone(), ws.name.clone()));
                         ui.close();
                     }
-                    ui.menu_button("Move to", |ui| {
-                        if ws.folder.is_some() && ui.button("No folder").clicked() {
+                    ui.menu_button(t!("Move to"), |ui| {
+                        if ws.folder.is_some() && ui.button(t!("No folder")).clicked() {
                             todo.push(Do::Move(key.clone(), None));
                             ui.close();
                         }
@@ -230,7 +230,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
                         }
                     });
                     ui.separator();
-                    if ui.button(RichText::new("Delete workspace").color(theme.error)).clicked() {
+                    if ui.button(RichText::new(t!("Delete workspace")).color(theme.error)).clicked() {
                         todo.push(Do::DeleteWorkspace(key.clone()));
                         ui.close();
                     }
@@ -261,16 +261,16 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
                         todo.push(Do::Move((*key).clone(), Some(folder.clone())));
                     }
                     let mut menu = |ui: &mut Ui| {
-                        if ui.button("New workspace here").clicked() {
+                        if ui.button(t!("New workspace here")).clicked() {
                             todo.push(Do::NewWorkspace(Some(folder.clone())));
                             ui.close();
                         }
-                        if ui.button("Rename").clicked() {
+                        if ui.button(t!("Rename")).clicked() {
                             todo.push(Do::StartRename(target.clone(), folder.clone()));
                             ui.close();
                         }
                         ui.separator();
-                        if ui.button("Delete folder").on_hover_text("Its workspaces move out of it; none are deleted").clicked() {
+                        if ui.button(t!("Delete folder")).on_hover_text(t!("Its workspaces move out of it; none are deleted")).clicked() {
                             todo.push(Do::DeleteFolder(folder.clone()));
                             ui.close();
                         }
@@ -291,7 +291,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     ui.add_space(26.0);
-                    ui.label(RichText::new("No workspaces yet. Click + above.").color(theme.text_muted).size(12.0));
+                    ui.label(RichText::new(t!("No workspaces yet. Click + above.")).color(theme.text_muted).size(12.0));
                 });
             }
         }
@@ -310,7 +310,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
             ui.painter().hline(line.x_range(), line.top(), Stroke::new(1.0, theme.line));
             ui.add_space(4.0);
             let open = is_open(SLASH_ROW);
-            let (resp, area) = row(ui, &theme, &icons, Id::new("sidebar-slash"), 0, Some(open), None, "Slash commands", false, true);
+            let (resp, area) = row(ui, &theme, &icons, Id::new("sidebar-slash"), 0, Some(open), None, t!("Slash commands"), false, true);
             ui.painter().text(pos2(area.right() - 4.0, area.center().y), Align2::RIGHT_CENTER, commands.len().to_string(), FontId::proportional(11.5), theme.text_muted);
             if resp.clicked() {
                 todo.push(Do::Toggle(SLASH_ROW.into()));
@@ -318,11 +318,11 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
             if open {
                 for name in &commands {
                     let (resp, _) = row(ui, &theme, &icons, Id::new(("sidebar-cmd", name)), 1, None, Some("slash"), name, false, false);
-                    if resp.on_hover_text("Edit in the Slash Command Builder").clicked() {
+                    if resp.on_hover_text(t!("Edit in the Slash Command Builder")).clicked() {
                         todo.push(Do::SlashCommands);
                     }
                 }
-                let (resp, _) = row(ui, &theme, &icons, Id::new("sidebar-cmd-new"), 1, None, Some("plus"), "Edit commands…", false, false);
+                let (resp, _) = row(ui, &theme, &icons, Id::new("sidebar-cmd-new"), 1, None, Some("plus"), t!("Edit commands…"), false, false);
                 if resp.clicked() {
                     todo.push(Do::SlashCommands);
                 }
@@ -412,7 +412,7 @@ fn apply(ed: &mut Editor, ctx: &egui::Context, todo: Vec<Do>, renaming: &mut Opt
                 ed.dirty = true;
             }
             Do::NewFolder => {
-                let name = unique("New folder", |n| project.meta.folders.iter().any(|f| f == n));
+                let name = unique(t!("New folder"), |n| project.meta.folders.iter().any(|f| f == n));
                 project.meta.folders.push(name.clone());
                 uncollapse(ctx, PROJECT_ROW);
                 *renaming = Some(Renaming { target: Target::Folder(name.clone()), text: name, fresh: true });

@@ -125,7 +125,7 @@ pub fn show(ctx: &egui::Context, theme: &Theme, state: &mut Palette, items: &[It
                 Frame::new().inner_margin(Margin::symmetric(14, 10)).show(ui, |ui| {
                     let edit = ui.add(
                         TextEdit::singleline(&mut state.query)
-                            .hint_text("Type a command, workspace or block")
+                            .hint_text(t!("Type a command, workspace or block"))
                             .frame(Frame::new())
                             .desired_width(width - 28.0)
                             .font(egui::FontId::proportional(15.0)),
@@ -172,7 +172,7 @@ pub fn show(ctx: &egui::Context, theme: &Theme, state: &mut Palette, items: &[It
                     }
                     if list.is_empty() {
                         ui.add_space(10.0);
-                        ui.label(RichText::new("     Nothing matches").color(theme.text_muted));
+                        ui.label(RichText::new(t!("     Nothing matches")).color(theme.text_muted));
                         ui.add_space(10.0);
                     }
                     ui.add_space(4.0);

@@ -34,6 +34,8 @@ pub struct Registry {
     pub types: IndexMap<String, PinTypeDef>,
     pub themes: Vec<ThemeDef>,
     pub modes: Vec<BuildMode>,
+    /// Translations, one per language code (files for the same language are merged).
+    pub locales: Vec<crate::LocaleDef>,
     /// Named icons: file stem → file path.
     pub icons: HashMap<String, PathBuf>,
     pub problems: Vec<Problem>,
@@ -97,6 +99,21 @@ impl Registry {
                     self.themes.retain(|old| old.id != t.id);
                     self.themes.push(t);
                 }
+                Err(e) => self.problem(display(&path), format!("{e:#}")),
+            }
+        }
+
+        for path in expand(&plugin.dir, &c.locales) {
+            match read_toml::<crate::LocaleDef>(&path) {
+                Ok(l) if l.meta.code.trim().is_empty() => self.problem(display(&path), "a translation needs [meta] code, such as \"de\""),
+                Ok(l) => match self.locales.iter_mut().find(|old| old.meta.code == l.meta.code) {
+                    Some(old) => old.merge(l),
+                    None => {
+                        let mut first = crate::LocaleDef { meta: l.meta.clone(), ..Default::default() };
+                        first.merge(l);
+                        self.locales.push(first);
+                    }
+                },
                 Err(e) => self.problem(display(&path), format!("{e:#}")),
             }
         }

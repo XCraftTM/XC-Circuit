@@ -200,8 +200,8 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
         &theme,
         dialog::Spec {
             id: "embed-builder",
-            title: "Embed Builder",
-            subtitle: Some("Type {name} anywhere to add an input with that name"),
+            title: t!("Embed Builder"),
+            subtitle: Some(t!("Type {name} anywhere to add an input with that name")),
             icon: icon.as_deref(),
             width: 1040.0,
         },
@@ -216,14 +216,14 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
                     });
                     ui.add_space(14.0);
                     ui.vertical(|ui| {
-                        dialog::section(ui, &theme, "Preview");
+                        dialog::section(ui, &theme, t!("Preview"));
                         preview_message(ui, &theme, &edit.draft);
                     });
                 });
             }
             Part::Footer => {
-                apply = dialog::primary_button(ui, &theme, "Apply to block").clicked();
-                cancel = dialog::secondary_button(ui, &theme, "Cancel").clicked();
+                apply = dialog::primary_button(ui, &theme, t!("Apply to block")).clicked();
+                cancel = dialog::secondary_button(ui, &theme, t!("Cancel")).clicked();
             }
         },
     );
@@ -239,7 +239,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
 }
 
 fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
-    dialog::section(ui, theme, "Color");
+    dialog::section(ui, theme, t!("Color"));
     ui.horizontal(|ui| {
         let mut c = hex_color(&e.color).unwrap_or(Color32::from_rgb(0, 0xD8, 0xF0));
         if crate::color::color_button(ui, ui.id().with("embed-color"), &mut c, theme, None) {
@@ -259,18 +259,18 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
     });
     ui.add_space(10.0);
 
-    dialog::section(ui, theme, "Author");
+    dialog::section(ui, theme, t!("Author"));
     let author = e.author.get_or_insert_with(NameIcon::default);
-    two(ui, theme, ("Name", &mut author.name, "{user}"), ("Icon URL", &mut author.icon, "https://…"));
+    two(ui, theme, (t!("Name"), &mut author.name, "{user}"), (t!("Icon URL"), &mut author.icon, "https://…"));
     if author.name.is_empty() && author.icon.is_empty() {
         e.author = None;
     }
 
-    dialog::section(ui, theme, "Body");
-    dialog::field(ui, theme, "Title", None, |ui| dialog::text_input(ui, &mut e.title, "Rank of {user}", false));
-    dialog::field(ui, theme, "Title link", None, |ui| dialog::text_input(ui, &mut e.url, "https://…", false));
-    dialog::field(ui, theme, "Description", Some("Markdown works: **bold**, *italic*, `code`. Drag the corner to make the box taller."), |ui| {
-        ui.add(crate::inputs::TextArea::new("embed-description", &mut e.description).hint("You have **{xp} XP**…").rows(5))
+    dialog::section(ui, theme, t!("Body"));
+    dialog::field(ui, theme, t!("Title"), None, |ui| dialog::text_input(ui, &mut e.title, t!("Rank of {user}"), false));
+    dialog::field(ui, theme, t!("Title link"), None, |ui| dialog::text_input(ui, &mut e.url, "https://…", false));
+    dialog::field(ui, theme, t!("Description"), Some(t!("Markdown works: **bold**, *italic*, `code`. Drag the corner to make the box taller.")), |ui| {
+        ui.add(crate::inputs::TextArea::new("embed-description", &mut e.description).hint(t!("You have **{xp} XP**…")).rows(5))
     });
 
     dialog::section(ui, theme, &format!("Fields · {} of 25", e.fields.len()));
@@ -286,16 +286,16 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
         egui::Frame::new().fill(theme.panel_header).stroke(Stroke::new(1.0, theme.line)).corner_radius(8).inner_margin(10).show(ui, |ui| {
             ui.set_width(inner_w);
             ui.horizontal(|ui| {
-                ui.add(crate::inputs::TextLine::new(&mut f.name).hint("Name").width(name_w));
-                ui.add(crate::inputs::TextLine::new(&mut f.value).hint("Value").width(inputs_w - name_w - 8.0));
-                crate::widgets::toggle(ui, &mut f.inline, theme).on_hover_text("Inline: share a row with other inline fields");
-                if ui.add_enabled(i > 0, egui::Button::new("Up").small()).clicked() {
+                ui.add(crate::inputs::TextLine::new(&mut f.name).hint(t!("Name")).width(name_w));
+                ui.add(crate::inputs::TextLine::new(&mut f.value).hint(t!("Value")).width(inputs_w - name_w - 8.0));
+                crate::widgets::toggle(ui, &mut f.inline, theme).on_hover_text(t!("Inline: share a row with other inline fields"));
+                if ui.add_enabled(i > 0, egui::Button::new(t!("Up")).small()).clicked() {
                     swap = Some((i, i - 1));
                 }
-                if ui.add_enabled(i + 1 < count, egui::Button::new("Down").small()).clicked() {
+                if ui.add_enabled(i + 1 < count, egui::Button::new(t!("Down")).small()).clicked() {
                     swap = Some((i, i + 1));
                 }
-                if ui.add(egui::Button::new(RichText::new("Remove").color(theme.error)).small()).clicked() {
+                if ui.add(egui::Button::new(RichText::new(t!("Remove")).color(theme.error)).small()).clicked() {
                     remove = Some(i);
                 }
             });
@@ -308,21 +308,21 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
     if let Some(i) = remove {
         e.fields.remove(i);
     }
-    if e.fields.len() < 25 && dialog::secondary_button(ui, theme, "+ Add field").clicked() {
+    if e.fields.len() < 25 && dialog::secondary_button(ui, theme, t!("+ Add field")).clicked() {
         e.fields.push(EmbedField { inline: true, ..Default::default() });
     }
     ui.add_space(12.0);
 
-    dialog::section(ui, theme, "Images");
-    two(ui, theme, ("Image URL", &mut e.image, "https://…"), ("Thumbnail URL", &mut e.thumbnail, "https://… or {avatar}"));
+    dialog::section(ui, theme, t!("Images"));
+    two(ui, theme, (t!("Image URL"), &mut e.image, "https://…"), (t!("Thumbnail URL"), &mut e.thumbnail, "https://… or {avatar}"));
 
-    dialog::section(ui, theme, "Footer");
+    dialog::section(ui, theme, t!("Footer"));
     let footer = e.footer.get_or_insert_with(FooterData::default);
-    two(ui, theme, ("Text", &mut footer.text, "DemoBot"), ("Icon URL", &mut footer.icon, "https://…"));
+    two(ui, theme, (t!("Text"), &mut footer.text, "DemoBot"), (t!("Icon URL"), &mut footer.icon, "https://…"));
     if footer.text.is_empty() && footer.icon.is_empty() {
         e.footer = None;
     }
-    dialog::toggle_row(ui, theme, &mut e.timestamp, "Timestamp", "Show when the embed was sent, next to the footer.");
+    dialog::toggle_row(ui, theme, &mut e.timestamp, t!("Timestamp"), t!("Show when the embed was sent, next to the footer."));
 }
 
 /// Room for a field row's inline switch and its Up, Down and Remove buttons.
@@ -345,7 +345,7 @@ fn preview_message(ui: &mut Ui, theme: &Theme, e: &EmbedData) {
     painter.rect_filled(rect, 8.0, Color32::from_rgb(0x31, 0x33, 0x38));
     let avatar = rect.min + vec2(14.0, 16.0);
     painter.circle_filled(avatar + vec2(18.0, 18.0), 18.0, theme.accent);
-    painter.text(avatar + vec2(48.0, 2.0), egui::Align2::LEFT_TOP, "Your Bot", FontId::proportional(14.0), STRONG);
+    painter.text(avatar + vec2(48.0, 2.0), egui::Align2::LEFT_TOP, t!("Your Bot"), FontId::proportional(14.0), STRONG);
     painter.text(avatar + vec2(118.0, 4.0), egui::Align2::LEFT_TOP, "APP · Today at 12:00", FontId::proportional(11.0), MUTED);
     paint(&painter, rect.min + vec2(62.0, 44.0), card_w, &l);
 }

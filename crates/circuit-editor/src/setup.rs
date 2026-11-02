@@ -11,6 +11,7 @@ use circuit_runner::node_setup::{self, NodeInstall};
 use eframe::egui::{self, Align, Align2, Color32, CursorIcon, FontId, Layout, Rect, RichText, ScrollArea, Sense, Stroke, Ui, pos2, vec2};
 
 use crate::editor::{Editor, file_uri};
+use crate::i18n::n;
 use crate::theme::{Theme, mix, with_alpha};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -22,7 +23,7 @@ pub enum Step {
 }
 
 impl Step {
-    const ALL: [(Step, &'static str); 4] = [(Step::Welcome, "Welcome"), (Step::Node, "Node.js"), (Step::Look, "Look"), (Step::Tour, "Tour")];
+    const ALL: [(Step, &'static str); 4] = [(Step::Welcome, n("Welcome")), (Step::Node, "Node.js"), (Step::Look, n("Look")), (Step::Tour, n("Tour"))];
 
     fn index(self) -> usize {
         Self::ALL.iter().position(|(s, _)| *s == self).unwrap_or(0)
@@ -158,24 +159,24 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, setup: &mut Setup) -> Option<Done> {
     let mut f = col.new_child(egui::UiBuilder::new().max_rect(footer).layout(Layout::left_to_right(Align::Center)));
     if setup.node_only {
         f.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if crate::dialog::primary_button(ui, &theme, "Save and close").clicked() && setup.job.is_none() {
+            if crate::dialog::primary_button(ui, &theme, t!("Save and close")).clicked() && setup.job.is_none() {
                 done = Some(Done::Closed);
             }
         });
         return done;
     }
-    if crate::dialog::secondary_button(&mut f, &theme, "Skip setup").on_hover_text("You can run it again from Help").clicked() {
+    if crate::dialog::secondary_button(&mut f, &theme, t!("Skip setup")).on_hover_text(t!("You can run it again from Help")).clicked() {
         done = Some(Done::Finished { tour: false });
     }
     f.with_layout(Layout::right_to_left(Align::Center), |ui| {
         let i = setup.step.index();
         if setup.step != Step::Tour {
-            let label = if setup.step == Step::Welcome { "Get started" } else { "Next" };
+            let label = if setup.step == Step::Welcome { t!("Get started") } else { t!("Next") };
             if crate::dialog::primary_button(ui, &theme, label).clicked() && setup.job.is_none() {
                 setup.step = Step::ALL[i + 1].0;
             }
         }
-        if i > 0 && crate::dialog::secondary_button(ui, &theme, "Back").clicked() && setup.job.is_none() {
+        if i > 0 && crate::dialog::secondary_button(ui, &theme, t!("Back")).clicked() && setup.job.is_none() {
             setup.step = Step::ALL[i - 1].0;
         }
     });
@@ -202,7 +203,7 @@ fn steps_bar(ui: &mut Ui, theme: &Theme, current: Step) {
     const GAP: f32 = 8.0;
     const LINE: f32 = 36.0;
     // Measured first, so the whole stepper can be centered.
-    let labels: f32 = Step::ALL.iter().map(|(_, name)| ui.painter().layout_no_wrap(name.to_string(), FontId::proportional(13.0), theme.text).size().x).sum();
+    let labels: f32 = Step::ALL.iter().map(|(_, name)| ui.painter().layout_no_wrap(crate::i18n::t(name).to_string(), FontId::proportional(13.0), theme.text).size().x).sum();
     let n = Step::ALL.len() as f32;
     let width = n * (22.0 + GAP) + labels + n * GAP + (n - 1.0) * (LINE + GAP);
     ui.horizontal(|ui| {
@@ -220,7 +221,7 @@ fn steps_bar(ui: &mut Ui, theme: &Theme, current: Step) {
             } else {
                 ui.painter().text(r.center(), Align2::CENTER_CENTER, (i + 1).to_string(), FontId::proportional(12.0), ink);
             }
-            ui.label(RichText::new(*name).size(13.0).color(if active { theme.text } else { theme.text_muted }));
+            ui.label(RichText::new(crate::i18n::t(name)).size(13.0).color(if active { theme.text } else { theme.text_muted }));
             if i + 1 < Step::ALL.len() {
                 let (line, _) = ui.allocate_exact_size(vec2(LINE, 22.0), Sense::hover());
                 ui.painter().hline(line.x_range(), line.center().y, Stroke::new(1.0, if done { theme.accent } else { theme.line }));
@@ -256,20 +257,24 @@ fn card(ui: &mut Ui, theme: &Theme, add: impl FnOnce(&mut Ui)) {
     ui.add_space(10.0);
 }
 
-fn welcome(ui: &mut Ui, ed: &Editor, theme: &Theme) {
+fn welcome(ui: &mut Ui, ed: &mut Editor, theme: &Theme) {
     ui.add_space(20.0);
     ui.vertical_centered(|ui| {
         ui.add(egui::Image::new(egui::include_image!("../assets/icon.svg")).fit_to_exact_size(vec2(96.0, 96.0)));
         ui.add_space(14.0);
-        ui.label(RichText::new("Welcome to XC™ Circuit").size(30.0).strong().color(theme.text));
+        ui.label(RichText::new(t!("Welcome to XC™ Circuit")).size(30.0).strong().color(theme.text));
         ui.add_space(6.0);
-        ui.label(RichText::new("Build Discord bots by connecting blocks.").size(15.0).color(theme.text_muted));
+        ui.label(RichText::new(t!("Build Discord bots by connecting blocks.")).size(15.0).color(theme.text_muted));
     });
-    ui.add_space(30.0);
+    ui.add_space(22.0);
+    ui.label(RichText::new(t!("LANGUAGE")).size(11.0).strong().color(theme.text_muted));
+    ui.add_space(6.0);
+    crate::settings::language_buttons(ui, ed, theme);
+    ui.add_space(18.0);
     for (ic, head, text) in [
-        ("workspace", "Connect blocks", "Every block does one thing. Wire them together on a canvas, no code needed."),
-        ("bolt", "Run it with one click", "Start your bot from the editor and watch blocks light up as they run."),
-        ("package", "Take it anywhere", "Export a folder that runs with node index.js on any server."),
+        ("workspace", t!("Connect blocks"), t!("Every block does one thing. Wire them together on a canvas, no code needed.")),
+        ("bolt", t!("Run it with one click"), t!("Start your bot from the editor and watch blocks light up as they run.")),
+        ("package", t!("Take it anywhere"), t!("Export a folder that runs with node index.js on any server.")),
     ] {
         card(ui, theme, |ui| {
             ui.horizontal(|ui| {
@@ -285,11 +290,11 @@ fn welcome(ui: &mut Ui, ed: &Editor, theme: &Theme) {
         });
     }
     ui.add_space(8.0);
-    ui.label(RichText::new("Setup takes a minute: Node.js, a look you like, and an optional tour.").size(12.5).color(theme.text_muted));
+    ui.label(RichText::new(t!("Setup takes a minute: Node.js, a look you like, and an optional tour.")).size(12.5).color(theme.text_muted));
 }
 
 fn node_step(ui: &mut Ui, ed: &mut Editor, theme: &Theme, setup: &mut Setup) {
-    title(ui, theme, "Node.js", &format!("Bots run on Node.js {MIN_NODE_MAJOR} or newer. XC Circuit can use one you already have, or install it for you."));
+    title(ui, theme, "Node.js", &tf!("Bots run on Node.js {version} or newer. XC Circuit can use one you already have, or install it for you.", version = MIN_NODE_MAJOR));
 
     // What is chosen now.
     let chosen = ed.prefs.node_path.clone();
@@ -312,7 +317,7 @@ fn node_step(ui: &mut Ui, ed: &mut Editor, theme: &Theme, setup: &mut Setup) {
             ui.vertical(|ui| {
                 match (current, &setup.installs) {
                     (_, None) => {
-                        ui.label(RichText::new("Looking for Node.js …").size(15.0).color(theme.text));
+                        ui.label(RichText::new(t!("Looking for Node.js …")).size(15.0).color(theme.text));
                     }
                     (Some(n), _) if n.usable() => {
                         ui.label(RichText::new(format!("Ready: Node.js {}", n.version.clone().unwrap_or_default())).size(15.0).strong().color(theme.text));
@@ -323,8 +328,8 @@ fn node_step(ui: &mut Ui, ed: &mut Editor, theme: &Theme, setup: &mut Setup) {
                         ui.label(RichText::new(format!("Choose a newer one below, or install Node.js {MIN_NODE_MAJOR}+.")).size(12.5).color(theme.text_muted));
                     }
                     (None, _) => {
-                        ui.label(RichText::new("No Node.js found yet").size(15.0).strong().color(theme.text));
-                        ui.label(RichText::new("Install it below, or browse to a node executable.").size(12.5).color(theme.text_muted));
+                        ui.label(RichText::new(t!("No Node.js found yet")).size(15.0).strong().color(theme.text));
+                        ui.label(RichText::new(t!("Install it below, or browse to a node executable.")).size(12.5).color(theme.text_muted));
                     }
                 }
             });
@@ -333,11 +338,11 @@ fn node_step(ui: &mut Ui, ed: &mut Editor, theme: &Theme, setup: &mut Setup) {
 
     // Found on this computer.
     ui.horizontal(|ui| {
-        ui.label(RichText::new("ON THIS COMPUTER").size(11.0).strong().color(theme.text_muted));
+        ui.label(RichText::new(t!("ON THIS COMPUTER")).size(11.0).strong().color(theme.text_muted));
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if ui.add_enabled(setup.job.is_none(), egui::Button::new("Browse…")).clicked()
+            if ui.add_enabled(setup.job.is_none(), egui::Button::new(t!("Browse…"))).clicked()
                 && let Some(path) = {
-                    let dialog = rfd::FileDialog::new().set_title("Choose the node executable");
+                    let dialog = rfd::FileDialog::new().set_title(t!("Choose the node executable"));
                     if cfg!(windows) { dialog.add_filter("Node.js", &["exe"]) } else { dialog }
                 }
                 .pick_file()
@@ -351,7 +356,7 @@ fn node_step(ui: &mut Ui, ed: &mut Editor, theme: &Theme, setup: &mut Setup) {
                     Err(e) => setup.outcome = Some(Err(format!("{e:#}"))),
                 }
             }
-            if ui.add_enabled(setup.scan.is_none() && setup.job.is_none(), egui::Button::new("Search again")).clicked() {
+            if ui.add_enabled(setup.scan.is_none() && setup.job.is_none(), egui::Button::new(t!("Search again"))).clicked() {
                 setup.rescan();
             }
         });
@@ -361,11 +366,11 @@ fn node_step(ui: &mut Ui, ed: &mut Editor, theme: &Theme, setup: &mut Setup) {
         None => {
             ui.horizontal(|ui| {
                 ui.spinner();
-                ui.label(RichText::new("Searching the usual places …").color(theme.text_muted));
+                ui.label(RichText::new(t!("Searching the usual places …")).color(theme.text_muted));
             });
         }
         Some(list) if list.is_empty() => {
-            ui.label(RichText::new("None found.").color(theme.text_muted));
+            ui.label(RichText::new(t!("None found.")).color(theme.text_muted));
         }
         Some(list) => {
             let list = list.clone();
@@ -390,30 +395,30 @@ fn node_step(ui: &mut Ui, ed: &mut Editor, theme: &Theme, setup: &mut Setup) {
 
     // Installing.
     ui.add_space(14.0);
-    ui.label(RichText::new("INSTALL NODE.JS").size(11.0).strong().color(theme.text_muted));
+    ui.label(RichText::new(t!("INSTALL NODE.JS")).size(11.0).strong().color(theme.text_muted));
     ui.add_space(6.0);
     let busy = setup.job.is_some();
     let mut start: Option<Installer> = None;
     if cfg!(windows) {
         if setup.winget == Some(true) {
             card(ui, theme, |ui| {
-                if install_option(ui, theme, "Install with winget", "Recommended. Windows' own package manager installs the current LTS version. Windows asks for permission.", busy) {
+                if install_option(ui, theme, t!("Install with winget"), t!("Recommended. Windows' own package manager installs the current LTS version. Windows asks for permission."), busy) {
                     start = Some(|log| node_setup::install_with_winget(log));
                 }
             });
         }
         card(ui, theme, |ui| {
-            if install_option(ui, theme, "Download the official installer", "From nodejs.org, checked against its published checksum, then installed without questions. Windows asks for permission.", busy) {
+            if install_option(ui, theme, t!("Download the official installer"), t!("From nodejs.org, checked against its published checksum, then installed without questions. Windows asks for permission."), busy) {
                 start = Some(|log| node_setup::install_official_windows(&crate::bot::app_data_dir().join("downloads"), log));
             }
         });
     } else {
         card(ui, theme, |ui| {
-            if install_option(ui, theme, "Download Node.js for XC Circuit", "Into XC Circuit's own folder, no password needed. From nodejs.org, checked against its published checksum.", busy) {
+            if install_option(ui, theme, t!("Download Node.js for XC Circuit"), t!("Into XC Circuit's own folder, no password needed. From nodejs.org, checked against its published checksum."), busy) {
                 start = Some(|log| node_setup::install_private(&private_root(), log));
             }
         });
-        ui.label(RichText::new("Or install it with your package manager. Distribution packages are often older than Node.js 22, so check the version.").size(12.0).color(theme.text_muted));
+        ui.label(RichText::new(t!("Or install it with your package manager. Distribution packages are often older than Node.js 22, so check the version.")).size(12.0).color(theme.text_muted));
     }
     if let Some(run) = start {
         let (tx, rx) = channel();
@@ -438,7 +443,7 @@ fn node_step(ui: &mut Ui, ed: &mut Editor, theme: &Theme, setup: &mut Setup) {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
                 ui.spinner();
-                ui.label(RichText::new("Installing Node.js …").color(theme.text));
+                ui.label(RichText::new(t!("Installing Node.js …")).color(theme.text));
             });
             for line in job.log.iter().rev().take(6).rev() {
                 ui.label(RichText::new(line).monospace().size(11.5).color(theme.text_muted));
@@ -470,7 +475,7 @@ fn install_row(ui: &mut Ui, theme: &Theme, n: &NodeInstall, selected: bool) -> b
         p.circle_filled(c, 3.5, theme.accent);
     }
     let text = if usable { theme.text } else { mix(theme.text_muted, theme.panel, 0.3) };
-    let version = n.version.clone().unwrap_or_else(|| "won't start".into());
+    let version = n.version.clone().unwrap_or_else(|| t!("won't start").into());
     p.text(pos2(rect.left() + 38.0, rect.center().y - 8.0), Align2::LEFT_CENTER, &version, FontId::proportional(14.0), text);
     p.text(pos2(rect.left() + 38.0, rect.center().y + 9.0), Align2::LEFT_CENTER, n.path.display().to_string(), FontId::monospace(11.0), theme.text_muted);
     let note = if usable { n.source.clone() } else if n.version.is_some() { format!("{} · too old", n.source) } else { format!("{} · doesn't start", n.source) };
@@ -488,17 +493,17 @@ fn install_option(ui: &mut Ui, theme: &Theme, head: &str, text: &str, busy: bool
             ui.label(RichText::new(text).size(12.5).color(theme.text_muted));
         });
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            go = ui.add_enabled(!busy, egui::Button::new(RichText::new("Install").strong()).min_size(vec2(90.0, 30.0))).clicked();
+            go = ui.add_enabled(!busy, egui::Button::new(RichText::new(t!("Install")).strong()).min_size(vec2(90.0, 30.0))).clicked();
         });
     });
     go
 }
 
 fn look(ui: &mut Ui, ed: &mut Editor, theme: &Theme) {
-    title(ui, theme, "Make it yours", "Pick a theme and an accent color. You can change both any time in Settings.");
+    title(ui, theme, t!("Make it yours"), t!("Pick a theme and an accent color. You can change both any time in Settings."));
     crate::settings::theme_cards(ui, ed, theme);
     ui.add_space(18.0);
-    ui.label(RichText::new("ACCENT COLOR").size(11.0).strong().color(theme.text_muted));
+    ui.label(RichText::new(t!("ACCENT COLOR")).size(11.0).strong().color(theme.text_muted));
     ui.add_space(8.0);
     crate::settings::accent_swatches(ui, ed, theme, 0.0);
     ui.add_space(22.0);
@@ -511,18 +516,18 @@ fn look(ui: &mut Ui, ed: &mut Editor, theme: &Theme) {
         }
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 2.0;
-            ui.label(RichText::new("Touch mode").size(13.5).color(theme.text));
-            ui.label(RichText::new("Bigger buttons and more room between them, for touch screens. Also in Settings.").size(12.0).color(theme.text_muted));
+            ui.label(RichText::new(t!("Touch mode")).size(13.5).color(theme.text));
+            ui.label(RichText::new(t!("Bigger buttons and more room between them, for touch screens. Also in Settings.")).size(12.0).color(theme.text_muted));
         });
     });
 }
 
 /// Returns `Some(true)` to start the tour, `Some(false)` to skip it.
 fn tour_choice(ui: &mut Ui, ed: &Editor, theme: &Theme) -> Option<bool> {
-    title(ui, theme, "You're all set", "Want a quick tour? It takes about three minutes and uses a small example bot, so nothing of yours is changed.");
+    title(ui, theme, t!("You're all set"), t!("Want a quick tour? It takes about three minutes and uses a small example bot, so nothing of yours is changed."));
     let mut choice = None;
     ui.columns(2, |cols| {
-        for (i, (ic, head, text, tour)) in [("bolt", "Take the tour", "Add a block, wire it up and run a bot, with each part of the app pointed out.", true), ("workspace", "Start building", "Jump straight in. The tour is in the Help menu whenever you want it.", false)].into_iter().enumerate() {
+        for (i, (ic, head, text, tour)) in [("bolt", t!("Take the tour"), t!("Add a block, wire it up and run a bot, with each part of the app pointed out."), true), ("workspace", t!("Start building"), t!("Jump straight in. The tour is in the Help menu whenever you want it."), false)].into_iter().enumerate() {
             let ui = &mut cols[i];
             let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 170.0), Sense::click());
             let primary = tour;

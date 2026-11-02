@@ -33,12 +33,12 @@ pub fn tab(ui: &mut egui::Ui, theme: &Theme, ed: &Editor, native: &NativeHost, d
     dialog::tab(
         ui,
         theme,
-        dialog::Spec { id: "plugins", title: "Plugins", subtitle: Some("What's loaded, and which native plugins may run"), icon: None, width: 560.0 },
+        dialog::Spec { id: "plugins", title: t!("Plugins"), subtitle: Some(t!("What's loaded, and which native plugins may run")), icon: None, width: 560.0 },
         |ui, part| match part {
             Part::Body => {
-                dialog::toggle_row(ui, theme, &mut draft.allow, "Allow native plugins", "Native plugins are compiled Rust code. They run with the same access to your computer as XC Circuit, and a broken one can crash the app. Only turn this on for plugins you trust.");
+                dialog::toggle_row(ui, theme, &mut draft.allow, t!("Allow native plugins"), t!("Native plugins are compiled Rust code. They run with the same access to your computer as XC Circuit, and a broken one can crash the app. Only turn this on for plugins you trust."));
                 ui.add_space(10.0);
-                dialog::section(ui, theme, "Installed");
+                dialog::section(ui, theme, t!("Installed"));
                 for lp in &ed.reg.plugins {
                     let m = &lp.manifest;
                     let np = native.plugins.iter().find(|p| p.id == m.id);
@@ -49,22 +49,22 @@ pub fn tab(ui: &mut egui::Ui, theme: &Theme, ed: &Editor, native: &NativeHost, d
                             ui.label(RichText::new(&m.name).size(13.5).strong().color(theme.text));
                             ui.label(RichText::new(format!("v{} · {}", m.version, m.author)).size(11.0).color(theme.text_muted));
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| match np.map(|p| &p.status) {
-                                None => dialog::pill(ui, "Blocks & config", theme.text_muted),
-                                Some(Status::Loaded) => dialog::pill(ui, "Native · running", theme.action),
+                                None => dialog::pill(ui, t!("Blocks & config"), theme.text_muted),
+                                Some(Status::Loaded) => dialog::pill(ui, t!("Native · running"), theme.action),
                                 Some(Status::NeedsApproval) if approved => {
-                                    if dialog::secondary_button(ui, theme, "Undo").clicked() {
+                                    if dialog::secondary_button(ui, theme, t!("Undo")).clicked() {
                                         draft.trust.retain(|id| *id != m.id);
                                     }
-                                    dialog::pill(ui, "Allowed on save", theme.action);
+                                    dialog::pill(ui, t!("Allowed on save"), theme.action);
                                 }
                                 Some(Status::NeedsApproval) => {
-                                    if dialog::primary_button(ui, theme, "Allow").on_hover_text(lp.dir.display().to_string()).clicked() {
+                                    if dialog::primary_button(ui, theme, t!("Allow")).on_hover_text(lp.dir.display().to_string()).clicked() {
                                         draft.trust.push(m.id.clone());
                                     }
                                     dialog::pill(ui, "Native", theme.warning);
                                 }
-                                Some(Status::Off) => dialog::pill(ui, "Native · off", theme.text_muted),
-                                Some(_) => dialog::pill(ui, "Native · not running", theme.error),
+                                Some(Status::Off) => dialog::pill(ui, t!("Native · off"), theme.text_muted),
+                                Some(_) => dialog::pill(ui, t!("Native · not running"), theme.error),
                             });
                         });
                         if !m.description.is_empty() {
@@ -84,14 +84,14 @@ pub fn tab(ui: &mut egui::Ui, theme: &Theme, ed: &Editor, native: &NativeHost, d
                 }
             }
             Part::Footer => {
-                if dialog::primary_button(ui, theme, "Save and close").clicked() {
+                if dialog::primary_button(ui, theme, t!("Save and close")).clicked() {
                     ask = Some(Ask::Save);
                 }
-                if dialog::secondary_button(ui, theme, "Cancel").clicked() {
+                if dialog::secondary_button(ui, theme, t!("Cancel")).clicked() {
                     ask = Some(Ask::Cancel);
                 }
                 if changed {
-                    ui.label(RichText::new("Unsaved changes").size(12.0).color(theme.warning));
+                    ui.label(RichText::new(t!("Unsaved changes")).size(12.0).color(theme.warning));
                 }
             }
         },

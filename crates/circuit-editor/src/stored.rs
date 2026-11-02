@@ -37,7 +37,7 @@ impl StoredView {
         let tmp = f.with_extension("json.tmp");
         let text = serde_json::to_string_pretty(&Value::Object(self.data.clone())).unwrap_or_default();
         match std::fs::write(&tmp, text).and_then(|_| std::fs::rename(&tmp, &f)) {
-            Ok(()) => ed.log(Level::Success, "Stored data saved"),
+            Ok(()) => ed.log(Level::Success, t!("Stored data saved")),
             Err(e) => ed.log(Level::Error, format!("Could not save stored data: {e}")),
         }
     }
@@ -57,21 +57,21 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, view: &mut StoredView, bot_running: b
     let mut changed = false;
     Frame::new().inner_margin(Margin::symmetric(12, 8)).show(ui, |ui| {
         ui.horizontal(|ui| {
-            ui.add(crate::inputs::TextLine::new(&mut view.filter).hint("Filter keys").width(200.0).compact());
-            if ui.small_button("Refresh").clicked() {
+            ui.add(crate::inputs::TextLine::new(&mut view.filter).hint(t!("Filter keys")).width(200.0).compact());
+            if ui.small_button(t!("Refresh")).clicked() {
                 view.reload(ed);
             }
             if bot_running {
-                ui.label(RichText::new("Bot running: read-only, refreshes every 2 s").size(11.5).color(theme.text_muted));
+                ui.label(RichText::new(t!("Bot running: read-only, refreshes every 2 s")).size(11.5).color(theme.text_muted));
             } else {
-                ui.label(RichText::new("Double-click a value to edit it. Changes apply on the next run.").size(11.5).color(theme.text_muted));
+                ui.label(RichText::new(t!("Double-click a value to edit it. Changes apply on the next run.")).size(11.5).color(theme.text_muted));
             }
         });
     });
     ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         Frame::new().inner_margin(Margin::symmetric(12, 4)).show(ui, |ui| {
             if view.data.is_empty() {
-                ui.label(RichText::new("Nothing stored yet. Blocks like Set Stored Value write here when the bot runs.").color(theme.text_muted));
+                ui.label(RichText::new(t!("Nothing stored yet. Blocks like Set Stored Value write here when the bot runs.")).color(theme.text_muted));
             }
             let filter = view.filter.to_lowercase();
             let scopes: Vec<String> = view.data.keys().cloned().collect();
@@ -108,7 +108,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, view: &mut StoredView, bot_running: b
                                     view.editing = Some((scope.clone(), key.clone(), shown));
                                 }
                             }
-                            if ui.add_enabled(!bot_running, egui::Button::new("Delete").small()).clicked()
+                            if ui.add_enabled(!bot_running, egui::Button::new(t!("Delete")).small()).clicked()
                                 && let Some(Value::Object(m)) = view.data.get_mut(&scope)
                             {
                                 m.shift_remove(key);

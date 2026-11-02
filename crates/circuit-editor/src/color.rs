@@ -65,7 +65,7 @@ pub fn color_button(ui: &mut Ui, id: Id, color: &mut Color32, theme: &Theme, wid
     let sw = Rect::from_min_size(rect.left_center() + vec2(5.0, -7.0), vec2(14.0, 14.0));
     p.rect(sw, 3.0, *color, Stroke::new(1.0, mix(*color, Color32::BLACK, 0.3)), StrokeKind::Inside);
     p.galley(pos2(sw.right() + 7.0, rect.center().y - galley.size().y / 2.0), galley, theme.text);
-    let resp = resp.on_hover_cursor(CursorIcon::PointingHand).on_hover_text("Pick a color");
+    let resp = resp.on_hover_cursor(CursorIcon::PointingHand).on_hover_text(t!("Pick a color"));
 
     if resp.clicked() {
         open = match open {

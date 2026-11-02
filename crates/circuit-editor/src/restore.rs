@@ -88,18 +88,18 @@ pub fn ui(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, bot_running: boo
     let theme = ed.theme.clone();
     ui.painter().rect_filled(ui.max_rect(), 0.0, theme.panel);
     let Some(root) = ed.project.as_ref().map(|p| p.root.clone()) else {
-        ui.label("Open a project to see its backups.");
+        ui.label(t!("Open a project to see its backups."));
         return;
     };
     ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         egui::Frame::new().inner_margin(egui::Margin { left: 32, right: 32, top: 24, bottom: 32 }).show(ui, |ui| {
             ui.set_max_width(760.0);
-            ui.label(RichText::new("Backups").size(22.0).strong().color(theme.text));
+            ui.label(RichText::new(t!("Backups")).size(22.0).strong().color(theme.text));
             ui.add_space(4.0);
             let note = if ed.prefs.backups {
                 format!("A copy of the project is kept each time you save: the newest {}, plus one a day for {} days. Change this in Settings › Backups.", ed.prefs.backup_keep, ed.prefs.backup_days)
             } else {
-                "Backups on save are turned off in Settings › Backups.".to_string()
+                t!("Backups on save are turned off in Settings › Backups.").to_string()
             };
             ui.label(RichText::new(note).size(13.0).color(theme.text_muted));
             ui.add_space(16.0);
@@ -119,7 +119,7 @@ fn project_backups(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, theme: 
     heading(ui, theme, "Project");
     let list = ed.backups.list(root);
     if list.is_empty() {
-        ui.label(RichText::new("No backups yet. One is made the next time you save.").color(theme.text_muted));
+        ui.label(RichText::new(t!("No backups yet. One is made the next time you save.")).color(theme.text_muted));
         return;
     }
     let mut restore_project: Option<Snapshot> = None;
@@ -139,7 +139,7 @@ fn project_backups(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, theme: 
                         ui.label(RichText::new(local_time(snap.info.saved_at)).size(14.0).color(theme.text));
                         let mut line = format!("{} · {} · {} workspaces · {}", ago(snap.info.saved_at), snap.info.reason, snap.info.workspaces.len(), size_text(snap.size));
                         if i == 0 {
-                            line.push_str(" · newest");
+                            line.push_str(t!(" · newest"));
                         }
                         ui.label(RichText::new(line).size(12.0).color(theme.text_muted));
                     });
@@ -157,16 +157,16 @@ fn project_backups(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, theme: 
                             for (key, name, change) in rows {
                                 ui.horizontal(|ui| {
                                     let (text, color) = match change {
-                                        Change::Same => ("same as now", theme.text_muted),
-                                        Change::Changed => ("changed since", theme.warning),
-                                        Change::OnlyInBackup => ("deleted since", theme.error),
-                                        Change::OnlyNow => ("added since", theme.action),
+                                        Change::Same => (t!("same as now"), theme.text_muted),
+                                        Change::Changed => (t!("changed since"), theme.warning),
+                                        Change::OnlyInBackup => (t!("deleted since"), theme.error),
+                                        Change::OnlyNow => (t!("added since"), theme.action),
                                     };
                                     ui.label(RichText::new(name).size(13.0).color(theme.text));
                                     crate::dialog::pill(ui, text, color);
                                     if matches!(change, Change::Changed | Change::OnlyInBackup) {
                                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                            if ui.button("Restore this workspace").on_hover_text("Brings it back as an unsaved change").clicked() {
+                                            if ui.button(t!("Restore this workspace")).on_hover_text(t!("Brings it back as an unsaved change")).clicked() {
                                                 restore_ws = Some((snap.clone(), key.clone()));
                                             }
                                         });
@@ -175,16 +175,16 @@ fn project_backups(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, theme: 
                             }
                             ui.add_space(8.0);
                             if view.confirm == Some(Confirm::Project(snap.dir.clone())) {
-                                ui.label(RichText::new("Put the whole project back as it was then? Your current version is backed up first, so you can come back to it.").size(12.5).color(theme.text));
+                                ui.label(RichText::new(t!("Put the whole project back as it was then? Your current version is backed up first, so you can come back to it.")).size(12.5).color(theme.text));
                                 ui.horizontal(|ui| {
-                                    if crate::dialog::primary_button(ui, theme, "Yes, restore").clicked() {
+                                    if crate::dialog::primary_button(ui, theme, t!("Yes, restore")).clicked() {
                                         restore_project = Some(snap.clone());
                                     }
-                                    if crate::dialog::secondary_button(ui, theme, "Cancel").clicked() {
+                                    if crate::dialog::secondary_button(ui, theme, t!("Cancel")).clicked() {
                                         view.confirm = None;
                                     }
                                 });
-                            } else if crate::dialog::primary_button(ui, theme, "Restore the whole project").clicked() {
+                            } else if crate::dialog::primary_button(ui, theme, t!("Restore the whole project")).clicked() {
                                 view.confirm = Some(Confirm::Project(snap.dir.clone()));
                             }
                         }
@@ -225,9 +225,9 @@ fn project_backups(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, theme: 
 }
 
 fn bot_data_backups(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, theme: &Theme, root: &Path, bot_running: bool) {
-    heading(ui, theme, "The bot's saved data");
+    heading(ui, theme, t!("The bot's saved data"));
     ui.label(
-        RichText::new("Made by the bot itself each time it starts (the newest 10 are kept). Exported bots do the same in their data/backups folder.")
+        RichText::new(t!("Made by the bot itself each time it starts (the newest 10 are kept). Exported bots do the same in their data/backups folder."))
             .size(12.5)
             .color(theme.text_muted),
     );
@@ -235,7 +235,7 @@ fn bot_data_backups(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, theme:
     let (store, dir) = bot_data(root);
     let list = bot_backups(&dir);
     if list.is_empty() {
-        ui.label(RichText::new("No backups yet. One is made the next time the bot starts with saved data.").color(theme.text_muted));
+        ui.label(RichText::new(t!("No backups yet. One is made the next time the bot starts with saved data.")).color(theme.text_muted));
         return;
     }
     let mut restore: Option<PathBuf> = None;
@@ -245,20 +245,20 @@ fn bot_data_backups(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, theme:
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
                     ui.label(RichText::new(local_time(b.at)).size(13.5).color(theme.text));
-                    let before = if b.name.contains("before-restore") { " · before a restore" } else { "" };
+                    let before = if b.name.contains("before-restore") { t!(" · before a restore") } else { "" };
                     ui.label(RichText::new(format!("{} · {}{before}", ago(b.at), size_text(b.size))).size(12.0).color(theme.text_muted));
                 });
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if view.confirm == Some(Confirm::BotData(b.path.clone())) {
-                        if ui.button("Cancel").clicked() {
+                        if ui.button(t!("Cancel")).clicked() {
                             view.confirm = None;
                         }
-                        if ui.button(RichText::new("Yes, restore").strong()).clicked() {
+                        if ui.button(RichText::new(t!("Yes, restore")).strong()).clicked() {
                             restore = Some(b.path.clone());
                         }
                     } else {
-                        let r = ui.add_enabled(!bot_running, egui::Button::new("Restore"));
-                        let r = if bot_running { r.on_disabled_hover_text("Stop the bot first") } else { r };
+                        let r = ui.add_enabled(!bot_running, egui::Button::new(t!("Restore")));
+                        let r = if bot_running { r.on_disabled_hover_text(t!("Stop the bot first")) } else { r };
                         if r.clicked() {
                             view.confirm = Some(Confirm::BotData(b.path.clone()));
                         }
@@ -271,7 +271,7 @@ fn bot_data_backups(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, theme:
     if let Some(from) = restore {
         view.confirm = None;
         match restore_bot_data(&store, &dir, &from) {
-            Ok(()) => ed.log(Level::Success, "The bot's saved data was restored. It's used the next time the bot starts."),
+            Ok(()) => ed.log(Level::Success, t!("The bot's saved data was restored. It's used the next time the bot starts.")),
             Err(e) => ed.log(Level::Error, format!("Couldn't restore the bot's saved data: {e:#}")),
         }
     }

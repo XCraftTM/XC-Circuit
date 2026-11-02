@@ -76,14 +76,19 @@ pub fn value_editor(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Val
             changed
         }
         _ => {
-            ui.label(egui::RichText::new("connect a value").italics().color(theme.text_muted));
+            ui.label(egui::RichText::new(t!("connect a value")).italics().color(theme.text_muted));
             false
         }
     }
 }
 
 fn select(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width: f32) -> bool {
-    let choices = field.choice_list();
+    // Choice texts are block labels: translated like field names.
+    let choices: Vec<(Option<String>, String, String)> = field
+        .choice_list()
+        .into_iter()
+        .map(|(g, k, l)| (g.map(|g| crate::i18n::label(&g).into_owned()), k, crate::i18n::label(&l).into_owned()))
+        .collect();
     let current = value.as_str().unwrap_or_default().to_string();
     let label = choices.iter().find(|(_, k, _)| *k == current).map(|(_, _, l)| l.clone()).unwrap_or(current.clone());
     let mut picked = None;

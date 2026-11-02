@@ -125,7 +125,7 @@ impl Widget for TextArea<'_> {
 
         // The grip.
         let grip = Rect::from_min_size(outer.right_bottom() - vec2(15.0, 15.0), vec2(13.0, 13.0));
-        let g = ui.interact(grip, id.with("grip"), Sense::click_and_drag()).on_hover_cursor(CursorIcon::ResizeVertical).on_hover_text("Drag to resize, double-click to reset");
+        let g = ui.interact(grip, id.with("grip"), Sense::click_and_drag()).on_hover_cursor(CursorIcon::ResizeVertical).on_hover_text(t!("Drag to resize, double-click to reset"));
         let color = if g.hovered() || g.dragged() { visuals.selection.stroke.color } else { visuals.weak_text_color() };
         for i in 1..=3 {
             let o = i as f32 * 3.5;

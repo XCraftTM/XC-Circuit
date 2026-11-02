@@ -36,7 +36,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
     let theme = ed.theme.clone();
     let Some((ws_key, node_id)) = ed.selected.clone() else {
         padded(ui, |ui| {
-            ui.label(RichText::new("Select a block to see its settings.").color(theme.text_muted));
+            ui.label(RichText::new(t!("Select a block to see its settings.")).color(theme.text_muted));
         });
         return;
     };
@@ -45,7 +45,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
     let Some(ws) = project.as_mut().and_then(|p| p.workspaces.get_mut(&ws_key)) else { return };
     let Some(shape) = node_shape(reg, engine, shapes, &ws_key, ws, &node_id, define_ctx) else {
         padded(ui, |ui| {
-            ui.label(RichText::new("This block's plugin is not loaded.").color(theme.error));
+            ui.label(RichText::new(t!("This block's plugin is not loaded.")).color(theme.error));
         });
         return;
     };
@@ -59,7 +59,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                 }
                 ui.vertical(|ui| {
                     ui.label(RichText::new(&def.name).strong().size(15.0));
-                    ui.label(RichText::new(format!("by {} · v{} · #{}", def.author, def.version, node_id)).size(11.0).color(theme.text_muted));
+                    ui.label(RichText::new(tf!("by {author} · v{version} · #{id}", author = def.author, version = def.version, id = node_id)).size(11.0).color(theme.text_muted));
                 });
             });
             ui.add_space(4.0);
@@ -75,18 +75,18 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                 let source = ws.links_into(&node_id, key).next().map(|l| l.from.clone());
                 padded(ui, |ui| {
                     ui.horizontal(|ui| {
-                        let label = ui.label(RichText::new(f.label(key)).color(theme.text_muted));
+                        let label = ui.label(RichText::new(crate::i18n::label(&f.label(key))).color(theme.text_muted));
                         if let Some(d) = &f.description {
                             label.on_hover_text(d);
                         }
                         if f.required {
-                            ui.label(RichText::new("required").size(10.0).color(theme.warning));
+                            ui.label(RichText::new(t!("required")).size(10.0).color(theme.warning));
                         }
                         if matches!(f.pin, PinMode::Auto | PinMode::Pin) && source.is_none() {
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                let text = if pinned { "● pin" } else { "○ pin" };
+                                let text = if pinned { t!("● pin") } else { t!("○ pin") };
                                 let color = if pinned { theme.pin_color(&f.ty, reg) } else { theme.text_muted };
-                                if ui.add(egui::Button::new(RichText::new(text).size(11.0).color(color)).selected(pinned)).on_hover_text("Switch between typing a value and connecting a pin").clicked() {
+                                if ui.add(egui::Button::new(RichText::new(text).size(11.0).color(color)).selected(pinned)).on_hover_text(t!("Switch between typing a value and connecting a pin")).clicked() {
                                     toggle = Some(key.clone());
                                 }
                             });
@@ -96,12 +96,12 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                         let from = ws.nodes.get(&src.node).and_then(|n| reg.block(&n.block)).map(|d| d.name.clone()).unwrap_or_default();
                         Frame::new().fill(theme.field).corner_radius(6).inner_margin(Margin::symmetric(8, 5)).show(ui, |ui| {
                             ui.set_width(ui.available_width());
-                            ui.label(format!("Connected · {from} ({})", src.pin));
+                            ui.label(tf!("Connected · {block} ({pin})", block = from, pin = src.pin));
                         });
                     } else if pinned {
                         ui.label(RichText::new(format!("Waiting for a {} wire", f.ty.display(reg))).italics().color(theme.text_muted));
                     } else if f.type_name == "embed" {
-                        if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Open Embed Builder")).clicked() {
+                        if ui.add_sized([ui.available_width(), 30.0], egui::Button::new(t!("Open Embed Builder"))).clicked() {
                             *ask = Some(InspectorAsk::EmbedBuilder(ws_key.clone(), node_id.clone(), key.clone()));
                         }
                     } else {
@@ -112,9 +112,9 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                             *dirty = true;
                         }
                         if f.template {
-                            ui.label(RichText::new("Type {name} to insert a connected value").size(11.0).color(theme.text_muted));
+                            ui.label(RichText::new(t!("Type {name} to insert a connected value")).size(11.0).color(theme.text_muted));
                         }
-                        if f.type_name == "slash-command-ref" && crate::dialog::small_button(ui, &theme, "Edit slash commands…").clicked() {
+                        if f.type_name == "slash-command-ref" && crate::dialog::small_button(ui, &theme, t!("Edit slash commands…")).clicked() {
                             *ask = Some(InspectorAsk::SlashCommands);
                         }
                     }
@@ -123,7 +123,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
         };
         fields(ui, false);
         if shape.visible_fields().any(|(_, f)| f.advanced) {
-            egui::CollapsingHeader::new("Advanced").default_open(false).show(ui, |ui| fields(ui, true));
+            egui::CollapsingHeader::new(t!("Advanced")).default_open(false).show(ui, |ui| fields(ui, true));
         }
         if let Some(key) = toggle {
             let n = ws.nodes.get_mut(&node_id).unwrap();
@@ -138,12 +138,12 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
         if !shape.outputs.is_empty() {
             ui.separator();
             padded(ui, |ui| {
-                ui.label(RichText::new("OUTPUTS").size(11.0).strong().color(theme.text_muted));
+                ui.label(RichText::new(t!("OUTPUTS")).size(11.0).strong().color(theme.text_muted));
                 for (k, o) in &shape.outputs {
                     ui.horizontal(|ui| {
                         let color = theme.pin_color(&o.ty, reg);
                         ui.label(RichText::new("●").color(color));
-                        let l = ui.label(o.label(k));
+                        let l = ui.label(crate::i18n::label(&o.label(k)));
                         if let Some(d) = &o.description {
                             l.on_hover_text(d);
                         }
@@ -156,11 +156,11 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
         ui.separator();
         padded(ui, |ui| {
             ui.horizontal(|ui| {
-                if ui.button("Block source").clicked() {
+                if ui.button(t!("Block source")).clicked() {
                     let _ = open::that(&def.source);
                 }
                 if let Some(docs) = &def.docs
-                    && ui.button("Docs").clicked()
+                    && ui.button(t!("Docs")).clicked()
                 {
                     let _ = open::that(docs);
                 }
@@ -173,7 +173,7 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
     let theme = ed.theme.clone();
     ui.horizontal(|ui| {
         ui.add_space(8.0);
-        if ui.small_button("Clear").clicked() {
+        if ui.small_button(t!("Clear")).clicked() {
             ed.log.clear();
         }
     });
@@ -192,7 +192,7 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
                     ui.label(RichText::new(tag).monospace().color(color));
                     ui.label(RichText::new(&line.text).monospace());
                     if let Some(t) = &line.target
-                        && crate::dialog::small_button(ui, &theme, "Show block").on_hover_text("Show the block that wrote this").clicked()
+                        && crate::dialog::small_button(ui, &theme, t!("Show block")).on_hover_text(t!("Show the block that wrote this")).clicked()
                     {
                         jump = Some(t.clone());
                     }
@@ -222,7 +222,7 @@ pub fn collect_problems(ed: &Editor) -> Vec<ProblemItem> {
                     continue;
                 };
                 if def.kind == circuit_core::BlockKind::Action && ws.links_into(id, ACTION_IN).next().is_none() {
-                    items.push((format!("{} › {}", ws.name, def.name), "nothing runs this block (no Action wire into it)".into(), Some((key.clone(), id.clone()))));
+                    items.push((format!("{} › {}", ws.name, def.name), t!("nothing runs this block (no Action wire into it)").into(), Some((key.clone(), id.clone()))));
                 }
                 for (k, f) in &def.fields {
                     let connected = ws.links_into(id, k).next().is_some();
@@ -246,7 +246,7 @@ pub fn collect_problems(ed: &Editor) -> Vec<ProblemItem> {
                     let name = ws.zones.get(zone).map(|z| z.title.clone()).unwrap_or_default();
                     items.push((
                         format!("{} › Try {name}", ws.name),
-                        "an Action wire leaves the Try Zone; connect the zone's Done output instead".into(),
+                        t!("an Action wire leaves the Try Zone; connect the zone's Done output instead").into(),
                         Some((key.clone(), link.from.node.clone())),
                     ));
                 }
@@ -261,7 +261,7 @@ pub fn problems(ui: &mut Ui, ed: &mut Editor, items: Vec<ProblemItem>) {
     ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         Frame::new().inner_margin(Margin::symmetric(12, 8)).show(ui, |ui| {
             if items.is_empty() {
-                ui.label(RichText::new("No problems").color(theme.text_muted));
+                ui.label(RichText::new(t!("No problems")).color(theme.text_muted));
             }
             for (source, message, target) in items {
                 ui.horizontal(|ui| {

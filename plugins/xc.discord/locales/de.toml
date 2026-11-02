@@ -1,0 +1,106 @@
+# Der Discord-Modus auf Deutsch: seine Kategorien, die Bot-Einstellungen und
+# die Discord-Blöcke. Die Oberfläche selbst übersetzt xc.core.
+
+[meta]
+code = "de"
+name = "Deutsch"
+english_name = "German"
+
+[strings]
+"Events" = "Ereignisse"
+"Messages" = "Nachrichten"
+"Members" = "Mitglieder"
+"Channels & Bot" = "Kanäle & Bot"
+"Connection" = "Verbindung"
+"Bot token" = "Bot-Token"
+"Discord developer portal › your app › Bot › Reset Token." = "Discord Developer Portal › deine App › Bot › Reset Token."
+"Paste the token from the Discord developer portal" = "Füge das Token aus dem Discord Developer Portal ein"
+"A bot token is three parts joined by dots. Copy it again from the developer portal, without spaces or quotes." = "Ein Bot-Token besteht aus drei Teilen mit Punkten dazwischen. Kopiere es erneut aus dem Developer Portal, ohne Leerzeichen oder Anführungszeichen."
+"Dev server id" = "ID des Test-Servers"
+"Commands register on this server instantly while you test. Leave empty to register them globally." = "Befehle werden beim Testen sofort auf diesem Server angemeldet. Leer lassen, um sie global anzumelden."
+"e.g. 123456789012345678" = "z. B. 123456789012345678"
+"A server id is 17 to 20 digits. In Discord, turn on Developer Mode, then right-click the server › Copy Server ID." = "Eine Server-ID hat 17 bis 20 Ziffern. Schalte in Discord den Entwicklermodus ein und klicke dann mit rechts auf den Server › Server-ID kopieren."
+"Text command prefix" = "Präfix für Textbefehle"
+"Used by blocks that react to text commands such as !help." = "Für Blöcke, die auf Textbefehle wie !help reagieren."
+"1 to 5 characters, without spaces." = "1 bis 5 Zeichen, ohne Leerzeichen."
+"Slash commands" = "Slash-Befehle"
+
+[blocks."discord.find_channel"]
+name = "Kanal finden"
+description = "Sucht einen Kanal per ID oder per Name in einem Server."
+
+[blocks."discord.set_status"]
+name = "Bot-Status setzen"
+description = "Ändert Status und Aktivität des Bots, etwa „Schaut 3 Server“."
+
+[blocks."discord.on_button"]
+name = "Schaltfläche gedrückt"
+description = "Läuft, wenn jemand eine Schaltfläche mit passender eigener ID drückt."
+
+[blocks."discord.on_member_join"]
+name = "Mitglied tritt bei"
+description = "Läuft, wenn jemand einem Server beitritt, auf dem der Bot ist."
+
+[blocks."discord.on_member_leave"]
+name = "Mitglied geht"
+description = "Läuft, wenn jemand einen Server verlässt (oder gekickt wird), auf dem der Bot ist."
+
+[blocks."discord.on_message"]
+name = "Nachricht gesendet"
+description = "Läuft, wenn in einem Kanal, den der Bot sieht, eine Nachricht gesendet wird."
+
+[blocks."discord.on_reaction"]
+name = "Reaktion hinzugefügt"
+description = "Läuft, wenn jemand auf eine Nachricht reagiert. Gut für Reaktionsrollen."
+
+[blocks."discord.on_slash_command"]
+name = "Slash-Befehl"
+description = "Läuft, wenn jemand einen deiner Slash-Befehle nutzt. Du baust sie unter Bot › Slash-Befehle."
+
+[blocks."discord.add_role"]
+name = "Rolle vergeben"
+description = "Gibt einem Mitglied eine Rolle. Die eigene Rolle des Bots muss höher stehen als diese Rolle."
+
+[blocks."discord.find_member"]
+name = "Mitglied finden"
+description = "Sucht ein Server-Mitglied per ID. Macht aus einem Nutzer ein Mitglied."
+
+[blocks."discord.has_role"]
+name = "Hat Rolle"
+description = "Ob ein Mitglied eine Rolle hat (per ID oder Name)."
+
+[blocks."discord.member_info"]
+name = "Mitglieds-Info"
+description = "Liest eine Information über ein Server-Mitglied."
+
+[blocks."discord.moderate"]
+name = "Mitglied moderieren"
+description = "Schickt ein Mitglied in die Auszeit, kickt, bannt oder entbannt es, entfernt eine Rolle oder ändert den Spitznamen. Der Bot braucht die passende Berechtigung."
+
+[blocks."discord.user_info"]
+name = "Nutzer-Info"
+description = "Liest eine Information über einen Nutzer (geht auch für Mitglieder)."
+
+[blocks."discord.add_reaction"]
+name = "Reaktion hinzufügen"
+description = "Reagiert mit einem Emoji auf eine Nachricht."
+
+[blocks."discord.build_embed"]
+name = "Embed bauen"
+description = "Erstellt ein Rich-Embed. Gestalte es im Embed-Editor; jeder {Platzhalter}, den du tippst, wird zu einem Eingang."
+
+[blocks."discord.button"]
+name = "Schaltfläche"
+description = "Eine Schaltfläche für eine Nachricht. Drücke kommen beim Ereignis „Schaltfläche gedrückt“ mit derselben eigenen ID an."
+
+[blocks."discord.delete_message"]
+name = "Nachricht löschen"
+description = "Löscht eine Nachricht, wahlweise nach einer Wartezeit."
+
+[blocks."discord.message_info"]
+name = "Nachrichten-Info"
+description = "Liest eine Information über eine Nachricht."
+
+[blocks."discord.send_message"]
+name = "Nachricht senden"
+description = "Antwortet auf einen Befehl oder eine Schaltfläche, oder sendet, beantwortet und bearbeitet Nachrichten in Kanälen."

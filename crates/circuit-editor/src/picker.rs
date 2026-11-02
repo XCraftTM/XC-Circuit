@@ -147,7 +147,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                     ui.horizontal(|ui| {
                         let edit = ui.add(
                             TextEdit::singleline(&mut picker.query)
-                                .hint_text("Search blocks")
+                                .hint_text(t!("Search blocks"))
                                 .frame(Frame::new())
                                 .desired_width(size.x - 140.0)
                                 .font(egui::FontId::proportional(15.0)),
@@ -159,7 +159,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                             picker.highlighted = 0;
                         }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let tag = if picker.pending.is_some() { "Only compatible" } else { "All blocks" };
+                            let tag = if picker.pending.is_some() { t!("Only compatible") } else { t!("All blocks") };
                             Frame::new().fill(theme.panel_header).corner_radius(99).inner_margin(Margin::symmetric(8, 2)).show(ui, |ui| {
                                 ui.label(RichText::new(tag).small().color(theme.text_muted));
                             });
@@ -178,7 +178,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                             for (i, (def, pin)) in list.iter().enumerate() {
                                 let cat = def.category.clone().unwrap_or_default();
                                 if last_cat.as_deref() != Some(cat.as_str()) {
-                                    let name = mode.as_ref().and_then(|m| m.category(&cat)).map(|c| c.name.clone()).unwrap_or(cat.clone());
+                                    let name = mode.as_ref().and_then(|m| m.category(&cat)).map(|c| crate::i18n::tr(&c.name).into_owned()).unwrap_or(cat.clone());
                                     ui.add_space(6.0);
                                     ui.horizontal(|ui| {
                                         ui.add_space(12.0);
@@ -213,7 +213,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                             }
                             if list.is_empty() {
                                 ui.add_space(16.0);
-                                ui.label(RichText::new("   No blocks match").color(theme.text_muted));
+                                ui.label(RichText::new(t!("   No blocks match")).color(theme.text_muted));
                             }
                         });
                     });
@@ -237,7 +237,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                     ui.set_width(size.x - 24.0);
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = vec2(14.0, 0.0);
-                        for hint in ["Enter: place", "Up/Down: move", "Esc: close"] {
+                        for hint in [t!("Enter: place"), t!("Up/Down: move"), t!("Esc: close")] {
                             ui.label(RichText::new(hint).size(11.0).color(theme.text_muted));
                         }
                     });
@@ -263,8 +263,8 @@ fn details(ui: &mut egui::Ui, def: &BlockDef, reg: &Registry, theme: &Theme) {
     ui.label(RichText::new(&def.name).strong().size(16.0));
     ui.label(RichText::new(format!("by {} · v{} · {}", def.author, def.version, def.plugin)).size(12.0).color(theme.text_muted));
     ui.label(&def.description);
-    let fields: Vec<String> = def.fields.iter().filter(|(_, f)| !f.advanced).map(|(k, f)| f.label(k)).collect();
-    let outputs: Vec<String> = def.outputs.iter().map(|(k, o)| format!("{} ({})", o.label(k), o.ty.display(reg))).collect();
+    let fields: Vec<String> = def.fields.iter().filter(|(_, f)| !f.advanced).map(|(k, f)| crate::i18n::label(&f.label(k)).into_owned()).collect();
+    let outputs: Vec<String> = def.outputs.iter().map(|(k, o)| format!("{} ({})", crate::i18n::label(&o.label(k)), o.ty.display(reg))).collect();
     if !fields.is_empty() {
         ui.label(RichText::new(format!("In: {}", fields.join(", "))).size(12.5).color(theme.text_muted));
     }

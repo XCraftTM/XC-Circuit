@@ -33,6 +33,7 @@ The first start opens `examples/DemoBot`. Windows and Linux are supported.
 | Backups | Every save keeps a snapshot outside the project (newest 20, plus one a day for 14 days; Settings › Backups). File › Restore from backup… compares them with now and restores the project or one workspace. Unsaved changes are copied every 30 s and offered back after a crash |
 | Bot data backups | A bot backs up its saved data (store.json) when it starts and every 6 hours, keeping the newest 10 in data/backups. If the data is empty or damaged it asks: restore a backup or start empty (a dialog in XC Circuit, a question in the terminal) |
 | Settings | Ctrl+, or the gear at the bottom of the activity bar: theme, accent color (changes live), touch mode, interface size, canvas, window, bot, plugins, shortcuts |
+| Language | English and German come with the app: pick one on the first start page or in Settings › Appearance; it switches right away, block names included |
 | Touch mode | Settings › Appearance (or the first start's Look step): bigger buttons, rows and pins with more room between them, for touch screens and pens |
 | Command palette | Ctrl+P or the search box in the title bar: run any command, open a workspace, or jump to a block |
 | Editor tabs | The Embed Builder, Slash Commands, Bot settings, Export and Plugins open as tabs in their own floating window; drag a tab onto any side or next to other tabs to dock it, or out again. Closing the tab cancels it |
@@ -128,6 +129,32 @@ The plugin folder has a `plugin.toml` with `[native] library = "my_plugin"` and 
 - **Turned off by default.** Plugins › Manage Plugins › Allow native plugins. Plugins outside the app's own `plugins/` folder (for example in a project you downloaded) must also be allowed one by one.
 - **Rebuilds reload.** The editor loads a copy of the library and notices when the original changes, so rebuilding while it runs swaps the plugin in. A plugin that panics is switched off until it is rebuilt.
 - The editor looks for the library in the plugin folder, its `native/` folder, then next to the editor executable (where `cargo plugin` puts it).
+
+## Translations
+
+A language is a plugin file, `locales/<code>.toml`, listed under `contributes.locales` in the plugin's `plugin.toml`. Settings › Appearance › Create a translation… writes one with every text to fill in (as a plugin in your plugins folder) and opens it; what you save shows right away.
+
+```toml
+[meta]
+code = "de"
+name = "Deutsch"          # the language's own name, shown in the picker
+english_name = "German"
+
+[strings]                 # interface texts, by their English text
+"Save and close" = "Speichern und schließen"
+"{count} to fix" = "{count} zu beheben"   # keep {placeholders}
+
+[labels]                  # block field, output and choice labels
+"Message" = "Nachricht"
+
+[blocks."core.math"]      # a block's name and description
+name = "Mathe"
+description = "Rechnet mit zwei Zahlen."
+```
+
+Empty entries show in English, and several plugins can add to the same language (each Build Mode translates its own blocks). German is in `plugins/xc.core/locales/de.toml` and `plugins/xc.discord/locales/de.toml`.
+
+In the editor's code, interface texts are wrapped in `t!("…")` (or `tf!("… {name} …", name = value)`, or `n("…")` in constants). `src/ui_strings.rs` lists them all for templates; a test checks it is current (run the tests with `XC_UPDATE_STRINGS=1` to refresh it) and that German translates every text.
 
 ## Status
 

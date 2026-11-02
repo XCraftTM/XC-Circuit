@@ -31,11 +31,13 @@ pub struct Prefs {
     pub backup_days: u32,
     /// Bigger controls with more room between them, for fingers.
     pub touch: bool,
+    /// The interface language's code (`en`, `de`).
+    pub language: String,
 }
 
 impl Default for Prefs {
     fn default() -> Self {
-        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false }
+        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into() }
     }
 }
 

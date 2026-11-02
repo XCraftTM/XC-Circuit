@@ -30,7 +30,7 @@ pub const SEARCH_W: f32 = 380.0;
 /// The search box in the middle of the title bar. Clicking it opens the
 /// command palette, which appears on top of it.
 pub fn search_box(ui: &mut egui::Ui, rect: Rect, theme: &Theme, label: &str) -> bool {
-    let resp = ui.interact(rect, ui.id().with("title-search"), Sense::click()).on_hover_text("Search commands, workspaces and blocks (Ctrl+P)");
+    let resp = ui.interact(rect, ui.id().with("title-search"), Sense::click()).on_hover_text(t!("Search commands, workspaces and blocks (Ctrl+P)"));
     let fill = if resp.hovered() { mix(theme.field, theme.text, 0.06) } else { theme.field };
     let p = ui.painter();
     p.rect(rect, 6.0, fill, Stroke::new(1.0, theme.line), egui::StrokeKind::Inside);

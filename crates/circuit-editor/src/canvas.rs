@@ -191,7 +191,7 @@ fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], def: Option<&BlockDef
                 dir: Dir::Out,
                 ty: PinType::Action,
                 pos: pos2(rect.right(), y),
-                label: circuit_core::block::title_case(f),
+                label: crate::i18n::label(&circuit_core::block::title_case(f)).into_owned(),
                 description: None,
                 faint: false,
                 multi: true,
@@ -204,7 +204,7 @@ fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], def: Option<&BlockDef
                         dir: Dir::In,
                         ty: f.ty.clone(),
                         pos: pos2(rect.left(), y),
-                        label: f.label(key),
+                        label: crate::i18n::label(&f.label(key)).into_owned(),
                         description: f.description.clone(),
                         faint: !*pinned,
                         multi: f.multi,
@@ -218,7 +218,7 @@ fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], def: Option<&BlockDef
                     dir: Dir::Out,
                     ty: o.ty.clone(),
                     pos: pos2(rect.right(), y),
-                    label: o.label(k),
+                    label: crate::i18n::label(&o.label(k)).into_owned(),
                     description: o.description.clone(),
                     faint: false,
                     multi: true,
@@ -276,7 +276,7 @@ fn zone_layout(zid: &str, rect: Rect) -> NodeLayout {
             dir: Dir::Out,
             ty,
             pos: pos2(rect.right(), top + ZONE_ROW_H * (i as f32 + 0.5)),
-            label: label.into(),
+            label: crate::i18n::label(label).into_owned(),
             description: Some(description.into()),
             faint: false,
             multi: true,
@@ -290,7 +290,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     let Some(project) = project.as_mut() else { return };
     let mode = reg.mode(&project.meta.mode).or_else(|| reg.modes.first());
     let Some(ws) = project.workspaces.get_mut(ws_key) else {
-        ui.label("This workspace no longer exists.");
+        ui.label(t!("This workspace no longer exists."));
         return;
     };
     let view = views.entry(ws_key.to_string()).or_insert_with(|| CanvasView { zoom: 1.0, ..Default::default() });
@@ -435,13 +435,13 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         painter.rect(r, 16.0, with_alpha(theme.accent, 14), Stroke::new(1.5, edge), StrokeKind::Inside);
         painter.rect_filled(layout.header, CornerRadius { nw: 16, ne: 16, sw: 0, se: 0 }, with_alpha(theme.accent, 36));
         let (title, retry, timeout) = ws.zones.get(&zid).map(|z| (z.title.clone(), z.retry, z.timeout_ms)).unwrap_or_default();
-        painter.text(layout.header.left_center() + vec2(14.0, 0.0), Align2::LEFT_CENTER, format!("Try · {title}"), FontId::proportional(12.5), theme.accent);
+        painter.text(layout.header.left_center() + vec2(14.0, 0.0), Align2::LEFT_CENTER, tf!("Try · {title}", title = title), FontId::proportional(12.5), theme.accent);
         let mut extra = Vec::new();
         if retry > 0 {
-            extra.push(format!("retry {retry}×"));
+            extra.push(tf!("retry {count}×", count = retry));
         }
         if let Some(t) = timeout {
-            extra.push(format!("{:.0} s timeout", t as f32 / 1000.0));
+            extra.push(tf!("{seconds} s timeout", seconds = format!("{:.0}", t as f32 / 1000.0)));
         }
         // Left of the settings button, which is drawn on top in screen space.
         painter.text(layout.header.right_center() - vec2(14.0 + zone_button / view.zoom, 0.0), Align2::RIGHT_CENTER, extra.join(" · "), FontId::proportional(11.0), theme.text_muted);
@@ -469,7 +469,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             }
             *dirty = true;
         }
-        band.on_hover_text("A Try Zone catches errors from the blocks inside it. The gear button sets its title, retries and timeout.");
+        band.on_hover_text(t!("A Try Zone catches errors from the blocks inside it. The gear button sets its title, retries and timeout."));
         for spot in &layout.pins {
             let connected = ws.links.iter().any(|l| l.from.node == zid && l.from.pin == spot.pin);
             let candidate = drag.as_ref().map(|d| drag_compat(d, &zid, spot, reg));
@@ -566,7 +566,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         let body = cui.interact(layout.rect, cui.id().with(("body", id)), Sense::click_and_drag());
 
         let Some(def) = def else {
-            painter.text(layout.header.left_center() + vec2(14.0, 0.0), Align2::LEFT_CENTER, "Missing block", FontId::proportional(13.0), theme.error);
+            painter.text(layout.header.left_center() + vec2(14.0, 0.0), Align2::LEFT_CENTER, t!("Missing block"), FontId::proportional(13.0), theme.error);
             painter.text(layout.header.left_bottom() + vec2(14.0, ROW_H / 2.0 + 4.0), Align2::LEFT_CENTER, &block_ref, FontId::monospace(11.0), theme.text_muted);
             if body.clicked() || body.secondary_clicked() {
                 *selected = Some((ws_key.to_string(), id.clone()));
@@ -607,7 +607,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                 RowKind::Flow(f) => (f, Dir::Out, *r),
                 RowKind::Output(k) => (k, Dir::Out, *r),
                 RowKind::Field { key, .. } => {
-                    let label = shape.and_then(|s| s.field(key)).map(|f| f.label(key)).unwrap_or_else(|| key.clone());
+                    let label = shape.and_then(|s| s.field(key)).map(|f| crate::i18n::label(&f.label(key)).into_owned()).unwrap_or_else(|| key.clone());
                     let w = (r.width() * 0.4).min(label.len() as f32 * 7.0 + 8.0);
                     (key, Dir::In, Rect::from_min_max(r.min, pos2(r.left() + 16.0 + w, r.bottom())))
                 }
@@ -617,11 +617,11 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             }
             match row {
                 RowKind::Flow(f) => {
-                    painter.text(r.right_center() - vec2(16.0, 0.0), Align2::RIGHT_CENTER, circuit_core::block::title_case(f), FontId::proportional(12.5), theme.text);
+                    painter.text(r.right_center() - vec2(16.0, 0.0), Align2::RIGHT_CENTER, crate::i18n::label(&circuit_core::block::title_case(f)), FontId::proportional(12.5), theme.text);
                 }
                 RowKind::Output(k) => {
                     let o = shape.and_then(|s| s.output(k));
-                    let label = o.map(|o| o.label(k)).unwrap_or_else(|| k.clone());
+                    let label = o.map(|o| crate::i18n::label(&o.label(k)).into_owned()).unwrap_or_else(|| k.clone());
                     painter.text(r.right_center() - vec2(16.0, 0.0), Align2::RIGHT_CENTER, label, FontId::proportional(12.5), theme.text_muted);
                 }
                 RowKind::Field { key, .. } if shape.and_then(|s| s.field(key)).is_some_and(|f| f.type_name == "embed") => {
@@ -631,7 +631,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     let l = crate::embed::layout(&painter, &data, w, Some(4), EMBED_SCALE);
                     crate::embed::paint(&painter, r.min + vec2(14.0, 4.0), w, &l);
                     let button = Rect::from_min_size(pos2(r.left() + 14.0, r.top() + 4.0 + l.height + 8.0), vec2(w, 26.0));
-                    if cui.put(button, egui::Button::new("Edit embed…")).clicked() {
+                    if cui.put(button, egui::Button::new(t!("Edit embed…"))).clicked() {
                         open_embed = Some(key.clone());
                     }
                 }
@@ -642,7 +642,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     let empty = node_values.get(key).or(f.default.as_ref()).is_none_or(|v| v.is_null() || v == &Value::String(String::new()));
                     let missing = f.required && empty && !connected;
                     let label_color = if missing { theme.warning } else { theme.text_muted };
-                    let label = f.label(key);
+                    let label = crate::i18n::label(&f.label(key)).into_owned();
                     let label_w = (r.width() * 0.4).min(label.len() as f32 * 7.0 + 8.0);
                     painter.text(r.left_center() + vec2(16.0, 0.0), Align2::LEFT_CENTER, &label, FontId::proportional(12.5), label_color);
                     if *pinned {
@@ -884,21 +884,21 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     tools(bar, row).scope(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
         let center = outer.center();
-        if tool_button(ui, theme, icon("plus").as_deref(), "Add block").on_hover_text("Add a block (Space or right-click on the canvas)").clicked() {
+        if tool_button(ui, theme, icon("plus").as_deref(), t!("Add block")).on_hover_text(t!("Add a block (Space or right-click on the canvas)")).clicked() {
             *picker = Some(Picker::new(ws_key, center, to_global.inverse() * center, None));
         }
         ui.add_space(6.0);
-        if crate::dialog::icon_button(ui, theme, icon("zoom-out").as_deref(), "−", "Zoom out").clicked() {
+        if crate::dialog::icon_button(ui, theme, icon("zoom-out").as_deref(), "−", t!("Zoom out")).clicked() {
             view.zoom_at(outer.min, center, 1.0 / 1.25);
         }
         let percent = format!("{:.0}%", view.zoom * 100.0);
-        if tool_button(ui, theme, None, &percent).on_hover_text("Back to 100%").clicked() {
+        if tool_button(ui, theme, None, &percent).on_hover_text(t!("Back to 100%")).clicked() {
             view.zoom_at(outer.min, center, 1.0 / view.zoom);
         }
-        if crate::dialog::icon_button(ui, theme, icon("zoom-in").as_deref(), "+", "Zoom in").clicked() {
+        if crate::dialog::icon_button(ui, theme, icon("zoom-in").as_deref(), "+", t!("Zoom in")).clicked() {
             view.zoom_at(outer.min, center, 1.25);
         }
-        if crate::dialog::icon_button(ui, theme, icon("maximize").as_deref(), "Fit", "Show every block").clicked() {
+        if crate::dialog::icon_button(ui, theme, icon("maximize").as_deref(), t!("Fit"), t!("Show every block")).clicked() {
             fit_view(view, outer, &layouts[..node_count]);
         }
     });
@@ -914,21 +914,21 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         tools(area, row).scope(|ui| {
             egui::Frame::new().fill(theme.panel_header).stroke(Stroke::new(1.0, theme.node_border)).corner_radius(9).inner_margin(4).shadow(ui.visuals().popup_shadow).show(ui, |ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
-                if b.source.is_some() && tool_button(ui, theme, icon("copy").as_deref(), &many("Duplicate")).clicked() {
+                if b.source.is_some() && tool_button(ui, theme, icon("copy").as_deref(), &many(t!("Duplicate"))).clicked() {
                     menu = Some(NodeMenu::Duplicate(b.node.clone()));
                 }
-                if count == 1 && b.in_zone && tool_button(ui, theme, icon("shield").as_deref(), "Leave Try Zone").clicked() {
+                if count == 1 && b.in_zone && tool_button(ui, theme, icon("shield").as_deref(), t!("Leave Try Zone")).clicked() {
                     menu = Some(NodeMenu::LeaveZone(b.node.clone()));
                 }
-                if count == 1 && b.can_wrap && tool_button(ui, theme, icon("shield").as_deref(), "Try Zone").on_hover_text("Wrap in a Try Zone, which catches its errors").clicked() {
+                if count == 1 && b.can_wrap && tool_button(ui, theme, icon("shield").as_deref(), t!("Try Zone")).on_hover_text(t!("Wrap in a Try Zone, which catches its errors")).clicked() {
                     menu = Some(NodeMenu::WrapInZone(b.node.clone()));
                 }
                 if let Some(src) = b.source.as_ref().filter(|_| count == 1)
-                    && tool_button(ui, theme, icon("function").as_deref(), "Source").on_hover_text("Open the block's source file").clicked()
+                    && tool_button(ui, theme, icon("function").as_deref(), t!("Source")).on_hover_text(t!("Open the block's source file")).clicked()
                 {
                     menu = Some(NodeMenu::OpenSource(src.clone()));
                 }
-                if tool_button(ui, theme, icon("trash").as_deref(), &many("Delete")).on_hover_text("Delete (Del)").clicked() {
+                if tool_button(ui, theme, icon("trash").as_deref(), &many(t!("Delete"))).on_hover_text(t!("Delete (Del)")).clicked() {
                     menu = Some(NodeMenu::Delete(b.node.clone()));
                 }
             });
@@ -940,7 +940,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         && let Some((_, link)) = selected_wire.clone()
     {
         let r = Rect::from_center_size(mid, vec2(124.0, 34.0));
-        let resp = tool_button(&mut tools(r, egui::Layout::centered_and_justified(egui::Direction::LeftToRight)), theme, icon("trash").as_deref(), "Delete wire").on_hover_text("Delete wire (Del)");
+        let resp = tool_button(&mut tools(r, egui::Layout::centered_and_justified(egui::Direction::LeftToRight)), theme, icon("trash").as_deref(), t!("Delete wire")).on_hover_text(t!("Delete wire (Del)"));
         if resp.clicked() {
             ws.links.retain(|l| *l != link);
             *selected_wire = None;
@@ -962,19 +962,19 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         if let Some(path) = icon("settings") {
             egui::Image::from_uri(crate::editor::file_uri(&path)).tint(theme.accent).paint_at(&t, r.shrink(r.width() * 0.2));
         }
-        let gear = gear.on_hover_text("Try Zone settings");
+        let gear = gear.on_hover_text(t!("Try Zone settings"));
         egui::Popup::menu(&gear).width(240.0).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
             let Some(z) = ws.zones.get_mut(zid) else { return };
             ui.spacing_mut().item_spacing.y = 8.0;
-            ui.label(RichText::new("Try Zone").strong());
-            ui.label("Title");
+            ui.label(RichText::new(t!("Try Zone")).strong());
+            ui.label(t!("Title"));
             *dirty |= ui.add(crate::inputs::TextLine::new(&mut z.title)).changed();
             ui.horizontal(|ui| {
-                ui.label("Retries");
+                ui.label(t!("Retries"));
                 *dirty |= ui.add(egui::DragValue::new(&mut z.retry).range(0..=10)).changed();
             });
             ui.horizontal(|ui| {
-                ui.label("Timeout (s)");
+                ui.label(t!("Timeout (s)"));
                 let mut secs = z.timeout_ms.map(|t| t as f64 / 1000.0).unwrap_or(0.0);
                 if ui.add(egui::DragValue::new(&mut secs).range(0.0..=600.0).speed(0.5)).changed() {
                     z.timeout_ms = (secs > 0.0).then_some((secs * 1000.0) as u64);
@@ -982,7 +982,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                 }
             });
             ui.separator();
-            if crate::dialog::small_button(ui, theme, "Remove Try Zone").clicked() {
+            if crate::dialog::small_button(ui, theme, t!("Remove Try Zone")).clicked() {
                 menu = Some(NodeMenu::RemoveZone(zid.clone()));
                 ui.close();
             }
@@ -1256,7 +1256,7 @@ fn pin_tooltip(ui: &mut Ui, spot: &PinSpot, reg: &Registry, theme: &Theme) {
         ui.label(egui::RichText::new(d).color(theme.text_muted));
     }
     if spot.faint {
-        ui.label(egui::RichText::new("Click to turn this field into a pin, or drop a wire on it.").small().italics().color(theme.text_muted));
+        ui.label(egui::RichText::new(t!("Click to turn this field into a pin, or drop a wire on it.")).small().italics().color(theme.text_muted));
     }
 }
 

@@ -63,7 +63,7 @@ fn compile_pattern(pattern: &str) -> Result<regex::Regex, regex::Error> {
 fn pattern_problem(pattern: Option<&regex::Regex>, hint: Option<&str>, value: &str) -> Option<String> {
     let value = value.trim();
     match pattern {
-        Some(re) if !value.is_empty() && !re.is_match(value) => Some(hint.unwrap_or("This doesn't look right.").to_string()),
+        Some(re) if !value.is_empty() && !re.is_match(value) => Some(hint.unwrap_or(t!("This doesn't look right.")).to_string()),
         _ => None,
     }
 }
@@ -138,7 +138,7 @@ impl BotUi {
     pub fn stop(&mut self, ed: &mut Editor) {
         if let Some(s) = self.session.take() {
             s.stop();
-            ed.log(Level::Info, "Bot stopped");
+            ed.log(Level::Info, t!("Bot stopped"));
         }
         self.state = BotState::Stopped;
     }
@@ -197,6 +197,7 @@ impl BotUi {
     pub fn open_settings(&mut self, ed: &mut Editor) {
         let (Some(project), Some(mode)) = (&ed.project, ed.mode()) else { return };
         let text = |spec: &Value, key: &str| spec.get(key).and_then(Value::as_str).map(str::to_string);
+        let tr = |s: &str| crate::i18n::tr(s).into_owned();
         let mut bad_patterns = Vec::new();
         let fields = mode
             .settings
@@ -217,15 +218,15 @@ impl BotUi {
                 };
                 SettingField {
                     key: key.clone(),
-                    group: text(spec, "group").unwrap_or_else(|| "General".into()),
-                    label: text(spec, "label").unwrap_or_else(|| key.clone()),
-                    description: text(spec, "description"),
-                    placeholder: text(spec, "placeholder").unwrap_or_default(),
+                    group: text(spec, "group").map(|g| tr(&g)).unwrap_or_else(|| t!("General").into()),
+                    label: text(spec, "label").map(|l| tr(&l)).unwrap_or_else(|| key.clone()),
+                    description: text(spec, "description").map(|d| tr(&d)),
+                    placeholder: text(spec, "placeholder").map(|p| tr(&p)).unwrap_or_default(),
                     secret,
                     masked: secret || spec.get("sensitive").and_then(Value::as_bool).unwrap_or(false),
                     required: spec.get("required").and_then(Value::as_bool).unwrap_or(false),
                     pattern,
-                    pattern_hint: text(spec, "patternHint"),
+                    pattern_hint: text(spec, "patternHint").map(|h| tr(&h)),
                     value,
                     saved: secret && secrets::get(&project.root, key).is_some(),
                     reveal: false,
@@ -264,7 +265,7 @@ impl BotUi {
         dialog::show(
             ctx,
             &theme,
-            dialog::Spec { id: "bot-question", title: "Your bot needs a decision", subtitle: Some("It waits until you choose"), icon: icon.as_deref(), width: 520.0 },
+            dialog::Spec { id: "bot-question", title: t!("Your bot needs a decision"), subtitle: Some(t!("It waits until you choose")), icon: icon.as_deref(), width: 520.0 },
             |ui, part| match part {
                 Part::Body => {
                     ui.label(RichText::new(&text).size(13.5).color(theme.text));
@@ -278,7 +279,7 @@ impl BotUi {
                     }
                 }
                 Part::Footer => {
-                    if dialog::secondary_button(ui, &theme, "Stop the bot").clicked() {
+                    if dialog::secondary_button(ui, &theme, t!("Stop the bot")).clicked() {
                         picked = Some((String::new(), String::new()));
                     }
                 }
@@ -302,8 +303,8 @@ impl BotUi {
         let Some(draft) = &mut self.settings else { return };
         let theme = ed.theme.clone();
         let icon = ed.reg.icons.get("settings").cloned();
-        let subtitle = format!("{} · stored per project", draft.project_name);
-        let store = if cfg!(windows) { "Windows Credential Manager" } else { "the system keyring" };
+        let subtitle = tf!("{project} · stored per project", project = draft.project_name);
+        let store = if cfg!(windows) { t!("Windows Credential Manager") } else { t!("the system keyring") };
         let root = ed.project.as_ref().map(|p| p.root.clone());
         let icon_of = |name: &str| ed.reg.icons.get(name).cloned();
         let (eye, eye_off, copy, check) = (icon_of("eye"), icon_of("eye-off"), icon_of("copy"), icon_of("check"));
@@ -312,7 +313,7 @@ impl BotUi {
         dialog::tab(
             ui,
             &theme,
-            dialog::Spec { id: "bot-settings", title: "Bot settings", subtitle: Some(&subtitle), icon: icon.as_deref(), width: 520.0 },
+            dialog::Spec { id: "bot-settings", title: t!("Bot settings"), subtitle: Some(&subtitle), icon: icon.as_deref(), width: 520.0 },
             |ui, part| match part {
                 Part::Body => {
                     let mut group: Option<String> = None;
@@ -329,19 +330,19 @@ impl BotUi {
                             } else {
                                 ui.horizontal(|ui| {
                                     ui.spacing_mut().item_spacing.x = 6.0;
-                                    let hint = if f.saved && !f.remove { "•••••••• saved · type to replace" } else { f.placeholder.as_str() };
+                                    let hint = if f.saved && !f.remove { t!("•••••••• saved · type to replace") } else { f.placeholder.as_str() };
                                     ui.allocate_ui(egui::vec2(ui.available_width() - 80.0, 34.0), |ui| {
                                         dialog::text_input(ui, &mut f.value, hint, !f.reveal);
                                     });
-                                    let (icon, tip) = if f.reveal { (eye_off.as_deref(), "Hide") } else { (eye.as_deref(), "Show what you typed") };
-                                    if dialog::icon_button(ui, &theme, icon, if f.reveal { "Hide" } else { "Show" }, tip).clicked() {
+                                    let (icon, tip) = if f.reveal { (eye_off.as_deref(), t!("Hide")) } else { (eye.as_deref(), t!("Show what you typed")) };
+                                    if dialog::icon_button(ui, &theme, icon, if f.reveal { t!("Hide") } else { "Show" }, tip).clicked() {
                                         f.reveal = !f.reveal;
                                     }
                                     // Copies what was typed, or else the saved value, without showing it.
                                     let saved_value = || if f.secret && f.saved { root.as_deref().and_then(|r| secrets::get(r, &f.key)) } else { None };
                                     let can_copy = !f.value.is_empty() || (f.saved && !f.remove);
                                     let copied = f.copied.is_some_and(|t| t.elapsed() < COPIED_FOR);
-                                    let (icon, tip) = if copied { (check.as_deref(), "Copied") } else { (copy.as_deref(), "Copy without showing it") };
+                                    let (icon, tip) = if copied { (check.as_deref(), t!("Copied")) } else { (copy.as_deref(), t!("Copy without showing it")) };
                                     if ui.add_enabled_ui(can_copy, |ui| dialog::icon_button(ui, &theme, icon, "Copy", tip)).inner.clicked() {
                                         let value = if f.value.is_empty() { saved_value() } else { Some(f.value.trim().to_string()) };
                                         if let Some(v) = value {
@@ -362,26 +363,26 @@ impl BotUi {
                             ui.add_space(4.0);
                             ui.horizontal(|ui| {
                                 if f.remove {
-                                    dialog::pill(ui, "Will be removed", theme.error);
+                                    dialog::pill(ui, t!("Will be removed"), theme.error);
                                 } else if f.saved {
-                                    dialog::pill(ui, "Saved", theme.action);
+                                    dialog::pill(ui, t!("Saved"), theme.action);
                                 } else {
-                                    dialog::pill(ui, "Not set", theme.warning);
+                                    dialog::pill(ui, t!("Not set"), theme.warning);
                                 }
-                                if f.saved && dialog::small_button(ui, &theme, if f.remove { "Keep it" } else { "Remove saved value" }).clicked() {
+                                if f.saved && dialog::small_button(ui, &theme, if f.remove { t!("Keep it") } else { t!("Remove saved value") }).clicked() {
                                     f.remove = !f.remove;
                                 }
                             });
                             ui.add_space(2.0);
-                            ui.label(RichText::new(format!("Kept in {store}, never in project files.")).size(11.5).color(theme.text_muted));
+                            ui.label(RichText::new(tf!("Kept in {store}, never in project files.", store = store)).size(11.5).color(theme.text_muted));
                         });
                     }
                 }
                 Part::Footer => {
-                    save = ui.add_enabled_ui(problems == 0, |ui| dialog::primary_button(ui, &theme, "Save and close")).inner.clicked();
-                    cancel = dialog::secondary_button(ui, &theme, "Cancel").clicked();
+                    save = ui.add_enabled_ui(problems == 0, |ui| dialog::primary_button(ui, &theme, t!("Save and close"))).inner.clicked();
+                    cancel = dialog::secondary_button(ui, &theme, t!("Cancel")).clicked();
                     if problems > 0 {
-                        ui.label(RichText::new(format!("{problems} to fix")).size(12.0).color(theme.warning));
+                        ui.label(RichText::new(tf!("{count} to fix", count = problems)).size(12.0).color(theme.warning));
                     }
                 }
             },
@@ -410,7 +411,7 @@ impl BotUi {
                     ed.log.push(crate::editor::LogLine::new(Level::Error, e));
                 }
             }
-            ed.log(Level::Success, "Settings saved");
+            ed.log(Level::Success, t!("Settings saved"));
             self.settings = None;
         } else if cancel {
             self.settings = None;
@@ -428,44 +429,44 @@ impl BotUi {
             &theme,
             dialog::Spec {
                 id: "export-bot",
-                title: "Export bot",
-                subtitle: Some("A folder that runs anywhere with Node.js 22+"),
+                title: t!("Export bot"),
+                subtitle: Some(t!("A folder that runs anywhere with Node.js 22+")),
                 icon: icon.as_deref(),
                 width: 540.0,
             },
             |ui, part| match part {
                 Part::Body => {
-                    dialog::section(ui, &theme, "Destination");
-                    dialog::field(ui, &theme, "Folder", Some("Created if it doesn't exist. It must be empty, or a folder you exported a bot to before."), |ui| {
+                    dialog::section(ui, &theme, t!("Destination"));
+                    dialog::field(ui, &theme, t!("Folder"), Some(t!("Created if it doesn't exist. It must be empty, or a folder you exported a bot to before.")), |ui| {
                         ui.horizontal(|ui| {
                             ui.allocate_ui(egui::vec2(ui.available_width() - 104.0, 34.0), |ui| dialog::readout(ui, &theme, &draft.dir.display().to_string()));
-                            if dialog::secondary_button(ui, &theme, "Change…").clicked()
-                                && let Some(parent) = rfd::FileDialog::new().set_title("Choose where to export the bot").pick_folder()
+                            if dialog::secondary_button(ui, &theme, t!("Change…")).clicked()
+                                && let Some(parent) = rfd::FileDialog::new().set_title(t!("Choose where to export the bot")).pick_folder()
                             {
                                 draft.dir = parent.join(circuit_runner::export::folder_name(&draft.name));
                             }
                         });
                     });
 
-                    dialog::section(ui, &theme, "Options");
+                    dialog::section(ui, &theme, t!("Options"));
                     let token_text = if draft.token_saved {
-                        "Writes DISCORD_TOKEN to the folder's .env file. Never share or upload that file."
+                        t!("Writes DISCORD_TOKEN to the folder's .env file. Never share or upload that file.")
                     } else {
-                        "No token saved yet (Bot › Settings). An empty .env is created for you to fill in."
+                        t!("No token saved yet (Bot › Settings). An empty .env is created for you to fill in.")
                     };
                     ui.add_enabled_ui(draft.token_saved, |ui| {
-                        dialog::toggle_row(ui, &theme, &mut draft.include_token, "Include the bot token", token_text);
+                        dialog::toggle_row(ui, &theme, &mut draft.include_token, t!("Include the bot token"), token_text);
                     });
-                    dialog::toggle_row(ui, &theme, &mut draft.install, "Install npm packages now", "Runs npm install in the folder so it's ready to start. Needs internet.");
+                    dialog::toggle_row(ui, &theme, &mut draft.install, t!("Install npm packages now"), t!("Runs npm install in the folder so it's ready to start. Needs internet."));
 
-                    dialog::section(ui, &theme, "What you get");
+                    dialog::section(ui, &theme, t!("What you get"));
                     egui::Frame::new().fill(theme.field).corner_radius(8).inner_margin(egui::Margin::symmetric(12, 10)).show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         for (file, what) in [
-                            ("index.js", "your workspaces, blocks and the Circuit runtime"),
-                            ("package.json", "npm packages the bot needs"),
-                            (".env", "the bot token"),
-                            ("README.txt", "how to start it: node index.js"),
+                            ("index.js", t!("your workspaces, blocks and the Circuit runtime")),
+                            ("package.json", t!("npm packages the bot needs")),
+                            (".env", t!("the bot token")),
+                            ("README.txt", t!("how to start it: node index.js")),
                         ] {
                             ui.horizontal(|ui| {
                                 ui.label(RichText::new(file).monospace().size(12.0).color(theme.text));
@@ -475,8 +476,8 @@ impl BotUi {
                     });
                 }
                 Part::Footer => {
-                    go = dialog::primary_button(ui, &theme, "Export").clicked();
-                    cancel = dialog::secondary_button(ui, &theme, "Cancel").clicked();
+                    go = dialog::primary_button(ui, &theme, t!("Export")).clicked();
+                    cancel = dialog::secondary_button(ui, &theme, t!("Cancel")).clicked();
                 }
             },
         );

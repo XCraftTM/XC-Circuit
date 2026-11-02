@@ -161,7 +161,7 @@ fn close_button(ui: &mut Ui, theme: &Theme) -> Response {
     let s = Stroke::new(1.6, if resp.hovered() { theme.text } else { theme.text_muted });
     ui.painter().line_segment([c + vec2(-5.0, -5.0), c + vec2(5.0, 5.0)], s);
     ui.painter().line_segment([c + vec2(5.0, -5.0), c + vec2(-5.0, 5.0)], s);
-    resp.on_hover_text("Close (Esc)")
+    resp.on_hover_text(t!("Close (Esc)"))
 }
 
 /// A small uppercase heading that starts a group of fields.

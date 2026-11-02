@@ -10,6 +10,7 @@ use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
 use serde::{Deserialize, Serialize};
 
 use crate::bot::{BotState, BotUi};
+use crate::i18n::n;
 use crate::editor::{Action, Editor, Level};
 use crate::palette::{Cmd, Item};
 use crate::{canvas, dialog, palette, panels, picker};
@@ -38,11 +39,11 @@ pub enum Tab {
 
 impl Tab {
     const PANELS: [(Tab, &'static str); 5] = [
-        (Tab::Workspaces, "Workspaces"),
-        (Tab::Inspector, "Inspector"),
-        (Tab::Console, "Console"),
-        (Tab::Problems, "Problems"),
-        (Tab::StoredData, "Stored Data"),
+        (Tab::Workspaces, n("Workspaces")),
+        (Tab::Inspector, n("Inspector")),
+        (Tab::Console, n("Console")),
+        (Tab::Problems, n("Problems")),
+        (Tab::StoredData, n("Stored Data")),
     ];
 }
 
@@ -109,6 +110,7 @@ impl CircuitApp {
             Err(e) => panic!("could not start the block sandbox: {e:#}"),
         };
         ed.prefs = prefs;
+        ed.apply_language();
         ed.prefs.apply_node();
         ed.restyle();
         ed.theme.apply(&cc.egui_ctx);
@@ -243,13 +245,13 @@ impl CircuitApp {
     }
 
     fn open_project_dialog(&mut self) {
-        if let Some(dir) = rfd::FileDialog::new().set_title("Open a Circuit project folder").pick_folder() {
+        if let Some(dir) = rfd::FileDialog::new().set_title(t!("Open a Circuit project folder")).pick_folder() {
             self.switch_project(&dir);
         }
     }
 
     fn new_project_dialog(&mut self) {
-        let Some(dir) = rfd::FileDialog::new().set_title("Choose an empty folder for the new project").pick_folder() else { return };
+        let Some(dir) = rfd::FileDialog::new().set_title(t!("Choose an empty folder for the new project")).pick_folder() else { return };
         let name = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "New Bot".into());
         let mode = self.ed.reg.modes.first().map(|m| m.id.clone()).unwrap_or_else(|| "discord-bot".into());
         match Project::create(&dir, &name, &mode) {
@@ -280,8 +282,8 @@ impl CircuitApp {
         // The search box sits in the middle, where the window title would be.
         let search = egui::Rect::from_center_size(bar.center(), egui::vec2(crate::titlebar::SEARCH_W, 24.0));
         let label = match &self.ed.project {
-            Some(p) => format!("Search {}", p.meta.name),
-            None => "Search".into(),
+            Some(p) => tf!("Search {project}", project = p.meta.name),
+            None => t!("Search").into(),
         };
         self.ed.ui_rects.insert("search".into(), search);
         if crate::titlebar::search_box(ui, search, &theme, &label) {
@@ -292,84 +294,85 @@ impl CircuitApp {
         if self.tour.is_some() {
             left.add(egui::Image::new(egui::include_image!("../assets/icon.svg")).fit_to_exact_size(egui::vec2(18.0, 18.0)));
             left.add_space(6.0);
-            left.label(RichText::new("Tour").strong().color(theme.accent));
+            left.label(RichText::new(t!("Tour")).strong().color(theme.accent));
         } else {
         egui::MenuBar::new().ui(&mut left, |ui| {
             ui.add(egui::Image::new(egui::include_image!("../assets/icon.svg")).fit_to_exact_size(egui::vec2(18.0, 18.0)));
             ui.add_space(4.0);
-            ui.menu_button("File", |ui| {
-                if ui.button("New Project…").clicked() {
+            ui.menu_button(t!("File"), |ui| {
+                if ui.button(t!("New Project…")).clicked() {
                     self.new_project_dialog();
                 }
-                if ui.button("Open Project…").clicked() {
+                if ui.button(t!("Open Project…")).clicked() {
                     self.open_project_dialog();
                 }
                 if let Some(examples) = self.examples_dir.clone()
-                    && ui.button("Open Example: DemoBot").clicked()
+                    && ui.button(t!("Open Example: DemoBot")).clicked()
                 {
                     self.switch_project(&examples.join("DemoBot"));
                 }
                 ui.separator();
-                if ui.add_enabled(self.ed.project.is_some(), egui::Button::new("Save").shortcut_text("Ctrl+S")).clicked() {
+                if ui.add_enabled(self.ed.project.is_some(), egui::Button::new(t!("Save")).shortcut_text("Ctrl+S")).clicked() {
                     self.ed.save();
                     self.bot.restart_if_running(&mut self.ed, ui.ctx());
                 }
-                if ui.add_enabled(self.ed.project.is_some(), egui::Button::new("Restore from backup…")).clicked() {
+                if ui.add_enabled(self.ed.project.is_some(), egui::Button::new(t!("Restore from backup…"))).clicked() {
                     open_center(&mut self.dock, Tab::Backups);
                 }
-                if ui.add(egui::Button::new("Settings…").shortcut_text("Ctrl+,")).clicked() {
+                if ui.add(egui::Button::new(t!("Settings…")).shortcut_text("Ctrl+,")).clicked() {
                     self.open_settings();
                 }
-                if ui.button("Reload Plugins").clicked() {
+                if ui.button(t!("Reload Plugins")).clicked() {
                     self.reload_plugins(ui.ctx());
                 }
                 ui.separator();
-                if ui.button("Exit").clicked() {
+                if ui.button(t!("Exit")).clicked() {
                     ui.ctx().send_viewport_cmd(ViewportCommand::Close);
                 }
             });
-            ui.menu_button("Edit", |ui| {
+            ui.menu_button(t!("Edit"), |ui| {
                 let key = self.ed.active_workspace.clone().unwrap_or_default();
-                if ui.add_enabled(self.ed.history.can_undo(&key) || self.ed.dirty, egui::Button::new("Undo").shortcut_text("Ctrl+Z")).clicked() {
+                if ui.add_enabled(self.ed.history.can_undo(&key) || self.ed.dirty, egui::Button::new(t!("Undo")).shortcut_text("Ctrl+Z")).clicked() {
                     self.ed.undo();
                 }
-                if ui.add_enabled(self.ed.history.can_redo(&key), egui::Button::new("Redo").shortcut_text("Ctrl+Y")).clicked() {
+                if ui.add_enabled(self.ed.history.can_redo(&key), egui::Button::new(t!("Redo")).shortcut_text("Ctrl+Y")).clicked() {
                     self.ed.redo();
                 }
                 ui.separator();
                 let has_sel = !self.ed.selection(&key).is_empty();
-                if ui.add_enabled(has_sel, egui::Button::new("Cut").shortcut_text("Ctrl+X")).clicked() && self.ed.copy(ui.ctx()) {
+                if ui.add_enabled(has_sel, egui::Button::new(t!("Cut")).shortcut_text("Ctrl+X")).clicked() && self.ed.copy(ui.ctx()) {
                     self.ed.delete_selection();
                 }
-                if ui.add_enabled(has_sel, egui::Button::new("Copy").shortcut_text("Ctrl+C")).clicked() {
+                if ui.add_enabled(has_sel, egui::Button::new(t!("Copy")).shortcut_text("Ctrl+C")).clicked() {
                     self.ed.copy(ui.ctx());
                 }
-                if ui.add(egui::Button::new("Paste").shortcut_text("Ctrl+V")).clicked()
+                if ui.add(egui::Button::new(t!("Paste")).shortcut_text("Ctrl+V")).clicked()
                     && let Ok(text) = arboard::Clipboard::new().and_then(|mut c| c.get_text())
                 {
                     self.ed.paste(&text, None);
                 }
-                if ui.add_enabled(has_sel, egui::Button::new("Duplicate").shortcut_text("Ctrl+D")).clicked() {
+                if ui.add_enabled(has_sel, egui::Button::new(t!("Duplicate")).shortcut_text("Ctrl+D")).clicked() {
                     self.ed.duplicate();
                 }
-                if ui.add_enabled(has_sel, egui::Button::new("Delete").shortcut_text("Del")).clicked() {
+                if ui.add_enabled(has_sel, egui::Button::new(t!("Delete")).shortcut_text("Del")).clicked() {
                     self.ed.delete_selection();
                 }
                 ui.separator();
-                if ui.add(egui::Button::new("Select all").shortcut_text("Ctrl+A")).clicked() {
+                if ui.add(egui::Button::new(t!("Select all")).shortcut_text("Ctrl+A")).clicked() {
                     self.ed.select_all();
                 }
             });
-            ui.menu_button("View", |ui| {
-                ui.label(RichText::new("PANELS").size(10.5).color(theme.text_muted));
+            ui.menu_button(t!("View"), |ui| {
+                ui.label(RichText::new(t!("PANELS")).size(10.5).color(theme.text_muted));
                 for (tab, name) in Tab::PANELS {
+                    let name = crate::i18n::t(name);
                     let mut open = self.dock.find_tab(&tab).is_some();
                     if ui.checkbox(&mut open, name).clicked() {
                         self.toggle_panel(tab);
                     }
                 }
                 ui.separator();
-                ui.label(RichText::new("THEME").size(10.5).color(theme.text_muted));
+                ui.label(RichText::new(t!("THEME")).size(10.5).color(theme.text_muted));
                 let themes: Vec<(String, String)> = self.ed.reg.themes.iter().map(|t| (t.id.clone(), t.name.clone())).collect();
                 for (id, name) in themes {
                     if ui.radio(self.ed.theme.id == id, name).clicked() {
@@ -378,38 +381,38 @@ impl CircuitApp {
                     }
                 }
                 ui.separator();
-                ui.checkbox(&mut self.ed.prefs.activity_bar, "Show activity bar");
-                if ui.checkbox(&mut self.ed.prefs.system_titlebar, "Use system title bar").clicked() {
+                ui.checkbox(&mut self.ed.prefs.activity_bar, t!("Show activity bar"));
+                if ui.checkbox(&mut self.ed.prefs.system_titlebar, t!("Use system title bar")).clicked() {
                     ui.ctx().send_viewport_cmd(ViewportCommand::Decorations(self.ed.prefs.system_titlebar));
                 }
-                if ui.add(egui::Button::new("Command Palette…").shortcut_text("Ctrl+P")).clicked() {
+                if ui.add(egui::Button::new(t!("Command Palette…")).shortcut_text("Ctrl+P")).clicked() {
                     self.palette = Some(Default::default());
                 }
-                if ui.button("Reset layout").clicked() {
+                if ui.button(t!("Reset layout")).clicked() {
                     self.reset_layout();
                 }
             });
             let has_project = self.ed.project.is_some();
-            ui.menu_button("Bot", |ui| {
+            ui.menu_button(t!("Bot"), |ui| {
                 let running = self.bot.state != BotState::Stopped;
-                if ui.add_enabled(has_project, egui::Button::new(if running { "Restart" } else { "Run" }).shortcut_text("F5")).clicked() {
+                if ui.add_enabled(has_project, egui::Button::new(if running { t!("Restart") } else { t!("Run") }).shortcut_text("F5")).clicked() {
                     self.bot.start(&mut self.ed, ui.ctx());
                 }
-                if ui.add_enabled(running, egui::Button::new("Stop").shortcut_text("Shift+F5")).clicked() {
+                if ui.add_enabled(running, egui::Button::new(t!("Stop")).shortcut_text("Shift+F5")).clicked() {
                     self.bot.stop(&mut self.ed);
                 }
                 ui.separator();
-                if ui.add_enabled(has_project, egui::Button::new("Slash Commands…")).clicked() {
+                if ui.add_enabled(has_project, egui::Button::new(t!("Slash Commands…"))).clicked() {
                     crate::slash::open(&mut self.ed);
                 }
-                if ui.add_enabled(has_project, egui::Button::new("Settings…")).clicked() {
+                if ui.add_enabled(has_project, egui::Button::new(t!("Settings…"))).clicked() {
                     self.bot.open_settings(&mut self.ed);
                 }
-                if ui.add_enabled(has_project, egui::Button::new("Export…")).clicked() {
+                if ui.add_enabled(has_project, egui::Button::new(t!("Export…"))).clicked() {
                     self.bot.open_export(&self.ed);
                 }
             });
-            ui.menu_button("Plugins", |ui| {
+            ui.menu_button(t!("Plugins"), |ui| {
                 let mut any = false;
                 for i in 0..self.native.plugins.len() {
                     let p = &self.native.plugins[i];
@@ -438,21 +441,21 @@ impl CircuitApp {
                     ui.separator();
                 }
                 if !any {
-                    ui.label(RichText::new("No native plugins are running").color(theme.text_muted));
+                    ui.label(RichText::new(t!("No native plugins are running")).color(theme.text_muted));
                     ui.separator();
                 }
-                if ui.button("Manage Plugins…").clicked() {
+                if ui.button(t!("Manage Plugins…")).clicked() {
                     self.open_plugins();
                 }
             });
-            ui.menu_button("Help", |ui| {
-                if ui.button("Welcome and setup…").clicked() {
+            ui.menu_button(t!("Help"), |ui| {
+                if ui.button(t!("Welcome and setup…")).clicked() {
                     self.setup = Some(crate::setup::Setup::new());
                 }
-                if ui.add_enabled(self.tour.is_none(), egui::Button::new("Take the tour")).clicked() {
+                if ui.add_enabled(self.tour.is_none(), egui::Button::new(t!("Take the tour"))).clicked() {
                     self.start_tour();
                 }
-                if ui.button("About XC™ Circuit").clicked() {
+                if ui.button(t!("About XC™ Circuit")).clicked() {
                     self.show_about = true;
                 }
             });
@@ -469,18 +472,18 @@ impl CircuitApp {
             ui.add_space(10.0);
         }
         let running = self.bot.state != BotState::Stopped;
-        if running && ui.button("Stop").on_hover_text("Stop the bot (Shift+F5)").clicked() {
+        if running && ui.button(t!("Stop")).on_hover_text(t!("Stop the bot (Shift+F5)")).clicked() {
             self.bot.stop(&mut self.ed);
         }
         let label = match self.bot.state {
-            BotState::Stopped => "Run",
-            BotState::Starting => "Starting…",
-            BotState::Running => "Restart",
+            BotState::Stopped => t!("Run"),
+            BotState::Starting => t!("Starting…"),
+            BotState::Running => t!("Restart"),
         };
         let run = egui::Button::new(RichText::new(label).strong().color(egui::Color32::from_rgb(4, 33, 13))).fill(theme.action);
         let run = ui.add_enabled(self.ed.project.is_some(), run);
         self.ed.ui_rects.insert("run".into(), run.rect);
-        if run.on_hover_text("Run the bot (F5)").clicked() {
+        if run.on_hover_text(t!("Run the bot (F5)")).clicked() {
             self.bot.start(&mut self.ed, ui.ctx());
         }
     }
@@ -523,20 +526,20 @@ impl CircuitApp {
         ui.painter().vline(line.right() - 0.5, line.y_range(), egui::Stroke::new(1.0, t.line));
         ui.spacing_mut().item_spacing.y = 2.0;
         let open = |dock: &DockState<Tab>, tab: &Tab| dock.find_tab(tab).is_some();
-        if self.activity_item(ui, "layers", "Workspaces", open(&self.dock, &Tab::Workspaces)) {
+        if self.activity_item(ui, "layers", t!("Workspaces"), open(&self.dock, &Tab::Workspaces)) {
             self.toggle_panel(Tab::Workspaces);
         }
-        if self.activity_item(ui, "database", "Stored Data", open(&self.dock, &Tab::StoredData)) {
+        if self.activity_item(ui, "database", t!("Stored Data"), open(&self.dock, &Tab::StoredData)) {
             self.toggle_panel(Tab::StoredData);
         }
-        if self.activity_item(ui, "plug", "Plugins", self.plugins.is_some()) {
+        if self.activity_item(ui, "plug", t!("Plugins"), self.plugins.is_some()) {
             match self.plugins {
                 Some(_) => self.plugins = None,
                 None => self.open_plugins(),
             }
         }
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
-            if self.activity_item(ui, "settings", "Settings (Ctrl+,)", open(&self.dock, &Tab::Settings)) {
+            if self.activity_item(ui, "settings", t!("Settings (Ctrl+,)"), open(&self.dock, &Tab::Settings)) {
                 self.toggle_settings();
             }
         });
@@ -659,24 +662,24 @@ impl CircuitApp {
         dialog::show(
             ctx,
             theme,
-            dialog::Spec { id: "recovery", title: "Unsaved changes found", subtitle: Some("XC Circuit didn't close normally last time"), icon: icon.as_deref(), width: 500.0 },
+            dialog::Spec { id: "recovery", title: t!("Unsaved changes found"), subtitle: Some(t!("XC Circuit didn't close normally last time")), icon: icon.as_deref(), width: 500.0 },
             |ui, part| match part {
                 dialog::Part::Body => {
                     ui.label(RichText::new(format!("Changes to {} from {when} weren't saved.", project.meta.name)).size(13.5).color(theme.text));
                     ui.add_space(6.0);
                     if changed.is_empty() {
-                        ui.label(RichText::new("They change the project's settings.").size(12.5).color(theme.text_muted));
+                        ui.label(RichText::new(t!("They change the project's settings.")).size(12.5).color(theme.text_muted));
                     } else {
                         for c in &changed {
                             ui.label(RichText::new(format!("• {c}")).size(12.5).color(theme.text_muted));
                         }
                     }
                     ui.add_space(6.0);
-                    ui.label(RichText::new("Bring them back as unsaved changes, then save to keep them.").size(12.5).color(theme.text_muted));
+                    ui.label(RichText::new(t!("Bring them back as unsaved changes, then save to keep them.")).size(12.5).color(theme.text_muted));
                 }
                 dialog::Part::Footer => {
-                    restore = dialog::primary_button(ui, theme, "Bring them back").clicked();
-                    discard = dialog::secondary_button(ui, theme, "Discard").clicked();
+                    restore = dialog::primary_button(ui, theme, t!("Bring them back")).clicked();
+                    discard = dialog::secondary_button(ui, theme, t!("Discard")).clicked();
                 }
             },
         );
@@ -708,53 +711,53 @@ impl CircuitApp {
         let has_sel = !self.ed.selection(&key).is_empty();
         let mut items = Vec::new();
         if has_project {
-            items.push(Item::new("Bot", if running { "Restart bot" } else { "Run bot" }, Cmd::Run).shortcut("F5"));
+            items.push(Item::new(t!("Bot"), if running { t!("Restart bot") } else { t!("Run bot") }, Cmd::Run).shortcut("F5"));
         }
         if running {
-            items.push(Item::new("Bot", "Stop bot", Cmd::Stop).shortcut("Shift+F5"));
+            items.push(Item::new(t!("Bot"), t!("Stop bot"), Cmd::Stop).shortcut("Shift+F5"));
         }
         if has_project {
-            items.push(Item::new("Bot", "Slash Commands…", Cmd::SlashCommands));
-            items.push(Item::new("Bot", "Bot Settings…", Cmd::Settings));
-            items.push(Item::new("Bot", "Export…", Cmd::Export));
-            items.push(Item::new("File", "Save", Cmd::Save).shortcut("Ctrl+S"));
+            items.push(Item::new(t!("Bot"), t!("Slash Commands…"), Cmd::SlashCommands));
+            items.push(Item::new(t!("Bot"), t!("Bot Settings…"), Cmd::Settings));
+            items.push(Item::new(t!("Bot"), "Export…", Cmd::Export));
+            items.push(Item::new(t!("File"), "Save", Cmd::Save).shortcut("Ctrl+S"));
         }
-        items.push(Item::new("File", "New Project…", Cmd::NewProject));
-        items.push(Item::new("File", "Open Project…", Cmd::OpenProject));
+        items.push(Item::new(t!("File"), t!("New Project…"), Cmd::NewProject));
+        items.push(Item::new(t!("File"), t!("Open Project…"), Cmd::OpenProject));
         if self.examples_dir.is_some() {
-            items.push(Item::new("File", "Open Example: DemoBot", Cmd::OpenExample));
+            items.push(Item::new(t!("File"), t!("Open Example: DemoBot"), Cmd::OpenExample));
         }
-        items.push(Item::new("File", "Reload Plugins", Cmd::ReloadPlugins));
+        items.push(Item::new(t!("File"), t!("Reload Plugins"), Cmd::ReloadPlugins));
         if self.ed.history.can_undo(&key) {
-            items.push(Item::new("Edit", "Undo", Cmd::Undo).shortcut("Ctrl+Z"));
+            items.push(Item::new(t!("Edit"), "Undo", Cmd::Undo).shortcut("Ctrl+Z"));
         }
         if self.ed.history.can_redo(&key) {
-            items.push(Item::new("Edit", "Redo", Cmd::Redo).shortcut("Ctrl+Y"));
+            items.push(Item::new(t!("Edit"), "Redo", Cmd::Redo).shortcut("Ctrl+Y"));
         }
         if has_sel {
-            items.push(Item::new("Edit", "Duplicate", Cmd::Duplicate).shortcut("Ctrl+D"));
-            items.push(Item::new("Edit", "Delete", Cmd::Delete).shortcut("Del"));
+            items.push(Item::new(t!("Edit"), "Duplicate", Cmd::Duplicate).shortcut("Ctrl+D"));
+            items.push(Item::new(t!("Edit"), "Delete", Cmd::Delete).shortcut("Del"));
         }
         if has_project {
-            items.push(Item::new("Edit", "Select all", Cmd::SelectAll).shortcut("Ctrl+A"));
+            items.push(Item::new(t!("Edit"), t!("Select all"), Cmd::SelectAll).shortcut("Ctrl+A"));
         }
         for (tab, name) in Tab::PANELS {
-            let verb = if self.dock.find_tab(&tab).is_some() { "Close" } else { "Show" };
-            items.push(Item::new("View", format!("{verb} {name} panel"), Cmd::TogglePanel(tab)));
+            let label = if self.dock.find_tab(&tab).is_some() { tf!("Close {name} panel", name = crate::i18n::t(name)) } else { tf!("Show {name} panel", name = crate::i18n::t(name)) };
+            items.push(Item::new(t!("View"), label, Cmd::TogglePanel(tab)));
         }
         for t in &self.ed.reg.themes {
             if t.id != self.ed.theme.id {
-                items.push(Item::new("Theme", format!("Use {} theme", t.name), Cmd::Theme(t.id.clone())));
+                items.push(Item::new(t!("Theme"), format!("Use {} theme", t.name), Cmd::Theme(t.id.clone())));
             }
         }
-        items.push(Item::new("View", "Reset layout", Cmd::ResetLayout));
-        items.push(Item::new("Help", "About XC™ Circuit", Cmd::About));
-        items.push(Item::new("File", "Settings", Cmd::OpenSettings).shortcut("Ctrl+,"));
-        items.push(Item::new("Help", "Take the tour", Cmd::Tour));
+        items.push(Item::new(t!("View"), t!("Reset layout"), Cmd::ResetLayout));
+        items.push(Item::new(t!("Help"), t!("About XC™ Circuit"), Cmd::About));
+        items.push(Item::new(t!("File"), "Settings", Cmd::OpenSettings).shortcut("Ctrl+,"));
+        items.push(Item::new(t!("Help"), t!("Take the tour"), Cmd::Tour));
         if has_project {
-            items.push(Item::new("File", "Restore from backup…", Cmd::Backups));
+            items.push(Item::new(t!("File"), t!("Restore from backup…"), Cmd::Backups));
         }
-        items.push(Item::new("Plugins", "Manage Plugins…", Cmd::ManagePlugins));
+        items.push(Item::new(t!("Plugins"), t!("Manage Plugins…"), Cmd::ManagePlugins));
         for p in &self.native.plugins {
             for c in p.commands() {
                 items.push(Item::new("Plugin", c.title.clone(), Cmd::PluginCommand(c.id.clone())).detail(p.name.clone()));
@@ -767,13 +770,13 @@ impl CircuitApp {
         }
         if let Some(p) = &self.ed.project {
             for (wk, ws) in &p.workspaces {
-                items.push(Item::new("Workspace", ws.name.clone(), Cmd::OpenWorkspace(wk.clone())));
+                items.push(Item::new(t!("Workspace"), ws.name.clone(), Cmd::OpenWorkspace(wk.clone())));
             }
             for (wk, ws) in &p.workspaces {
                 for (id, node) in &ws.nodes {
                     let block = node.block.split('@').next().unwrap_or(&node.block);
                     let name = self.ed.reg.block(block).map(|d| d.name.clone()).unwrap_or_else(|| block.to_string());
-                    items.push(Item::new("Block", name, Cmd::RevealBlock(wk.clone(), id.clone())).detail(format!("{} · #{id}", ws.name)));
+                    items.push(Item::new(t!("Block"), name, Cmd::RevealBlock(wk.clone(), id.clone())).detail(format!("{} · #{id}", ws.name)));
                 }
             }
         }
@@ -828,26 +831,26 @@ impl CircuitApp {
         ui.spacing_mut().item_spacing.x = 2.0;
         let bar = ui.max_rect();
         let (dot, state) = match self.bot.state {
-            BotState::Stopped => (t.status_text.gamma_multiply(0.45), "Bot stopped"),
-            BotState::Starting => (egui::Color32::from_rgb(0xFF, 0xB4, 0x54), "Bot starting"),
-            BotState::Running => (t.action, "Bot running"),
+            BotState::Stopped => (t.status_text.gamma_multiply(0.45), t!("Bot stopped")),
+            BotState::Starting => (egui::Color32::from_rgb(0xFF, 0xB4, 0x54), t!("Bot starting")),
+            BotState::Running => (t.action, t!("Bot running")),
         };
         let has_project = self.ed.project.is_some();
         let mut left = ui.new_child(egui::UiBuilder::new().max_rect(bar).layout(egui::Layout::left_to_right(egui::Align::Center)));
         let running = self.bot.state != BotState::Stopped;
-        let tip = if running { "Stop the bot (Shift+F5)" } else { "Run the bot (F5)" };
+        let tip = if running { t!("Stop the bot (Shift+F5)") } else { t!("Run the bot (F5)") };
         if status_item(&mut left, &t, Some(dot), state).on_hover_text(tip).clicked() && has_project {
             if running { self.bot.stop(&mut self.ed) } else { self.bot.start(&mut self.ed, &ctx) }
         }
         match self.ed.project.as_ref().map(|p| (p.meta.name.clone(), p.meta.mode.clone())) {
             Some((name, mode_id)) => {
-                if status_item(&mut left, &t, None, &name).on_hover_text("Bot settings").clicked() {
+                if status_item(&mut left, &t, None, &name).on_hover_text(t!("Bot settings")).clicked() {
                     self.bot.open_settings(&mut self.ed);
                 }
                 let mode = self.ed.reg.mode(&mode_id).map(|m| (m.name.clone(), m.description.clone()));
                 let (mode_name, about) = match mode {
                     Some(m) => m,
-                    None if mode_id == crate::editor::NO_MODE => ("Core blocks".to_string(), "No build mode: only the core blocks, no npm packages".to_string()),
+                    None if mode_id == crate::editor::NO_MODE => (t!("Core blocks").to_string(), t!("No build mode: only the core blocks, no npm packages").to_string()),
                     None => (mode_id, String::new()),
                 };
                 let r = status_item(&mut left, &t, None, &mode_name);
@@ -856,18 +859,18 @@ impl CircuitApp {
                 }
             }
             None => {
-                if status_item(&mut left, &t, None, "No project").on_hover_text("Open a project").clicked() {
+                if status_item(&mut left, &t, None, t!("No project")).on_hover_text(t!("Open a project")).clicked() {
                     self.open_project_dialog();
                 }
             }
         }
-        let counts = format!("{} plugins · {} blocks", self.ed.reg.plugins.len(), self.ed.reg.blocks.len());
-        if status_item(&mut left, &t, None, &counts).on_hover_text("Manage plugins").clicked() {
+        let counts = tf!("{plugins} plugins · {blocks} blocks", plugins = self.ed.reg.plugins.len(), blocks = self.ed.reg.blocks.len());
+        if status_item(&mut left, &t, None, &counts).on_hover_text(t!("Manage plugins")).clicked() {
             self.open_plugins();
         }
         if self.problem_count > 0 {
-            let label = format!("⚠ {} problem{}", self.problem_count, if self.problem_count == 1 { "" } else { "s" });
-            if status_item(&mut left, &t, None, &label).on_hover_text("Show the Problems panel").clicked() {
+            let label = if self.problem_count == 1 { t!("⚠ 1 problem").to_string() } else { tf!("⚠ {count} problems", count = self.problem_count) };
+            if status_item(&mut left, &t, None, &label).on_hover_text(t!("Show the Problems panel")).clicked() {
                 match self.dock.find_tab(&Tab::Problems) {
                     Some(path) => {
                         let _ = self.dock.set_active_tab(path);
@@ -878,15 +881,15 @@ impl CircuitApp {
         }
 
         let mut right = ui.new_child(egui::UiBuilder::new().max_rect(bar).layout(egui::Layout::right_to_left(egui::Align::Center)));
-        if status_item(&mut right, &t, None, &format!("Theme: {}", t.name)).on_hover_text("Switch to the next theme").clicked() {
+        if status_item(&mut right, &t, None, &tf!("Theme: {name}", name = t.name)).on_hover_text(t!("Switch to the next theme")).clicked() {
             let ids: Vec<String> = self.ed.reg.themes.iter().map(|x| x.id.clone()).collect();
             if let Some(next) = ids.iter().position(|id| *id == t.id).map(|i| ids[(i + 1) % ids.len()].clone()) {
                 self.ed.set_theme(&next);
                 self.ed.theme.apply(&ctx);
             }
         }
-        let saved = if self.ed.dirty { "Unsaved changes" } else { "Saved" };
-        if status_item(&mut right, &t, None, saved).on_hover_text("Save (Ctrl+S)").clicked() && has_project {
+        let saved = if self.ed.dirty { t!("Unsaved changes") } else { t!("Saved") };
+        if status_item(&mut right, &t, None, saved).on_hover_text(t!("Save (Ctrl+S)")).clicked() && has_project {
             self.ed.save();
             self.bot.restart_if_running(&mut self.ed, &ctx);
         }
@@ -940,33 +943,28 @@ impl CircuitApp {
             self.recovery_dialog(ctx, &theme);
         }
         if self.show_about {
-            let info = format!(
-                "{} plugins · {} blocks · {} themes loaded",
-                self.ed.reg.plugins.len(),
-                self.ed.reg.blocks.len(),
-                self.ed.reg.themes.len()
-            );
+            let info = tf!("{plugins} plugins · {blocks} blocks · {themes} themes loaded", plugins = self.ed.reg.plugins.len(), blocks = self.ed.reg.blocks.len(), themes = self.ed.reg.themes.len());
             let mut ok = false;
             let close = dialog::show(
                 ctx,
                 &theme,
-                dialog::Spec { id: "about", title: "About XC™ Circuit", subtitle: None, icon: None, width: 420.0 },
+                dialog::Spec { id: "about", title: t!("About XC™ Circuit"), subtitle: None, icon: None, width: 420.0 },
                 |ui, part| match part {
                     dialog::Part::Body => {
                         ui.vertical_centered(|ui| {
                             ui.add_space(6.0);
                             ui.add(egui::Image::new(egui::include_image!("../assets/icon.svg")).fit_to_exact_size(egui::vec2(76.0, 76.0)));
                             ui.add_space(10.0);
-                            ui.label(RichText::new("XC™ Circuit").size(22.0).strong().color(theme.text));
+                            ui.label(RichText::new(t!("XC™ Circuit")).size(22.0).strong().color(theme.text));
                             ui.label(RichText::new(format!("Version {}", env!("CARGO_PKG_VERSION"))).size(12.5).color(theme.text_muted));
                             ui.add_space(10.0);
-                            ui.label(RichText::new("Build bots by connecting blocks.").size(13.5).color(theme.text));
+                            ui.label(RichText::new(t!("Build bots by connecting blocks.")).size(13.5).color(theme.text));
                             ui.add_space(4.0);
                             ui.label(RichText::new(&info).size(11.5).color(theme.text_muted));
                             ui.add_space(6.0);
                         });
                     }
-                    dialog::Part::Footer => ok = dialog::primary_button(ui, &theme, "Close").clicked(),
+                    dialog::Part::Footer => ok = dialog::primary_button(ui, &theme, t!("Close")).clicked(),
                 },
             );
             if ok || close {
@@ -984,16 +982,16 @@ impl CircuitApp {
                 dialog::Spec { id: "confirm-close", title: &title, subtitle: None, icon: icon.as_deref(), width: 460.0 },
                 |ui, part| match part {
                     dialog::Part::Body => {
-                        ui.label(RichText::new("Your changes are lost if you close without saving.").size(13.5).color(theme.text));
+                        ui.label(RichText::new(t!("Your changes are lost if you close without saving.")).size(13.5).color(theme.text));
                         if self.bot.state != BotState::Stopped {
                             ui.add_space(4.0);
-                            ui.label(RichText::new("The running bot will be stopped.").size(12.0).color(theme.text_muted));
+                            ui.label(RichText::new(t!("The running bot will be stopped.")).size(12.0).color(theme.text_muted));
                         }
                     }
                     dialog::Part::Footer => {
-                        save = dialog::primary_button(ui, &theme, "Save and close").clicked();
-                        discard = dialog::secondary_button(ui, &theme, "Don't save").clicked();
-                        cancel = dialog::secondary_button(ui, &theme, "Cancel").clicked();
+                        save = dialog::primary_button(ui, &theme, t!("Save and close")).clicked();
+                        discard = dialog::secondary_button(ui, &theme, t!("Don't save")).clicked();
+                        cancel = dialog::secondary_button(ui, &theme, t!("Cancel")).clicked();
                     }
                 },
             );
@@ -1042,7 +1040,7 @@ impl eframe::App for CircuitApp {
         self.bot.poll(&mut self.ed);
         self.run_native(&ctx);
         if self.watcher.poll() {
-            self.ed.log(Level::Info, "Plugin files changed, reloading");
+            self.ed.log(Level::Info, t!("Plugin files changed, reloading"));
             self.reload_plugins(&ctx);
         } else if self.watcher.waiting() {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
@@ -1239,20 +1237,20 @@ impl TabViewer for Viewer<'_> {
 
     fn title(&mut self, tab: &mut Tab) -> WidgetText {
         match tab {
-            Tab::Workspaces => "Workspaces".into(),
-            Tab::Inspector => "Inspector".into(),
-            Tab::Console => "Console".into(),
-            Tab::Problems => format!("Problems  {}", self.problem_count).into(),
-            Tab::StoredData => "Stored Data".into(),
-            Tab::Settings => "Settings".into(),
-            Tab::Backups => "Backups".into(),
+            Tab::Workspaces => t!("Workspaces").into(),
+            Tab::Inspector => t!("Inspector").into(),
+            Tab::Console => t!("Console").into(),
+            Tab::Problems => tf!("Problems  {count}", count = self.problem_count).into(),
+            Tab::StoredData => t!("Stored Data").into(),
+            Tab::Settings => t!("Settings").into(),
+            Tab::Backups => t!("Backups").into(),
             Tab::Plugin(plugin, panel) => self.native.panel_title(plugin, panel).unwrap_or_else(|| panel.clone()).into(),
             Tab::Canvas(key) => self.ed.workspace(key).map(|w| w.name.clone()).unwrap_or_else(|| key.clone()).into(),
-            Tab::EmbedBuilder => "Embed Builder".into(),
-            Tab::SlashCommands => "Slash Commands".into(),
-            Tab::BotSettings => "Bot settings".into(),
-            Tab::Export => "Export bot".into(),
-            Tab::Plugins => "Plugins".into(),
+            Tab::EmbedBuilder => t!("Embed Builder").into(),
+            Tab::SlashCommands => t!("Slash Commands").into(),
+            Tab::BotSettings => t!("Bot settings").into(),
+            Tab::Export => t!("Export bot").into(),
+            Tab::Plugins => t!("Plugins").into(),
         }
     }
 

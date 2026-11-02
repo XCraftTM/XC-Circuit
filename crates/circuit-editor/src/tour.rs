@@ -10,6 +10,7 @@ use eframe::egui::{self, Align, Color32, Layout, Order, Pos2, Rect, RichText, St
 use serde_json::{Value, json};
 
 use crate::editor::{Editor, NO_MODE};
+use crate::i18n::n;
 
 /// The practice project's workspace.
 pub const WORKSPACE: &str = "hello";
@@ -48,71 +49,71 @@ struct StepDef {
 
 const STEPS: [StepDef; 10] = [
     StepDef {
-        title: "Welcome to the tour",
-        body: "In a few steps you'll add a block, connect it and run a small bot. This is a practice project, so nothing of yours changes. You can skip the tour any time.",
+        title: n("Welcome to the tour"),
+        body: n("In a few steps you'll add a block, connect it and run a small bot. This is a practice project, so nothing of yours changes. You can skip the tour any time."),
         target: Target::Center,
         wait: None,
         hint: "",
     },
     StepDef {
-        title: "The canvas",
-        body: "Bots are built here from blocks. Drag empty space to move around and use the mouse wheel to zoom.",
+        title: n("The canvas"),
+        body: n("Bots are built here from blocks. Drag empty space to move around and use the mouse wheel to zoom."),
         target: Target::Ui("canvas"),
         wait: None,
         hint: "",
     },
     StepDef {
-        title: "Blocks and wires",
-        body: "Bot Started runs once when the bot starts. The green wire hands over to Log, which writes a line to the Console. Green wires decide the order things happen in.",
+        title: n("Blocks and wires"),
+        body: n("Bot Started runs once when the bot starts. The green wire hands over to Log, which writes a line to the Console. Green wires decide the order things happen in."),
         target: Target::StartBlocks,
         wait: None,
         hint: "",
     },
     StepDef {
-        title: "Add a block",
-        body: "Click Add block in the canvas toolbar (or right-click empty canvas, or press Space), type Math and click it.",
+        title: n("Add a block"),
+        body: n("Click Add block in the canvas toolbar (or right-click empty canvas, or press Space), type Math and click it."),
         target: Target::Ui("canvas"),
         wait: Some(Wait::AddMath),
-        hint: "Waiting for a Math block …",
+        hint: n("Waiting for a Math block …"),
     },
     StepDef {
-        title: "Connect them",
-        body: "Drag from the Result pin on the right of Math to the Message pin on the left of Log. Colored wires carry values.",
+        title: n("Connect them"),
+        body: n("Drag from the Result pin on the right of Math to the Message pin on the left of Log. Colored wires carry values."),
         target: Target::MathAndLog,
         wait: Some(Wait::Wire),
-        hint: "Waiting for the wire …",
+        hint: n("Waiting for the wire …"),
     },
     StepDef {
-        title: "Change its settings",
-        body: "Click the Math block: its settings show in the Inspector. Set A to 2 and B to 3. You can also type right on the block.",
+        title: n("Change its settings"),
+        body: n("Click the Math block: its settings show in the Inspector. Set A to 2 and B to 3. You can also type right on the block."),
         target: Target::Ui("inspector"),
         wait: Some(Wait::Values),
-        hint: "Waiting for A = 2 and B = 3 …",
+        hint: n("Waiting for A = 2 and B = 3 …"),
     },
     StepDef {
-        title: "Run it",
-        body: "Press Run (or F5). XC Circuit starts the bot, Bot Started fires and the blocks light up as they run.",
+        title: n("Run it"),
+        body: n("Press Run (or F5). XC Circuit starts the bot, Bot Started fires and the blocks light up as they run."),
         target: Target::Ui("run"),
         wait: Some(Wait::Run),
-        hint: "Waiting for the bot to say something …",
+        hint: n("Waiting for the bot to say something …"),
     },
     StepDef {
-        title: "The Console",
-        body: "Your bot wrote 5, the answer from Math. Everything a bot says shows up here, errors too, with a link to the block that said it.",
+        title: n("The Console"),
+        body: n("Your bot wrote 5, the answer from Math. Everything a bot says shows up here, errors too, with a link to the block that said it."),
         target: Target::Ui("console"),
         wait: None,
         hint: "",
     },
     StepDef {
-        title: "Find anything",
-        body: "Search here (or press Ctrl+P) for any command, workspace or block. Settings are behind the gear in the activity bar, or Ctrl+,.",
+        title: n("Find anything"),
+        body: n("Search here (or press Ctrl+P) for any command, workspace or block. Settings are behind the gear in the activity bar, or Ctrl+,."),
         target: Target::Ui("search"),
         wait: None,
         hint: "",
     },
     StepDef {
-        title: "That's the basics!",
-        body: "Discord bots work the same way, with events like Slash Command and actions like Send Message. Where to next?",
+        title: n("That's the basics!"),
+        body: n("Discord bots work the same way, with events like Slash Command and actions like Send Message. Where to next?"),
         target: Target::Center,
         wait: None,
         hint: "",
@@ -287,37 +288,37 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor, tour: &mut Tour, bot_running: 
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(format!("{} of {}", tour.step + 1, STEPS.len())).size(11.5).color(theme.accent));
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if crate::dialog::small_button(ui, &theme, "Skip tour").clicked() {
+                        if crate::dialog::small_button(ui, &theme, t!("Skip tour")).clicked() {
                             ask = Some(Ask::End(Exit::Return));
                         }
                     });
                 });
                 ui.add_space(2.0);
-                ui.label(RichText::new(step.title).size(17.0).strong().color(theme.text));
+                ui.label(RichText::new(crate::i18n::t(step.title)).size(17.0).strong().color(theme.text));
                 ui.add_space(4.0);
-                ui.label(RichText::new(step.body).size(13.0).color(theme.text));
+                ui.label(RichText::new(crate::i18n::t(step.body)).size(13.0).color(theme.text));
                 if waiting {
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
                         ui.spinner();
-                        ui.label(RichText::new(step.hint).size(12.0).color(theme.text_muted));
+                        ui.label(RichText::new(crate::i18n::t(step.hint)).size(12.0).color(theme.text_muted));
                     });
                     if step.wait == Some(Wait::Run) && circuit_runner::node::check_node_cached().is_err() {
                         ui.add_space(4.0);
-                        ui.label(RichText::new("Node.js isn't set up yet, so the bot can't start.").size(12.0).color(theme.warning));
-                        if ui.button("Set up Node.js").clicked() {
+                        ui.label(RichText::new(t!("Node.js isn't set up yet, so the bot can't start.")).size(12.0).color(theme.warning));
+                        if ui.button(t!("Set up Node.js")).clicked() {
                             ask = Some(Ask::SetUpNode);
                         }
                     } else if step.wait == Some(Wait::Run) && bot_running {
-                        ui.label(RichText::new("The bot is starting …").size(12.0).color(theme.text_muted));
+                        ui.label(RichText::new(t!("The bot is starting …")).size(12.0).color(theme.text_muted));
                     }
                 } else if step.wait.is_some() {
                     ui.add_space(6.0);
-                    ui.label(RichText::new("Done!").size(12.5).strong().color(theme.action));
+                    ui.label(RichText::new(t!("Done!")).size(12.5).strong().color(theme.action));
                 }
                 ui.add_space(12.0);
                 if tour.step + 1 == STEPS.len() {
-                    for (label, exit) in [("Open the DemoBot example", Exit::DemoBot), ("Start a new project", Exit::NewProject), ("Back to my project", Exit::Return)] {
+                    for (label, exit) in [(t!("Open the DemoBot example"), Exit::DemoBot), (t!("Start a new project"), Exit::NewProject), (t!("Back to my project"), Exit::Return)] {
                         let primary = exit == Exit::DemoBot;
                         let b = if primary { crate::dialog::primary_button(ui, &theme, label) } else { crate::dialog::secondary_button(ui, &theme, label) };
                         if b.clicked() {
@@ -328,17 +329,17 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor, tour: &mut Tour, bot_running: 
                     return;
                 }
                 ui.horizontal(|ui| {
-                    if tour.step > 0 && crate::dialog::secondary_button(ui, &theme, "Back").clicked() {
+                    if tour.step > 0 && crate::dialog::secondary_button(ui, &theme, t!("Back")).clicked() {
                         tour.step -= 1;
                     }
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        let next = ui.add_enabled_ui(!waiting, |ui| crate::dialog::primary_button(ui, &theme, "Next")).inner;
+                        let next = ui.add_enabled_ui(!waiting, |ui| crate::dialog::primary_button(ui, &theme, t!("Next"))).inner;
                         if next.clicked() {
                             tour.step += 1;
                         }
                         if waiting
                             && let Some(w) = step.wait
-                            && crate::dialog::secondary_button(ui, &theme, "Do it for me").clicked()
+                            && crate::dialog::secondary_button(ui, &theme, t!("Do it for me")).clicked()
                         {
                             ask = do_it(ed, w);
                         }

@@ -12,3 +12,4 @@ circuit = "^1.0"
 blocks = ["blocks/**/*.{js,cjs,mjs,ts}"]
 themes = ["themes/*.toml"]
 icons  = ["icons/*.{svg,png}"]
+locales = ["locales/*.toml"]
