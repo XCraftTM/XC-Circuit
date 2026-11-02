@@ -166,16 +166,21 @@ impl Theme {
         s.tab.tab_body.inner_margin = Margin::ZERO;
         s.tab.active.bg_fill = self.panel;
         s.tab.active.text_color = self.text;
-        s.tab.active.outline_color = self.line;
+        // No outlines: the tab the keyboard is in gets a thin accent line on
+        // top instead (drawn by the tab viewer).
+        s.tab.active.outline_color = Color32::TRANSPARENT;
         s.tab.focused.bg_fill = self.panel;
         s.tab.focused.text_color = self.text;
-        s.tab.focused.outline_color = self.accent;
+        s.tab.focused.outline_color = Color32::TRANSPARENT;
         s.tab.inactive.bg_fill = self.frame;
         s.tab.inactive.text_color = self.text_muted;
         s.tab.inactive.outline_color = Color32::TRANSPARENT;
         s.tab.hovered.bg_fill = self.panel_header;
         s.tab.hovered.text_color = self.text;
         s.tab.hline_below_active_tab_name = true;
+        s.tab.active_with_kb_focus = s.tab.active.clone();
+        s.tab.focused_with_kb_focus = s.tab.focused.clone();
+        s.tab.inactive_with_kb_focus = s.tab.inactive.clone();
         s.buttons.close_tab_color = self.text_muted;
         s.buttons.close_tab_active_color = self.text;
         s.buttons.close_tab_bg_fill = self.panel_header;

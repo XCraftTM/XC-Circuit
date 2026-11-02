@@ -1102,7 +1102,9 @@ impl eframe::App for CircuitApp {
             let style = theme.dock_style(ui.style());
             let running = self.bot.state != BotState::Stopped;
             self.sync_dialog_tabs(ui.ctx());
+            let focused_tab = self.dock.find_active_focused().map(|(_, t)| t.clone());
             let mut viewer = Viewer {
+                focused_tab,
                 bot: &mut self.bot,
                 bundled_plugins: self.bundled_plugins.as_deref(),
                 plugins: &mut self.plugins,
@@ -1210,6 +1212,8 @@ const RECOVERY_EVERY: std::time::Duration = std::time::Duration::from_secs(30);
 
 struct Viewer<'a> {
     ed: &'a mut Editor,
+    /// The tab the user last clicked into, marked with an accent line.
+    focused_tab: Option<Tab>,
     bot: &'a mut BotUi,
     bundled_plugins: Option<&'a Path>,
     plugins: &'a mut Option<crate::plugin_manager::Draft>,
@@ -1246,6 +1250,14 @@ impl TabViewer for Viewer<'_> {
             Tab::BotSettings => "Bot settings".into(),
             Tab::Export => "Export bot".into(),
             Tab::Plugins => "Plugins".into(),
+        }
+    }
+
+    fn on_tab_button(&mut self, tab: &mut Tab, response: &egui::Response) {
+        if self.focused_tab.as_ref() == Some(tab) {
+            let r = response.rect;
+            let line = egui::Rect::from_min_max(r.left_top(), egui::pos2(r.right(), r.top() + 2.0));
+            response.ctx.layer_painter(response.layer_id).rect_filled(line, 0.0, self.ed.theme.accent);
         }
     }
 
