@@ -369,7 +369,7 @@ impl BotUi {
                                 } else {
                                     dialog::pill(ui, t!("Not set"), theme.warning);
                                 }
-                                if f.saved && dialog::small_button(ui, &theme, if f.remove { t!("Keep it") } else { t!("Remove saved value") }).clicked() {
+                                if f.saved && dialog::button(ui, &theme, if f.remove { t!("Keep it") } else { t!("Remove saved value") }).clicked() {
                                     f.remove = !f.remove;
                                 }
                             });

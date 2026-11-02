@@ -288,7 +288,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor, tour: &mut Tour, bot_running: 
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(format!("{} of {}", tour.step + 1, STEPS.len())).size(11.5).color(theme.accent));
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if crate::dialog::small_button(ui, &theme, t!("Skip tour")).clicked() {
+                        if crate::dialog::button(ui, &theme, t!("Skip tour")).clicked() {
                             ask = Some(Ask::End(Exit::Return));
                         }
                     });

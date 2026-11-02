@@ -211,10 +211,21 @@ pub fn primary_button(ui: &mut Ui, theme: &Theme, text: &str) -> Response {
     styled_button(ui, theme, button, theme.accent, Stroke::NONE)
 }
 
-/// A small framed button, for secondary actions inside a row (where a text
-/// link was used before: it is easier to see and to hit with a finger).
-pub fn small_button(ui: &mut Ui, theme: &Theme, text: &str) -> Response {
-    let button = egui::Button::new(RichText::new(text).size(11.5).color(theme.text)).corner_radius(6).min_size(vec2(0.0, (ui.spacing().interact_size.y - 4.0).max(26.0)));
+/// A framed button for actions inside a row or a panel. Every such button
+/// has this size: as tall as a text box, so buttons, boxes and dropdowns in a
+/// row line up, and easy to hit with a finger.
+pub fn button(ui: &mut Ui, theme: &Theme, text: impl Into<RichText>) -> Response {
+    framed(ui, theme, text.into().color(theme.text))
+}
+
+/// [`button`] for removing or deleting something.
+pub fn danger_button(ui: &mut Ui, theme: &Theme, text: &str) -> Response {
+    framed(ui, theme, RichText::new(text).color(theme.error))
+}
+
+fn framed(ui: &mut Ui, theme: &Theme, text: RichText) -> Response {
+    let h = crate::inputs::input_height(ui).max(ui.spacing().interact_size.y);
+    let button = egui::Button::new(text.size(13.0)).corner_radius(7).min_size(vec2(h, h));
     styled_button(ui, theme, button, theme.panel, Stroke::new(1.0, theme.node_border))
 }
 

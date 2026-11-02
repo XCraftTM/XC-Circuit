@@ -16,7 +16,7 @@
       "block": "discord.user_info@1",
       "at": [
         360,
-        300
+        380
       ],
       "values": {
         "info": "username"
@@ -38,7 +38,7 @@
       "block": "discord.button@1",
       "at": [
         680,
-        360
+        404
       ],
       "values": {
         "label": "Close ticket",
@@ -50,7 +50,7 @@
       "block": "discord.mention@1",
       "at": [
         680,
-        520
+        682
       ]
     },
     "6": {
@@ -68,7 +68,7 @@
       "block": "discord.mention@1",
       "at": [
         1000,
-        300
+        432
       ]
     },
     "8": {

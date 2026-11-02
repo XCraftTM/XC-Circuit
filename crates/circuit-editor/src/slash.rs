@@ -357,7 +357,7 @@ fn option_card(ui: &mut Ui, theme: &Theme, o: &mut SlashOption, choices: &mut St
             }
             ui.add_space(12.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.add(egui::Button::new(RichText::new(t!("Remove")).color(theme.error)).small()).clicked() {
+                if dialog::danger_button(ui, theme, t!("Remove")).clicked() {
                     on_remove();
                 }
             });

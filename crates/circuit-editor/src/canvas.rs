@@ -26,6 +26,11 @@ pub const ROW_H: f32 = 28.0;
 const PAD_TOP: f32 = 6.0;
 const PAD_BOTTOM: f32 = 8.0;
 const PIN_R: f32 = 5.5;
+/// Text boxes on blocks: how tall they start (two lines, five for long text)
+/// and how far they can be resized.
+const TEXT_BOX_H: f32 = 42.0;
+const TEXT_AREA_H: f32 = 94.0;
+const TEXT_BOX_RANGE: (f32, f32) = (30.0, 900.0);
 const GRID: f32 = 22.0;
 const ZOOM_RANGE: (f32, f32) = (0.25, 2.0);
 
@@ -63,16 +68,8 @@ pub struct CanvasView {
     pub focus: Option<String>,
     /// Zone outlines from when the current block drag started.
     pub drag_zones: Vec<(String, Rect)>,
-    /// The size of the bigger editor each text field opens while being edited:
-    /// (block, field) → size, when the user changed it.
-    pub expanded: HashMap<(String, String), Vec2>,
-    /// Where the expanded editor was drawn last frame (screen).
-    pub overlay_rect: Option<Rect>,
-    /// Screen rectangles of the text fields drawn last frame.
+    /// Screen rectangles of the text boxes drawn last frame: (block, field) → box.
     pub text_fields: Vec<((String, String), Rect)>,
-    /// The expanded editor that is open now, and for how many more frames it
-    /// claims the keyboard focus (the click that opened it can still take it away).
-    pub overlay: Option<(String, String, u8)>,
 }
 
 impl CanvasView {
@@ -305,6 +302,12 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         let def = reg.block(&node.block);
         let shape = node_shape(reg, engine, shapes, ws_key, ws, id, define_ctx);
         let mut tall = HashMap::new();
+        if let Some(s) = &shape {
+            // Text fields that are typed into: a label line with the box under it.
+            for (key, f) in s.visible_fields().filter(|(k, f)| widgets::is_plain_text(f) && f.pin != PinMode::Only && !node.pins.contains(k)) {
+                tall.insert(key.clone(), ROW_H - 4.0 + text_box_h(node, key, f) + 8.0);
+            }
+        }
         if let (Some(s), Some(d)) = (&shape, def) {
             for (key, f) in s.visible_fields().filter(|(_, f)| f.type_name == "embed") {
                 let data = crate::embed::EmbedData::from_value(node.values.get(key).or(f.default.as_ref()).unwrap_or(&Value::Null));
@@ -526,8 +529,6 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     let mut open_embed_for: Option<(String, String)> = None;
     let mut dropped: Option<String> = None;
     let mut drag_zones: Option<Vec<(String, Rect)>> = None;
-    // Where the open expanded editor's field is on screen.
-    let mut overlay_anchor: Option<Rect> = None;
     view.text_fields.clear();
     for layout in &layouts[..node_count] {
         let id = &layout.id;
@@ -644,36 +645,58 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     let label_color = if missing { theme.warning } else { theme.text_muted };
                     let label = crate::i18n::label(&f.label(key)).into_owned();
                     let label_w = (r.width() * 0.4).min(label.len() as f32 * 7.0 + 8.0);
-                    painter.text(r.left_center() + vec2(16.0, 0.0), Align2::LEFT_CENTER, &label, FontId::proportional(12.5), label_color);
+                    painter.text(pos2(r.left() + 16.0, r.top() + ROW_H / 2.0), Align2::LEFT_CENTER, &label, FontId::proportional(12.5), label_color);
                     if *pinned {
                         if !connected {
                             painter.text(r.right_center() - vec2(16.0, 0.0), Align2::RIGHT_CENTER, "connect", FontId::proportional(11.0), with_alpha(theme.text_muted, 140));
                         }
                     } else if widgets::is_plain_text(f) {
-                        // Free text: clicking into it opens a bigger editor over the block.
-                        let wr = Rect::from_min_max(pos2(r.left() + 16.0 + label_w + 6.0, r.top() + 3.0), pos2(r.right() - 12.0, r.bottom() - 3.0));
-                        let field_key = (id.clone(), key.clone());
-                        let open_here = view.overlay.as_ref().is_some_and(|(n, k, _)| n == id && k == key);
+                        // Free text: a box under the label, as tall as it was last resized to.
+                        let bx = Rect::from_min_max(pos2(r.left() + 14.0, r.top() + ROW_H - 4.0), pos2(r.right() - 14.0, r.bottom() - 8.0));
+                        let edit_id = cui.id().with(("field", id, key));
+                        let focused = ctx.memory(|m| m.has_focus(edit_id));
+                        painter.rect(bx, 6.0, theme.field, Stroke::new(1.0, if focused { theme.accent } else { theme.node_border }), StrokeKind::Inside);
+                        let inner = bx.shrink2(vec2(8.0, 5.0));
                         let mut text = widgets::as_text(ws.nodes[id].values.get(key).or(f.default.as_ref()).unwrap_or(&Value::Null));
-                        let resp = cui.put(
-                            wr,
-                            egui::TextEdit::singleline(&mut text)
-                                .id(cui.id().with(("field", id, key)))
-                                .hint_text(f.placeholder.clone().unwrap_or_default())
-                                .desired_width(wr.width()),
-                        );
+                        let resp = cui
+                            .scope_builder(UiBuilder::new().id_salt(("field-ui", id, key)).max_rect(inner), |ui| {
+                                // Longer text scrolls inside the box.
+                                egui::ScrollArea::vertical().id_salt("scroll").max_height(inner.height()).auto_shrink([false, false]).show(ui, |ui| {
+                                    ui.add(
+                                        egui::TextEdit::multiline(&mut text)
+                                            .id(edit_id)
+                                            .frame(egui::Frame::NONE)
+                                            .hint_text(f.placeholder.clone().unwrap_or_default())
+                                            .desired_width(inner.width())
+                                            .min_size(vec2(inner.width(), inner.height())),
+                                    )
+                                })
+                                .inner
+                            })
+                            .inner;
                         if resp.changed() {
                             ws.nodes.get_mut(id).unwrap().values.insert(key.clone(), Value::String(text));
                             *dirty = true;
                         }
-                        if resp.has_focus() && !open_here {
-                            view.overlay = Some((id.clone(), key.clone(), OVERLAY_FOCUS_FRAMES));
+                        // The grip in its corner resizes it; a double-click puts the size back.
+                        let side = if theme.touch { 24.0 } else { 14.0 };
+                        let grip = Rect::from_min_size(bx.right_bottom() - vec2(side + 2.0, side + 2.0), vec2(side, side));
+                        let g = cui.interact(grip, cui.id().with(("text-grip", id, key)), Sense::click_and_drag()).on_hover_cursor(CursorIcon::ResizeVertical);
+                        let c = if g.hovered() || g.dragged() { theme.accent } else { theme.text_muted };
+                        for i in 1..=3 {
+                            let o = i as f32 * side / 4.0;
+                            painter.line_segment([grip.right_bottom() - vec2(o, 1.0), grip.right_bottom() - vec2(1.0, o)], Stroke::new(1.2, c));
                         }
-                        // Recorded last: the focus above may just have opened it.
-                        if view.overlay.as_ref().is_some_and(|(n, k, _)| n == id && k == key) {
-                            overlay_anchor = Some(to_global * wr);
+                        let node = ws.nodes.get_mut(id).unwrap();
+                        if g.double_clicked() {
+                            node.heights.remove(key);
+                            *dirty = true;
+                        } else if g.dragged() && g.drag_delta().y != 0.0 {
+                            let h = (text_box_h(node, key, f) + g.drag_delta().y).clamp(TEXT_BOX_RANGE.0, TEXT_BOX_RANGE.1);
+                            node.heights.insert(key.clone(), h.round());
+                            *dirty = true;
                         }
-                        view.text_fields.push((field_key, to_global * wr));
+                        view.text_fields.push(((id.clone(), key.clone()), to_global * bx));
                     } else if widgets::is_inline_editable(f) {
                         let wr = Rect::from_min_max(pos2(r.left() + 16.0 + label_w + 6.0, r.top() + 3.0), pos2(r.right() - 12.0, r.bottom() - 3.0));
                         let mut value = ws.nodes[id].values.get(key).cloned().or_else(|| f.default.clone()).unwrap_or(Value::Null);
@@ -983,7 +1006,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                 }
             });
             ui.separator();
-            if crate::dialog::small_button(ui, theme, t!("Remove Try Zone")).clicked() {
+            if crate::dialog::button(ui, theme, t!("Remove Try Zone")).clicked() {
                 menu = Some(NodeMenu::RemoveZone(zid.clone()));
                 ui.close();
             }
@@ -1085,7 +1108,6 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     for l in &layouts[..node_count] {
         ui_rects.insert(format!("node:{}", l.id), to_global * l.rect);
     }
-    expanded_editor(&ctx, cui.id(), view, ws, overlay_anchor, theme, dirty);
 }
 
 /// The block whose action bar is shown.
@@ -1261,85 +1283,9 @@ fn pin_tooltip(ui: &mut Ui, spot: &PinSpot, reg: &Registry, theme: &Theme) {
     }
 }
 
-const OVERLAY_FOCUS_FRAMES: u8 = 3;
-
-/// The bigger editor of an expanded text field. It opens over the field (and
-/// the block) without changing the block, can be resized from its corner, and
-/// closes when the focus moves elsewhere.
-fn expanded_editor(ctx: &egui::Context, base: egui::Id, view: &mut CanvasView, ws: &mut Workspace, anchor: Option<Rect>, theme: &Theme, dirty: &mut bool) {
-    let Some((node, key, fresh)) = view.overlay.clone() else { return };
-    let (Some(anchor), Some(n)) = (anchor, ws.nodes.get_mut(&node)) else {
-        view.overlay = None;
-        return;
-    };
-    let field_key = (node.clone(), key.clone());
-    let stored = view.expanded.get(&field_key).copied().unwrap_or(Vec2::ZERO);
-    let size = if stored == Vec2::ZERO { vec2(anchor.width().max(340.0), 150.0) } else { stored };
-    let edit_id = base.with(("expanded", &node, &key));
-    let mut text = widgets::as_text(n.values.get(&key).unwrap_or(&Value::Null));
-    let mut resized: Option<Vec2> = None;
-    let mut resizing = false;
-    let mut reset = false;
-
-    let area = egui::Area::new(base.with("expanded-editor")).order(egui::Order::Foreground).fixed_pos(anchor.min - vec2(6.0, 6.0)).show(ctx, |ui| {
-        egui::Frame::new()
-            .fill(theme.panel)
-            .stroke(Stroke::new(1.0, theme.accent))
-            .corner_radius(8)
-            .inner_margin(6)
-            .shadow(ctx.global_style().visuals.popup_shadow)
-            .show(ui, |ui| {
-                // Exactly `size`: the text box fills it, and longer text scrolls.
-                ui.set_width(size.x);
-                ui.set_height(size.y);
-                egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                    let resp = ui.add(egui::TextEdit::multiline(&mut text).id(edit_id).frame(egui::Frame::NONE).desired_width(size.x).min_size(size));
-                    if resp.changed() {
-                        n.values.insert(key.clone(), Value::String(text.clone()));
-                        *dirty = true;
-                    }
-                });
-            });
-        // Resize grip in the bottom-right corner.
-        let frame = ui.min_rect();
-        let grip = Rect::from_min_size(frame.right_bottom() - vec2(16.0, 16.0), vec2(14.0, 14.0));
-        let g = ui.interact(grip, base.with(("expanded-grip", &node, &key)), Sense::click_and_drag()).on_hover_cursor(CursorIcon::ResizeNwSe);
-        let c = if g.hovered() || g.dragged() { theme.accent } else { theme.text_muted };
-        for i in 1..=3 {
-            let o = i as f32 * 4.0;
-            ui.painter().line_segment([grip.right_bottom() - vec2(o, 1.0), grip.right_bottom() - vec2(1.0, o)], Stroke::new(1.2, c));
-        }
-        if g.double_clicked() {
-            reset = true;
-        }
-        if g.dragged() {
-            resizing = true;
-            let d = g.drag_delta();
-            resized = Some(vec2((size.x + d.x).clamp(180.0, 3000.0), (size.y + d.y).clamp(60.0, 3000.0)));
-        }
-    });
-
-    if reset {
-        view.expanded.remove(&field_key);
-    } else if let Some(s) = resized {
-        view.expanded.insert(field_key, s);
-    }
-    let focused = ctx.memory(|m| m.has_focus(edit_id));
-    view.overlay_rect = Some(area.response.rect);
-    let pointer_inside = ctx.input(|i| i.pointer.interact_pos()).is_some_and(|p| area.response.rect.contains(p));
-    // It closes on a press outside it, Escape, or the focus moving to another
-    // widget (Tab). Clicks inside it (the grip too) keep it open.
-    let pressed_outside = ctx.input(|i| i.pointer.any_pressed()) && !pointer_inside;
-    let focus_elsewhere = ctx.memory(|m| m.focused()).is_some_and(|f| f != edit_id);
-    let closing = pressed_outside || focus_elsewhere || ctx.input(|i| i.key_pressed(Key::Escape));
-    if fresh > 0 || resizing || (!focused && !closing) {
-        // Keep (or put) the text cursor in the big editor.
-        ctx.memory_mut(|m| m.request_focus(edit_id));
-        view.overlay = Some((node, key, fresh.saturating_sub(1)));
-        ctx.request_repaint();
-    } else if !focused || closing {
-        view.overlay = None;
-    }
+/// How tall a text box on a block is: as it was resized, or as it starts.
+fn text_box_h(node: &circuit_core::Node, key: &str, f: &circuit_core::FieldDef) -> f32 {
+    node.heights.get(key).copied().unwrap_or(if f.type_name == "textarea" { TEXT_AREA_H } else { TEXT_BOX_H })
 }
 
 /// egui draws text in a zoomed layer from glyphs rendered for 100% and then
@@ -1417,76 +1363,139 @@ mod tests {
     }
 
     #[test]
-    fn expanded_text_field() {
+    fn blocks_in_the_examples_dont_overlap() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut dirs = vec![root.join("examples/DemoBot")];
+        dirs.extend(std::fs::read_dir(root.join("examples/templates")).unwrap().map(|e| e.unwrap().path()));
+        let mut overlaps = Vec::new();
+        for dir in dirs {
+            let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+            ed.open_project(&dir);
+            let keys: Vec<String> = ed.project.as_ref().unwrap().workspaces.keys().cloned().collect();
+            for ws in keys {
+                let ctx = egui::Context::default();
+                ed.ui_rects.clear();
+                for _ in 0..3 {
+                    frame(&ctx, &mut ed, &ws, vec![]);
+                }
+                let nodes: Vec<(&String, &Rect)> = ed.ui_rects.iter().filter(|(k, _)| k.starts_with("node:")).collect();
+                for (i, (a, ra)) in nodes.iter().enumerate() {
+                    for (b, rb) in &nodes[i + 1..] {
+                        if ra.shrink(1.0).intersects(**rb) {
+                            overlaps.push(format!("{} {ws}: {a} and {b}", dir.file_name().unwrap().to_string_lossy()));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(overlaps.is_empty(), "blocks overlap:
+{}", overlaps.join("
+"));
+    }
+
+    /// Moves overlapping blocks in the examples down until they fit:
+    /// `cargo test -p circuit-editor -- --ignored spread_example_blocks`.
+    #[test]
+    #[ignore]
+    fn spread_example_blocks() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut dirs = vec![root.join("examples/DemoBot")];
+        dirs.extend(std::fs::read_dir(root.join("examples/templates")).unwrap().map(|e| e.unwrap().path()));
+        for dir in dirs {
+            let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+            ed.open_project(&dir);
+            let keys: Vec<String> = ed.project.as_ref().unwrap().workspaces.keys().cloned().collect();
+            for ws in keys {
+                let ctx = egui::Context::default();
+                ed.ui_rects.clear();
+                for _ in 0..3 {
+                    frame(&ctx, &mut ed, &ws, vec![]);
+                }
+                let zoom = ed.views[&ws].zoom;
+                let w = ed.workspace(&ws).unwrap();
+                // Scene rectangles, top to bottom.
+                let mut rects: Vec<(String, Rect)> = w
+                    .nodes
+                    .iter()
+                    .filter_map(|(id, n)| ed.ui_rects.get(&format!("node:{id}")).map(|r| (id.clone(), Rect::from_min_size(pos2(n.at[0], n.at[1]), r.size() / zoom))))
+                    .collect();
+                rects.sort_by(|a, b| a.1.top().total_cmp(&b.1.top()));
+                let mut placed: Vec<Rect> = Vec::new();
+                let mut moved = Vec::new();
+                for (id, mut r) in rects {
+                    while let Some(hit) = placed.iter().find(|p| p.expand(12.0).intersects(r)) {
+                        r = r.translate(vec2(0.0, hit.bottom() + 30.0 - r.top()));
+                    }
+                    placed.push(r);
+                    moved.push((id, r.min));
+                }
+                let w = ed.project.as_mut().unwrap().workspaces.get_mut(&ws).unwrap();
+                for (id, at) in moved {
+                    w.nodes.get_mut(&id).unwrap().at = [at.x, at.y];
+                }
+            }
+            ed.project.as_mut().unwrap().save().unwrap();
+        }
+    }
+
+    #[test]
+    fn text_fields_keep_focus_and_their_size() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
         ed.open_project(&root.join("examples/DemoBot"));
         let ctx = egui::Context::default();
-        for _ in 0..3 {
-            frame(&ctx, &mut ed, "rank-command", vec![]);
-        }
-        let field = ("4".to_string(), "text".to_string());
-        let rect = ed.views["rank-command"].text_fields.iter().find(|(k, _)| *k == field).map(|(_, r)| *r).unwrap();
-        let click = |p: Pos2| {
-            vec![
-                egui::Event::PointerMoved(p),
-                egui::Event::PointerButton { pos: p, button: PointerButton::Primary, pressed: true, modifiers: Default::default() },
-                egui::Event::PointerButton { pos: p, button: PointerButton::Primary, pressed: false, modifiers: Default::default() },
-            ]
-        };
-        let open = |ed: &Editor| ed.views["rank-command"].overlay.is_some();
         let settle = |ed: &mut Editor| {
             for _ in 0..6 {
                 frame(&ctx, ed, "rank-command", vec![]);
             }
         };
+        settle(&mut ed);
+        let field = ("4".to_string(), "text".to_string());
+        let box_of = |ed: &Editor| ed.views["rank-command"].text_fields.iter().find(|(k, _)| *k == field).map(|(_, r)| *r).unwrap();
+        let text = |ed: &Editor| ed.workspace("rank-command").unwrap().nodes["4"].values["text"].as_str().unwrap().to_string();
+        let press = |pos: Pos2, pressed: bool| egui::Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Default::default() };
 
-        // Clicking into a text field opens the big editor over it.
+        // The box is several lines tall from the start (this one is for long text).
+        let before = box_of(&ed);
+        let zoom = ed.views["rank-command"].zoom;
+        assert!((before.height() - TEXT_AREA_H * zoom).abs() < 1.0, "starts {} px tall", before.height());
+
+        // Clicking into it and typing, then typing again later, all goes in.
+        let p = before.center();
+        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerMoved(p), press(p, true), press(p, false)]);
         settle(&mut ed);
-        assert!(!open(&ed));
-        frame(&ctx, &mut ed, "rank-command", click(rect.center()));
-        settle(&mut ed);
-        assert!(open(&ed), "clicking the field opens the expanded editor");
         frame(&ctx, &mut ed, "rank-command", vec![egui::Event::Text("!!".into())]);
-        let text = ed.workspace("rank-command").unwrap().nodes["4"].values["text"].clone();
-        assert!(text.as_str().unwrap().ends_with("!!"), "typing goes into the expanded editor: {text}");
+        settle(&mut ed);
+        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::Text("?".into())]);
+        assert!(text(&ed).ends_with("!!?"), "typing stays in the box: {}", text(&ed));
 
-        // Dragging the corner grip down (and right) grows the editor by as much.
-        let before = ed.views["rank-command"].overlay_rect.unwrap();
+        // Dragging the corner grip down makes it taller, and the block with it.
         let grip = before.right_bottom() - vec2(8.0, 8.0);
-        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerMoved(grip)]);
-        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerButton { pos: grip, button: PointerButton::Primary, pressed: true, modifiers: Default::default() }]);
-        for step in 1..=10 {
-            frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerMoved(grip + vec2(4.0 * step as f32, 25.0 * step as f32))]);
+        for _ in 0..60 {
+            frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerMoved(grip)]);
         }
-        let end = grip + vec2(40.0, 250.0);
-        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerButton { pos: end, button: PointerButton::Primary, pressed: false, modifiers: Default::default() }]);
+        frame(&ctx, &mut ed, "rank-command", vec![press(grip, true)]);
+        for step in 1..=10 {
+            frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerMoved(grip + vec2(0.0, 12.0 * step as f32))]);
+        }
+        frame(&ctx, &mut ed, "rank-command", vec![press(grip + vec2(0.0, 120.0), false)]);
         settle(&mut ed);
-        assert!(open(&ed), "resizing keeps it open");
-        let after = ed.views["rank-command"].overlay_rect.unwrap();
-        assert!((after.height() - before.height() - 250.0).abs() < 4.0, "grew {} px down", after.height() - before.height());
-        assert!((after.width() - before.width() - 40.0).abs() < 4.0, "grew {} px right", after.width() - before.width());
-
-        // Clicking elsewhere hides it; clicking the field again brings it back.
-        frame(&ctx, &mut ed, "rank-command", click(pos2(300.0, 850.0)));
-        settle(&mut ed);
-        assert!(!open(&ed), "leaving hides it");
-        frame(&ctx, &mut ed, "rank-command", click(rect.center()));
-        settle(&mut ed);
-        assert!(open(&ed), "going back in expands it again");
-        assert_eq!(ed.views["rank-command"].overlay_rect.unwrap().size(), after.size(), "it keeps its size");
+        let after = box_of(&ed);
+        assert!((after.height() - before.height() - 120.0).abs() < 3.0, "grew {} px", after.height() - before.height());
+        let stored = ed.workspace("rank-command").unwrap().nodes["4"].heights["text"];
+        assert!((stored * zoom - after.height()).abs() < 2.0, "the height is kept with the block: {stored}");
 
         // Double-clicking the grip puts the size back.
         let grip = after.right_bottom() - vec2(8.0, 8.0);
-        // (A second apart from the click above, which would make it a triple-click.)
         for _ in 0..60 {
             frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerMoved(grip)]);
         }
         for pressed in [true, false, true, false] {
-            frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerButton { pos: grip, button: PointerButton::Primary, pressed, modifiers: Default::default() }]);
+            frame(&ctx, &mut ed, "rank-command", vec![press(grip, pressed)]);
         }
         settle(&mut ed);
-        assert!(!ed.views["rank-command"].expanded.contains_key(&field), "the size is reset");
+        assert!(!ed.workspace("rank-command").unwrap().nodes["4"].heights.contains_key("text"), "the size is reset");
+        assert!((box_of(&ed).height() - before.height()).abs() < 1.0);
     }
 
     #[test]

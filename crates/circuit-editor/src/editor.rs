@@ -333,7 +333,7 @@ impl Editor {
         let id = ws.next_node_id();
         ws.nodes.insert(
             id.clone(),
-            Node { block: def.reference(), at: [at.x, at.y], values: def.default_values(), pins: def.default_pins(), zone: None },
+            Node { block: def.reference(), at: [at.x, at.y], values: def.default_values(), pins: def.default_pins(), ..Default::default() },
         );
         self.dirty = true;
         self.select_only(ws_key, &id);

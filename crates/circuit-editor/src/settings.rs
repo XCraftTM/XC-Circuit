@@ -148,7 +148,7 @@ pub fn language_buttons(ui: &mut Ui, ed: &mut Editor, theme: &Theme) {
         for (code, name) in crate::i18n::languages(&ed.reg) {
             let selected = ed.prefs.language == code;
             let ink = if selected { Color32::from_rgb(0, 24, 28) } else { theme.text };
-            let b = egui::Button::new(RichText::new(&name).size(13.0).color(ink)).min_size(vec2(96.0, ui.spacing().interact_size.y.max(30.0)));
+            let b = egui::Button::new(RichText::new(&name).size(13.0).color(ink)).min_size(vec2(96.0, crate::inputs::input_height(ui).max(ui.spacing().interact_size.y)));
             if crate::dialog::styled_button(ui, theme, b, if selected { theme.accent } else { theme.field }, Stroke::NONE).clicked() && !selected {
                 ed.prefs.language = code;
                 ed.apply_language();
@@ -164,7 +164,7 @@ fn appearance(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsVi
         ui.with_layout(Layout::left_to_right(Align::Center), |ui| language_buttons(ui, ed, theme));
     });
     row(ui, theme, t!("Translate XC Circuit"), t!("Makes a file with every text to translate, saved as a plugin you can share. Changes show while you edit it."), |ui| {
-        if ui.button(t!("Create a translation…")).clicked() {
+        if crate::dialog::button(ui, theme, t!("Create a translation…")).clicked() {
             view.new_translation = Some(Default::default());
         }
     });
@@ -178,7 +178,7 @@ fn appearance(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsVi
     ui.add_space(10.0);
 
     row(ui, theme, t!("Accent color"), t!("Used for selections, highlights and the open tab. Changes show right away."), |ui| {
-        if ed.prefs.accent.is_some() && ui.button(t!("Reset")).on_hover_text(t!("Use the theme's own accent")).clicked() {
+        if ed.prefs.accent.is_some() && crate::dialog::button(ui, theme, t!("Reset")).on_hover_text(t!("Use the theme's own accent")).clicked() {
             ed.prefs.accent = None;
             ed.restyle();
             ed.theme.apply(&ctx);
@@ -206,7 +206,7 @@ fn appearance(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsVi
         for s in UI_SCALES.iter().rev() {
             let selected = (ed.prefs.ui_scale - s).abs() < 0.01;
             let text = RichText::new(format!("{:.0}%", s * 100.0)).size(12.0).color(if selected { Color32::from_rgb(0, 24, 28) } else { theme.text });
-            let b = egui::Button::new(text).min_size(vec2(46.0, 26.0));
+            let b = egui::Button::new(text).min_size(vec2(52.0, crate::inputs::input_height(ui)));
             if crate::dialog::styled_button(ui, theme, b, if selected { theme.accent } else { theme.field }, Stroke::NONE).clicked() && !selected {
                 ed.prefs.ui_scale = *s;
                 ctx.set_zoom_factor(*s);
@@ -220,7 +220,7 @@ fn appearance(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsVi
     });
     let theme_wire = ed.reg.theme(&current).map(|d| d.shape.wire_width).unwrap_or(2.0);
     row(ui, theme, t!("Wire thickness"), t!("How thick the wires between blocks are drawn."), |ui| {
-        if ed.prefs.wire_width.is_some() && ui.button(t!("Reset")).clicked() {
+        if ed.prefs.wire_width.is_some() && crate::dialog::button(ui, theme, t!("Reset")).clicked() {
             ed.prefs.wire_width = None;
             ed.restyle();
         }
@@ -273,7 +273,7 @@ fn editor(ui: &mut Ui, ed: &mut Editor, theme: &Theme, asks: &mut Vec<Ask>) {
         }
     });
     row(ui, theme, t!("Panel layout"), t!("Put every panel back where it started."), |ui| {
-        if ui.button(t!("Reset layout")).clicked() {
+        if crate::dialog::button(ui, theme, t!("Reset layout")).clicked() {
             asks.push(Ask::ResetLayout);
         }
     });
@@ -298,18 +298,18 @@ fn bot(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView, ask
     };
     let which = ed.prefs.node_path.clone().unwrap_or_else(|| t!("node from the PATH").into());
     row(ui, theme, "Node.js", &format!("Bots run with Node.js 22 or newer. Using: {which}"), |ui| {
-        if ui.button(t!("Set up…")).on_hover_text(t!("Find Node.js on this computer or install it")).clicked() {
+        if crate::dialog::button(ui, theme, t!("Set up…")).on_hover_text(t!("Find Node.js on this computer or install it")).clicked() {
             asks.push(Ask::NodeSetup);
             view.node = None;
         }
-        if ui.button(t!("Check again")).clicked() {
+        if crate::dialog::button(ui, theme, t!("Check again")).clicked() {
             view.node = None;
         }
         ui.label(RichText::new(status).size(12.0).color(color));
     });
     let packages = crate::bot::app_data_dir().join("packages");
     row(ui, theme, t!("npm packages"), &tf!("Installed once for all bots: {folder}", folder = packages.display()), |ui| {
-        if ui.button(t!("Open folder")).clicked() {
+        if crate::dialog::button(ui, theme, t!("Open folder")).clicked() {
             let _ = std::fs::create_dir_all(&packages);
             let _ = open::that(&packages);
         }
@@ -317,17 +317,17 @@ fn bot(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView, ask
     if let Some(p) = &ed.project {
         group(ui, theme, &format!("This project · {}", p.meta.name));
         row(ui, theme, t!("Bot settings"), t!("Token and the other settings of this project's bot."), |ui| {
-            if ui.button(t!("Open…")).clicked() {
+            if crate::dialog::button(ui, theme, t!("Open…")).clicked() {
                 asks.push(Ask::BotSettings);
             }
         });
         row(ui, theme, t!("Slash commands"), t!("The commands this bot registers with Discord."), |ui| {
-            if ui.button(t!("Edit…")).clicked() {
+            if crate::dialog::button(ui, theme, t!("Edit…")).clicked() {
                 asks.push(Ask::SlashCommands);
             }
         });
         row(ui, theme, t!("Export"), t!("Write a folder that runs with node index.js."), |ui| {
-            if ui.button(t!("Export…")).clicked() {
+            if crate::dialog::button(ui, theme, t!("Export…")).clicked() {
                 asks.push(Ask::Export);
             }
         });
@@ -346,13 +346,13 @@ fn backups(ui: &mut Ui, ed: &mut Editor, theme: &Theme, asks: &mut Vec<Ask>) {
         ui.add(egui::Slider::new(&mut ed.prefs.backup_days, 0..=60).suffix(" days"));
     });
     row(ui, theme, t!("Restore"), t!("See what changed and bring back the project, a workspace or the bot's saved data."), |ui| {
-        if ui.button(t!("Restore from backup…")).clicked() {
+        if crate::dialog::button(ui, theme, t!("Restore from backup…")).clicked() {
             asks.push(Ask::OpenBackups);
         }
     });
     let folder = crate::bot::app_data_dir().join("backups");
     row(ui, theme, t!("Backups folder"), &folder.display().to_string(), |ui| {
-        if ui.button(t!("Open")).clicked() {
+        if crate::dialog::button(ui, theme, t!("Open")).clicked() {
             let _ = std::fs::create_dir_all(&folder);
             let _ = open::that(&folder);
         }
@@ -366,10 +366,10 @@ fn backups(ui: &mut Ui, ed: &mut Editor, theme: &Theme, asks: &mut Vec<Ask>) {
 fn plugins(ui: &mut Ui, ed: &mut Editor, native: &NativeHost, theme: &Theme, asks: &mut Vec<Ask>) {
     group(ui, theme, t!("Plugins"));
     row(ui, theme, t!("Installed plugins"), &tf!("{plugins} plugins with {blocks} blocks and {themes} themes are loaded.", plugins = ed.reg.plugins.len(), blocks = ed.reg.blocks.len(), themes = ed.reg.themes.len()), |ui| {
-        if ui.button(t!("Manage…")).clicked() {
+        if crate::dialog::button(ui, theme, t!("Manage…")).clicked() {
             asks.push(Ask::ManagePlugins);
         }
-        if ui.button(t!("Reload")).on_hover_text(t!("Load plugin files again")).clicked() {
+        if crate::dialog::button(ui, theme, t!("Reload")).on_hover_text(t!("Load plugin files again")).clicked() {
             asks.push(Ask::ReloadPlugins);
         }
     });
@@ -382,7 +382,7 @@ fn plugins(ui: &mut Ui, ed: &mut Editor, native: &NativeHost, theme: &Theme, ask
     group(ui, theme, t!("Plugin folders"));
     for dir in ed.plugin_dirs.clone() {
         row(ui, theme, &dir.display().to_string(), if dir.is_dir() { "" } else { t!("Doesn't exist yet") }, |ui| {
-            if ui.button(t!("Open")).clicked() {
+            if crate::dialog::button(ui, theme, t!("Open")).clicked() {
                 let _ = std::fs::create_dir_all(&dir);
                 let _ = open::that(&dir);
             }
@@ -441,7 +441,7 @@ fn about(ui: &mut Ui, ed: &Editor, theme: &Theme) {
     let data = crate::bot::app_data_dir();
     for (title, path) in [(t!("App data"), data.clone()), (t!("npm packages"), data.join("packages")), (t!("Plugins you install"), data.join("plugins"))] {
         row(ui, theme, title, &path.display().to_string(), |ui| {
-            if ui.button(t!("Open")).clicked() {
+            if crate::dialog::button(ui, theme, t!("Open")).clicked() {
                 let _ = std::fs::create_dir_all(&path);
                 let _ = open::that(&path);
             }
@@ -450,7 +450,7 @@ fn about(ui: &mut Ui, ed: &Editor, theme: &Theme) {
     if let Some(p) = &ed.project {
         let root = p.root.clone();
         row(ui, theme, t!("This project"), &root.display().to_string(), |ui| {
-            if ui.button(t!("Open")).clicked() {
+            if crate::dialog::button(ui, theme, t!("Open")).clicked() {
                 let _ = open::that(&root);
             }
         });

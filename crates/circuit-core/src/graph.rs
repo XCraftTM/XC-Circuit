@@ -1,6 +1,7 @@
 //! A workspace graph: placed blocks, the links between their pins, Try Zones
 //! and comment boxes.
 
+use std::collections::BTreeMap;
 use std::fmt;
 use std::str::FromStr;
 
@@ -40,6 +41,9 @@ pub struct Node {
     pub pins: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub zone: Option<String>,
+    /// Heights of the text boxes on the block that were resized, by field.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub heights: BTreeMap<String, f32>,
 }
 
 impl Node {

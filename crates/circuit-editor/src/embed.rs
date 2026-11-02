@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use eframe::egui::{self, Color32, FontId, Galley, Painter, Pos2, Rect, RichText, ScrollArea, Stroke, Ui, pos2, vec2};
+use eframe::egui::{self, Color32, FontId, Galley, Painter, Pos2, Rect, ScrollArea, Stroke, Ui, pos2, vec2};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -296,13 +296,13 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
                 ui.add(crate::inputs::TextLine::new(&mut f.name).hint(t!("Name")).width(name_w));
                 ui.add(crate::inputs::TextLine::new(&mut f.value).hint(t!("Value")).width(inputs_w - name_w - 8.0));
                 crate::widgets::toggle(ui, &mut f.inline, theme).on_hover_text(t!("Inline: share a row with other inline fields"));
-                if ui.add_enabled(i > 0, egui::Button::new(t!("Up")).small()).clicked() {
+                if ui.add_enabled_ui(i > 0, |ui| dialog::button(ui, theme, t!("Up"))).inner.clicked() {
                     swap = Some((i, i - 1));
                 }
-                if ui.add_enabled(i + 1 < count, egui::Button::new(t!("Down")).small()).clicked() {
+                if ui.add_enabled_ui(i + 1 < count, |ui| dialog::button(ui, theme, t!("Down"))).inner.clicked() {
                     swap = Some((i, i + 1));
                 }
-                if ui.add(egui::Button::new(RichText::new(t!("Remove")).color(theme.error)).small()).clicked() {
+                if dialog::danger_button(ui, theme, t!("Remove")).clicked() {
                     remove = Some(i);
                 }
             });
@@ -333,7 +333,7 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
 }
 
 /// Room for a field row's inline switch and its Up, Down and Remove buttons.
-const FIELD_CONTROLS_W: f32 = 226.0;
+const FIELD_CONTROLS_W: f32 = 250.0;
 
 fn two(ui: &mut Ui, theme: &Theme, a: (&str, &mut String, &str), b: (&str, &mut String, &str)) {
     ui.columns(2, |cols| {

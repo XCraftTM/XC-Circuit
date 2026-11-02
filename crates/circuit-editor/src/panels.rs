@@ -104,7 +104,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                     } else if pinned {
                         ui.label(RichText::new(tf!("Waiting for a {type} wire", type = f.ty.display(reg))).italics().color(theme.text_muted));
                     } else if f.type_name == "embed" {
-                        if ui.add_sized([ui.available_width(), 30.0], egui::Button::new(t!("Open Embed Builder"))).clicked() {
+                        if crate::dialog::button(ui, &theme, t!("Open Embed Builder")).clicked() {
                             *ask = Some(InspectorAsk::EmbedBuilder(ws_key.clone(), node_id.clone(), key.clone()));
                         }
                     } else {
@@ -117,7 +117,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                         if f.templated() {
                             ui.label(RichText::new(t!("Type {name} to insert a connected value")).size(11.0).color(theme.text_muted));
                         }
-                        if f.type_name == "slash-command-ref" && crate::dialog::small_button(ui, &theme, t!("Edit slash commands…")).clicked() {
+                        if f.type_name == "slash-command-ref" && crate::dialog::button(ui, &theme, t!("Edit slash commands…")).clicked() {
                             *ask = Some(InspectorAsk::SlashCommands);
                         }
                     }
@@ -159,11 +159,11 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
         ui.separator();
         padded(ui, |ui| {
             ui.horizontal(|ui| {
-                if ui.button(t!("Block source")).clicked() {
+                if crate::dialog::button(ui, &theme, t!("Block source")).clicked() {
                     let _ = open::that(&def.source);
                 }
                 if let Some(docs) = &def.docs
-                    && ui.button(t!("Docs")).clicked()
+                    && crate::dialog::button(ui, &theme, t!("Docs")).clicked()
                 {
                     let _ = open::that(docs);
                 }
@@ -177,7 +177,7 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
     // A toolbar row like the Stored Data panel's, with the button in its middle.
     Frame::new().inner_margin(Margin::symmetric(12, 8)).show(ui, |ui| {
         ui.horizontal(|ui| {
-            if crate::dialog::small_button(ui, &theme, t!("Clear")).clicked() {
+            if crate::dialog::button(ui, &theme, t!("Clear")).clicked() {
                 ed.log.clear();
             }
         });
@@ -197,7 +197,7 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
                     ui.label(RichText::new(tag).monospace().color(color));
                     ui.label(RichText::new(&line.text).monospace());
                     if let Some(t) = &line.target
-                        && crate::dialog::small_button(ui, &theme, t!("Show block")).on_hover_text(t!("Show the block that wrote this")).clicked()
+                        && crate::dialog::button(ui, &theme, t!("Show block")).on_hover_text(t!("Show the block that wrote this")).clicked()
                     {
                         jump = Some(t.clone());
                     }
