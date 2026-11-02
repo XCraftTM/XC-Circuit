@@ -624,6 +624,7 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let ed = Editor::new(vec![root.join("plugins")], None).unwrap();
         assert!(ed.reg.problems.is_empty(), "{:?}", ed.reg.problems);
+        assert!(ed.reg.blocks.len() > 60 && ed.reg.blocks.values().filter(|b| b.has_define).count() > 15, "the bundled blocks loaded");
         let project = serde_json::json!({ "name": "Test", "mode": "discord-bot", "settings": {}, "data": { "slashCommands": [{ "name": "ping", "description": "Pong", "options": [] }] } });
         let mut failures = Vec::new();
         for def in ed.reg.blocks.values() {
