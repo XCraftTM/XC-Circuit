@@ -299,3 +299,15 @@ pub fn readout(ui: &mut Ui, theme: &Theme, text: &str) {
         ui.add(egui::Label::new(RichText::new(text).monospace().size(12.0).color(theme.text)).truncate());
     });
 }
+
+/// A button that is on (accent) or off; returns whether it was clicked.
+pub fn chip(ui: &mut Ui, theme: &Theme, on: &mut bool, label: &str) -> bool {
+    let ink = if *on { if theme.dark { Color32::from_rgb(0, 24, 28) } else { Color32::WHITE } } else { theme.text };
+    let text = label.to_string();
+    let b = egui::Button::new(RichText::new(text).size(12.5).color(ink)).corner_radius(99).min_size(vec2(0.0, crate::inputs::input_height(ui) - 4.0));
+    let clicked = styled_button(ui, theme, b, if *on { theme.accent } else { theme.field }, Stroke::new(1.0, if *on { theme.accent } else { theme.node_border })).clicked();
+    if clicked {
+        *on = !*on;
+    }
+    clicked
+}

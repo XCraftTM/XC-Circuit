@@ -1,0 +1,19 @@
+[
+  { "name": "ping", "description": "Pong", "options": [], "contexts": ["guild", "botDm"], "locales": { "de": { "name": "ping", "description": "Antwortet mit Pong" } } },
+  { "name": "ticket", "description": "Tickets", "contexts": ["guild"], "permissions": ["ManageMessages", "KickMembers"], "installs": ["guild", "user"], "nsfw": true, "options": [] },
+  {
+    "name": "ticket open",
+    "description": "Open a ticket",
+    "locales": { "de": { "name": "öffnen", "description": "Öffnet ein Ticket" }, "fr": { "name": "ouvrir", "description": "Ouvre un ticket" } },
+    "options": [
+      { "name": "topic", "type": "string", "description": "What it is about", "autocomplete": true, "minLength": 3, "maxLength": 200 },
+      { "name": "priority", "type": "integer", "description": "How urgent", "required": true, "min": 1, "max": 3, "choices": [{ "name": "Low", "value": 1, "locales": { "de": { "name": "Niedrig" } } }, { "name": "High", "value": 3 }] },
+      { "name": "where", "type": "channel", "description": "Channel", "channelTypes": ["text", "forum"], "locales": { "de": { "name": "wo", "description": "Kanal" } } },
+      { "name": "kind", "type": "string", "description": "Kind", "choices": [{ "name": "Bug report", "value": "bug" }] }
+    ]
+  },
+  { "name": "ticket close", "description": "Close", "options": [] },
+  { "name": "admin config", "description": "Config settings", "locales": { "de": { "name": "einstellungen", "description": "Einstellungen" } } },
+  { "name": "admin config set", "description": "Set", "options": [{ "name": "value", "type": "number", "description": "Value", "min": 0.5 }] },
+  { "name": "admin reload", "description": "Reload", "contexts": ["guild"], "options": [] }
+]

@@ -90,6 +90,7 @@ pub struct Editor {
     /// What blocks see as `project` in `define()`: `{ data }` of the open project.
     pub define_ctx: Value,
     pub embed_edit: Option<crate::embed::EmbedEdit>,
+    pub layout_edit: Option<crate::layout::LayoutEdit>,
     pub slash_edit: Option<crate::slash::SlashEdit>,
 }
 
@@ -123,6 +124,7 @@ impl Editor {
             saves: 0,
             define_ctx: Value::Object(Map::new()),
             embed_edit: None,
+            layout_edit: None,
             slash_edit: None,
         };
         ed.set_theme(theme_id.unwrap_or("graphite"));

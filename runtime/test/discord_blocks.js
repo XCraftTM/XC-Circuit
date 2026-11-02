@@ -44,6 +44,28 @@ assert.strictEqual(fmt("subtext", "small"), "-# small");
 assert.strictEqual(fmt("link", "site", { url: "https://x.y" }), "[site](https://x.y)");
 assert.strictEqual(fmt("escape", "*not bold*"), "\\*not bold\\*");
 
+// Build Layout: placeholders are filled in every text, and pictures and files
+// that are not on the web are attached.
+{
+  const layout = {
+    components: [
+      { type: 17, accent_color: 1, components: [{ type: 10, content: "Hi {who}" }, { type: 9, components: [{ type: 10, content: "x" }], accessory: { type: 11, media: { url: "C:/pics/cat.png" } } }] },
+      { type: 12, items: [{ media: { url: "https://x.example/a.png" } }, { media: { url: "/tmp/cat.png" } }] },
+      { type: 13, file: { url: "attachment://log.txt" } },
+    ],
+  };
+  const fill = (s, f) => s.replace(/\{(\w+)\}/g, (w, k) => (k in f ? String(f[k]) : w));
+  const out = all["discord.build_layout"].run({ fields: { layout, who: "Ada" }, ctx: { fill } }).layout;
+  assert.strictEqual(out.components[0].components[0].content, "Hi Ada");
+  assert.strictEqual(out.components[0].components[1].accessory.media.url, "attachment://cat.png");
+  assert.strictEqual(out.components[1].items[0].media.url, "https://x.example/a.png");
+  assert.strictEqual(out.components[1].items[1].media.url, "attachment://1-cat.png", "two files with one name");
+  assert.deepStrictEqual(out.files.map((f) => f.name), ["cat.png", "1-cat.png"]);
+  assert.strictEqual(layout.components[0].components[0].content, "Hi {who}", "the design itself is unchanged");
+  const placeholders = Object.keys(all["discord.build_layout"].define({ values: { layout } }).add);
+  assert.deepStrictEqual(placeholders, ["who"]);
+}
+
 // Slash commands: names with spaces are subcommands and groups.
 const { toDiscordCommands } = require("../../plugins/xc.discord/runtime/discord.js");
 const cmds = toDiscordCommands(
@@ -64,5 +86,13 @@ assert.strictEqual(byName.ticket.default_member_permissions, "8192");
 assert.deepStrictEqual(byName.ticket.contexts, [0]);
 assert.strictEqual(byName.admin.options[0].type, 2, "three words make a group");
 assert.strictEqual(byName.admin.options[0].options[0].name, "set");
+
+// Every setting (translations, choices, lengths, places, installs) gives the same
+// JSON as the editor's JSON view (crates/circuit-editor/src/slash.rs checks this file too).
+const permissionBits = { ManageMessages: "8192", KickMembers: "2", BanMembers: "4" };
+assert.deepStrictEqual(
+  toDiscordCommands(require("./fixtures/slash-input.json"), (n) => permissionBits[n]),
+  require("./fixtures/slash-discord.json"),
+);
 
 console.log(`${Object.keys(all).length} Discord blocks checked\ndiscord blocks test passed`);

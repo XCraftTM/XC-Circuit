@@ -1,0 +1,153 @@
+[
+  {
+    "name": "ping",
+    "description": "Pong",
+    "name_localizations": {
+      "de": "ping"
+    },
+    "description_localizations": {
+      "de": "Antwortet mit Pong"
+    },
+    "options": [],
+    "contexts": [
+      0,
+      1
+    ]
+  },
+  {
+    "name": "ticket",
+    "description": "Tickets",
+    "options": [
+      {
+        "type": 1,
+        "name": "open",
+        "description": "Open a ticket",
+        "options": [
+          {
+            "type": 4,
+            "name": "priority",
+            "description": "How urgent",
+            "required": true,
+            "choices": [
+              {
+                "name": "Low",
+                "value": 1,
+                "name_localizations": {
+                  "de": "Niedrig"
+                }
+              },
+              {
+                "name": "High",
+                "value": 3
+              }
+            ],
+            "min_value": 1,
+            "max_value": 3
+          },
+          {
+            "type": 3,
+            "name": "topic",
+            "description": "What it is about",
+            "required": false,
+            "min_length": 3,
+            "max_length": 200,
+            "autocomplete": true
+          },
+          {
+            "type": 7,
+            "name": "where",
+            "description": "Channel",
+            "name_localizations": {
+              "de": "wo"
+            },
+            "description_localizations": {
+              "de": "Kanal"
+            },
+            "required": false,
+            "channel_types": [
+              0,
+              15
+            ]
+          },
+          {
+            "type": 3,
+            "name": "kind",
+            "description": "Kind",
+            "required": false,
+            "choices": [
+              {
+                "name": "Bug report",
+                "value": "bug"
+              }
+            ]
+          }
+        ],
+        "name_localizations": {
+          "de": "öffnen",
+          "fr": "ouvrir"
+        },
+        "description_localizations": {
+          "de": "Öffnet ein Ticket",
+          "fr": "Ouvre un ticket"
+        }
+      },
+      {
+        "type": 1,
+        "name": "close",
+        "description": "Close",
+        "options": []
+      }
+    ],
+    "default_member_permissions": "8194",
+    "contexts": [
+      0
+    ],
+    "integration_types": [
+      0,
+      1
+    ],
+    "nsfw": true
+  },
+  {
+    "name": "admin",
+    "description": "Reload",
+    "options": [
+      {
+        "type": 1,
+        "name": "reload",
+        "description": "Reload",
+        "options": []
+      },
+      {
+        "type": 2,
+        "name": "config",
+        "description": "Config settings",
+        "options": [
+          {
+            "type": 1,
+            "name": "set",
+            "description": "Set",
+            "options": [
+              {
+                "type": 10,
+                "name": "value",
+                "description": "Value",
+                "required": false,
+                "min_value": 0.5
+              }
+            ]
+          }
+        ],
+        "name_localizations": {
+          "de": "einstellungen"
+        },
+        "description_localizations": {
+          "de": "Einstellungen"
+        }
+      }
+    ],
+    "contexts": [
+      0
+    ]
+  }
+]

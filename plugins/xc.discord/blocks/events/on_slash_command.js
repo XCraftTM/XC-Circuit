@@ -46,10 +46,10 @@ module.exports = {
 
   define({ values, project }) {
     const commands = commandsOf(project);
-    // Subcommands are listed by their full name (ticket open); a command that only
-    // groups subcommands can't be used on its own, so it isn't listed.
-    const groups = new Set(commands.filter((c) => c.name.includes(" ")).map((c) => c.name.split(" ")[0]));
-    const choices = Object.fromEntries(commands.filter((c) => !groups.has(c.name)).map((c) => [c.name, `/${c.name}`]));
+    // Subcommands are listed by their full name (ticket open); a command or group
+    // that only holds subcommands can't be used on its own, so it isn't listed.
+    const isHeader = (c) => commands.some((o) => o.name.startsWith(`${c.name} `));
+    const choices = Object.fromEntries(commands.filter((c) => !isHeader(c)).map((c) => [c.name, `/${c.name}`]));
     if (values.command && !(values.command in choices)) choices[values.command] = `/${values.command} (not in the builder)`;
     const command = commands.find((c) => c.name === values.command);
     const outputs = {};

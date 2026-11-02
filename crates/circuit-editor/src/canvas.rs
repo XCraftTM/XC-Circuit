@@ -31,6 +31,9 @@ const PIN_R: f32 = 5.5;
 const TEXT_BOX_H: f32 = 42.0;
 const TEXT_AREA_H: f32 = 94.0;
 const TEXT_BOX_RANGE: (f32, f32) = (30.0, 900.0);
+/// A layout field lists up to this many parts, a line each.
+const LAYOUT_LINES: usize = 6;
+const LAYOUT_LINE_H: f32 = 17.0;
 const GRID: f32 = 22.0;
 const ZOOM_RANGE: (f32, f32) = (0.25, 2.0);
 
@@ -283,7 +286,7 @@ fn zone_layout(zid: &str, rect: Rect) -> NodeLayout {
 }
 
 pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
-    let Editor { reg, engine, theme, project, shapes, views, selected, dirty, picker, active_workspace, activity, multi, define_ctx, embed_edit, selected_wire, prefs, ui_rects, .. } = ed;
+    let Editor { reg, engine, theme, project, shapes, views, selected, dirty, picker, active_workspace, activity, multi, define_ctx, embed_edit, layout_edit, selected_wire, prefs, ui_rects, .. } = ed;
     let Some(project) = project.as_mut() else { return };
     let mode = reg.mode(&project.meta.mode).or_else(|| reg.modes.first());
     let Some(ws) = project.workspaces.get_mut(ws_key) else {
@@ -306,6 +309,12 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             // Text fields that are typed into: a label line with the box under it.
             for (key, f) in s.visible_fields().filter(|(k, f)| widgets::is_plain_text(f) && f.pin != PinMode::Only && !node.pins.contains(k)) {
                 tall.insert(key.clone(), ROW_H - 4.0 + text_box_h(node, key, f) + 8.0);
+            }
+        }
+        if let Some(s) = &shape {
+            for (key, f) in s.visible_fields().filter(|(_, f)| f.type_name == "layout") {
+                let lines = crate::layout::summary(node.values.get(key).or(f.default.as_ref()).unwrap_or(&Value::Null)).len().clamp(1, LAYOUT_LINES);
+                tall.insert(key.clone(), 8.0 + lines as f32 * LAYOUT_LINE_H + 8.0 + 26.0 + 8.0);
             }
         }
         if let (Some(s), Some(d)) = (&shape, def) {
@@ -602,6 +611,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         // Rows.
         let shape = node_shapes.get(id);
         let mut open_embed: Option<String> = None;
+        let mut open_layout: Option<String> = None;
         for (row, r) in &layout.rows {
             // Hovering a row's name shows what it is, like hovering its pin.
             let (tip_key, tip_dir, tip_rect) = match row {
@@ -634,6 +644,25 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     let button = Rect::from_min_size(pos2(r.left() + 14.0, r.top() + 4.0 + l.height + 8.0), vec2(w, 26.0));
                     if cui.put(button, egui::Button::new(t!("Edit embed…"))).clicked() {
                         open_embed = Some(key.clone());
+                    }
+                }
+                RowKind::Field { key, .. } if shape.and_then(|s| s.field(key)).is_some_and(|f| f.type_name == "layout") => {
+                    let f = shape.and_then(|s| s.field(key)).unwrap();
+                    let lines = crate::layout::summary(ws.nodes[id].values.get(key).or(f.default.as_ref()).unwrap_or(&Value::Null));
+                    let shown = lines.len().clamp(1, LAYOUT_LINES);
+                    let w = r.width() - 28.0;
+                    let list = Rect::from_min_size(r.min + vec2(14.0, 4.0), vec2(w, 8.0 + shown as f32 * LAYOUT_LINE_H));
+                    painter.rect_filled(list, 6.0, Color32::from_rgb(0x2B, 0x2D, 0x31));
+                    if lines.is_empty() {
+                        painter.text(list.left_center() + vec2(8.0, 0.0), Align2::LEFT_CENTER, t!("Empty: add parts in the builder"), FontId::proportional(11.5), theme.text_muted);
+                    }
+                    for (i, l) in lines.iter().take(LAYOUT_LINES).enumerate() {
+                        let text = if i + 1 == LAYOUT_LINES && lines.len() > LAYOUT_LINES { tf!("… and {count} more", count = lines.len() - i) } else { l.clone() };
+                        painter.text(list.left_top() + vec2(8.0, 4.0 + (i as f32 + 0.5) * LAYOUT_LINE_H), Align2::LEFT_CENTER, text, FontId::proportional(11.5), Color32::from_rgb(0xDB, 0xDE, 0xE1));
+                    }
+                    let button = Rect::from_min_size(pos2(r.left() + 14.0, list.bottom() + 8.0), vec2(w, 26.0));
+                    if cui.put(button, egui::Button::new(t!("Edit layout…"))).clicked() {
+                        open_layout = Some(key.clone());
                     }
                 }
                 RowKind::Field { key, pinned } => {
@@ -718,6 +747,10 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
 
         if let Some(k) = open_embed {
             open_embed_for = Some((id.clone(), k));
+        }
+        if let Some(k) = open_layout {
+            let value = ws.nodes[id].values.get(&k).cloned().or_else(|| shape.and_then(|s| s.field(&k)).and_then(|f| f.default.clone())).unwrap_or(Value::Null);
+            *layout_edit = Some(crate::layout::LayoutEdit::new(ws_key, id, &k, &value));
         }
 
         // Header interaction: the only place a block can be dragged.
@@ -809,7 +842,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     }
     if let Some((node, key)) = open_embed_for {
         let value = ws.nodes.get(&node).and_then(|n| n.values.get(&key).cloned()).unwrap_or(Value::Null);
-        *embed_edit = Some(crate::embed::EmbedEdit { ws: ws_key.to_string(), node, key, draft: crate::embed::EmbedData::from_value(&value) });
+        *embed_edit = Some(crate::embed::EmbedEdit { ws: ws_key.to_string(), node, key, draft: crate::embed::EmbedData::from_value(&value), json: None });
     }
     if let Some((node, pin)) = toggle_pin {
         let n = ws.nodes.get_mut(&node).unwrap();

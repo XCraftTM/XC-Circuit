@@ -5,10 +5,12 @@ const TEXTS = (e) => [
   e.url,
   e.author?.name,
   e.author?.icon,
+  e.author?.url,
   e.footer?.text,
   e.footer?.icon,
   e.image,
   e.thumbnail,
+  e.time,
   ...(e.fields || []).flatMap((f) => [f.name, f.value]),
 ];
 
@@ -78,14 +80,19 @@ module.exports = {
     if (e.title) embed.setTitle(fill(e.title).slice(0, 256));
     if (e.url) embed.setURL(fill(e.url));
     if (e.description) embed.setDescription(fill(e.description).slice(0, 4096));
-    if (e.author?.name) embed.setAuthor({ name: fill(e.author.name), iconURL: e.author.icon ? fill(e.author.icon) : undefined });
+    if (e.author?.name) embed.setAuthor({ name: fill(e.author.name), iconURL: e.author.icon ? fill(e.author.icon) : undefined, url: e.author.url ? fill(e.author.url) : undefined });
     for (const f of (e.fields || []).slice(0, 25)) {
       if (f.name || f.value) embed.addFields({ name: fill(f.name) || "​", value: fill(f.value) || "​", inline: Boolean(f.inline) });
     }
     if (e.footer?.text) embed.setFooter({ text: fill(e.footer.text), iconURL: e.footer.icon ? fill(e.footer.icon) : undefined });
     if (e.image) embed.setImage(fill(e.image));
     if (e.thumbnail) embed.setThumbnail(fill(e.thumbnail));
-    if (e.timestamp) embed.setTimestamp();
+    if (e.time) {
+      // A set time: a date, or a placeholder holding a date or a timestamp in ms.
+      const value = fill(e.time).trim();
+      const date = new Date(/^\d+$/.test(value) ? Number(value) : value);
+      if (!Number.isNaN(date.getTime())) embed.setTimestamp(date);
+    } else if (e.timestamp) embed.setTimestamp();
     return { embed };
   },
 };

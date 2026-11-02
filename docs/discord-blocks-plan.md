@@ -74,7 +74,8 @@ The blocks below are chosen so these common bots can be built without code:
 
 | Block | Status | Fields → Outputs | Notes |
 |---|---|---|---|
-| Send Message | ✅ | mode, text, embeds, components, private → message | reply, edit, follow-up, defer, send, reply to message, edit message |
+| Send Message | ✅ | mode, format, text, embeds, components, private → message | reply, edit, follow-up, defer, send, reply to message, edit message; format Layout sends a Build Layout message |
+| Build Layout (Components V2) | ✅ | layout designer → layout | containers, text, sections, media galleries, files, separators, buttons and select menus |
 | Build Embed | ✅ | embed designer → embed | |
 | Button | ✅ | label, style, custom id, url, emoji → component | |
 | Add Reaction | ✅ | message, emoji | |
@@ -198,6 +199,8 @@ The blocks below are chosen so these common bots can be built without code:
 - ✅ **Templates:** File › New Project starts from Welcome & auto role, Moderation, Levels & XP,
   Tickets or Role menu.
 - ✅ **Text merging:** every text field takes `{name}` placeholders, each with an input.
+- ✅ **JSON views:** the Embed Builder, Layout Builder and Slash Commands switch between the builder and Discord's JSON, and take pasted JSON.
+- ✅ **Slash command settings:** translations, choice values, length limits, channel kinds, several permissions, contexts, install types, age-restricted.
 
 ## Not built yet
 
@@ -207,4 +210,5 @@ The blocks below are chosen so these common bots can be built without code:
   portal (today the login error explains it).
 - **Friendlier errors** that name the missing permission for every block.
 - **Creating stickers** (listing them works).
+- **Components V2 in modals** (labels, file uploads and select menus in Show Modal).
 - **Music** (voice playback) needs `@discordjs/voice` and ffmpeg; it belongs in its own plugin.

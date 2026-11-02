@@ -3,12 +3,13 @@
 
 use std::sync::Arc;
 
-use eframe::egui::{self, Color32, FontId, Galley, Painter, Pos2, Rect, ScrollArea, Stroke, Ui, pos2, vec2};
+use eframe::egui::{self, Color32, FontId, Galley, Painter, Pos2, Rect, RichText, ScrollArea, Stroke, Ui, pos2, vec2};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value, json};
 
 use crate::dialog::{self, Part};
 use crate::editor::Editor;
+use crate::json_view::{self, JsonText};
 use crate::theme::{Theme, hex_color};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -25,7 +26,11 @@ pub struct EmbedData {
     pub footer: Option<FooterData>,
     pub image: String,
     pub thumbnail: String,
+    /// Show when the message was sent, next to the footer.
     pub timestamp: bool,
+    /// A set time to show instead: a date such as 2026-12-24T18:00:00Z, or a {placeholder}.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub time: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -33,6 +38,9 @@ pub struct EmbedData {
 pub struct NameIcon {
     pub name: String,
     pub icon: String,
+    /// The page the author's name links to.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub url: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -57,6 +65,92 @@ impl EmbedData {
 
     pub fn to_value(&self) -> Value {
         serde_json::to_value(self).unwrap_or(Value::Null)
+    }
+
+    /// The embed as Discord's JSON. "When it's sent" is written as `"timestamp": "now"`.
+    pub fn to_discord(&self) -> Value {
+        let mut out = Map::new();
+        let mut put = |k: &str, v: Value| {
+            out.insert(k.into(), v);
+        };
+        for (k, v) in [("title", &self.title), ("description", &self.description), ("url", &self.url)] {
+            if !v.is_empty() {
+                put(k, json!(v));
+            }
+        }
+        if let Some(c) = hex_color(&self.color) {
+            put("color", json!(((c.r() as u32) << 16) | ((c.g() as u32) << 8) | c.b() as u32));
+        }
+        if let Some(a) = &self.author {
+            let mut m = json!({ "name": a.name });
+            if !a.url.is_empty() {
+                m["url"] = json!(a.url);
+            }
+            if !a.icon.is_empty() {
+                m["icon_url"] = json!(a.icon);
+            }
+            put("author", m);
+        }
+        if !self.fields.is_empty() {
+            put("fields", self.fields.iter().map(|f| json!({ "name": f.name, "value": f.value, "inline": f.inline })).collect());
+        }
+        if !self.image.is_empty() {
+            put("image", json!({ "url": self.image }));
+        }
+        if !self.thumbnail.is_empty() {
+            put("thumbnail", json!({ "url": self.thumbnail }));
+        }
+        if let Some(f) = &self.footer {
+            let mut m = json!({ "text": f.text });
+            if !f.icon.is_empty() {
+                m["icon_url"] = json!(f.icon);
+            }
+            put("footer", m);
+        }
+        if !self.time.is_empty() {
+            put("timestamp", json!(self.time));
+        } else if self.timestamp {
+            put("timestamp", json!("now"));
+        }
+        Value::Object(out)
+    }
+
+    /// An embed in Discord's JSON, or a whole message with `embeds` (its first one).
+    pub fn from_discord(v: &Value) -> Result<EmbedData, String> {
+        let v = match v.get("embeds").and_then(Value::as_array) {
+            Some(list) => list.first().ok_or_else(|| t!("the message has no embeds").to_string())?,
+            None => v,
+        };
+        if !v.is_object() {
+            return Err(t!("paste an embed object { … }").into());
+        }
+        let s = |v: &Value, k: &str| v.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
+        let url_of = |k: &str| v.get(k).map(|i| s(i, "url")).unwrap_or_default();
+        let color = match v.get("color") {
+            Some(Value::Number(n)) => format!("#{:06X}", n.as_u64().unwrap_or(0) & 0xFF_FFFF),
+            Some(Value::String(c)) => c.clone(),
+            _ => String::new(),
+        };
+        let time = s(v, "timestamp");
+        Ok(EmbedData {
+            color,
+            title: s(v, "title"),
+            url: s(v, "url"),
+            description: s(v, "description"),
+            author: v.get("author").map(|a| NameIcon { name: s(a, "name"), icon: s(a, "icon_url"), url: s(a, "url") }),
+            fields: v
+                .get("fields")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .map(|f| EmbedField { name: s(f, "name"), value: s(f, "value"), inline: f.get("inline").and_then(Value::as_bool).unwrap_or(false) })
+                .collect(),
+            footer: v.get("footer").map(|f| FooterData { text: s(f, "text"), icon: s(f, "icon_url") }),
+            image: url_of("image"),
+            thumbnail: url_of("thumbnail"),
+            timestamp: time == "now",
+            time: if time == "now" { String::new() } else { time },
+        })
     }
 }
 
@@ -145,7 +239,7 @@ pub fn layout(painter: &Painter, e: &EmbedData, width: f32, max_desc_lines: Opti
         y += 90.0 * scale + 8.0 * scale;
         r
     });
-    let footer = match (&e.footer, e.timestamp) {
+    let footer = match (&e.footer, e.timestamp || !e.time.is_empty()) {
         (Some(f), true) if !f.text.is_empty() => format!("{} · Today at 12:00", f.text),
         (Some(f), _) => f.text.clone(),
         (None, true) => "Today at 12:00".into(),
@@ -178,6 +272,8 @@ pub struct EmbedEdit {
     pub node: String,
     pub key: String,
     pub draft: EmbedData,
+    /// The draft as JSON, while switched to JSON.
+    pub json: Option<JsonText>,
 }
 
 pub fn open(ed: &mut Editor, ws: &str, node: &str, key: &str) {
@@ -186,7 +282,7 @@ pub fn open(ed: &mut Editor, ws: &str, node: &str, key: &str) {
         .and_then(|w| w.nodes.get(node))
         .and_then(|n| n.values.get(key).cloned())
         .unwrap_or(Value::Null);
-    ed.embed_edit = Some(EmbedEdit { ws: ws.into(), node: node.into(), key: key.into(), draft: EmbedData::from_value(&value) });
+    ed.embed_edit = Some(EmbedEdit { ws: ws.into(), node: node.into(), key: key.into(), draft: EmbedData::from_value(&value), json: None });
 }
 
 /// The Embed Builder tab.
@@ -209,7 +305,25 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
             Part::Body => {
                 ui.horizontal_top(|ui| {
                     ui.allocate_ui_with_layout(vec2(470.0, 560.0), egui::Layout::top_down(egui::Align::Min), |ui| {
-                        ScrollArea::vertical().id_salt("embed-form").max_height(560.0).auto_shrink([false, false]).show(ui, |ui| {
+                        if let Some(json) = json_view::switch(ui, &theme, edit.json.is_some()) {
+                            if json {
+                                edit.json = Some(JsonText::new(&edit.draft.to_discord()));
+                            } else if edit.json.as_ref().is_none_or(|j| j.error.is_none()) {
+                                edit.json = None;
+                            }
+                        }
+                        ui.add_space(8.0);
+                        if let Some(jt) = &mut edit.json {
+                            let help = t!("The embed as Discord's JSON. Edit it, or paste an embed or a whole message (from an embed generator, say); it applies as soon as it is valid. \"timestamp\": \"now\" shows when it's sent.");
+                            if let Some(v) = json_view::editor(ui, &theme, ui.id().with("embed-json"), jt, 400.0, help) {
+                                match EmbedData::from_discord(&v) {
+                                    Ok(e) => edit.draft = e,
+                                    Err(e) => jt.error = Some(e),
+                                }
+                            }
+                            return;
+                        }
+                        ScrollArea::vertical().id_salt("embed-form").max_height(510.0).auto_shrink([false, false]).show(ui, |ui| {
                             ui.set_width(452.0);
                             form(ui, &theme, &mut edit.draft);
                         });
@@ -222,11 +336,17 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
                 });
             }
             Part::Footer => {
-                if dialog::primary_button(ui, &theme, t!("Apply and close")).clicked() {
-                    (apply, close) = (true, true);
-                }
-                apply |= dialog::secondary_button(ui, &theme, t!("Apply")).on_hover_text(t!("Put it on the block and keep editing")).clicked();
+                let broken = edit.json.as_ref().is_some_and(|j| j.error.is_some());
+                ui.add_enabled_ui(!broken, |ui| {
+                    if dialog::primary_button(ui, &theme, t!("Apply and close")).clicked() {
+                        (apply, close) = (true, true);
+                    }
+                    apply |= dialog::secondary_button(ui, &theme, t!("Apply")).on_hover_text(t!("Put it on the block and keep editing")).clicked();
+                });
                 cancel = dialog::secondary_button(ui, &theme, t!("Cancel")).clicked();
+                if broken {
+                    ui.label(RichText::new(t!("Fix the JSON first")).size(12.0).color(theme.warning));
+                }
             }
         },
     );
@@ -269,7 +389,8 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
     dialog::section(ui, theme, t!("Author"));
     let author = e.author.get_or_insert_with(NameIcon::default);
     two(ui, theme, (t!("Name"), &mut author.name, "{user}"), (t!("Icon URL"), &mut author.icon, "https://…"));
-    if author.name.is_empty() && author.icon.is_empty() {
+    dialog::field(ui, theme, t!("Name link"), None, |ui| dialog::text_input(ui, &mut author.url, "https://…", false));
+    if author.name.is_empty() && author.icon.is_empty() && author.url.is_empty() {
         e.author = None;
     }
 
@@ -329,7 +450,29 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
     if footer.text.is_empty() && footer.icon.is_empty() {
         e.footer = None;
     }
-    dialog::toggle_row(ui, theme, &mut e.timestamp, t!("Timestamp"), t!("Show when the embed was sent, next to the footer."));
+    dialog::section(ui, theme, t!("Timestamp"));
+    ui.horizontal(|ui| {
+        ui.set_min_height(crate::inputs::input_height(ui));
+        // None, when it's sent, or a set time (kept in `time`).
+        let set_id = ui.id().with("set-time");
+        let mut kind = if !e.time.is_empty() || ui.memory(|m| m.data.get_temp::<bool>(set_id).unwrap_or(false)) { 2 } else if e.timestamp { 1 } else { 0 };
+        let labels = [t!("None"), t!("When it's sent"), t!("A set time")];
+        crate::widgets::dropdown(ui, ui.id().with("timestamp"), 160.0, labels[kind], |ui| {
+            for (i, l) in labels.iter().enumerate() {
+                ui.selectable_value(&mut kind, i, *l);
+            }
+        });
+        e.timestamp = kind == 1;
+        if kind != 2 {
+            e.time.clear();
+        }
+        ui.memory_mut(|m| m.data.insert_temp(set_id, kind == 2));
+        if kind == 2 {
+            let w = ui.available_width();
+            ui.add(crate::inputs::TextLine::new(&mut e.time).hint("2026-12-24T18:00:00Z or {date}").width(w));
+        }
+    });
+    ui.label(RichText::new(t!("Shown next to the footer, in each reader's own time zone.")).size(11.5).color(theme.text_muted));
 }
 
 /// Room for a field row's inline switch and its Up, Down and Remove buttons.
@@ -355,4 +498,36 @@ fn preview_message(ui: &mut Ui, theme: &Theme, e: &EmbedData) {
     painter.text(avatar + vec2(48.0, 2.0), egui::Align2::LEFT_TOP, t!("Your Bot"), FontId::proportional(14.0), STRONG);
     painter.text(avatar + vec2(118.0, 4.0), egui::Align2::LEFT_TOP, "APP · Today at 12:00", FontId::proportional(11.0), MUTED);
     paint(&painter, rect.min + vec2(62.0, 44.0), card_w, &l);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn embeds_go_to_discord_json_and_back() {
+        let e = EmbedData {
+            color: "#5865F2".into(),
+            title: "Rank of {user}".into(),
+            url: "https://example.com".into(),
+            description: "**{xp}** XP".into(),
+            author: Some(NameIcon { name: "{user}".into(), icon: "{avatar}".into(), url: "https://a.example".into() }),
+            fields: vec![EmbedField { name: "Level".into(), value: "{level}".into(), inline: true }],
+            footer: Some(FooterData { text: "DemoBot".into(), icon: String::new() }),
+            image: "https://i.example/a.png".into(),
+            thumbnail: String::new(),
+            timestamp: true,
+            time: String::new(),
+        };
+        let v = e.to_discord();
+        assert_eq!(v["color"], 0x5865F2);
+        assert_eq!(v["author"]["icon_url"], "{avatar}");
+        assert_eq!(v["timestamp"], "now");
+        assert_eq!(EmbedData::from_discord(&v).unwrap(), e);
+        // A whole message from an embed generator: its first embed, with a set time.
+        let message = json!({ "content": "hi", "embeds": [{ "title": "T", "color": 16711680, "timestamp": "2026-12-24T18:00:00.000Z" }] });
+        let back = EmbedData::from_discord(&message).unwrap();
+        assert_eq!((back.title.as_str(), back.color.as_str(), back.time.as_str(), back.timestamp), ("T", "#FF0000", "2026-12-24T18:00:00.000Z", false));
+        assert!(EmbedData::from_discord(&json!([1])).is_err());
+    }
 }

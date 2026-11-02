@@ -19,6 +19,7 @@ fn padded(ui: &mut Ui, add: impl FnOnce(&mut Ui)) {
 /// Something the Inspector asks for that needs the whole editor.
 enum InspectorAsk {
     EmbedBuilder(String, String, String),
+    LayoutBuilder(String, String, String),
     SlashCommands,
 }
 
@@ -27,6 +28,7 @@ pub fn inspector(ui: &mut Ui, ed: &mut Editor) {
     inspector_body(ui, ed, &mut ask);
     match ask {
         Some(InspectorAsk::EmbedBuilder(ws, node, key)) => crate::embed::open(ed, &ws, &node, &key),
+        Some(InspectorAsk::LayoutBuilder(ws, node, key)) => crate::layout::open(ed, &ws, &node, &key),
         Some(InspectorAsk::SlashCommands) => crate::slash::open(ed),
         None => {}
     }
@@ -106,6 +108,10 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                     } else if f.type_name == "embed" {
                         if crate::dialog::button(ui, &theme, t!("Open Embed Builder")).clicked() {
                             *ask = Some(InspectorAsk::EmbedBuilder(ws_key.clone(), node_id.clone(), key.clone()));
+                        }
+                    } else if f.type_name == "layout" {
+                        if crate::dialog::button(ui, &theme, t!("Open Layout Builder")).clicked() {
+                            *ask = Some(InspectorAsk::LayoutBuilder(ws_key.clone(), node_id.clone(), key.clone()));
                         }
                     } else {
                         let mut value = ws.nodes[&node_id].values.get(key).cloned().or_else(|| f.default.clone()).unwrap_or(Value::Null);

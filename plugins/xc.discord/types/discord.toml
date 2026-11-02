@@ -74,6 +74,15 @@ icon = "embed"
 description = "A rich message card with title, description, fields and images."
 
 [[type]]
+id = "discord.layout"
+name = "Layout"
+extends = "object"
+color = "#3DD9C1"
+icon = "layers"
+check = "v => Array.isArray(v?.components)"
+description = "A whole message built from Components V2, made with Build Layout. Send it with Send Message set to Layout."
+
+[[type]]
 id = "discord.component"
 name = "Component"
 extends = "object"

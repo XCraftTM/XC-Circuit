@@ -31,6 +31,7 @@ pub enum Tab {
     Plugin(String, String),
     /// Editors that used to be dialogs. Each is open while its draft exists.
     EmbedBuilder,
+    LayoutBuilder,
     SlashCommands,
     BotSettings,
     Export,
@@ -58,7 +59,7 @@ impl Tab {
 
     /// The editors that open in their own floating window.
     fn floats(&self) -> bool {
-        matches!(self, Tab::EmbedBuilder | Tab::SlashCommands | Tab::BotSettings | Tab::Export | Tab::Plugins)
+        matches!(self, Tab::EmbedBuilder | Tab::LayoutBuilder | Tab::SlashCommands | Tab::BotSettings | Tab::Export | Tab::Plugins)
     }
 
     const PANELS: [(Tab, &'static str); 5] = [
@@ -203,6 +204,7 @@ impl CircuitApp {
     fn sync_dialog_tabs(&mut self, ctx: &egui::Context) {
         let wanted = [
             (Tab::EmbedBuilder, self.ed.embed_edit.is_some(), egui::vec2(1060.0, 760.0)),
+            (Tab::LayoutBuilder, self.ed.layout_edit.is_some(), egui::vec2(1240.0, 800.0)),
             (Tab::SlashCommands, self.ed.slash_edit.is_some(), egui::vec2(1320.0, 720.0)),
             (Tab::BotSettings, self.bot.settings.is_some(), egui::vec2(540.0, 600.0)),
             (Tab::Export, self.bot.export.is_some(), egui::vec2(560.0, 620.0)),
@@ -1346,6 +1348,7 @@ impl TabViewer for Viewer<'_> {
             Tab::Plugin(plugin, panel) => self.native.panel_title(plugin, panel).unwrap_or_else(|| panel.clone()).into(),
             Tab::Canvas(key) => self.ed.workspace(key).map(|w| w.name.clone()).unwrap_or_else(|| key.clone()).into(),
             Tab::EmbedBuilder => t!("Embed Builder").into(),
+            Tab::LayoutBuilder => t!("Layout Builder").into(),
             Tab::SlashCommands => t!("Slash Commands").into(),
             Tab::BotSettings => t!("Bot settings").into(),
             Tab::Export => t!("Export bot").into(),
@@ -1365,6 +1368,7 @@ impl TabViewer for Viewer<'_> {
         // Closing an editor's tab cancels it.
         match tab {
             Tab::EmbedBuilder => self.ed.embed_edit = None,
+            Tab::LayoutBuilder => self.ed.layout_edit = None,
             Tab::SlashCommands => self.ed.slash_edit = None,
             Tab::BotSettings => self.bot.settings = None,
             Tab::Export => self.bot.export = None,
@@ -1401,6 +1405,7 @@ impl TabViewer for Viewer<'_> {
                 canvas::show(ui, self.ed, &key);
             }
             Tab::EmbedBuilder => crate::embed::tab(ui, self.ed),
+            Tab::LayoutBuilder => crate::layout::tab(ui, self.ed),
             Tab::SlashCommands => crate::slash::tab(ui, self.ed),
             Tab::BotSettings => self.bot.settings_tab(ui, self.ed),
             Tab::Export => self.bot.export_tab(ui, self.ed),

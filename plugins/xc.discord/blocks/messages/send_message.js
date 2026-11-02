@@ -4,6 +4,7 @@ const MODES = {
   User: { dm: "Direct message" },
 };
 const INTERACTION_MODES = ["reply", "edit", "followup", "defer", "update"];
+const FORMATS = { text: "Text and embeds", layout: "Layout (Components V2)" };
 const MENTIONS = { all: "Everyone mentioned", users: "Only users", usersRoles: "Users and roles (not @everyone)", none: "Nobody" };
 
 module.exports = {
@@ -11,12 +12,20 @@ module.exports = {
   name: "Send Message",
   description: "Replies to a command or button, or sends, replies to and edits messages in channels.",
   author: "XC Team",
-  version: "3.2.0",
+  version: "3.3.0",
   category: "messages",
   icon: "send",
   kind: "action",
   fields: {
     mode: { type: "select", pin: false, default: "reply", choices: MODES, description: "What kind of message to send." },
+    format: {
+      type: "select",
+      pin: false,
+      default: "text",
+      choices: FORMATS,
+      description: "Text and embeds, or a layout from Build Layout (Components V2: containers, sections, galleries and more).",
+      show: { mode: ["reply", "edit", "followup", "update", "send", "msgReply", "msgEdit", "dm"] },
+    },
     text: { type: "textarea", template: true, default: "", description: "The message text. Use {name} for connected values." },
     embeds: { type: "list<discord.embed>", pin: true, multi: true, description: "Embeds to attach." },
     components: {
@@ -59,10 +68,18 @@ module.exports = {
       add.message = { type: "discord.message", pin: "only", required: true, description: "The message to reply to or edit." };
     }
     const hide = mode === "defer" ? ["text", "embeds", "split"] : [];
+    if (mode !== "defer" && values.format === "layout") {
+      // A Components V2 message has no text or embeds of its own: they are in the layout.
+      add.layout = { type: "discord.layout", pin: "only", required: true, description: "The message from Build Layout." };
+      hide.push("text", "embeds", "split", "tts", "noEmbeds");
+    }
     return { add, hide };
   },
   async run({ fields, ctx }) {
-    const flagList = [fields.private && "Ephemeral", fields.silent && "SuppressNotifications", fields.noEmbeds && "SuppressEmbeds"].filter(Boolean);
+    const layout = fields.format === "layout" && fields.mode !== "defer" ? fields.layout || { components: [] } : null;
+    const flagList = [fields.private && "Ephemeral", fields.silent && "SuppressNotifications", !layout && fields.noEmbeds && "SuppressEmbeds", layout && "IsComponentsV2"].filter(
+      Boolean,
+    );
     const flags = flagList.length ? flagList : undefined;
     const files = (fields.files || []).flat().filter(Boolean).map((f) => f.url ?? f.attachment ?? f);
     const payload = { content: fields.text || undefined, embeds: fields.embeds?.length ? fields.embeds : undefined, flags, files: files.length ? files : undefined };
@@ -84,13 +101,21 @@ module.exports = {
       }
       payload.components = rows.slice(0, 5).map((r) => new ActionRowBuilder().addComponents(...r.items));
     }
+    if (layout) {
+      // Components V2: the layout is the whole message; buttons and menus from
+      // the Components input follow it in rows of their own.
+      Object.assign(payload, { content: undefined, embeds: undefined, tts: undefined });
+      payload.components = [...(layout.components || []), ...(payload.components || [])];
+      const all = [...(layout.files || []), ...(payload.files || [])];
+      payload.files = all.length ? all : undefined;
+    }
     const target = fields.interaction ?? fields.channel ?? fields.message ?? (fields.user?.user ?? fields.user);
     const send = {
       reply: () => (target.deferred ? target.editReply(payload) : target.reply({ ...payload, withResponse: true })),
       edit: () => target.editReply(payload),
       followup: () => target.followUp(payload),
       defer: () => target.deferReply({ flags }),
-      update: () => target.update({ ...payload, flags: undefined, withResponse: true }),
+      update: () => target.update({ ...payload, flags: layout ? ["IsComponentsV2"] : undefined, withResponse: true }),
       dm: () => target.send(payload),
       send: () => target.send(payload),
       msgReply: () => target.reply(payload),

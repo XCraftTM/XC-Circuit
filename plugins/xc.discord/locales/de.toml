@@ -453,6 +453,9 @@ english_name = "German"
 "Where" = "Wo"
 "Who gets pinged" = "Wer angepingt wird"
 "Winner" = "Gewinner"
+"Layout" = "Layout"
+"Layout (Components V2)" = "Layout (Components V2)"
+"Text and embeds" = "Text und Embeds"
 
 [blocks."discord.find_channel"]
 name = "Kanal finden"
@@ -813,3 +816,7 @@ description = "Liest eine Information über einen Server."
 [blocks."discord.voice_action"]
 name = "Sprachmitglied"
 description = "Verschiebt ein Mitglied in einen anderen Sprachkanal, trennt es, schaltet es stumm oder taub. Der Bot braucht Mitglieder verschieben, stummschalten oder taub stellen."
+
+[blocks."discord.build_layout"]
+name = "Layout bauen"
+description = "Gestaltet eine ganze Nachricht mit Components V2: Container, Text, Abschnitte mit Bild oder Button, Galerien, Dateien, Trenner, Buttons und Menüs. Verbinde es mit „Nachricht senden“ im Format Layout."
