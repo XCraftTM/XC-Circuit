@@ -610,6 +610,19 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         let shape = node_shapes.get(id);
         let mut open_embed: Option<String> = None;
         for (row, r) in &layout.rows {
+            // Hovering a row's name shows what it is, like hovering its pin.
+            let (tip_key, tip_dir, tip_rect) = match row {
+                RowKind::Flow(f) => (f, Dir::Out, *r),
+                RowKind::Output(k) => (k, Dir::Out, *r),
+                RowKind::Field { key, .. } => {
+                    let label = shape.and_then(|s| s.field(key)).map(|f| f.label(key)).unwrap_or_else(|| key.clone());
+                    let w = (r.width() * 0.4).min(label.len() as f32 * 7.0 + 8.0);
+                    (key, Dir::In, Rect::from_min_max(r.min, pos2(r.left() + 16.0 + w, r.bottom())))
+                }
+            };
+            if let Some(spot) = layout.pins.iter().find(|p| p.pin == *tip_key && p.dir == tip_dir) {
+                cui.interact(tip_rect, cui.id().with(("row-tip", id, tip_key, tip_dir)), Sense::hover()).on_hover_ui(|ui| pin_tooltip(ui, spot, reg, theme));
+            }
             match row {
                 RowKind::Flow(f) => {
                     painter.text(r.right_center() - vec2(16.0, 0.0), Align2::RIGHT_CENTER, circuit_core::block::title_case(f), FontId::proportional(12.5), theme.text);

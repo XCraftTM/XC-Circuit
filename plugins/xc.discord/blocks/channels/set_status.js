@@ -12,8 +12,8 @@ module.exports = {
   kind: "action",
   tags: ["presence", "activity", "playing"],
   fields: {
-    status: { type: "select", pin: false, default: "online", choices: STATUS },
-    activity: { type: "select", pin: false, default: "Watching", choices: ACTIVITY },
+    status: { type: "select", pin: false, default: "online", choices: STATUS, description: "Online, idle, do not disturb or invisible." },
+    activity: { type: "select", pin: false, default: "Watching", choices: ACTIVITY, description: "The word shown before the text, such as Watching or Playing." },
     text: { type: "text", template: true, default: "the server", description: "The activity text. {placeholders} work." },
   },
   run({ fields, ctx }) {

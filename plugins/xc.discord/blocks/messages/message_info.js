@@ -21,8 +21,8 @@ module.exports = {
   icon: "message",
   kind: "value",
   fields: {
-    message: { type: "discord.message", pin: "only", required: true },
-    info: { type: "select", pin: false, default: "content", choices: Object.fromEntries(Object.entries(INFO).map(([k, [l]]) => [k, l])) },
+    message: { type: "discord.message", pin: "only", required: true, description: "The message to read from." },
+    info: { type: "select", pin: false, default: "content", choices: Object.fromEntries(Object.entries(INFO).map(([k, [l]]) => [k, l])), description: "Which detail about the message to get." },
   },
   outputs: {
     result: { type: "text", description: "The value you picked." },

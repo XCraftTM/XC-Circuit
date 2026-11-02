@@ -12,11 +12,11 @@ module.exports = {
   tags: ["component", "click"],
   fields: {
     label: { type: "text", template: true, default: "Click me", description: "The text on the button." },
-    style: { type: "select", pin: false, default: "primary", choices: STYLES },
+    style: { type: "select", pin: false, default: "primary", choices: STYLES, description: "The color of the button, or Link to open a web page." },
     customId: { type: "text", default: "my-button", label: "Custom id", description: "Identifies the button in Button Pressed.", show: { style: ["primary", "secondary", "success", "danger"] } },
-    url: { type: "text", default: "https://", label: "URL", show: { style: ["link"] } },
+    url: { type: "text", default: "https://", label: "URL", show: { style: ["link"] }, description: "The web page a Link button opens." },
     emoji: { type: "text", default: "", advanced: true, description: "An emoji such as 👍 or <:name:id>." },
-    disabled: { type: "boolean", pin: false, default: false, advanced: true },
+    disabled: { type: "boolean", pin: false, default: false, advanced: true, description: "Shown grayed out, so nobody can press it." },
   },
   outputs: {
     button: { type: "discord.component", description: "Connect to Send Message › Components." },

@@ -19,10 +19,10 @@ module.exports = {
   kind: "value",
   fields: {
     user: { type: "discord.user", pin: "only", required: true, description: "A user or member." },
-    info: { type: "select", pin: false, default: "username", choices: Object.fromEntries(Object.entries(INFO).map(([k, [l]]) => [k, l])) },
+    info: { type: "select", pin: false, default: "username", choices: Object.fromEntries(Object.entries(INFO).map(([k, [l]]) => [k, l])), description: "Which detail about the user to get." },
   },
   outputs: {
-    result: { type: "text" },
+    result: { type: "text", description: "The detail you picked." },
   },
   define({ values }) {
     const [label, type] = INFO[values.info] || INFO.username;

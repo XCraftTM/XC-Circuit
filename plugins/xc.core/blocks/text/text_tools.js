@@ -29,7 +29,7 @@ module.exports = {
     text: { type: "text", pin: true, description: "The text." },
     tool: { type: "select", pin: false, default: "upper", choices: Object.fromEntries(Object.entries(TOOLS).map(([k, [l]]) => [k, l])), description: "What to do." },
     with: { type: "text", default: "", label: "With", description: "The text to look for, separator, count or pattern.", show: { tool: Object.keys(TOOLS).filter((k) => TOOLS[k][1]) } },
-    replacement: { type: "text", default: "", label: "Replace with", show: { tool: ["replace"] } },
+    replacement: { type: "text", default: "", label: "Replace with", show: { tool: ["replace"] }, description: "The text that goes where the found text was." },
   },
   outputs: {
     result: { type: "text", description: "The result." },

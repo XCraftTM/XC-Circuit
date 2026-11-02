@@ -12,10 +12,10 @@ module.exports = {
   tags: ["http", "api", "fetch", "url", "json"],
   fields: {
     url: { type: "text", template: true, required: true, default: "https://", label: "URL", description: "The address. {placeholders} work." },
-    method: { type: "select", pin: false, default: "GET", choices: METHODS },
+    method: { type: "select", pin: false, default: "GET", choices: METHODS, description: "GET reads, POST sends new data, PUT and PATCH change it, DELETE removes it." },
     body: { type: "any", pin: true, description: "Sent as JSON for POST, PUT and PATCH.", show: { method: ["POST", "PUT", "PATCH"] } },
     headers: { type: "textarea", pin: false, default: "", advanced: true, description: "One per line: Name: value" },
-    timeoutSeconds: { type: "number", default: 15, advanced: true, label: "Timeout (s)" },
+    timeoutSeconds: { type: "number", default: 15, advanced: true, label: "Timeout (s)", description: "Give up and fail when there is no answer after this many seconds." },
   },
   outputs: {
     status: { type: "number", description: "The HTTP status, such as 200." },

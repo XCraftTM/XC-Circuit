@@ -12,7 +12,7 @@ module.exports = {
   tags: ["boolean", "and", "or", "not"],
   fields: {
     a: { type: "boolean", pin: true, description: "The first value." },
-    op: { type: "select", pin: false, default: "and", choices: OPS, label: "Operation" },
+    op: { type: "select", pin: false, default: "and", choices: OPS, label: "Operation", description: "How the two values are combined: both true, either true, and so on." },
     b: { type: "boolean", pin: true, description: "The second value.", show: { op: ["and", "or", "xor"] } },
   },
   outputs: {

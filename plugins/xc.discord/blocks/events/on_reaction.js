@@ -11,7 +11,7 @@ module.exports = {
   fields: {
     emoji: { type: "text", pin: false, default: "", description: "Only this emoji (such as 👍 or a custom emoji name). Empty = any." },
     messageId: { type: "text", pin: false, default: "", label: "Message id", description: "Only reactions on this message. Empty = any." },
-    ignoreBots: { type: "boolean", pin: false, default: true, label: "Ignore bots" },
+    ignoreBots: { type: "boolean", pin: false, default: true, label: "Ignore bots", description: "Don't run when a bot adds the reaction." },
   },
   outputs: {
     user: { type: "discord.user", description: "Who reacted." },

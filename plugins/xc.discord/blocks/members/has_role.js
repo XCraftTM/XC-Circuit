@@ -9,7 +9,7 @@ module.exports = {
   kind: "value",
   tags: ["role", "check", "permission"],
   fields: {
-    member: { type: "discord.member", pin: "only", required: true },
+    member: { type: "discord.member", pin: "only", required: true, description: "The member whose roles are checked." },
     role: { type: "text", required: true, default: "", description: "A role id or exact role name." },
   },
   outputs: {
