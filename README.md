@@ -29,6 +29,8 @@ The first start opens `examples/DemoBot`. Windows and Linux are supported.
 | Copy / Paste / Duplicate | Ctrl+C / Ctrl+V (at the mouse) / Ctrl+D; works across workspaces and projects |
 | First start | The welcome page sets up Node.js (finds it, or installs it: winget or the official installer on Windows, a private copy on Linux), a theme and an accent; Help › Welcome and setup… opens it again |
 | Tour | Help › Take the tour: a guided walk through adding, wiring and running blocks on a practice project; skip any time, arrow keys move between steps |
+| Backups | Every save keeps a snapshot outside the project (newest 20, plus one a day for 14 days; Settings › Backups). File › Restore from backup… compares them with now and restores the project or one workspace. Unsaved changes are copied every 30 s and offered back after a crash |
+| Bot data backups | A bot backs up its saved data (store.json) when it starts and every 6 hours, keeping the newest 10 in data/backups. If the data is empty or damaged it asks: restore a backup or start empty (a dialog in XC Circuit, a question in the terminal) |
 | Settings | Ctrl+, or the gear at the bottom of the activity bar: theme, accent color (changes live), interface size, canvas, window, bot, plugins, shortcuts |
 | Command palette | Ctrl+P or the search box in the title bar: run any command, open a workspace, or jump to a block |
 | Title bar | Drag to move, double-click to maximize, drag the window edges to resize; View › Use system title bar switches to the system one |

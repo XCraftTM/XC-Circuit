@@ -498,7 +498,12 @@ fn handle_event(ed: &mut Editor, ev: BotEvent) {
 }
 
 /// `%APPDATA%\XC Circuit` on Windows, `~/.local/share/xc-circuit` on Linux.
+/// XC Circuit's own data: packages, backups, downloaded Node.js. The
+/// `XC_CIRCUIT_DATA` environment variable moves it (portable installs, tests).
 pub fn app_data_dir() -> PathBuf {
+    if let Some(dir) = std::env::var_os("XC_CIRCUIT_DATA").filter(|d| !d.is_empty()) {
+        return PathBuf::from(dir);
+    }
     let name = if cfg!(windows) { "XC Circuit" } else { "xc-circuit" };
     dirs::data_dir().unwrap_or_else(std::env::temp_dir).join(name)
 }

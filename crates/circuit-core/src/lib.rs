@@ -1,6 +1,7 @@
 //! Mode-independent model of an XC Circuit project: pin types, block
 //! definitions, workspace graphs and the on-disk project format.
 
+pub mod backup;
 pub mod block;
 pub mod graph;
 pub mod project;

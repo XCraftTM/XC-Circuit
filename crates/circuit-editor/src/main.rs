@@ -16,6 +16,7 @@ mod picker;
 mod settings;
 mod setup;
 mod prefs;
+mod restore;
 mod sidebar;
 mod plugin_manager;
 mod slash;

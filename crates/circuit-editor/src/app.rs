@@ -23,6 +23,8 @@ pub enum Tab {
     StoredData,
     /// The Settings page.
     Settings,
+    /// Backups and restoring.
+    Backups,
     /// A native plugin's panel: plugin id, panel id.
     Plugin(String, String),
 }
@@ -66,6 +68,9 @@ pub struct CircuitApp {
     bundled_plugins: Option<PathBuf>,
     show_plugins: bool,
     settings: crate::settings::SettingsView,
+    restore: crate::restore::RestoreView,
+    /// When unsaved changes were last copied for crash recovery.
+    last_recovery: std::time::Instant,
     /// The First Start page, while it is open.
     setup: Option<crate::setup::Setup>,
     /// The guided tour, while it runs, and the layout to put back afterwards.
@@ -149,6 +154,8 @@ impl CircuitApp {
             tour: None,
             dock_before_tour: None,
             settings: Default::default(),
+            restore: Default::default(),
+            last_recovery: std::time::Instant::now(),
         }
     }
 
@@ -267,6 +274,9 @@ impl CircuitApp {
                 if ui.add_enabled(self.ed.project.is_some(), egui::Button::new("Save").shortcut_text("Ctrl+S")).clicked() {
                     self.ed.save();
                     self.bot.restart_if_running(&mut self.ed, ui.ctx());
+                }
+                if ui.add_enabled(self.ed.project.is_some(), egui::Button::new("Restore from backup…")).clicked() {
+                    open_center(&mut self.dock, Tab::Backups);
                 }
                 if ui.add(egui::Button::new("Settings…").shortcut_text("Ctrl+,")).clicked() {
                     self.open_settings();
@@ -582,6 +592,58 @@ impl CircuitApp {
                 }
                 Ask::ResetLayout => self.reset_layout(),
                 Ask::NodeSetup => self.setup = Some(crate::setup::Setup::node_only()),
+                Ask::OpenBackups => open_center(&mut self.dock, Tab::Backups),
+            }
+        }
+    }
+
+    /// After a crash: offers the unsaved changes that were left behind.
+    fn recovery_dialog(&mut self, ctx: &egui::Context, theme: &crate::theme::Theme) {
+        let Some(rec) = &self.ed.recovery_offer else { return };
+        let Some(project) = &self.ed.project else { return };
+        let changes = circuit_core::backup::compare(&rec.workspaces, &project.workspaces);
+        let changed: Vec<String> = changes
+            .iter()
+            .filter_map(|(_, name, c)| match c {
+                circuit_core::backup::Change::Same => None,
+                circuit_core::backup::Change::Changed => Some(format!("{name} (changed)")),
+                circuit_core::backup::Change::OnlyInBackup => Some(format!("{name} (new)")),
+                circuit_core::backup::Change::OnlyNow => Some(format!("{name} (deleted)")),
+            })
+            .collect();
+        let when = format!("{} ({})", crate::editor::local_time(rec.saved_at), crate::editor::ago(rec.saved_at));
+        let icon = self.ed.reg.icons.get("clock").cloned();
+        let (mut restore, mut discard) = (false, false);
+        dialog::show(
+            ctx,
+            theme,
+            dialog::Spec { id: "recovery", title: "Unsaved changes found", subtitle: Some("XC Circuit didn't close normally last time"), icon: icon.as_deref(), width: 500.0 },
+            |ui, part| match part {
+                dialog::Part::Body => {
+                    ui.label(RichText::new(format!("Changes to {} from {when} weren't saved.", project.meta.name)).size(13.5).color(theme.text));
+                    ui.add_space(6.0);
+                    if changed.is_empty() {
+                        ui.label(RichText::new("They change the project's settings.").size(12.5).color(theme.text_muted));
+                    } else {
+                        for c in &changed {
+                            ui.label(RichText::new(format!("• {c}")).size(12.5).color(theme.text_muted));
+                        }
+                    }
+                    ui.add_space(6.0);
+                    ui.label(RichText::new("Bring them back as unsaved changes, then save to keep them.").size(12.5).color(theme.text_muted));
+                }
+                dialog::Part::Footer => {
+                    restore = dialog::primary_button(ui, theme, "Bring them back").clicked();
+                    discard = dialog::secondary_button(ui, theme, "Discard").clicked();
+                }
+            },
+        );
+        if restore && let Some(rec) = self.ed.recovery_offer.take() {
+            self.ed.apply_recovery(rec);
+        } else if discard {
+            self.ed.recovery_offer = None;
+            if let Some(p) = &self.ed.project {
+                self.ed.backups.clear_recovery(&p.root);
             }
         }
     }
@@ -647,6 +709,9 @@ impl CircuitApp {
         items.push(Item::new("Help", "About XC™ Circuit", Cmd::About));
         items.push(Item::new("File", "Settings", Cmd::OpenSettings).shortcut("Ctrl+,"));
         items.push(Item::new("Help", "Take the tour", Cmd::Tour));
+        if has_project {
+            items.push(Item::new("File", "Restore from backup…", Cmd::Backups));
+        }
         items.push(Item::new("Plugins", "Manage Plugins…", Cmd::ManagePlugins));
         for p in &self.native.plugins {
             for c in p.commands() {
@@ -706,6 +771,7 @@ impl CircuitApp {
             Cmd::About => self.show_about = true,
             Cmd::OpenSettings => self.open_settings(),
             Cmd::Tour => self.start_tour(),
+            Cmd::Backups => open_center(&mut self.dock, Tab::Backups),
             Cmd::ManagePlugins => self.show_plugins = true,
             Cmd::PluginCommand(id) => self.native.queued.push(id),
             Cmd::TogglePluginPanel(plugin, panel) => self.toggle_panel(Tab::Plugin(plugin, panel)),
@@ -828,6 +894,9 @@ impl CircuitApp {
 
     fn dialogs(&mut self, ctx: &egui::Context) {
         let theme = self.ed.theme.clone();
+        if self.setup.is_none() && self.tour.is_none() {
+            self.recovery_dialog(ctx, &theme);
+        }
         if self.show_about {
             let info = format!(
                 "{} plugins · {} blocks · {} themes loaded",
@@ -889,6 +958,9 @@ impl CircuitApp {
             if save || discard {
                 if save {
                     self.ed.save();
+                } else if let Some(p) = &self.ed.project {
+                    // Chosen on purpose: no recovery offer next time.
+                    self.ed.backups.clear_recovery(&p.root);
                 }
                 self.allow_close = true;
                 ctx.send_viewport_cmd(ViewportCommand::Close);
@@ -995,6 +1067,7 @@ impl eframe::App for CircuitApp {
                 running,
                 native: &mut self.native,
                 settings: &mut self.settings,
+                restore: &mut self.restore,
                 asks: Vec::new(),
             };
             DockArea::new(&mut self.dock)
@@ -1058,6 +1131,18 @@ impl eframe::App for CircuitApp {
         if let Some(p) = &self.ed.project {
             self.ed.history.track(p, settled);
         }
+        // Unsaved changes are copied every 30 seconds, for crash recovery.
+        if self.ed.dirty && settled && self.tour.is_none() && self.last_recovery.elapsed() >= RECOVERY_EVERY {
+            self.last_recovery = std::time::Instant::now();
+            if let Some(p) = &self.ed.project
+                && let Err(e) = self.ed.backups.write_recovery(p)
+            {
+                self.ed.log(Level::Warn, format!("Couldn't keep a recovery copy of your unsaved changes: {e:#}"));
+            }
+        }
+        if self.ed.dirty {
+            ctx.request_repaint_after(RECOVERY_EVERY);
+        }
     }
 
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
@@ -1088,6 +1173,8 @@ impl eframe::App for CircuitApp {
 }
 
 const ACTIVITY_W: f32 = 44.0;
+/// How often unsaved changes are copied for crash recovery.
+const RECOVERY_EVERY: std::time::Duration = std::time::Duration::from_secs(30);
 
 struct Viewer<'a> {
     ed: &'a mut Editor,
@@ -1097,6 +1184,7 @@ struct Viewer<'a> {
     problems: Vec<panels::ProblemItem>,
     native: &'a mut crate::native::NativeHost,
     settings: &'a mut crate::settings::SettingsView,
+    restore: &'a mut crate::restore::RestoreView,
     asks: Vec<crate::settings::Ask>,
 }
 
@@ -1115,6 +1203,7 @@ impl TabViewer for Viewer<'_> {
             Tab::Problems => format!("Problems  {}", self.problem_count).into(),
             Tab::StoredData => "Stored Data".into(),
             Tab::Settings => "Settings".into(),
+            Tab::Backups => "Backups".into(),
             Tab::Plugin(plugin, panel) => self.native.panel_title(plugin, panel).unwrap_or_else(|| panel.clone()).into(),
             Tab::Canvas(key) => self.ed.workspace(key).map(|w| w.name.clone()).unwrap_or_else(|| key.clone()).into(),
         }
@@ -1137,6 +1226,7 @@ impl TabViewer for Viewer<'_> {
             Tab::Problems => panels::problems(ui, self.ed, std::mem::take(&mut self.problems)),
             Tab::StoredData => crate::stored::panel(ui, self.ed, self.stored, self.running),
             Tab::Settings => crate::settings::ui(ui, self.ed, self.native, self.settings, &mut self.asks),
+            Tab::Backups => crate::restore::ui(ui, self.ed, self.restore, self.running),
             Tab::Plugin(plugin, panel) => {
                 let (plugin, panel) = (plugin.clone(), panel.clone());
                 self.native.panel_ui(ui, self.ed, &plugin, &panel, self.running);

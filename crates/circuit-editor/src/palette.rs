@@ -33,6 +33,7 @@ pub enum Cmd {
     ManagePlugins,
     OpenSettings,
     Tour,
+    Backups,
 }
 
 pub struct Item {

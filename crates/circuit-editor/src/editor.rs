@@ -4,7 +4,6 @@
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 
 use std::collections::HashSet;
 
@@ -80,6 +79,10 @@ pub struct Editor {
     pub prefs: crate::prefs::Prefs,
     /// Where parts of the window were drawn this frame, for the tour to point at.
     pub ui_rects: HashMap<String, eframe::egui::Rect>,
+    /// Project snapshots and crash recovery copies, kept outside projects.
+    pub backups: circuit_core::backup::Backups,
+    /// Unsaved changes found when the project opened (left by a crash).
+    pub recovery_offer: Option<circuit_core::backup::Recovery>,
     /// Successful saves so far, so others can react to a save.
     pub saves: u64,
     /// What blocks see as `project` in `define()`: `{ data }` of the open project.
@@ -112,6 +115,8 @@ impl Editor {
             history: Histories::default(),
             prefs: Default::default(),
             ui_rects: HashMap::new(),
+            backups: circuit_core::backup::Backups::new(crate::bot::app_data_dir().join("backups")),
+            recovery_offer: None,
             saves: 0,
             define_ctx: Value::Object(Map::new()),
             embed_edit: None,
@@ -194,6 +199,7 @@ impl Editor {
                     self.log(Level::Error, format!("Couldn't read workspaces/{stem}.json, so it isn't open. The file is left as it is: {why}"));
                 }
                 let first = project.workspaces.keys().next().cloned();
+                self.recovery_offer = self.backups.read_recovery(&project);
                 self.project = Some(project);
                 self.dirty = false;
                 self.selected = None;
@@ -218,10 +224,84 @@ impl Editor {
                 self.dirty = false;
                 self.saves += 1;
                 let msg = format!("Saved {}", project.meta.name);
+                self.backups.clear_recovery(&project.root);
+                let backup = self.prefs.backups.then(|| {
+                    let made = self.backups.snapshot(project, "Saved");
+                    self.backups.prune(&project.root, self.prefs.backup_keep, self.prefs.backup_days, circuit_core::backup::now_ms());
+                    made
+                });
                 self.log(Level::Success, msg);
+                if let Some(Err(e)) = backup {
+                    self.log(Level::Warn, format!("Saved, but the backup couldn't be made: {e:#}"));
+                }
             }
             Err(e) => self.log(Level::Error, format!("Save failed: {e:#}")),
         }
+    }
+
+    /// Puts the whole project back as it was in a snapshot and saves it. The
+    /// current version is backed up first, so this can be undone.
+    pub fn restore_project(&mut self, snap: &circuit_core::backup::Snapshot) -> anyhow::Result<()> {
+        let (meta, workspaces) = self.backups.load(snap)?;
+        let Some(project) = self.project.as_mut() else { anyhow::bail!("no project is open") };
+        self.backups.snapshot(project, "Before restore")?;
+        let gone: Vec<String> = project.workspaces.keys().filter(|k| !workspaces.contains_key(*k)).cloned().collect();
+        for key in &gone {
+            project.remove_workspace(key);
+            self.actions.push(Action::CloseWorkspaceTabs(key.clone()));
+        }
+        project.meta = meta;
+        for (key, ws) in workspaces {
+            project.removed.retain(|r| *r != key);
+            project.workspaces.insert(key, ws);
+        }
+        self.history.clear();
+        self.views.clear();
+        self.clear_selection();
+        self.shapes.clear();
+        self.dirty = true;
+        self.save();
+        self.refresh_define_ctx();
+        let when = crate::editor::local_time(snap.info.saved_at);
+        self.log(Level::Success, format!("Restored the project as it was on {when}"));
+        if let Some(first) = self.project.as_ref().and_then(|p| p.workspaces.keys().next().cloned()) {
+            self.actions.push(Action::OpenWorkspace(first));
+        }
+        Ok(())
+    }
+
+    /// Puts one workspace back as it was in a snapshot, as an unsaved change.
+    pub fn restore_workspace(&mut self, snap: &circuit_core::backup::Snapshot, key: &str) -> anyhow::Result<()> {
+        let (_, mut workspaces) = self.backups.load(snap)?;
+        let ws = workspaces.shift_remove(key).ok_or_else(|| anyhow::anyhow!("the backup has no workspace `{key}`"))?;
+        let Some(project) = self.project.as_mut() else { anyhow::bail!("no project is open") };
+        project.removed.retain(|r| r != key);
+        let name = ws.name.clone();
+        project.workspaces.insert(key.to_string(), ws);
+        self.shapes.retain(|(w, _), _| w != key);
+        self.dirty = true;
+        self.actions.push(Action::OpenWorkspace(key.to_string()));
+        self.log(Level::Info, format!("Restored the workspace {name} from {} (not saved yet)", crate::editor::local_time(snap.info.saved_at)));
+        Ok(())
+    }
+
+    /// Takes over the unsaved changes found after a crash, as unsaved changes.
+    pub fn apply_recovery(&mut self, rec: circuit_core::backup::Recovery) {
+        let Some(project) = self.project.as_mut() else { return };
+        let gone: Vec<String> = project.workspaces.keys().filter(|k| !rec.workspaces.contains_key(*k)).cloned().collect();
+        for key in &gone {
+            project.remove_workspace(key);
+            self.actions.push(Action::CloseWorkspaceTabs(key.clone()));
+        }
+        project.meta = rec.meta;
+        for (key, ws) in rec.workspaces {
+            project.removed.retain(|r| *r != key);
+            project.workspaces.insert(key, ws);
+        }
+        self.shapes.clear();
+        self.history.clear();
+        self.dirty = true;
+        self.log(Level::Success, "Your unsaved changes are back. Save to keep them.");
     }
 
     pub fn mode(&self) -> Option<&BuildMode> {
@@ -499,8 +579,26 @@ pub fn file_uri(path: &Path) -> String {
 }
 
 fn clock() -> String {
-    let secs = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-    // Local offset is not available without extra crates; show UTC time of day.
-    let s = secs % 86_400;
-    format!("{:02}:{:02}:{:02}", s / 3600, (s / 60) % 60, s % 60)
+    chrono::Local::now().format("%H:%M:%S").to_string()
+}
+
+/// A moment (milliseconds since 1970) in local time: `Mon 2 Nov 2026, 15:30`.
+pub fn local_time(ms: u64) -> String {
+    use chrono::TimeZone;
+    match chrono::Local.timestamp_millis_opt(ms as i64).single() {
+        Some(t) => t.format("%a %-d %b %Y, %H:%M").to_string(),
+        None => "an unknown time".into(),
+    }
+}
+
+/// How long ago a moment was: `just now`, `5 minutes ago`, `3 days ago`.
+pub fn ago(ms: u64) -> String {
+    let secs = circuit_core::backup::now_ms().saturating_sub(ms) / 1000;
+    let (n, unit) = match secs {
+        0..60 => return "just now".into(),
+        60..3_600 => (secs / 60, "minute"),
+        3_600..86_400 => (secs / 3_600, "hour"),
+        _ => (secs / 86_400, "day"),
+    };
+    format!("{n} {unit}{} ago", if n == 1 { "" } else { "s" })
 }

@@ -23,11 +23,17 @@ pub struct Prefs {
     pub node_path: Option<String>,
     /// The First Start page was finished or skipped.
     pub setup_done: bool,
+    /// A snapshot of the project on every save.
+    pub backups: bool,
+    /// Snapshots kept: the newest this many …
+    pub backup_keep: usize,
+    /// … plus one per day for this many days.
+    pub backup_days: u32,
 }
 
 impl Default for Prefs {
     fn default() -> Self {
-        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false }
+        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14 }
     }
 }
 

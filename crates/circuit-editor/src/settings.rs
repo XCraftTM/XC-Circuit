@@ -15,16 +15,18 @@ pub enum Section {
     Editor,
     Bot,
     Plugins,
+    Backups,
     Shortcuts,
     About,
 }
 
 impl Section {
-    const ALL: [(Section, &'static str, &'static str); 6] = [
+    const ALL: [(Section, &'static str, &'static str); 7] = [
         (Section::Appearance, "Appearance", "palette"),
         (Section::Editor, "Editor", "workspace"),
         (Section::Bot, "Bot", "bolt"),
         (Section::Plugins, "Plugins", "plug"),
+        (Section::Backups, "Backups", "clock"),
         (Section::Shortcuts, "Shortcuts", "keyboard"),
         (Section::About, "About", "info"),
     ];
@@ -40,6 +42,7 @@ pub enum Ask {
     AllowNative(bool),
     ResetLayout,
     NodeSetup,
+    OpenBackups,
 }
 
 #[derive(Default)]
@@ -96,6 +99,7 @@ pub fn ui(ui: &mut Ui, ed: &mut Editor, native: &NativeHost, view: &mut Settings
                 Section::Editor => editor(ui, ed, &theme, asks),
                 Section::Bot => bot(ui, ed, &theme, view, asks),
                 Section::Plugins => plugins(ui, ed, native, &theme, asks),
+                Section::Backups => backups(ui, ed, &theme, asks),
                 Section::Shortcuts => shortcuts(ui, &theme),
                 Section::About => about(ui, ed, &theme),
             }
@@ -289,6 +293,35 @@ fn bot(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView, ask
             }
         });
     }
+}
+
+fn backups(ui: &mut Ui, ed: &mut Editor, theme: &Theme, asks: &mut Vec<Ask>) {
+    group(ui, theme, "Project backups");
+    row(ui, theme, "Back up on every save", "Keeps a copy of the project each time you save, outside the project folder.", |ui| {
+        toggle(ui, theme, &mut ed.prefs.backups);
+    });
+    row(ui, theme, "Keep the newest", "How many of the most recent backups are always kept.", |ui| {
+        ui.add(egui::Slider::new(&mut ed.prefs.backup_keep, 5..=100).suffix(" backups"));
+    });
+    row(ui, theme, "And one a day for", "Older backups thin out to the last one of each day.", |ui| {
+        ui.add(egui::Slider::new(&mut ed.prefs.backup_days, 0..=60).suffix(" days"));
+    });
+    row(ui, theme, "Restore", "See what changed and bring back the project, a workspace or the bot's saved data.", |ui| {
+        if ui.button("Restore from backup…").clicked() {
+            asks.push(Ask::OpenBackups);
+        }
+    });
+    let folder = crate::bot::app_data_dir().join("backups");
+    row(ui, theme, "Backups folder", &folder.display().to_string(), |ui| {
+        if ui.button("Open").clicked() {
+            let _ = std::fs::create_dir_all(&folder);
+            let _ = open::that(&folder);
+        }
+    });
+    group(ui, theme, "Unsaved changes");
+    row(ui, theme, "Crash recovery", "While you have unsaved changes, a copy is kept every 30 seconds. If XC Circuit or your computer stops, you're offered your changes back the next time you open the project.", |_| {});
+    group(ui, theme, "The bot's saved data");
+    row(ui, theme, "Backups by the bot", "Every bot backs up its saved data each time it starts and every 6 hours, keeping the newest 10. If the data is ever empty, it asks whether to restore a backup.", |_| {});
 }
 
 fn plugins(ui: &mut Ui, ed: &mut Editor, native: &NativeHost, theme: &Theme, asks: &mut Vec<Ask>) {
