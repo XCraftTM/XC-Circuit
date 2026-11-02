@@ -775,16 +775,20 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                         let wr = Rect::from_min_max(pos2(r.left() + 16.0 + label_w + 6.0, r.top() + 3.0), pos2(r.right() - 12.0, r.bottom() - 3.0));
                         let mut value = ws.nodes[id].values.get(key).cloned().or_else(|| f.default.clone()).unwrap_or(Value::Null);
                         let wid = cui.id().with(("field", id, key));
-                        // A fixed id: number boxes keep their editing state while typing.
-                        let drawn = cui.scope_builder(UiBuilder::new().id_salt(("field-ui", id, key)).max_rect(wr).layout(egui::Layout::right_to_left(egui::Align::Center)), |ui| {
+                        // Drawn top-aligned in a box as tall as the control was last time,
+                        // centered on the row (egui centers a row's items on its first line,
+                        // not on the room given). A fixed id: number boxes keep their editing
+                        // state while typing.
+                        let field = (id.clone(), key.clone());
+                        let place = match view.field_heights.get(&field) {
+                            Some(h) => Rect::from_center_size(pos2(wr.center().x, r.center().y), vec2(wr.width(), *h)),
+                            None => wr,
+                        };
+                        let drawn = cui.scope_builder(UiBuilder::new().id_salt(("field-ui", id, key)).max_rect(place).layout(egui::Layout::right_to_left(egui::Align::Min)), |ui| {
                             widgets::value_editor(ui, wid, f, &mut value, wr.width(), false, theme)
                         });
-                        // A control taller than its row (a dropdown, say) gets a row as tall as
-                        // it from the next frame on. (Smaller ones report the whole row.)
-                        let h = drawn.response.rect.height();
-                        if h > wr.height() + 0.5 {
-                            view.field_heights.insert((id.clone(), key.clone()), h);
-                        }
+                        // Its own height: the row fits it, and it is centered from the next frame on.
+                        view.field_heights.insert(field, drawn.response.rect.height());
                         let changed = drawn.inner;
                         if changed {
                             ws.nodes.get_mut(id).unwrap().values.insert(key.clone(), value);
