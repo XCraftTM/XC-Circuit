@@ -304,7 +304,12 @@ impl CircuitApp {
             left.add_space(6.0);
             left.label(RichText::new(t!("Tour")).strong().color(theme.accent));
         } else {
+        // The menus fill the bar's height, so they're easy to hit. (Set before
+        // the menu bar: it sizes its row from this.)
+        left.spacing_mut().interact_size.y = bar.height();
         egui::MenuBar::new().ui(&mut left, |ui| {
+            ui.spacing_mut().button_padding.x = 10.0;
+            ui.spacing_mut().item_spacing.x = 0.0;
             ui.add(egui::Image::new(egui::include_image!("../assets/icon.svg")).fit_to_exact_size(egui::vec2(18.0, 18.0)));
             ui.add_space(4.0);
             ui.menu_button(t!("File"), |ui| {

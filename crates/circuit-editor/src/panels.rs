@@ -171,11 +171,13 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
 
 pub fn console(ui: &mut Ui, ed: &mut Editor) {
     let theme = ed.theme.clone();
-    ui.horizontal(|ui| {
-        ui.add_space(8.0);
-        if ui.small_button(t!("Clear")).clicked() {
-            ed.log.clear();
-        }
+    // A toolbar row like the Stored Data panel's, with the button in its middle.
+    Frame::new().inner_margin(Margin::symmetric(12, 8)).show(ui, |ui| {
+        ui.horizontal(|ui| {
+            if crate::dialog::small_button(ui, &theme, t!("Clear")).clicked() {
+                ed.log.clear();
+            }
+        });
     });
     let mut jump: Option<(String, String)> = None;
     ScrollArea::vertical().auto_shrink([false, false]).stick_to_bottom(true).show(ui, |ui| {

@@ -58,7 +58,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, view: &mut StoredView, bot_running: b
     Frame::new().inner_margin(Margin::symmetric(12, 8)).show(ui, |ui| {
         ui.horizontal(|ui| {
             ui.add(crate::inputs::TextLine::new(&mut view.filter).hint(t!("Filter keys")).width(200.0).compact());
-            if ui.small_button(t!("Refresh")).clicked() {
+            if crate::dialog::small_button(ui, &theme, t!("Refresh")).clicked() {
                 view.reload(ed);
             }
             if bot_running {
