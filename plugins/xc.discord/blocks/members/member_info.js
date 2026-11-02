@@ -11,6 +11,18 @@ const INFO = {
   isTimedOut: ["Is timed out", "boolean", (m) => m.isCommunicationDisabled()],
   kickable: ["Bot can kick", "boolean", (m) => m.kickable],
   bannable: ["Bot can ban", "boolean", (m) => m.bannable],
+  nickname: ["Nickname", "text", (m) => m.nickname ?? ""],
+  color: ["Name color", "text", (m) => m.displayHexColor],
+  permissions: ["Permissions", "list<text>", (m) => m.permissions.toArray()],
+  voiceChannel: ["Voice channel", "discord.channel?", (m) => m.voice.channel],
+  boostingSince: ["Boosting since", "date", (m) => m.premiumSince],
+  timedOutUntil: ["Timed out until", "date", (m) => m.communicationDisabledUntil],
+  isOwner: ["Is the server owner", "boolean", (m) => m.id === m.guild.ownerId],
+  pending: ["Hasn't passed screening", "boolean", (m) => Boolean(m.pending)],
+  serverAvatar: ["Server avatar URL", "text", (m) => m.avatarURL({ size: 512 }) ?? m.displayAvatarURL({ size: 512 })],
+  server: ["Server", "discord.guild", (m) => m.guild],
+  manageable: ["Bot can change them", "boolean", (m) => m.manageable],
+  moderatable: ["Bot can time out", "boolean", (m) => m.moderatable],
 };
 
 const CHOICES = Object.fromEntries(Object.entries(INFO).map(([k, [label]]) => [k, label]));

@@ -9,6 +9,18 @@ const INFO = {
   mentions: ["Mentioned users", "list<discord.user>", (m) => [...m.mentions.users.values()]],
   attachments: ["Attachment URLs", "list<text>", (m) => [...m.attachments.values()].map((a) => a.url)],
   isBot: ["Sent by a bot", "boolean", (m) => m.author.bot],
+  server: ["Server", "discord.guild?", (m) => m.guild],
+  editedAt: ["Edited at", "date", (m) => m.editedAt],
+  pinned: ["Is pinned", "boolean", (m) => m.pinned],
+  isReply: ["Is a reply", "boolean", (m) => Boolean(m.reference?.messageId)],
+  replyTo: ["Replied-to message", "discord.message?", (m) => (m.reference?.messageId ? m.fetchReference().catch(() => null) : null)],
+  roleMentions: ["Mentioned roles", "list<discord.role>", (m) => [...m.mentions.roles.values()]],
+  channelMentions: ["Mentioned channels", "list<discord.channel>", (m) => [...m.mentions.channels.values()]],
+  mentionsEveryone: ["Mentions @everyone", "boolean", (m) => m.mentions.everyone],
+  embeds: ["Embeds", "list<object>", (m) => m.embeds.map((e) => e.toJSON())],
+  reactions: ["Reactions", "list<object>", (m) => [...m.reactions.cache.values()].map((r) => ({ emoji: r.emoji.toString(), count: r.count }))],
+  stickers: ["Sticker names", "list<text>", (m) => [...m.stickers.values()].map((s) => s.name)],
+  thread: ["Its thread", "discord.channel?", (m) => m.thread],
 };
 
 module.exports = {
@@ -31,8 +43,8 @@ module.exports = {
     const [label, type] = INFO[values.info] || INFO.content;
     return { outputs: { result: { type, label, description: `The message's ${label.toLowerCase()}.` } } };
   },
-  run({ fields }) {
+  async run({ fields }) {
     const [, , read] = INFO[fields.info] || INFO.content;
-    return { result: read(fields.message) };
+    return { result: await read(fields.message) };
   },
 };

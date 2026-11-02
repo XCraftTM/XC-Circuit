@@ -4,13 +4,14 @@ const MODES = {
   User: { dm: "Direct message" },
 };
 const INTERACTION_MODES = ["reply", "edit", "followup", "defer", "update"];
+const MENTIONS = { all: "Everyone mentioned", users: "Only users", usersRoles: "Users and roles (not @everyone)", none: "Nobody" };
 
 module.exports = {
   id: "discord.send_message",
   name: "Send Message",
   description: "Replies to a command or button, or sends, replies to and edits messages in channels.",
   author: "XC Team",
-  version: "3.1.0",
+  version: "3.2.0",
   category: "messages",
   icon: "send",
   kind: "action",
@@ -34,6 +35,13 @@ module.exports = {
     },
     split: { type: "boolean", default: false, advanced: true, label: "Split long text", description: "Send text over 2000 characters as several messages." },
     files: { type: "list<any>", pin: "only", multi: true, advanced: true, description: "Attachments: web addresses, file paths or Discord attachments." },
+    mentions: { type: "select", pin: false, default: "all", advanced: true, label: "Who gets pinged", choices: MENTIONS, description: "Which mentions in the text notify people." },
+    replyPing: { type: "boolean", default: true, advanced: true, label: "Ping the author", show: { mode: ["msgReply"] }, description: "Notify the person being replied to." },
+    silent: { type: "boolean", default: false, advanced: true, description: "Send without a notification sound (@silent)." },
+    noEmbeds: { type: "boolean", default: false, advanced: true, label: "No link previews", description: "Don't show previews of links in the text." },
+    tts: { type: "boolean", default: false, advanced: true, label: "Read aloud", description: "Text to speech, for people who have it on." },
+    stickers: { type: "text", default: "", advanced: true, description: "Sticker ids to send, comma separated (up to 3)." },
+    deleteAfter: { type: "number", default: 0, min: 0, advanced: true, label: "Delete after (s)", description: "Delete the sent message after this many seconds. 0 keeps it." },
   },
   outputs: {
     message: { type: "discord.message", description: "The message that was sent." },
@@ -54,9 +62,15 @@ module.exports = {
     return { add, hide };
   },
   async run({ fields, ctx }) {
-    const flags = fields.private ? ["Ephemeral"] : undefined;
+    const flagList = [fields.private && "Ephemeral", fields.silent && "SuppressNotifications", fields.noEmbeds && "SuppressEmbeds"].filter(Boolean);
+    const flags = flagList.length ? flagList : undefined;
     const files = (fields.files || []).flat().filter(Boolean).map((f) => f.url ?? f.attachment ?? f);
     const payload = { content: fields.text || undefined, embeds: fields.embeds?.length ? fields.embeds : undefined, flags, files: files.length ? files : undefined };
+    if (fields.tts) payload.tts = true;
+    const stickers = String(fields.stickers || "").split(",").map((s) => s.trim()).filter(Boolean);
+    if (stickers.length) payload.stickers = stickers.slice(0, 3);
+    const parse = { users: ["users"], usersRoles: ["users", "roles"], none: [] }[fields.mentions];
+    if (parse || fields.replyPing === false) payload.allowedMentions = { ...(parse ? { parse } : {}), repliedUser: fields.replyPing !== false };
     const parts = (fields.components || []).filter(Boolean);
     if (parts.length) {
       // Buttons share a row (up to 5); a select menu takes a row of its own.
@@ -83,6 +97,8 @@ module.exports = {
       msgEdit: () => target.edit(payload),
     }[fields.mode];
     const result = await send();
-    return { message: result?.resource?.message ?? result ?? null };
+    const message = result?.resource?.message ?? (typeof result?.delete === "function" ? result : null);
+    if (message && fields.deleteAfter > 0) setTimeout(() => message.delete().catch(() => {}), fields.deleteAfter * 1000);
+    return { message };
   },
 };

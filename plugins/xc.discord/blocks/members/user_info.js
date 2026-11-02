@@ -6,6 +6,13 @@ const INFO = {
   avatar: ["Avatar URL", "text", (u) => u.displayAvatarURL({ size: 512 })],
   createdAt: ["Account created", "date", (u) => u.createdAt],
   bot: ["Is a bot", "boolean", (u) => u.bot],
+  globalName: ["Global name", "text", (u) => u.globalName ?? ""],
+  tag: ["Tag", "text", (u) => u.tag],
+  defaultAvatar: ["Default avatar URL", "text", (u) => u.defaultAvatarURL],
+  banner: ["Banner URL", "text", async (u) => (await u.fetch(true)).bannerURL({ size: 1024 }) ?? ""],
+  accentColor: ["Profile color", "text", async (u) => (await u.fetch(true)).hexAccentColor ?? ""],
+  system: ["Is Discord itself", "boolean", (u) => Boolean(u.system)],
+  dm: ["DM channel", "discord.channel", (u) => u.createDM()],
 };
 
 module.exports = {
@@ -28,9 +35,9 @@ module.exports = {
     const [label, type] = INFO[values.info] || INFO.username;
     return { outputs: { result: { type, label, description: `The user's ${label.toLowerCase()}.` } } };
   },
-  run({ fields }) {
+  async run({ fields }) {
     const user = fields.user?.user ?? fields.user;
     const [, , read] = INFO[fields.info] || INFO.username;
-    return { result: read(user) };
+    return { result: await read(user) };
   },
 };

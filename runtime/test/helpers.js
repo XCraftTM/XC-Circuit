@@ -24,7 +24,7 @@ const n = (block, values = {}, extra = {}) => ({ block: block + "@1", at: [0, 0]
 const log = (message) => n("core.log", { message, level: "info" });
 
 // Actions run one after another: start > a > b > … (value blocks are read by the logs).
-const chain = ["start", "cd1", "cd2", "sx1", "sx2", "lbLog", "keysLog", "del", "delLog", "iset", "loop", "after", "call", "callLog", "fmt", "obj"];
+const chain = ["start", "cd1", "cd2", "sx1", "sx2", "lbLog", "keysLog", "del", "delLog", "iset", "loop", "after", "call", "callLog", "fmt", "obj", "code", "codeLog", "up", "len", "useLog"];
 const nodes = {
   start: n("core.on_start"),
   // Cooldown: the first use is ready, the second waits.
@@ -66,6 +66,13 @@ const nodes = {
   mk: n("core.make_object", { keys: "a", a: 1 }),
   set: n("core.set_property", { path: "b.c", value: 2 }),
   obj: log("obj {result.a} {result.b.c}"),
+  // Run Code and Use Method.
+  code: n("core.run_code", { inputs: "a, b", outputs: "sum, product", code: "return { sum: inputs.a + inputs.b, product: inputs.a * inputs.b };", a: 2, b: 3 }),
+  codeLog: log("code {sum} {product}"),
+  word: n("core.text", { text: "hello" }),
+  up: n("core.use_method", { mode: "call", path: "toUpperCase" }),
+  len: n("core.use_method", { mode: "read", path: "length" }),
+  useLog: log("use {upper} {length}"),
   // Every: once at start, then each second.
   tick: n("core.every", { mode: "interval", every: 1, unit: "seconds", now: true }),
   tickLog: log("tick {count}"),
@@ -102,6 +109,12 @@ links.push(
   "mk.object > set.object",
   "set.result > obj.result",
   "tick.next > tickLog.in",
+  "code.sum > codeLog.sum",
+  "code.product > codeLog.product",
+  "word.text > up.object",
+  "word.text > len.object",
+  "up.result > useLog.upper",
+  "len.result > useLog.length",
 );
 
 const bundle = { project: { name: "Helpers", mode: "test", settings: {}, data: {} }, blocks, libs: [], workspaces: { main: { name: "Main", nodes, links } } };
@@ -131,6 +144,8 @@ setTimeout(() => {
   has("called 42");
   has("num 1,234.5 2nd dur 5400000 1 h 30 min rx 42,7");
   has("obj 1 2");
+  has("code 5 6");
+  has("use HELLO 5");
   has("tick 1");
   has("tick 2");
   assert.ok(!logs.some((l) => l.startsWith("error")), "no errors");

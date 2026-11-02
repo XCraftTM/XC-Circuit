@@ -68,6 +68,7 @@ module.exports = {
     mentionable: { type: "select", pin: false, default: "keep", choices: KEEP, description: "Anyone can @mention it." },
     permissions: { type: "text", default: "", description: "Replaces all its permissions (comma separated). Empty keeps them." },
     position: { type: "number", default: 0, min: 0, step: 1, advanced: true, description: "Its place in the role list (0 keeps it). Higher is above." },
+    emoji: { type: "text", default: "", advanced: true, label: "Icon emoji", description: "An emoji shown next to members' names. Empty keeps it." },
     reason: { type: "text", default: "", advanced: true, description: "Shown in the audit log." },
   },
   outputs: {
@@ -81,6 +82,7 @@ module.exports = {
     if (tri(f.mentionable) !== undefined) edit.mentionable = tri(f.mentionable);
     if (String(f.permissions || "").trim()) edit.permissions = permissionList(f.permissions);
     if (f.position > 0) edit.position = Math.floor(f.position);
+    if (f.emoji) edit.unicodeEmoji = f.emoji;
     return { role: await f.role.edit(edit) };
   },
 };

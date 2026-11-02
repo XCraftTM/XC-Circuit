@@ -65,6 +65,8 @@ module.exports = {
     hoist: { type: "boolean", default: false, label: "Show separately", description: "List its members in their own group." },
     mentionable: { type: "boolean", default: false, description: "Anyone can @mention it." },
     permissions: { type: "text", default: "", description: "Comma separated, such as Send Messages, Manage Messages. Empty = none." },
+    emoji: { type: "text", default: "", advanced: true, label: "Icon emoji", description: "An emoji shown next to members' names (needs boost level 2)." },
+    position: { type: "number", default: 0, min: 0, step: 1, advanced: true, description: "Its place in the role list (0 = just above @everyone)." },
     reason: { type: "text", default: "", advanced: true, description: "Shown in the audit log." },
   },
   outputs: {
@@ -77,6 +79,8 @@ module.exports = {
       hoist: Boolean(f.hoist),
       mentionable: Boolean(f.mentionable),
       permissions: permissionList(f.permissions),
+      unicodeEmoji: f.emoji || undefined,
+      position: f.position > 0 ? Math.floor(f.position) : undefined,
       reason: f.reason || undefined,
     });
     return { role };

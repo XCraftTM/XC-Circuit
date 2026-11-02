@@ -99,6 +99,11 @@ name = "Web"
 icon = "send"
 
 [[categories]]
+id = "code"
+name = "Code"
+icon = "terminal"
+
+[[categories]]
 id = "debug"
 name = "Debug"
 icon = "terminal"
