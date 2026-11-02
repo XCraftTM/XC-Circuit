@@ -26,7 +26,7 @@ module.exports = {
       description: "Text and embeds, or a layout from Build Layout (Components V2: containers, sections, galleries and more).",
       show: { mode: ["reply", "edit", "followup", "update", "send", "msgReply", "msgEdit", "dm"] },
     },
-    text: { type: "textarea", template: true, default: "", description: "The message text. Use {name} for connected values." },
+    text: { type: "textarea", template: true, default: "", description: "The message text. ${…} holds JavaScript, such as ${user.username}." },
     embeds: { type: "list<discord.embed>", pin: true, multi: true, description: "Embeds to attach." },
     components: {
       type: "list<discord.component>",

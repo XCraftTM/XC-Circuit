@@ -104,7 +104,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                             ui.set_width(ui.available_width());
                             ui.label(tf!("Connected · {block} ({pin})", block = from, pin = src.pin));
                         });
-                    } else if pinned && f.label.as_deref().is_some_and(|l| l.starts_with('{')) {
+                    } else if pinned && f.label.as_deref().is_some_and(|l| l.starts_with("${")) {
                         // A text's {name} input: connecting it is up to you.
                         ui.label(RichText::new(t!("Optional: connect what goes there. Unconnected, the name is looked up in the event and earlier blocks.")).size(11.5).color(theme.text_muted));
                     } else if pinned {
@@ -125,7 +125,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                             *dirty = true;
                         }
                         if f.templated() {
-                            ui.label(RichText::new(t!("Type {name} to insert a connected value")).size(11.0).color(theme.text_muted));
+                            ui.label(RichText::new(t!("${…} holds JavaScript: type ${ for values from earlier blocks, or ${xp * 2}")).size(11.0).color(theme.text_muted));
                         }
                         if f.type_name == "slash-command-ref" && crate::dialog::button(ui, &theme, t!("Edit slash commands…")).clicked() {
                             *ask = Some(InspectorAsk::SlashCommands);

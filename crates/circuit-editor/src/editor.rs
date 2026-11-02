@@ -218,6 +218,7 @@ impl Editor {
                 self.reload_plugins();
                 self.refresh_define_ctx();
                 self.upgrade_blocks();
+                self.upgrade_texts();
                 if let Some(first) = first {
                     self.actions.push(Action::OpenWorkspace(first));
                 }
@@ -351,6 +352,43 @@ impl Editor {
         let data = self.project.as_ref().map(|p| p.meta.data.clone()).unwrap_or_default();
         self.define_ctx = serde_json::json!({ "data": data });
         self.shapes.clear();
+    }
+
+    /// Texts written with `{name}` placeholders use `${name}` now (`${…}` holds
+    /// JavaScript): every text field of every block, and the texts of designs
+    /// such as embeds, are upgraded.
+    fn upgrade_texts(&mut self) {
+        let Some(project) = self.project.as_mut() else { return };
+        fn walk(v: &mut Value, count: &mut usize) {
+            match v {
+                Value::String(s) => {
+                    if let Some(new) = circuit_core::template::upgrade(s) {
+                        *s = new;
+                        *count += 1;
+                    }
+                }
+                Value::Array(a) => a.iter_mut().for_each(|x| walk(x, count)),
+                Value::Object(m) => m.values_mut().for_each(|x| walk(x, count)),
+                _ => {}
+            }
+        }
+        let mut count = 0;
+        for ws in project.workspaces.values_mut() {
+            for node in ws.nodes.values_mut() {
+                let Some(def) = self.reg.block(&node.block) else { continue };
+                for (key, f) in &def.fields {
+                    if f.templated()
+                        && let Some(v) = node.values.get_mut(key)
+                    {
+                        walk(v, &mut count);
+                    }
+                }
+            }
+        }
+        if count > 0 {
+            self.dirty = true;
+            self.log(Level::Info, tf!("Changed {count} texts from {name} to ${name}, which holds JavaScript now (save to keep)", count = count));
+        }
     }
 
     /// Upgrades blocks saved with an older major version, using the block's `migrate()`.
@@ -637,6 +675,22 @@ mod tests {
 
     /// Every bundled block's define() runs in the sandbox with its defaults
     /// and with each choice of its select fields, and gives a usable shape.
+    #[test]
+    fn older_texts_upgrade_to_javascript() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&root.join("examples/DemoBot"));
+        assert!(!ed.dirty, "the example is up to date");
+        let nodes = &mut ed.project.as_mut().unwrap().workspaces.get_mut("rank-command").unwrap().nodes;
+        nodes.get_mut("4").unwrap().values.insert("text".into(), "Hi {user}, {#3.embed.title} x{3}".into());
+        nodes.get_mut("3").unwrap().values["embed"]["title"] = "Rank of {user}".into();
+        ed.upgrade_texts();
+        let nodes = &ed.project.as_ref().unwrap().workspaces["rank-command"].nodes;
+        assert_eq!(nodes["4"].values["text"], "Hi ${user}, ${#3.embed.title} x{3}");
+        assert_eq!(nodes["3"].values["embed"]["title"], "Rank of ${user}", "texts inside designs too");
+        assert!(ed.dirty);
+    }
+
     #[test]
     fn every_block_defines_cleanly() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");

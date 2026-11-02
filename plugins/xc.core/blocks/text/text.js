@@ -1,7 +1,7 @@
 module.exports = {
   id: "core.text",
   name: "Text",
-  description: "A piece of text. Use {name} placeholders to fill in connected values.",
+  description: "A piece of text. ${…} holds JavaScript, such as ${count * 2}.",
   author: "XC Team",
   version: "1.0.0",
   category: "text",

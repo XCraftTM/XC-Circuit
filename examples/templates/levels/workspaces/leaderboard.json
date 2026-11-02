@@ -32,7 +32,7 @@
       ],
       "values": {
         "mode": "reply",
-        "text": "🏆 **Top 10**\n{board}",
+        "text": "🏆 **Top 10**\n${board}",
         "private": false
       }
     }

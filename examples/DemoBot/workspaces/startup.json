@@ -14,7 +14,7 @@
     "3": {
       "block": "core.log@1",
       "at": [660, 60],
-      "values": { "message": "DemoBot started {value} times", "level": "success" }
+      "values": { "message": "DemoBot started ${value} times", "level": "success" }
     }
   },
   "links": [

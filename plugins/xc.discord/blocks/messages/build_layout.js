@@ -1,7 +1,6 @@
 // Components V2: a whole message built from components. The design is kept as
 // Discord's own JSON (made in the Layout Builder), so every component and
-// setting Discord has can be used. Every {placeholder} in a text becomes an input,
-// unless earlier blocks provide that name.
+// setting Discord has can be used. ${…} in its texts holds JavaScript.
 
 /** A copy of a JSON value with `fn` applied to every string. */
 function mapStrings(v, fn) {
@@ -38,7 +37,7 @@ module.exports = {
     layout: {
       type: "layout",
       pin: false,
-      // Every {name} in the design's texts gets an input, unless earlier blocks provide it.
+      // Names used in ${…} in the design's texts get an input, unless earlier blocks provide them.
       template: true,
       label: "Layout",
       default: {
@@ -47,7 +46,7 @@ module.exports = {
             type: 17,
             accent_color: 0x00d8f0,
             components: [
-              { type: 10, content: "## Hello {user}!" },
+              { type: 10, content: "## Hello ${user}!" },
               { type: 10, content: "This message is built from components." },
             ],
           },

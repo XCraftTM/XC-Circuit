@@ -19,11 +19,11 @@
       "values": {
         "embed": {
           "color": "#00D8F0",
-          "title": "Rank of {user}",
-          "description": "You have **{xp} XP**. Keep chatting to level up!",
+          "title": "Rank of ${user}",
+          "description": "You have **${xp} XP**. Keep chatting to level up!",
           "fields": [
-            { "name": "Level", "value": "{level}", "inline": true },
-            { "name": "Server", "value": "{server}", "inline": true }
+            { "name": "Level", "value": "${level}", "inline": true },
+            { "name": "Server", "value": "${server}", "inline": true }
           ],
           "footer": { "text": "DemoBot" },
           "timestamp": true
@@ -40,7 +40,7 @@
     "4": {
       "block": "discord.send_message@3",
       "at": [760, 120],
-      "values": { "mode": "reply", "text": "GG {user}! Here's your rank.", "private": true },
+      "values": { "mode": "reply", "text": "GG ${user}! Here's your rank.", "private": true },
       "pins": ["embeds"],
       "zone": "z1"
     },

@@ -3,7 +3,7 @@ const LEVELS = { info: "Info", success: "Success", warn: "Warning", error: "Erro
 module.exports = {
   id: "core.log",
   name: "Log",
-  description: "Writes a line to the Console panel. Use {name} placeholders for connected values.",
+  description: "Writes a line to the Console panel. ${…} holds JavaScript, such as ${user.username}.",
   author: "XC Team",
   version: "1.0.0",
   category: "debug",

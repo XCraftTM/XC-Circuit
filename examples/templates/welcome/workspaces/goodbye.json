@@ -37,7 +37,7 @@
       ],
       "values": {
         "mode": "send",
-        "text": "{name} left the server. 👋"
+        "text": "${name} left the server. 👋"
       }
     }
   },

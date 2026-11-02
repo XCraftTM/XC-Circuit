@@ -30,7 +30,7 @@
       ],
       "values": {
         "mode": "reply",
-        "text": "Deleted {count} messages. 🧹",
+        "text": "Deleted ${count} messages. 🧹",
         "private": true
       }
     }

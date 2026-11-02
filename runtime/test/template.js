@@ -1,33 +1,46 @@
-// Checks how {placeholders} in text are filled.
+// Checks how ${…} in texts are filled: each is a JavaScript expression.
 // Usage: node runtime/test/template.js
 "use strict";
 
 const assert = require("assert");
-const { fillTemplate, allowReadMethods } = require("../circuit-runtime.js");
+const { fillTemplate } = require("../circuit-runtime.js");
 
 const run = { event: { user: "from the event", guild: { name: "XC" } }, vars: new Map([["count", 3]]), outputs: new Map([["n1", { result: 42 }]]) };
 
 // The event, run variables, the block's own fields and earlier outputs.
-assert.strictEqual(fillTemplate("{user} in {guild.name}", run, {}), "from the event in XC");
-assert.strictEqual(fillTemplate("{count} times", run, {}), "3 times");
-assert.strictEqual(fillTemplate("{mode}", run, { mode: "reply" }), "reply");
-assert.strictEqual(fillTemplate("answer {result}", run, {}), "answer 42");
+assert.strictEqual(fillTemplate("${user} in ${guild.name}", run, {}), "from the event in XC");
+assert.strictEqual(fillTemplate("${count} times", run, {}), "3 times");
+assert.strictEqual(fillTemplate("${mode}", run, { mode: "reply" }), "reply");
+assert.strictEqual(fillTemplate("answer ${result}", run, {}), "answer 42");
 
-// A value wired into the field's {user} input wins over the event's user.
-assert.strictEqual(fillTemplate("Hi {user}!", run, {}, { user: "wired" }), "Hi wired!");
-assert.strictEqual(fillTemplate("{who.name}", run, {}, { who: { name: "Ada" } }), "Ada");
+// A value wired into the text's input wins over the event's.
+assert.strictEqual(fillTemplate("Hi ${user}!", run, {}, { user: "wired" }), "Hi wired!");
+assert.strictEqual(fillTemplate("${who.name}", run, {}, { who: { name: "Ada" } }), "Ada");
 
-// Unknown names and non-names stay as they are; empty values become "".
-assert.strictEqual(fillTemplate("{nobody} \\d{3}", run, {}), "{nobody} \\d{3}");
-assert.strictEqual(fillTemplate("[{gone}]", run, {}, { gone: null }), "[]");
+// Any JavaScript: arithmetic, methods, ?? and ?., JavaScript's own names,
+// strings with braces, nested template strings.
+assert.strictEqual(fillTemplate("${count * 2 + 1}", run, {}), "7");
+assert.strictEqual(fillTemplate("${guild.name.toLowerCase()}", run, {}), "xc");
+assert.strictEqual(fillTemplate("${run?.missing ?? 'none'}", run, { run: null }), "none");
+assert.strictEqual(fillTemplate("${Math.max(count, 10)}", run, {}), "10");
+assert.strictEqual(fillTemplate("${'{' + count + '}'}", run, {}), "{3}");
+assert.strictEqual(fillTemplate("${`${count} times`}!", run, {}), "3 times!");
+assert.strictEqual(fillTemplate("${ {a: count}.a }", run, {}), "3");
 
-// {#n1.result} is block n1's output in this run, even when another block has
-// an output of the same name; unknown blocks and outputs stay as they are.
-assert.strictEqual(fillTemplate("{#n1.result} / {#n2.result} / {#n1.other}", run, {}), "42 / {#n2.result} / {#n1.other}");
-const avatar = { id: "7", displayAvatarURL() { return `https://cdn/${this.id}.png`; }, delete() { throw new Error("must not run"); } };
-const withUser = { ...run, outputs: new Map([["n3", { member: avatar }]]) };
-allowReadMethods(["displayAvatarURL"]); // as the Discord plugin does with its catalog
-assert.strictEqual(fillTemplate("{#n3.member.displayAvatarURL}", withUser, {}), "https://cdn/7.png", "methods that read are called");
-assert.strictEqual(fillTemplate("[{#n3.member.delete}]", withUser, {}), "[]", "other methods never run");
+// #n1 is block n1's outputs in this run, even when another block has an
+// output of the same name; inside strings # is just a #.
+assert.strictEqual(fillTemplate("${#n1.result} ${'#n1'}", run, {}), "42 #n1");
+const avatar = { id: "7", displayAvatarURL() { return `https://cdn/${this.id}.png`; } };
+const withUser = { ...run, outputs: new Map([["3", { member: avatar }]]) };
+assert.strictEqual(fillTemplate("${#3.member.displayAvatarURL()}", withUser, {}), "https://cdn/7.png");
+
+// Text without ${ is left alone, old-style braces too; empty values become "".
+assert.strictEqual(fillTemplate("{user} \\d{3} $5", run, {}), "{user} \\d{3} $5");
+assert.strictEqual(fillTemplate("[${gone}]", run, {}, { gone: null }), "[]");
+assert.strictEqual(fillTemplate("an open ${count", run, {}), "an open ${count");
+
+// Mistakes name the expression.
+assert.throws(() => fillTemplate("${nobody}", run, {}), /\$\{nobody\}: nobody is not defined/);
+assert.throws(() => fillTemplate("${count +}", run, {}), /\$\{count \+\}/);
 
 console.log("template ok");

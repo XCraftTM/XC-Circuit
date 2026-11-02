@@ -50,7 +50,7 @@
       ],
       "values": {
         "mode": "reply",
-        "text": "Done: {who} (time out).",
+        "text": "Done: ${who} (time out).",
         "private": true
       },
       "zone": "z1"
@@ -63,7 +63,7 @@
       ],
       "values": {
         "mode": "reply",
-        "text": "Couldn't do that: {error}",
+        "text": "Couldn't do that: ${error}",
         "private": true
       }
     }

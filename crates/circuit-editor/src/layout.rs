@@ -346,7 +346,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
         dialog::Spec {
             id: "layout-builder",
             title: t!("Layout Builder"),
-            subtitle: Some(t!("Components V2: the whole message is built from parts. Type {name} anywhere to add an input with that name")),
+            subtitle: Some(t!("Components V2: the whole message is built from parts. ${…} in any text holds JavaScript: type ${ for values from earlier blocks")),
             icon: icon.as_deref(),
             width: 1220.0,
         },

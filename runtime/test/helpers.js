@@ -31,16 +31,16 @@ const nodes = {
   cd1: n("core.cooldown", { name: "t", seconds: 60 }),
   cd2: n("core.cooldown", { name: "t", seconds: 60 }),
   lReady: log("cooldown ready"),
-  lWait: log("cooldown waiting {secondsLeft}"),
+  lWait: log("cooldown waiting ${secondsLeft}"),
   // Stored values, ranked.
   sx1: n("core.set_stored", { scope: "user", target: "u1", key: "xp", value: 50 }),
   sx2: n("core.set_stored", { scope: "user", target: "u2", key: "xp", value: 120 }),
   lb: n("core.leaderboard", { scope: "user", key: "xp", top: 5, who: "u1" }),
-  lbLog: log("board {text} | rank {rank} of {total}"),
+  lbLog: log("board ${text} | rank ${rank} of ${total}"),
   keys: n("core.list_stored_keys", { scope: "user", target: "u1" }),
-  keysLog: log("keys {keys}"),
+  keysLog: log("keys ${keys}"),
   del: n("core.delete_stored", { scope: "user", target: "u2", key: "xp" }),
-  delLog: log("deleted {existed}"),
+  delLog: log("deleted ${existed}"),
   // Loop While: i counts 0, 1, 2 and stops at 3.
   iset: n("core.set_variable", { name: "i", scope: "global", value: 0 }),
   iget: n("core.get_variable", { name: "i", scope: "global", fallback: 0 }),
@@ -49,10 +49,10 @@ const nodes = {
   inc: n("core.set_variable", { name: "i", scope: "global" }),
   plus: n("core.math", { op: "add", b: 1 }),
   iget2: n("core.get_variable", { name: "i", scope: "global", fallback: 0 }),
-  after: log("loop done {count}"),
+  after: log("loop done ${count}"),
   // Call / When Called / Return.
   call: n("core.call", { name: "double", data: 21 }),
-  callLog: log("called {result}"),
+  callLog: log("called ${result}"),
   called: n("core.on_called", { name: "double" }),
   twice: n("core.math", { op: "multiply", b: 2 }),
   ret: n("core.return"),
@@ -61,21 +61,21 @@ const nodes = {
   ord: n("core.format_number", { number: 2, style: "ordinal" }),
   dur: n("core.duration", { direction: "parse", input: "1h 30m" }),
   rx: n("core.regex", { text: "order 42 and 7", pattern: "\\d+", mode: "all" }),
-  fmt: log("num {num} {ord} dur {ms} {durText} rx {rx}"),
+  fmt: log("num ${num} ${ord} dur ${ms} ${durText} rx ${rx}"),
   // Objects.
   mk: n("core.make_object", { keys: "a", a: 1 }),
   set: n("core.set_property", { path: "b.c", value: 2 }),
-  obj: log("obj {result.a} {result.b.c}"),
+  obj: log("obj ${result.a} ${result.b.c}"),
   // Run Code and Use Method.
   code: n("core.run_code", { inputs: "a, b", outputs: "sum, product", code: "return { sum: inputs.a + inputs.b, product: inputs.a * inputs.b };", a: 2, b: 3 }),
-  codeLog: log("code {sum} {product}"),
+  codeLog: log("code ${sum} ${product}"),
   word: n("core.text", { text: "hello" }),
   up: n("core.use_method", { mode: "call", path: "toUpperCase" }),
   len: n("core.use_method", { mode: "read", path: "length" }),
-  useLog: log("use {upper} {length}"),
+  useLog: log("use ${upper} ${length}"),
   // Every: once at start, then each second.
   tick: n("core.every", { mode: "interval", every: 1, unit: "seconds", now: true }),
-  tickLog: log("tick {count}"),
+  tickLog: log("tick ${count}"),
 };
 const links = [];
 for (let i = 0; i < chain.length - 1; i++) {

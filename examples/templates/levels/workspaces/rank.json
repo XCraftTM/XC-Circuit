@@ -32,7 +32,7 @@
       ],
       "values": {
         "mode": "reply",
-        "text": "You have **{xp} XP** and are **#{rank}** of {total}.",
+        "text": "You have **${xp} XP** and are **#${rank}** of ${total}.",
         "private": false
       }
     }

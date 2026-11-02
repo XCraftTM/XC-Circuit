@@ -49,7 +49,7 @@
       ],
       "values": {
         "mode": "reply",
-        "text": "Done: {who} (kick).",
+        "text": "Done: ${who} (kick).",
         "private": true
       },
       "zone": "z1"
@@ -62,7 +62,7 @@
       ],
       "values": {
         "mode": "reply",
-        "text": "Couldn't do that: {error}",
+        "text": "Couldn't do that: ${error}",
         "private": true
       }
     }

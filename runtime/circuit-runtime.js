@@ -36,7 +36,6 @@ class Runtime {
     this.globalVars = new Map();
     this.workspaceVars = new Map();
     this.errorHandlers = [];
-    this.allowReadMethods = allowReadMethods;
     this.signalHandlers = new Map();
     /** Call Workspace: name -> handlers that start a run and resolve to its return value. */
     this.callHandlers = new Map();
@@ -452,40 +451,112 @@ function templated(f) {
   return ["text", "textarea", "string"].includes(String(f.type || "").replace(/\?$/, "")) && !f.choices;
 }
 
-// Methods a placeholder may call, such as {date.toISOString}: they only read.
-// Plugins add theirs (rt.allowReadMethods); any other function in a path gives nothing.
-const readMethods = new Set(["toISOString", "toLocaleString", "toLocaleDateString", "toLocaleTimeString", "getTime"]);
-function allowReadMethods(names) {
-  for (const n of names || []) readMethods.add(String(n));
-}
-
 /**
- * Fills {name} placeholders: from `placed` (values wired into the field's
- * {name} inputs), then the event, run variables, the block's fields and the
- * latest output of that name earlier in the run. {#4.message} is block #4's
- * Message output in this run. A path after a dot reads properties.
+ * Fills each ${…} in a text with the value of the JavaScript expression in it.
+ * Names in the expression are looked up in `placed` (values wired into the
+ * text's inputs), the event, run variables, the block's fields and the latest
+ * output of that name earlier in the run; other names are JavaScript's own
+ * (Math, Date, JSON …). #4 is block #4's outputs in this run: ${#4.message.url}.
+ * Empty values (null, undefined) give "". A mistake in an expression throws,
+ * naming the expression.
  */
 function fillTemplate(text, run, fields, placed = {}) {
-  return text.replace(/\{(#?[\w$.]+)\}/g, (whole, expr) => {
-    const [head, ...rest] = expr.split(".");
+  if (!text.includes("${")) return text;
+  let out = "";
+  let from = 0;
+  for (;;) {
+    const open = text.indexOf("${", from);
+    const close = open < 0 ? -1 : expressionEnd(text, open + 2);
+    if (close < 0) return out + text.slice(from);
+    const expr = text.slice(open + 2, close);
+    out += text.slice(from, open);
     let value;
-    if (head.startsWith("#")) {
-      const outputs = run && run.outputs.get(head.slice(1));
-      if (!outputs || !rest.length || !(rest[0] in outputs)) return whole;
-      value = outputs[rest.shift()];
-    } else if (head in placed) value = placed[head];
-    else if (run && run.event && head in run.event) value = run.event[head];
-    else if (run && run.vars.has(head)) value = run.vars.get(head);
-    else if (head in fields) value = fields[head];
-    else if (run && lastOutput(run, head) !== NOT_FOUND) value = lastOutput(run, head);
-    else return whole;
-    for (const k of rest) {
-      const owner = value;
-      value = value == null ? undefined : value[k];
-      if (typeof value === "function") value = readMethods.has(k) ? value.call(owner) : undefined;
+    try {
+      value = evaluate(expr, run, fields, placed);
+    } catch (e) {
+      throw new Error(`\${${expr}}: ${e.message}`);
     }
-    return value == null ? "" : String(value);
+    out += value == null ? "" : String(value);
+    from = close + 1;
+  }
+}
+
+/** Where the `}` closing an expression that starts at `from` is, or -1. */
+function expressionEnd(text, from) {
+  let depth = 0;
+  for (let i = from; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"' || c === "'") i = stringEnd(text, i, c);
+    else if (c === "`") i = templateEnd(text, i);
+    else if (c === "{") depth++;
+    else if (c === "}" && depth-- === 0) return i;
+  }
+  return -1;
+}
+
+function stringEnd(text, i, quote) {
+  for (let j = i + 1; j < text.length; j++) {
+    if (text[j] === "\\") j++;
+    else if (text[j] === quote) return j;
+  }
+  return text.length;
+}
+
+function templateEnd(text, i) {
+  for (let j = i + 1; j < text.length; j++) {
+    if (text[j] === "\\") j++;
+    else if (text[j] === "`") return j;
+    else if (text[j] === "$" && text[j + 1] === "{") {
+      const end = expressionEnd(text, j + 2);
+      if (end < 0) return text.length;
+      j = end;
+    }
+  }
+  return text.length;
+}
+
+/** An expression with each #4 (outside strings) turned into a lookup of block #4's outputs. */
+function blockReferences(expr) {
+  let out = "";
+  for (let i = 0; i < expr.length; i++) {
+    const c = expr[i];
+    if (c === '"' || c === "'" || c === "`") {
+      const end = c === "`" ? templateEnd(expr, i) : stringEnd(expr, i, c);
+      out += expr.slice(i, end + 1);
+      i = end;
+    } else if (c === "#" && /[\w]/.test(expr[i + 1] || "")) {
+      const id = expr.slice(i + 1).match(/^\w+/)[0];
+      out += `__blocks[${JSON.stringify(id)}]`;
+      i += id.length;
+    } else out += c;
+  }
+  return out;
+}
+
+// Each expression is compiled once.
+const compiled = new Map();
+
+function evaluate(expr, run, fields, placed) {
+  const code = blockReferences(expr);
+  let fn = compiled.get(code);
+  if (!fn) {
+    // Not strict mode, for `with`: names resolve through the scope below first.
+    fn = new Function("__scope", "__blocks", `with (__scope) { return (${code}\n); }`);
+    compiled.set(code, fn);
+  }
+  const lookup = (name) => {
+    if (name in placed) return placed[name];
+    if (run && run.event && name in run.event) return run.event[name];
+    if (run && run.vars.has(name)) return run.vars.get(name);
+    if (name in fields) return fields[name];
+    return run ? lastOutput(run, name) : NOT_FOUND;
+  };
+  const scope = new Proxy(Object.create(null), {
+    has: (_, name) => typeof name === "string" && !name.startsWith("__") && lookup(name) !== NOT_FOUND,
+    get: (_, name) => (typeof name === "string" ? lookup(name) : undefined),
   });
+  const blocks = new Proxy(Object.create(null), { get: (_, id) => (run ? run.outputs.get(String(id)) : undefined) });
+  return fn(scope, blocks);
 }
 
 const NOT_FOUND = Symbol("not found");
@@ -931,4 +1002,4 @@ if (typeof __XC_BUNDLE__ !== "undefined") {
   cli();
 }
 
-module.exports = { start, fillTemplate, allowReadMethods, coerce, Store, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };
+module.exports = { start, fillTemplate, expressionEnd, coerce, Store, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };

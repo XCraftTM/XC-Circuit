@@ -35,7 +35,7 @@ const bundle = {
         m: { block: "core.math@1", at: [0, 0], values: { a: 6, op: "multiply", b: 7 } },
         cmp: { block: "core.compare@1", at: [0, 0], values: { op: "eq", b: 42 } },
         if: { block: "core.if@1", at: [0, 0] },
-        yes: { block: "core.log@1", at: [0, 0], values: { message: "answer {result}", level: "success" } },
+        yes: { block: "core.log@1", at: [0, 0], values: { message: "answer ${result}", level: "success" } },
         no: { block: "core.log@1", at: [0, 0], values: { message: "wrong", level: "error" } },
         emit: { block: "core.emit_signal@1", at: [0, 0], values: { name: "ping", data: "hello" } },
         // Try Zone: fails twice (retry 1), then the Error output logs the message.
@@ -47,7 +47,7 @@ const bundle = {
       links: [
         "a.next > if.in",
         "m.result > cmp.a",
-        // A wire into a name that is not a field fills that {placeholder}.
+        // A wire into a name that is not a field fills that ${placeholder}.
         "m.result > yes.result",
         "cmp.result > if.condition",
         "if.true > yes.in",
@@ -65,9 +65,9 @@ const bundle = {
       nodes: {
         s: { block: "core.on_signal@1", at: [0, 0], values: { name: "ping" } },
         inc: { block: "core.increase_stored@1", at: [0, 0], values: { scope: "global", key: "pings", by: 2 } },
-        log: { block: "core.log@1", at: [0, 0], values: { message: "signal {data}", level: "info" } },
+        log: { block: "core.log@1", at: [0, 0], values: { message: "signal ${data}", level: "info" } },
         e: { block: "core.on_error@1", at: [0, 0] },
-        elog: { block: "core.log@1", at: [0, 0], values: { message: "on error: {message} in {block}", level: "info" } },
+        elog: { block: "core.log@1", at: [0, 0], values: { message: "on error: ${message} in ${block}", level: "info" } },
       },
       links: ["s.next > inc.in", "inc.next > log.in", "e.next > elog.in"],
     },

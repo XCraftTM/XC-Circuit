@@ -5,6 +5,7 @@ pub mod backup;
 pub mod block;
 pub mod graph;
 pub mod project;
+pub mod template;
 pub mod types;
 
 pub use block::{BlockDef, BlockKind, BlockShape, DefineResult, FieldDef, OutputDef, PinMode};

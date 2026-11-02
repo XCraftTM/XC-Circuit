@@ -30,7 +30,7 @@
       ],
       "values": {
         "from": "channel",
-        "name": "ticket-{user}",
+        "name": "ticket-${user}",
         "private": true
       }
     },
@@ -61,7 +61,7 @@
       ],
       "values": {
         "mode": "send",
-        "text": "{who} Tell us what you need. Press **Close ticket** when you're done."
+        "text": "${who} Tell us what you need. Press **Close ticket** when you're done."
       }
     },
     "7": {
@@ -79,7 +79,7 @@
       ],
       "values": {
         "mode": "reply",
-        "text": "Your ticket is open: {thread}",
+        "text": "Your ticket is open: ${thread}",
         "private": true
       }
     }

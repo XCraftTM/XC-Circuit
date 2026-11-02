@@ -1,7 +1,7 @@
 module.exports = {
   id: "discord.build_embed",
   name: "Build Embed",
-  description: "Creates a rich embed. Design it in the Embed Builder; every {placeholder} you type becomes an input.",
+  description: "Creates a rich embed. Design it in the Embed Builder; ${…} in its texts holds JavaScript.",
   author: "XC Team",
   version: "2.0.0",
   category: "messages",
@@ -12,7 +12,7 @@ module.exports = {
     embed: {
       type: "embed",
       pin: false,
-      // Every {name} in the design's texts gets an input, unless earlier blocks provide it.
+      // Names used in ${…} in the design's texts get an input, unless earlier blocks provide them.
       template: true,
       label: "Embed",
       default: { color: "#00D8F0", title: "", description: "", fields: [] },

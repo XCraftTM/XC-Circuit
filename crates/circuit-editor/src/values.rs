@@ -1,13 +1,13 @@
 //! Values a block can use in its texts: what the event and the blocks before
 //! it on its action path made, found by following the Action wires back.
 //!
-//! Each is written as a placeholder with the block's number: `{#1.user}` for
-//! the User output of block #1, `{name}` for a variable set earlier in the
-//! run, and members after a dot: `{#1.user.username}`. The members come from
+//! Texts use them in `${…}`, which holds JavaScript: `${#1.user}` is the User
+//! output of block #1, `${name}` a variable set earlier in the run, and
+//! members follow a dot: `${#1.user.username}`, `${#1.user.displayAvatarURL()}`. The members come from
 //! class catalogs made from the libraries' type definitions (the Discord
 //! plugin's is made from discord.js).
 //!
-//! Text boxes offer them after `{` and on right-click (in any text box drawn
+//! Text boxes offer them inside `${…}` and on right-click (in any text box drawn
 //! while a block's values are in scope, see [`set_scope`]): a list of the
 //! blocks before this one that slides to a block's values and on to their
 //! members, or after a dot the members of what is before it. Builders list
@@ -332,17 +332,40 @@ fn set_cursor(ctx: &egui::Context, id: Id, at: usize) {
     ctx.memory_mut(|m| m.request_focus(id));
 }
 
-/// Replaces the characters `from..to` of `text` with `{token}` and puts the
-/// cursor after it. A `}` already right after the cursor is reused.
+/// Puts `token` in place of the characters `from..to`, which are inside a
+/// `${…}`. When that expression has no `}` yet, one is added and the cursor
+/// goes after it; otherwise the cursor stays right after the token.
 fn put(ctx: &egui::Context, id: Id, text: &mut String, from: usize, to: usize, token: &str) {
     let chars: Vec<char> = text.chars().collect();
-    let closed = chars.get(to) == Some(&'}');
-    let piece = if closed { format!("{{{token}") } else { format!("{{{token}}}") };
+    let closed = circuit_core::template::expression_at(&chars, from).is_some_and(|start| circuit_core::template::expression_end(&chars, start).is_some());
     let mut out: String = chars[..from].iter().collect();
-    out.push_str(&piece);
+    out.push_str(token);
+    let mut cursor = from + token.chars().count();
+    if !closed {
+        out.push('}');
+        cursor += 1;
+    }
     out.extend(&chars[to..]);
     *text = out;
-    set_cursor(ctx, id, from + piece.chars().count() + usize::from(closed));
+    set_cursor(ctx, id, cursor);
+}
+
+/// Puts a value in at the text cursor: the token alone inside a `${…}`,
+/// otherwise as `${token}`.
+fn put_at_cursor(ctx: &egui::Context, id: Id, text: &mut String, token: &str) {
+    let at = cursor(ctx, id, text);
+    let chars: Vec<char> = text.chars().collect();
+    let at = at.min(chars.len());
+    if circuit_core::template::expression_at(&chars, at).is_some() {
+        put(ctx, id, text, at, at, token);
+    } else {
+        let piece = format!("${{{token}}}");
+        let mut out: String = chars[..at].iter().collect();
+        out.push_str(&piece);
+        out.extend(&chars[at..]);
+        *text = out;
+        set_cursor(ctx, id, at + piece.chars().count());
+    }
 }
 
 /// A step into the list of blocks: a block (by its place in the scope), or the
@@ -401,7 +424,8 @@ fn value_row(scope: &Scope, v: &Avail) -> Row {
 }
 
 fn member_row(scope: &Scope, m: &Member, prefix: &str) -> Row {
-    let token = format!("{prefix}.{}", m.name);
+    // Methods go in called: ${#1.user.displayAvatarURL()}.
+    let token = if m.kind == "method" { format!("{prefix}.{}()", m.name) } else { format!("{prefix}.{}", m.name) };
     let into = m.class.as_ref().filter(|c| !scope.members(c).is_empty()).map(|c| Step::Members { class: c.clone(), token: token.clone(), label: m.name.clone() });
     let code = if m.kind == "method" { format!("{}()", m.name) } else { m.name.clone() };
     Row { code, text: String::new(), kind: kind_text(m), insert: Some(token), into, doc: m.doc.clone() }
@@ -411,7 +435,7 @@ fn title_at(scope: &Scope, steps: &[Step]) -> String {
     match steps.last() {
         None => t!("Values from earlier blocks").into(),
         Some(Step::Source(i)) => scope.sources.get(*i).map(|s| s.title.clone()).unwrap_or_default(),
-        Some(Step::Members { token, class, .. }) => format!("{{{token}}} · {class}"),
+        Some(Step::Members { token, class, .. }) => format!("{token} · {class}"),
     }
 }
 
@@ -469,8 +493,7 @@ pub fn after(ui: &mut Ui, resp: &egui::Response, text: &mut String) -> bool {
     let open = resp.context_menu_opened();
     ctx.data_mut(|d| d.insert_temp(id.with("values-menu-open"), open));
     if let Some(token) = picked {
-        let at = cursor(&ctx, id, text);
-        put(&ctx, id, text, at, at, &token);
+        put_at_cursor(&ctx, id, text, &token);
         return true;
     }
     if resp.has_focus() {
@@ -480,8 +503,7 @@ pub fn after(ui: &mut Ui, resp: &egui::Response, text: &mut String) -> bool {
     if ctx.data(|d| d.get_temp::<Id>(Id::new(LAST_TEXT))) == Some(id)
         && let Some(token) = ctx.data_mut(|d| d.remove_temp::<String>(Id::new(PENDING)))
     {
-        let at = cursor(&ctx, id, text);
-        put(&ctx, id, text, at, at, &token);
+        put_at_cursor(&ctx, id, text, &token);
         return true;
     }
     let selected_id = id.with("values-selected");
@@ -503,15 +525,21 @@ pub fn after(ui: &mut Ui, resp: &egui::Response, text: &mut String) -> bool {
         close(&ctx);
         return false;
     }
-    // What is typed after an open brace, up to the cursor.
-    let at = cursor(&ctx, id, text);
+    // The name being typed in a ${…} expression, up to the cursor.
     let chars: Vec<char> = text.chars().collect();
-    let mut start = at.min(chars.len());
-    while start > 0 && (chars[start - 1].is_alphanumeric() || matches!(chars[start - 1], '_' | '$' | '.' | '#')) {
+    let at = cursor(&ctx, id, text).min(chars.len());
+    let Some(expr) = circuit_core::template::expression_at(&chars, at) else {
+        close(&ctx);
+        return false;
+    };
+    let mut start = at;
+    while start > expr && (chars[start - 1].is_alphanumeric() || matches!(chars[start - 1], '_' | '$' | '.' | '#')) {
         start -= 1;
     }
+    // Right after `${` the list shows the blocks; elsewhere in an expression it
+    // shows once a name is being typed.
     let dismissed = ctx.data(|d| d.get_temp::<usize>(id.with("values-dismissed")));
-    if start == 0 || chars[start - 1] != '{' || dismissed == Some(start) {
+    if dismissed == Some(start) || (start == at && start != expr) {
         close(&ctx);
         return false;
     }
@@ -606,7 +634,7 @@ pub fn after(ui: &mut Ui, resp: &egui::Response, text: &mut String) -> bool {
             // The heading: where the list is, and the way back.
             let heading = match &mode {
                 Mode::Browse => title_at(&scope, &nav.steps[..nav.level]),
-                Mode::Members { prefix, class, .. } => format!("{{{prefix}}} · {class}"),
+                Mode::Members { prefix, class, .. } => format!("{prefix} · {class}"),
                 Mode::Search(_) => t!("Values from earlier blocks").into(),
             };
             let can_back = nav.browsing && nav.level > 0;
@@ -665,7 +693,7 @@ pub fn after(ui: &mut Ui, resp: &egui::Response, text: &mut String) -> bool {
         d.insert_temp(Id::new(OPEN_LIST), area.response.rect);
     });
     if let Some(token) = insert {
-        put(&ctx, id, text, start - 1, at, &token);
+        put(&ctx, id, text, start, at, &token);
         close(&ctx);
         return true;
     }
@@ -764,7 +792,7 @@ pub fn list(ui: &mut Ui, theme: &Theme, scope: &Scope) {
         ui.label(RichText::new(t!("Nothing comes before this block yet: connect its Action input to an event or other blocks, and their values show up here.")).size(12.0).color(theme.text_muted));
         return;
     }
-    let tip = if has_target(ui.ctx()) { t!("Click a value to put it where the text cursor is, or type { in any text.") } else { t!("Click into a text, then a value to put it there. Or type { in any text.") };
+    let tip = if has_target(ui.ctx()) { t!("Click a value to put it where the text cursor is, or type ${ in any text.") } else { t!("Click into a text, then a value to put it there. Or type ${ in any text.") };
     ui.label(RichText::new(tip).size(12.0).color(theme.text_muted));
     for source in &scope.sources {
         ui.add_space(4.0);
@@ -787,7 +815,7 @@ mod tests {
         let crate::editor::Editor { reg, engine, project, shapes, define_ctx, .. } = ed;
         let ws = &project.as_ref().unwrap().workspaces[ws_key];
         let shape = crate::editor::node_shape(reg, engine, shapes, ws_key, ws, node, define_ctx).unwrap();
-        shape.fields.into_iter().filter(|(_, f)| f.label.as_deref().is_some_and(|l| l.starts_with('{'))).map(|(k, _)| k).collect()
+        shape.fields.into_iter().filter(|(_, f)| f.label.as_deref().is_some_and(|l| l.starts_with("${"))).map(|(k, _)| k).collect()
     }
 
     #[test]
@@ -798,15 +826,15 @@ mod tests {
         let set = |ed: &mut crate::editor::Editor, ws: &str, node: &str, key: &str, text: &str| {
             ed.project.as_mut().unwrap().workspaces.get_mut(ws).unwrap().nodes.get_mut(node).unwrap().values.insert(key.into(), text.into());
         };
-        // After a Slash Command, {user} and {interaction} come from the event; {score} doesn't.
-        set(&mut ed, "rank-command", "4", "text", "Hi {user} {interaction} {score}");
+        // After a Slash Command, user and interaction come from the event; score doesn't.
+        set(&mut ed, "rank-command", "4", "text", "Hi ${user} ${interaction} ${score}");
         let send = inputs(&mut ed, "rank-command", "4");
         assert_eq!(send, ["score"]);
         // The same in an embed's texts; {xp} and {level} are wired, so they stay.
         let embed = inputs(&mut ed, "rank-command", "3");
         assert_eq!(embed, ["xp", "level"]);
         // After Member Joins there is no interaction, so it gets an input there.
-        set(&mut ed, "welcome", "3", "message", "Welcome {member} {interaction}");
+        set(&mut ed, "welcome", "3", "message", "Welcome ${member} ${interaction}");
         let log = inputs(&mut ed, "welcome", "3");
         assert_eq!(log, ["interaction"]);
     }

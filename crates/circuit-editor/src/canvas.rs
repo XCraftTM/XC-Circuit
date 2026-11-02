@@ -1447,22 +1447,22 @@ mod tests {
         settle(&mut ed);
         let key = |key: Key| egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() };
         frame(&ctx, &mut ed, "rank-command", vec![key(Key::End), key(Key::Enter)]);
-        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::Text("Hi {us".into())]);
+        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::Text("Hi ${us".into())]);
         settle(&mut ed);
         // The list is open; Enter puts in the first match instead of a new line.
         frame(&ctx, &mut ed, "rank-command", vec![key(Key::Enter)]);
         settle(&mut ed);
         let text = ed.workspace("rank-command").unwrap().nodes["4"].values["text"].as_str().unwrap().to_string();
         assert!(text.ends_with("
-Hi {#1.user}"), "values go in with the block's number: {text:?}");
+Hi ${#1.user}"), "values go in with the block's number: {text:?}");
         // Typing goes on after the placeholder.
         frame(&ctx, &mut ed, "rank-command", vec![egui::Event::Text("!".into())]);
         let text = ed.workspace("rank-command").unwrap().nodes["4"].values["text"].as_str().unwrap().to_string();
-        assert!(text.ends_with("{#1.user}!"), "{text:?}");
+        assert!(text.ends_with("${#1.user}!"), "{text:?}");
 
         // Clicking a value in the list picks it too (pressing takes the text
         // cursor from the box for a moment).
-        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::Text(" {us".into())]);
+        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::Text(" ${us".into())]);
         settle(&mut ed);
         let list = crate::values::open_list_rect(&ctx).unwrap_or(Rect::NOTHING);
         assert!(list.is_positive(), "the list is open");
@@ -1473,10 +1473,10 @@ Hi {#1.user}"), "values go in with the block's number: {text:?}");
         frame(&ctx, &mut ed, "rank-command", vec![at(false)]);
         settle(&mut ed);
         let text = ed.workspace("rank-command").unwrap().nodes["4"].values["text"].as_str().unwrap().to_string();
-        assert!(text.ends_with("{#1.user}! {#1.user}"), "{text:?}");
+        assert!(text.ends_with("${#1.user}! ${#1.user}"), "{text:?}");
         frame(&ctx, &mut ed, "rank-command", vec![egui::Event::Text("?".into())]);
         let text = ed.workspace("rank-command").unwrap().nodes["4"].values["text"].as_str().unwrap().to_string();
-        assert!(text.ends_with("{#1.user}?"), "the text cursor is back after it: {text:?}");
+        assert!(text.ends_with("${#1.user}?"), "the text cursor is back after it: {text:?}");
     }
 
     #[test]
@@ -1506,24 +1506,24 @@ Hi {#1.user}"), "values go in with the block's number: {text:?}");
 
         // { lists the blocks; Enter goes into the first (the Slash Command), Enter
         // again puts in its first value.
-        step(&mut ed, vec![egui::Event::Text(" {".into())]);
+        step(&mut ed, vec![egui::Event::Text(" ${".into())]);
         step(&mut ed, vec![key(Key::Enter)]);
         step(&mut ed, vec![key(Key::Enter)]);
-        assert!(text(&ed).ends_with(" {#1.interaction}"), "{:?}", text(&ed));
+        assert!(text(&ed).ends_with(" ${#1.interaction}"), "{:?}", text(&ed));
 
         // → goes into a value's members, ← back out, Enter puts the value in.
-        step(&mut ed, vec![egui::Event::Text(" {".into())]);
+        step(&mut ed, vec![egui::Event::Text(" ${".into())]);
         step(&mut ed, vec![key(Key::Enter)]);
         step(&mut ed, vec![key(Key::ArrowDown)]);
         step(&mut ed, vec![key(Key::ArrowRight)]);
         step(&mut ed, vec![key(Key::ArrowLeft)]);
         step(&mut ed, vec![key(Key::Enter)]);
-        assert!(text(&ed).ends_with(" {#1.user}"), "{:?}", text(&ed));
+        assert!(text(&ed).ends_with(" ${#1.user}"), "{:?}", text(&ed));
 
         // After a dot: the members of that type, from discord.js.
-        step(&mut ed, vec![egui::Event::Text(" {#1.user.glob".into())]);
+        step(&mut ed, vec![egui::Event::Text(" ${#1.user.glob".into())]);
         step(&mut ed, vec![key(Key::Enter)]);
-        assert!(text(&ed).ends_with(" {#1.user.globalName}"), "{:?}", text(&ed));
+        assert!(text(&ed).ends_with(" ${#1.user.globalName}"), "{:?}", text(&ed));
     }
 
     #[test]

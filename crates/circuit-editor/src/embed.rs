@@ -28,7 +28,7 @@ pub struct EmbedData {
     pub thumbnail: String,
     /// Show when the message was sent, next to the footer.
     pub timestamp: bool,
-    /// A set time to show instead: a date such as 2026-12-24T18:00:00Z, or a {placeholder}.
+    /// A set time to show instead: a date such as 2026-12-24T18:00:00Z, or a `${…}`.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub time: String,
 }
@@ -301,7 +301,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
         dialog::Spec {
             id: "embed-builder",
             title: t!("Embed Builder"),
-            subtitle: Some(t!("Type {name} anywhere to add an input with that name")),
+            subtitle: Some(t!("${…} in any text holds JavaScript: type ${ for values from earlier blocks")),
             icon: icon.as_deref(),
             width: 1040.0,
         },
@@ -397,17 +397,17 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
 
     dialog::section(ui, theme, t!("Author"));
     let author = e.author.get_or_insert_with(NameIcon::default);
-    two(ui, theme, (t!("Name"), &mut author.name, "{user}"), (t!("Icon URL"), &mut author.icon, "https://…"));
+    two(ui, theme, (t!("Name"), &mut author.name, "${user}"), (t!("Icon URL"), &mut author.icon, "https://…"));
     dialog::field(ui, theme, t!("Name link"), None, |ui| dialog::text_input(ui, &mut author.url, "https://…", false));
     if author.name.is_empty() && author.icon.is_empty() && author.url.is_empty() {
         e.author = None;
     }
 
     dialog::section(ui, theme, t!("Body"));
-    dialog::field(ui, theme, t!("Title"), None, |ui| dialog::text_input(ui, &mut e.title, t!("Rank of {user}"), false));
+    dialog::field(ui, theme, t!("Title"), None, |ui| dialog::text_input(ui, &mut e.title, t!("Rank of ${user}"), false));
     dialog::field(ui, theme, t!("Title link"), None, |ui| dialog::text_input(ui, &mut e.url, "https://…", false));
     dialog::field(ui, theme, t!("Description"), Some(t!("Markdown works: **bold**, *italic*, `code`. Drag the corner to make the box taller.")), |ui| {
-        ui.add(crate::inputs::TextArea::new("embed-description", &mut e.description).hint(t!("You have **{xp} XP**…")).rows(5))
+        ui.add(crate::inputs::TextArea::new("embed-description", &mut e.description).hint(t!("You have **${xp} XP**…")).rows(5))
     });
 
     dialog::section(ui, theme, &format!("Fields · {} of 25", e.fields.len()));
@@ -478,7 +478,7 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
         ui.memory_mut(|m| m.data.insert_temp(set_id, kind == 2));
         if kind == 2 {
             let w = ui.available_width();
-            ui.add(crate::inputs::TextLine::new(&mut e.time).hint("2026-12-24T18:00:00Z or {date}").width(w));
+            ui.add(crate::inputs::TextLine::new(&mut e.time).hint("2026-12-24T18:00:00Z or ${date}").width(w));
         }
     });
     ui.label(RichText::new(t!("Shown next to the footer, in each reader's own time zone.")).size(11.5).color(theme.text_muted));

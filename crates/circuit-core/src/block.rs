@@ -80,8 +80,8 @@ pub struct FieldDef {
     pub show: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub choices: Option<Value>,
-    /// Whether `{name}` placeholders in the text are filled in. Unset: yes for
-    /// plain text fields (see `templated`).
+    /// Whether `${…}` in the text is filled in. Unset: yes for plain text
+    /// fields (see `templated`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub template: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -105,7 +105,7 @@ impl FieldDef {
         self.label.clone().unwrap_or_else(|| title_case(key))
     }
 
-    /// Whether `{name}` placeholders in this field's text are filled in, each
+    /// Whether `${…}` in this field's text is filled in, each name it uses
     /// with an input of its own: plain text fields, unless the block sets
     /// `template: false`.
     pub fn templated(&self) -> bool {
@@ -293,7 +293,7 @@ impl BlockShape {
     }
 
     /// [`BlockShape::build`], where the names in `known` are values the block
-    /// gets from earlier blocks (the event's outputs, run variables): a `{name}`
+    /// gets from earlier blocks (the event's outputs, run variables): a name
     /// typed for one of them needs no input.
     pub fn build_with(def: &BlockDef, values: &Map<String, Value>, define: Option<&DefineResult>, known: &HashSet<String>) -> BlockShape {
         let mut fields: IndexMap<String, FieldDef> = def.fields.clone();
@@ -333,11 +333,11 @@ impl BlockShape {
             }
         }
 
-        // Each {name} typed into a text field (or any text of a design such as
-        // an embed) gets an input right below it, to connect the value that goes
-        // there, unless the block gets that name from earlier blocks anyway.
+        // Each name a ${…} in a text field uses (or in any text of a design such
+        // as an embed) gets an input right below it, to connect its value,
+        // unless the block gets that name from earlier blocks anyway.
         // Unconnected, the name is looked up in the event, variables and
-        // earlier outputs as before.
+        // earlier outputs when the block runs.
         let mut extra: Vec<(usize, String, FieldDef)> = Vec::new();
         for (i, (k, f)) in fields.iter().enumerate() {
             if hidden.contains(k) || !f.templated() || f.pin == PinMode::Only {
@@ -351,8 +351,8 @@ impl BlockShape {
                 }
                 let mut input = FieldDef {
                     type_name: "any".into(),
-                    label: Some(format!("{{{name}}}")),
-                    description: Some(format!("Goes where {{{name}}} is in {}.", f.label(k))),
+                    label: Some(format!("${{{name}}}")),
+                    description: Some(format!("The value of {name} in {}.", f.label(k))),
                     pin: PinMode::Only,
                     ..Default::default()
                 };
@@ -417,23 +417,10 @@ fn strings_in<'a>(v: &'a Value, out: &mut Vec<&'a str>) {
     }
 }
 
-/// The names of the `{name}` placeholders in a text, in order and once each.
-/// `{user.name}` gives `user`; `{3}` and other non-names are left alone.
+/// The names a text's `${…}` expressions use, in order and once each (see
+/// [`crate::template::names`]): each can get an input.
 pub fn placeholders(text: &str) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    let mut rest = text;
-    while let Some(open) = rest.find('{') {
-        rest = &rest[open + 1..];
-        let Some(close) = rest.find('}') else { break };
-        let inner = &rest[..close];
-        let head = inner.split('.').next().unwrap_or_default();
-        let is_name = head.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_') && inner.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.' || c == '$');
-        if is_name && !out.iter().any(|n| n == head) {
-            out.push(head.to_string());
-        }
-        rest = &rest[close + 1..];
-    }
-    out
+    crate::template::names(text)
 }
 
 fn show_matches(cond: &Value, values: &Map<String, Value>, fields: &IndexMap<String, FieldDef>) -> bool {
@@ -488,18 +475,11 @@ mod tests {
             }
         }))
         .unwrap();
-        let values = json!({ "text": "Hi {user}, {xp} XP", "card": { "title": "{user}", "fields": [{ "value": "{level}" }] } });
+        let values = json!({ "text": "Hi ${user}, ${xp} XP", "card": { "title": "${user}", "fields": [{ "value": "${level}" }] } });
         let known: HashSet<String> = ["user".to_string()].into();
         let shape = BlockShape::build_with(&def, values.as_object().unwrap(), None, &known);
         let keys: Vec<&str> = shape.fields.iter().map(|(k, _)| k.as_str()).collect();
         assert_eq!(keys, ["text", "xp", "card", "level"], "user comes from earlier blocks; the design's texts count too");
-    }
-
-    #[test]
-    fn finds_placeholders() {
-        assert_eq!(placeholders("Hi {user}, you have {xp} XP ({user.name})"), vec!["user", "xp"]);
-        assert!(placeholders("\\d{3} {a,b} {} { x }").is_empty(), "regex counts and other braces aren't names");
-        assert_eq!(placeholders("{_x}{y2}"), vec!["_x", "y2"]);
     }
 
     #[test]
@@ -516,13 +496,13 @@ mod tests {
         .unwrap();
         let mut def = def;
         def.finish();
-        let values = serde_json::json!({ "text": "Hi {name}, {name} has {count} {after}", "code": "{skip}" });
+        let values = serde_json::json!({ "text": "Hi ${name}, ${name} has ${count + after}", "code": "${skip}" });
         let shape = BlockShape::build(&def, values.as_object().unwrap(), None);
         let keys: Vec<&str> = shape.fields.iter().map(|(k, _)| k.as_str()).collect();
         assert_eq!(keys, vec!["text", "name", "count", "code", "mode", "after"], "inputs right after their text, once each; existing fields aren't doubled");
         let name = shape.field("name").unwrap();
         assert_eq!(name.pin, PinMode::Only);
-        assert_eq!(name.label("name"), "{name}");
+        assert_eq!(name.label("name"), "${name}");
         assert!(!shape.field("code").unwrap().templated() && !shape.field("mode").unwrap().templated());
     }
 

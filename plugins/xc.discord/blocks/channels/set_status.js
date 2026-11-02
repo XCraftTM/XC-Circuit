@@ -14,7 +14,7 @@ module.exports = {
   fields: {
     status: { type: "select", pin: false, default: "online", choices: STATUS, description: "Online, idle, do not disturb or invisible." },
     activity: { type: "select", pin: false, default: "Watching", choices: ACTIVITY, description: "The word shown before the text, such as Watching or Playing." },
-    text: { type: "text", template: true, default: "the server", description: "The activity text. {placeholders} work." },
+    text: { type: "text", template: true, default: "the server", description: "The activity text. ${…} works." },
     url: { type: "text", default: "https://twitch.tv/", show: { activity: ["Streaming"] }, label: "Stream URL", description: "A Twitch or YouTube link (needed for the purple Streaming status)." },
     afk: { type: "boolean", default: false, advanced: true, label: "AFK", description: "Mark the bot as away from keyboard." },
   },

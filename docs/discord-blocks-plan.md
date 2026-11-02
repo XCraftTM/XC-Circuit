@@ -13,8 +13,8 @@ For anything the blocks don't cover, two blocks reach everything discord.js can 
 
 Blocks fall into three kinds: **events** start a flow, **actions** do something in order
 (green wires), **values** compute something when an action needs it. Every text field takes
-`{name}` placeholders, and each one gets an input to connect a value to (or it is looked up in
-the event, variables and earlier blocks by name).
+JavaScript in `${…}`; names in it get an input to connect a value to unless the event,
+variables or earlier blocks give them.
 
 ## What bots are built from
 
@@ -198,7 +198,7 @@ The blocks below are chosen so these common bots can be built without code:
 - ✅ **Intents** are collected from every block in the project.
 - ✅ **Templates:** File › New Project starts from Welcome & auto role, Moderation, Levels & XP,
   Tickets or Role menu.
-- ✅ **Text merging:** every text field takes `{name}` placeholders, each with an input.
+- ✅ **JavaScript in texts:** every text field takes `${…}` with any JavaScript (`${#4.message.url}`, `${xp * 2}`); names nothing earlier gives get an input.
 - ✅ **JSON views:** the Embed Builder, Layout Builder and Slash Commands switch between the builder and Discord's JSON, and take pasted JSON.
 - ✅ **Slash command settings:** translations, choice values, length limits, channel kinds, several permissions, contexts, install types, age-restricted.
 

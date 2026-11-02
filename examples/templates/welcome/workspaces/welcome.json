@@ -34,7 +34,7 @@
       ],
       "values": {
         "mode": "send",
-        "text": "Welcome {who} to the server! 👋"
+        "text": "Welcome ${who} to the server! 👋"
       }
     },
     "5": {
