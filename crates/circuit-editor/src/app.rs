@@ -68,6 +68,9 @@ pub struct CircuitApp {
     settings: crate::settings::SettingsView,
     /// The First Start page, while it is open.
     setup: Option<crate::setup::Setup>,
+    /// The guided tour, while it runs, and the layout to put back afterwards.
+    tour: Option<crate::tour::Tour>,
+    dock_before_tour: Option<DockState<Tab>>,
 }
 
 impl CircuitApp {
@@ -143,6 +146,8 @@ impl CircuitApp {
             bundled_plugins,
             show_plugins: false,
             setup,
+            tour: None,
+            dock_before_tour: None,
             settings: Default::default(),
         }
     }
@@ -232,11 +237,17 @@ impl CircuitApp {
             Some(p) => format!("Search {}", p.meta.name),
             None => "Search".into(),
         };
+        self.ed.ui_rects.insert("search".into(), search);
         if crate::titlebar::search_box(ui, search, &theme, &label) {
             self.palette = Some(Default::default());
         }
         let row = |ui: &mut egui::Ui, layout| ui.new_child(egui::UiBuilder::new().max_rect(bar).layout(layout));
         let mut left = row(ui, egui::Layout::left_to_right(egui::Align::Center));
+        if self.tour.is_some() {
+            left.add(egui::Image::new(egui::include_image!("../assets/icon.svg")).fit_to_exact_size(egui::vec2(18.0, 18.0)));
+            left.add_space(6.0);
+            left.label(RichText::new("Tour").strong().color(theme.accent));
+        } else {
         egui::MenuBar::new().ui(&mut left, |ui| {
             ui.add(egui::Image::new(egui::include_image!("../assets/icon.svg")).fit_to_exact_size(egui::vec2(18.0, 18.0)));
             ui.add_space(4.0);
@@ -389,11 +400,16 @@ impl CircuitApp {
                 if ui.button("Welcome and setup…").clicked() {
                     self.setup = Some(crate::setup::Setup::new());
                 }
+                if ui.add_enabled(self.tour.is_none(), egui::Button::new("Take the tour")).clicked() {
+                    self.start_tour();
+                }
                 if ui.button("About XC™ Circuit").clicked() {
                     self.show_about = true;
                 }
             });
         });
+
+        }
 
         // Window buttons and Run / Stop on the right.
         let ui = &mut row(ui, egui::Layout::right_to_left(egui::Align::Center));
@@ -413,7 +429,9 @@ impl CircuitApp {
             BotState::Running => "Restart",
         };
         let run = egui::Button::new(RichText::new(label).strong().color(egui::Color32::from_rgb(4, 33, 13))).fill(theme.action);
-        if ui.add_enabled(self.ed.project.is_some(), run).on_hover_text("Run the bot (F5)").clicked() {
+        let run = ui.add_enabled(self.ed.project.is_some(), run);
+        self.ed.ui_rects.insert("run".into(), run.rect);
+        if run.on_hover_text("Run the bot (F5)").clicked() {
             self.bot.start(&mut self.ed, ui.ctx());
         }
     }
@@ -487,8 +505,53 @@ impl CircuitApp {
         resp.clicked()
     }
 
-    /// Starts the guided tour (see tour.rs).
-    fn start_tour(&mut self) {}
+    /// Starts the guided tour on a fresh practice project, with a reduced layout.
+    fn start_tour(&mut self) {
+        if self.tour.is_some() {
+            return;
+        }
+        let dir = crate::bot::app_data_dir().join("tour");
+        if let Err(e) = crate::tour::create_project(&dir) {
+            self.ed.log(Level::Error, format!("Couldn't prepare the tour: {e:#}"));
+            return;
+        }
+        self.bot.stop(&mut self.ed);
+        let before = self.ed.project.as_ref().map(|p| p.root.clone());
+        self.dock_before_tour = Some(self.dock.clone());
+        self.switch_project(&dir);
+        self.dock = tour_layout();
+        self.ed.log.clear();
+        self.tour = Some(crate::tour::Tour { step: 0, before });
+    }
+
+    fn end_tour(&mut self, exit: crate::tour::Exit) {
+        use crate::tour::Exit;
+        let Some(tour) = self.tour.take() else { return };
+        self.bot.stop(&mut self.ed);
+        // The practice project isn't kept.
+        self.ed.dirty = false;
+        let target = match exit {
+            Exit::DemoBot => self.examples_dir.as_ref().map(|e| e.join("DemoBot")),
+            Exit::Return | Exit::NewProject => tour.before,
+        };
+        match target {
+            Some(dir) => self.switch_project(&dir),
+            None => {
+                self.dock.retain_tabs(|t| !matches!(t, Tab::Canvas(_)));
+            }
+        }
+        if let Some(dock) = self.dock_before_tour.take() {
+            let keys: Vec<String> = self.ed.project.as_ref().map(|p| p.workspaces.keys().cloned().collect()).unwrap_or_default();
+            self.dock = dock;
+            self.dock.retain_tabs(|t| !matches!(t, Tab::Canvas(k) if !keys.contains(k)));
+            if let Some(first) = keys.first() {
+                open_canvas(&mut self.dock, first.clone());
+            }
+        }
+        if exit == Exit::NewProject {
+            self.new_project_dialog();
+        }
+    }
 
     fn open_settings(&mut self) {
         open_center(&mut self.dock, Tab::Settings);
@@ -583,6 +646,7 @@ impl CircuitApp {
         items.push(Item::new("View", "Reset layout", Cmd::ResetLayout));
         items.push(Item::new("Help", "About XC™ Circuit", Cmd::About));
         items.push(Item::new("File", "Settings", Cmd::OpenSettings).shortcut("Ctrl+,"));
+        items.push(Item::new("Help", "Take the tour", Cmd::Tour));
         items.push(Item::new("Plugins", "Manage Plugins…", Cmd::ManagePlugins));
         for p in &self.native.plugins {
             for c in p.commands() {
@@ -641,6 +705,7 @@ impl CircuitApp {
             Cmd::Export => self.bot.open_export(&self.ed),
             Cmd::About => self.show_about = true,
             Cmd::OpenSettings => self.open_settings(),
+            Cmd::Tour => self.start_tour(),
             Cmd::ManagePlugins => self.show_plugins = true,
             Cmd::PluginCommand(id) => self.native.queued.push(id),
             Cmd::TogglePluginPanel(plugin, panel) => self.toggle_panel(Tab::Plugin(plugin, panel)),
@@ -672,7 +737,11 @@ impl CircuitApp {
                     self.bot.open_settings(&self.ed);
                 }
                 let mode = self.ed.reg.mode(&mode_id).map(|m| (m.name.clone(), m.description.clone()));
-                let (mode_name, about) = mode.unwrap_or((mode_id, String::new()));
+                let (mode_name, about) = match mode {
+                    Some(m) => m,
+                    None if mode_id == crate::editor::NO_MODE => ("Core blocks".to_string(), "No build mode: only the core blocks, no npm packages".to_string()),
+                    None => (mode_id, String::new()),
+                };
                 let r = status_item(&mut left, &t, None, &mode_name);
                 if !about.is_empty() {
                     r.on_hover_text(about);
@@ -833,7 +902,9 @@ impl CircuitApp {
 impl eframe::App for CircuitApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
-        if ctx.input(|i| i.viewport().close_requested()) && self.ed.dirty && !self.allow_close {
+        self.ed.ui_rects.clear();
+        // The tour's practice project is never worth a "save changes?" question.
+        if ctx.input(|i| i.viewport().close_requested()) && self.ed.dirty && !self.allow_close && self.tour.is_none() {
             ctx.send_viewport_cmd(ViewportCommand::CancelClose);
             self.confirm_close = true;
         }
@@ -888,7 +959,7 @@ impl eframe::App for CircuitApp {
             .exact_size(24.0)
             .frame(Frame::new().fill(theme.status_bar).inner_margin(Margin::symmetric(4, 0)))
             .show(ui, |ui| self.status_bar(ui));
-        if self.ed.prefs.activity_bar && self.setup.is_none() {
+        if self.ed.prefs.activity_bar && self.setup.is_none() && self.tour.is_none() {
             egui::Panel::left("activity")
                 .exact_size(ACTIVITY_W)
                 .resizable(false)
@@ -937,6 +1008,19 @@ impl eframe::App for CircuitApp {
         });
         }
 
+        if self.setup.is_none()
+            && let Some(mut tour) = self.tour.take()
+        {
+            let running = self.bot.state != BotState::Stopped;
+            let ask = crate::tour::show(&ctx, &mut self.ed, &mut tour, running);
+            self.tour = Some(tour);
+            match ask {
+                Some(crate::tour::Ask::Run) => self.bot.start(&mut self.ed, &ctx),
+                Some(crate::tour::Ask::SetUpNode) => self.setup = Some(crate::setup::Setup::node_only()),
+                Some(crate::tour::Ask::End(exit)) => self.end_tour(exit),
+                None => {}
+            }
+        }
         picker::show(&ctx, &mut self.ed);
         if let Some(mut state) = self.palette.take() {
             let items = self.palette_items();
@@ -985,14 +1069,20 @@ impl eframe::App for CircuitApp {
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        eframe::set_value(storage, KEY_DOCK, &self.dock);
+        // Mid-tour, keep the user's own layout and project.
+        let dock = self.dock_before_tour.as_ref().filter(|_| self.tour.is_some()).unwrap_or(&self.dock);
+        eframe::set_value(storage, KEY_DOCK, dock);
         eframe::set_value(storage, KEY_THEME, &self.ed.theme.id);
         eframe::set_value(storage, KEY_NATIVE_ALLOW, &self.native.allow);
         eframe::set_value(storage, KEY_PREFS, &self.ed.prefs);
         eframe::set_value(storage, KEY_NATIVE_TRUSTED, &self.native.trusted);
         eframe::set_value(storage, KEY_NATIVE_STORAGE, &self.native.storage);
-        if let Some(p) = &self.ed.project {
-            eframe::set_value(storage, KEY_PROJECT, &p.root);
+        let project = match &self.tour {
+            Some(t) => t.before.clone(),
+            None => self.ed.project.as_ref().map(|p| p.root.clone()),
+        };
+        if let Some(root) = project {
+            eframe::set_value(storage, KEY_PROJECT, &root);
         }
     }
 }
@@ -1031,6 +1121,15 @@ impl TabViewer for Viewer<'_> {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Tab) {
+        let name = match tab {
+            Tab::Canvas(_) => Some("canvas"),
+            Tab::Inspector => Some("inspector"),
+            Tab::Console => Some("console"),
+            _ => None,
+        };
+        if let Some(name) = name {
+            self.ed.ui_rects.insert(name.into(), ui.max_rect());
+        }
         match tab {
             Tab::Workspaces => crate::sidebar::panel(ui, self.ed),
             Tab::Inspector => panels::inspector(ui, self.ed),
@@ -1052,6 +1151,15 @@ impl TabViewer for Viewer<'_> {
     fn scroll_bars(&self, _tab: &Tab) -> [bool; 2] {
         [false, false]
     }
+}
+
+/// The tour's reduced window: canvas, Inspector and Console only.
+fn tour_layout() -> DockState<Tab> {
+    let mut dock = DockState::new(vec![Tab::Console]);
+    let surface = dock.main_surface_mut();
+    let [_bottom, top] = surface.split_above(NodeIndex::root(), 0.74, vec![Tab::Canvas(crate::tour::WORKSPACE.into())]);
+    surface.split_right(top, 0.72, vec![Tab::Inspector]);
+    dock
 }
 
 fn default_layout() -> DockState<Tab> {

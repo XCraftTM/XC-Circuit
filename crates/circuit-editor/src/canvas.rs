@@ -287,7 +287,7 @@ fn zone_layout(zid: &str, rect: Rect) -> NodeLayout {
 }
 
 pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
-    let Editor { reg, engine, theme, project, shapes, views, selected, dirty, picker, active_workspace, activity, multi, define_ctx, embed_edit, selected_wire, prefs, .. } = ed;
+    let Editor { reg, engine, theme, project, shapes, views, selected, dirty, picker, active_workspace, activity, multi, define_ctx, embed_edit, selected_wire, prefs, ui_rects, .. } = ed;
     let Some(project) = project.as_mut() else { return };
     let mode = reg.mode(&project.meta.mode).or_else(|| reg.modes.first());
     let Some(ws) = project.workspaces.get_mut(ws_key) else {
@@ -991,6 +991,9 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         painter.rect(b, 4.0, with_alpha(theme.accent, 30), Stroke::new(1.0, theme.accent), StrokeKind::Inside);
     }
     sharpen_text(&ctx, layer, to_global);
+    for l in &layouts[..node_count] {
+        ui_rects.insert(format!("node:{}", l.id), to_global * l.rect);
+    }
     expanded_editor(&ctx, cui.id(), view, ws, overlay_anchor, theme, dirty);
 
     // Zoom readout.

@@ -4,7 +4,8 @@ use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::RwLock;
+use std::sync::{Mutex, RwLock};
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use indexmap::IndexMap;
@@ -68,6 +69,24 @@ pub fn version_of(path: &Path) -> Result<String> {
         bail!("{} doesn't look like Node.js", path.display());
     }
     Ok(version)
+}
+
+/// `check_node`, run at most every few seconds (or when the chosen Node.js
+/// changes): cheap enough to call while drawing.
+pub fn check_node_cached() -> std::result::Result<String, String> {
+    type Checked = (Instant, Option<PathBuf>, std::result::Result<String, String>);
+    static LAST: Mutex<Option<Checked>> = Mutex::new(None);
+    let path = node_path();
+    let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((at, p, result)) = &*last
+        && *p == path
+        && at.elapsed() < Duration::from_secs(3)
+    {
+        return result.clone();
+    }
+    let result = check_node().map_err(|e| format!("{e:#}"));
+    *last = Some((Instant::now(), path, result.clone()));
+    result
 }
 
 /// The chosen Node.js's version, checked against the minimum.

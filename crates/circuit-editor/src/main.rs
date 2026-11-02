@@ -22,6 +22,7 @@ mod slash;
 mod stored;
 mod theme;
 mod titlebar;
+mod tour;
 mod watch;
 mod widgets;
 

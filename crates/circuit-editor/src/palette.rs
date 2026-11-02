@@ -32,6 +32,7 @@ pub enum Cmd {
     TogglePluginPanel(String, String),
     ManagePlugins,
     OpenSettings,
+    Tour,
 }
 
 pub struct Item {

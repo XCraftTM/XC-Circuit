@@ -50,6 +50,9 @@ pub enum Action {
     CloseWorkspaceTabs(String),
 }
 
+/// The mode of a project with only the core blocks: no Discord, no npm packages.
+pub const NO_MODE: &str = "none";
+
 pub struct Editor {
     pub reg: Registry,
     pub engine: BlockEngine,
@@ -75,6 +78,8 @@ pub struct Editor {
     pub history: Histories,
     /// App preferences; the theme is styled with them.
     pub prefs: crate::prefs::Prefs,
+    /// Where parts of the window were drawn this frame, for the tour to point at.
+    pub ui_rects: HashMap<String, eframe::egui::Rect>,
     /// Successful saves so far, so others can react to a save.
     pub saves: u64,
     /// What blocks see as `project` in `define()`: `{ data }` of the open project.
@@ -106,6 +111,7 @@ impl Editor {
             selected_wire: None,
             history: Histories::default(),
             prefs: Default::default(),
+            ui_rects: HashMap::new(),
             saves: 0,
             define_ctx: Value::Object(Map::new()),
             embed_edit: None,
@@ -220,6 +226,9 @@ impl Editor {
 
     pub fn mode(&self) -> Option<&BuildMode> {
         let id = self.project.as_ref().map(|p| p.meta.mode.as_str()).unwrap_or("discord-bot");
+        if id == NO_MODE {
+            return None;
+        }
         self.reg.mode(id).or_else(|| self.reg.modes.first())
     }
 
