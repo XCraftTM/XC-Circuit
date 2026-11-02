@@ -162,6 +162,12 @@ fn appearance(ui: &mut Ui, ed: &mut Editor, theme: &Theme) {
     ui.add_space(14.0);
 
     group(ui, theme, "Interface");
+    row(ui, theme, "Touch mode", "Bigger buttons and more room between them, for touch screens and pens.", |ui| {
+        if toggle(ui, theme, &mut ed.prefs.touch) {
+            ed.restyle();
+            ed.theme.apply(&ctx);
+        }
+    });
     row(ui, theme, "Interface size", "Makes all text and controls bigger or smaller.", |ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
         for s in UI_SCALES.iter().rev() {

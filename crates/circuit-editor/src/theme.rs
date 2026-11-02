@@ -33,6 +33,9 @@ pub struct Theme {
     pub pin_colors: HashMap<String, Color32>,
     pub node_radius: f32,
     pub wire_width: f32,
+    /// Touch mode (a preference, not part of the theme file): bigger
+    /// controls and more room between them.
+    pub touch: bool,
 }
 
 impl Theme {
@@ -73,6 +76,7 @@ impl Theme {
             pin_colors,
             node_radius: def.shape.node_radius,
             wire_width: def.shape.wire_width,
+            touch: false,
         }
     }
 
@@ -146,10 +150,27 @@ impl Theme {
         let theme = if self.dark { egui::Theme::Dark } else { egui::Theme::Light };
         ctx.set_visuals_of(theme, v);
         ctx.set_theme(theme);
+        let touch = self.touch;
         ctx.all_styles_mut(|s| {
-            s.spacing.item_spacing = egui::vec2(8.0, 6.0);
-            s.spacing.button_padding = egui::vec2(12.0, 6.0);
-            s.spacing.menu_margin = Margin::same(6);
+            if touch {
+                // Everything a finger presses is at least 40 points tall.
+                s.spacing.item_spacing = egui::vec2(12.0, 10.0);
+                s.spacing.button_padding = egui::vec2(16.0, 10.0);
+                s.spacing.interact_size = egui::vec2(48.0, 40.0);
+                s.spacing.icon_width = 22.0;
+                s.spacing.icon_width_inner = 12.0;
+                s.spacing.icon_spacing = 8.0;
+                s.spacing.menu_margin = Margin::same(10);
+                s.spacing.scroll.bar_width = 14.0;
+                s.spacing.combo_height = 320.0;
+                s.interaction.resize_grab_radius_side = 10.0;
+                s.interaction.resize_grab_radius_corner = 16.0;
+            } else {
+                compact(s);
+                let i = egui::style::Interaction::default();
+                s.interaction.resize_grab_radius_side = i.resize_grab_radius_side;
+                s.interaction.resize_grab_radius_corner = i.resize_grab_radius_corner;
+            }
         });
     }
 
@@ -158,7 +179,7 @@ impl Theme {
         s.main_surface_border_stroke = Stroke::NONE;
         s.tab_bar.bg_fill = self.frame;
         s.tab_bar.hline_color = self.line;
-        s.tab_bar.height = 32.0;
+        s.tab_bar.height = if self.touch { 42.0 } else { 32.0 };
         s.separator.color_idle = self.line;
         s.separator.color_hovered = self.accent;
         s.separator.color_dragged = self.accent;
@@ -191,6 +212,22 @@ impl Theme {
         s.overlay.button_border_stroke = Stroke::new(1.0, self.node_border);
         s
     }
+}
+
+/// The normal (not touch) sizes. Also used inside places with a fixed size in
+/// touch mode: the title bar, and the controls on blocks, which the canvas zoom
+/// already makes bigger or smaller.
+pub fn compact(s: &mut egui::Style) {
+    let d = egui::style::Spacing::default();
+    s.spacing.item_spacing = egui::vec2(8.0, 6.0);
+    s.spacing.button_padding = egui::vec2(12.0, 6.0);
+    s.spacing.interact_size = d.interact_size;
+    s.spacing.icon_width = d.icon_width;
+    s.spacing.icon_width_inner = d.icon_width_inner;
+    s.spacing.icon_spacing = d.icon_spacing;
+    s.spacing.menu_margin = Margin::same(6);
+    s.spacing.scroll.bar_width = d.scroll.bar_width;
+    s.spacing.combo_height = d.combo_height;
 }
 
 pub fn hex_color(s: &str) -> Option<Color32> {

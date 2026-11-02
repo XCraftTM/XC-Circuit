@@ -374,6 +374,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     ctx.set_sublayer(parent_layer, layer);
     ctx.set_transform_layer(layer, to_global);
     let mut cui = ui.new_child(UiBuilder::new().layer_id(layer).max_rect(visible));
+    crate::theme::compact(cui.style_mut());
     cui.set_clip_rect(visible);
     // Registered before any block, so blocks and pins sit on top of it.
     let bg = cui.interact(visible, cui.id().with("background"), Sense::click_and_drag());
@@ -415,6 +416,10 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     let recent = |id: &str| activity.get(&(ws_key.to_string(), id.to_string()));
     let glow = |id: &str| recent(id).filter(|a| a.error.is_none()).map(|a| (1.0 - a.at.elapsed().as_secs_f32()).max(0.0)).unwrap_or(0.0);
 
+    // How big a pin is to the pointer (in touch mode, about a fingertip).
+    let pin_hit = if theme.touch { 30.0 } else { 16.0 };
+    let zone_button = if theme.touch { ZONE_BUTTON_TOUCH } else { ZONE_BUTTON };
+
     // Try Zones: drawn behind everything, dragged by their title band.
     let mut menu: Option<NodeMenu> = None;
     // Screen rectangles of the zones' title bands, for their settings buttons.
@@ -439,7 +444,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             extra.push(format!("{:.0} s timeout", t as f32 / 1000.0));
         }
         // Left of the settings button, which is drawn on top in screen space.
-        painter.text(layout.header.right_center() - vec2(14.0 + ZONE_BUTTON / view.zoom, 0.0), Align2::RIGHT_CENTER, extra.join(" · "), FontId::proportional(11.0), theme.text_muted);
+        painter.text(layout.header.right_center() - vec2(14.0 + zone_button / view.zoom, 0.0), Align2::RIGHT_CENTER, extra.join(" · "), FontId::proportional(11.0), theme.text_muted);
         zone_heads.push((zid.clone(), to_global * layout.header));
         // Outputs panel in the bottom-right corner.
         let panel = Rect::from_min_max(pos2(r.right() - ZONE_PANEL_W, r.bottom() - ZONE_PANEL_H - 8.0), pos2(r.right(), r.bottom() - 8.0));
@@ -469,7 +474,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             let connected = ws.links.iter().any(|l| l.from.node == zid && l.from.pin == spot.pin);
             let candidate = drag.as_ref().map(|d| drag_compat(d, &zid, spot, reg));
             draw_pin(&painter, spot, connected, candidate, theme, reg);
-            let resp = cui.interact(Rect::from_center_size(spot.pos, vec2(16.0, 16.0)), cui.id().with(("zpin", &zid, &spot.pin)), Sense::click_and_drag());
+            let resp = cui.interact(Rect::from_center_size(spot.pos, Vec2::splat(pin_hit)), cui.id().with(("zpin", &zid, &spot.pin)), Sense::click_and_drag());
             if resp.drag_started() {
                 start_drag = Some(PinEnd { node: zid.clone(), pin: spot.pin.clone(), dir: Dir::Out, ty: spot.ty.clone(), picked_up: None });
             }
@@ -481,7 +486,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     // under the pointer (on empty canvas) can be clicked or right-clicked to select it.
     let over_block = pointer_scene.is_some_and(|p| layouts[..node_count].iter().any(|l| l.rect.expand(8.0).contains(p)));
     let wire_pick = (bg.hovered() && view.drag.is_none() && !over_block).then_some(pointer_scene).flatten();
-    let reach = 6.0 / view.zoom.max(0.3);
+    let reach = if theme.touch { 14.0 } else { 6.0 } / view.zoom.max(0.3);
     let mut hovered_wire: Option<Link> = None;
     for link in &ws.links {
         let a = pin_at(&(link.from.node.clone(), link.from.pin.clone(), Dir::Out));
@@ -753,7 +758,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             let candidate = drag.as_ref().map(|d| drag_compat(d, id, spot, reg));
             draw_pin(&painter, spot, connected, candidate, theme, reg);
 
-            let resp = cui.interact(Rect::from_center_size(spot.pos, vec2(16.0, 16.0)), cui.id().with(("pin", id, &spot.pin, spot.dir)), Sense::click_and_drag());
+            let resp = cui.interact(Rect::from_center_size(spot.pos, Vec2::splat(pin_hit)), cui.id().with(("pin", id, &spot.pin, spot.dir)), Sense::click_and_drag());
             if resp.hovered() {
                 ctx.set_cursor_icon(CursorIcon::Crosshair);
             }
@@ -810,7 +815,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                 layouts
                     .iter()
                     .flat_map(|l| l.pins.iter().map(move |s| (l, s)))
-                    .filter(|(l, s)| s.pos.distance(p) < 14.0 && drag_compat(&d, &l.id, s, reg) != Compat::No)
+                    .filter(|(l, s)| s.pos.distance(p) < pin_hit * 0.9 && drag_compat(&d, &l.id, s, reg) != Compat::No)
                     .min_by(|a, b| a.1.pos.distance(p).total_cmp(&b.1.pos.distance(p)))
                     .map(|(l, s)| (l.id.clone(), s.clone()))
             });
@@ -874,7 +879,8 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     let icon = |name: &str| reg.icons.get(name).cloned();
 
     // Toolbar, bottom left.
-    let bar = Rect::from_min_size(outer.left_bottom() + vec2(12.0, -46.0), vec2(outer.width() - 24.0, 34.0));
+    let bar_h = if theme.touch { 44.0 } else { 34.0 };
+    let bar = Rect::from_min_size(outer.left_bottom() + vec2(12.0, -(bar_h + 12.0)), vec2(outer.width() - 24.0, bar_h));
     tools(bar, row).scope(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
         let center = outer.center();
@@ -901,9 +907,10 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     if let Some(b) = action_bar.filter(|b| outer.intersects(b.rect) && view.drag.is_none()) {
         let count = if multi.contains(&b.node) { multi.len().max(1) } else { 1 };
         let many = |text: &str| if count > 1 { format!("{text} {count}") } else { text.to_string() };
-        let above = b.rect.left_top() - vec2(0.0, ACTION_BAR_H + 8.0);
+        let bar_h = if theme.touch { ACTION_BAR_TOUCH_H } else { ACTION_BAR_H };
+        let above = b.rect.left_top() - vec2(0.0, bar_h + 8.0);
         let at = if above.y >= outer.top() + 4.0 { above } else { b.rect.left_bottom() + vec2(0.0, 8.0) };
-        let area = Rect::from_min_size(pos2(at.x.max(outer.left() + 4.0), at.y), vec2(outer.width(), ACTION_BAR_H));
+        let area = Rect::from_min_size(pos2(at.x.max(outer.left() + 4.0), at.y), vec2(outer.width(), bar_h));
         tools(area, row).scope(|ui| {
             egui::Frame::new().fill(theme.panel_header).stroke(Stroke::new(1.0, theme.node_border)).corner_radius(9).inner_margin(4).shadow(ui.visuals().popup_shadow).show(ui, |ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
@@ -943,7 +950,8 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
 
     // Each zone's settings button, on the right of its title band.
     for (zid, head) in &zone_heads {
-        let r = Rect::from_center_size(head.right_center() - vec2(ZONE_BUTTON / 2.0 + 6.0, 0.0), Vec2::splat(ZONE_BUTTON.min(head.height() - 2.0).max(18.0)));
+        let side = if theme.touch { zone_button } else { zone_button.min(head.height() - 2.0).max(18.0) };
+        let r = Rect::from_center_size(head.right_center() - vec2(side / 2.0 + 6.0, 0.0), Vec2::splat(side));
         if !outer.contains_rect(r) {
             continue;
         }
@@ -1091,8 +1099,10 @@ struct BarFor {
 }
 
 const ACTION_BAR_H: f32 = 42.0;
+const ACTION_BAR_TOUCH_H: f32 = 52.0;
 /// The size of a Try Zone's settings button, on screen.
 const ZONE_BUTTON: f32 = 24.0;
+const ZONE_BUTTON_TOUCH: f32 = 36.0;
 
 /// A framed button for the canvas toolbars: an icon and a label.
 fn tool_button(ui: &mut Ui, theme: &Theme, icon: Option<&std::path::Path>, text: &str) -> Response {
@@ -1101,7 +1111,8 @@ fn tool_button(ui: &mut Ui, theme: &Theme, icon: Option<&std::path::Path>, text:
         Some(p) => egui::Button::image_and_text(egui::Image::from_uri(crate::editor::file_uri(p)).tint(theme.text).fit_to_exact_size(vec2(14.0, 14.0)), text),
         None => egui::Button::new(text),
     };
-    ui.add(button.fill(theme.panel).stroke(Stroke::new(1.0, theme.node_border)).corner_radius(7).min_size(vec2(34.0, 32.0)))
+    let h = ui.spacing().interact_size.y.max(32.0);
+    ui.add(button.fill(theme.panel).stroke(Stroke::new(1.0, theme.node_border)).corner_radius(7).min_size(vec2(h, h)))
 }
 
 /// Centers the view on all blocks, at 100% when they fit.

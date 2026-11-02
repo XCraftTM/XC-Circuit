@@ -501,6 +501,20 @@ fn look(ui: &mut Ui, ed: &mut Editor, theme: &Theme) {
     ui.label(RichText::new("ACCENT COLOR").size(11.0).strong().color(theme.text_muted));
     ui.add_space(8.0);
     crate::settings::accent_swatches(ui, ed, theme, 0.0);
+    ui.add_space(22.0);
+    ui.horizontal(|ui| {
+        let mut touch = ed.prefs.touch;
+        if crate::widgets::toggle(ui, &mut touch, theme).changed() {
+            ed.prefs.touch = touch;
+            ed.restyle();
+            ed.theme.apply(ui.ctx());
+        }
+        ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = 2.0;
+            ui.label(RichText::new("Touch mode").size(13.5).color(theme.text));
+            ui.label(RichText::new("Bigger buttons and more room between them, for touch screens. Also in Settings.").size(12.0).color(theme.text_muted));
+        });
+    });
 }
 
 /// Returns `Some(true)` to start the tour, `Some(false)` to skip it.

@@ -1068,7 +1068,10 @@ impl eframe::App for CircuitApp {
         if let Some(h) = height {
             top = top.exact_size(h);
         }
-        top.show(ui, |ui| self.menu_bar(ui));
+        top.show(ui, |ui| {
+            crate::theme::compact(ui.style_mut());
+            self.menu_bar(ui)
+        });
         egui::Panel::bottom("status")
             .exact_size(24.0)
             .frame(Frame::new().fill(theme.status_bar).inner_margin(Margin::symmetric(4, 0)))

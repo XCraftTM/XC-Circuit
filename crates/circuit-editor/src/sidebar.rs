@@ -12,6 +12,7 @@ use crate::editor::{Action, Editor, file_uri};
 use crate::theme::{Theme, with_alpha};
 
 const ROW_H: f32 = 26.0;
+const ROW_TOUCH_H: f32 = 40.0;
 const INDENT: f32 = 16.0;
 const ICON: f32 = 14.0;
 const COLLAPSED_KEY: &str = "sidebar-collapsed";
@@ -74,7 +75,8 @@ fn chevron(ui: &Ui, center: egui::Pos2, open: bool, color: Color32) {
 /// One tree row. Returns its response (click, double-click, drag, drop, context menu).
 #[allow(clippy::too_many_arguments)]
 fn row(ui: &mut Ui, theme: &Theme, icons: &Icons, id: Id, depth: usize, open: Option<bool>, icon: Option<&str>, label: &str, active: bool, strong: bool) -> (Response, Rect) {
-    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::hover());
+    let h = if theme.touch { ROW_TOUCH_H } else { ROW_H };
+    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), h), Sense::hover());
     let resp = ui.interact(rect, id, Sense::click_and_drag());
     let drop_target = resp.dnd_hover_payload::<String>().is_some();
     if active {
@@ -118,7 +120,8 @@ fn row_button(ui: &mut Ui, theme: &Theme, icons: &Icons, rect: Rect, id: Id, ico
 /// The ⋯ button on the right of a row, which opens the row's menu (the same
 /// one right-click opens).
 fn more_button(ui: &mut Ui, theme: &Theme, icons: &Icons, row: Rect, id: Id) -> egui::Response {
-    row_button(ui, theme, icons, Rect::from_center_size(pos2(row.right() - 16.0, row.center().y), vec2(24.0, 22.0)), id, "more", "More")
+    let size = if theme.touch { vec2(36.0, 34.0) } else { vec2(24.0, 22.0) };
+    row_button(ui, theme, icons, Rect::from_center_size(pos2(row.right() - size.x / 2.0 - 4.0, row.center().y), size), id, "more", "More")
 }
 
 /// The name editor shown in place of a row's label.

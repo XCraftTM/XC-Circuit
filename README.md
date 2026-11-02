@@ -32,7 +32,8 @@ The first start opens `examples/DemoBot`. Windows and Linux are supported.
 | Tour | Help › Take the tour: a guided walk through adding, wiring and running blocks on a practice project; skip any time, arrow keys move between steps |
 | Backups | Every save keeps a snapshot outside the project (newest 20, plus one a day for 14 days; Settings › Backups). File › Restore from backup… compares them with now and restores the project or one workspace. Unsaved changes are copied every 30 s and offered back after a crash |
 | Bot data backups | A bot backs up its saved data (store.json) when it starts and every 6 hours, keeping the newest 10 in data/backups. If the data is empty or damaged it asks: restore a backup or start empty (a dialog in XC Circuit, a question in the terminal) |
-| Settings | Ctrl+, or the gear at the bottom of the activity bar: theme, accent color (changes live), interface size, canvas, window, bot, plugins, shortcuts |
+| Settings | Ctrl+, or the gear at the bottom of the activity bar: theme, accent color (changes live), touch mode, interface size, canvas, window, bot, plugins, shortcuts |
+| Touch mode | Settings › Appearance (or the first start's Look step): bigger buttons, rows and pins with more room between them, for touch screens and pens |
 | Command palette | Ctrl+P or the search box in the title bar: run any command, open a workspace, or jump to a block |
 | Editor tabs | The Embed Builder, Slash Commands, Bot settings, Export and Plugins open as tabs in their own floating window; drag a tab onto any side or next to other tabs to dock it, or out again. Closing the tab cancels it |
 | Title bar | Drag to move, double-click to maximize, drag the window edges to resize; View › Use system title bar switches to the system one |

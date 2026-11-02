@@ -194,7 +194,7 @@ pub fn primary_button(ui: &mut Ui, theme: &Theme, text: &str) -> Response {
             .fill(theme.accent)
             .stroke(Stroke::NONE)
             .corner_radius(7)
-            .min_size(vec2(96.0, 32.0)),
+            .min_size(vec2(96.0, ui.spacing().interact_size.y.max(32.0))),
     )
 }
 
@@ -206,14 +206,15 @@ pub fn small_button(ui: &mut Ui, theme: &Theme, text: &str) -> Response {
             .fill(theme.panel)
             .stroke(Stroke::new(1.0, theme.node_border))
             .corner_radius(6)
-            .min_size(vec2(0.0, 26.0)),
+            .min_size(vec2(0.0, (ui.spacing().interact_size.y - 4.0).max(26.0))),
     )
 }
 
 /// A framed square button showing an icon (or `fallback` text when the icon is
 /// missing), the same height as a text input. `tip` is shown on hover.
 pub fn icon_button(ui: &mut Ui, theme: &Theme, icon: Option<&Path>, fallback: &str, tip: &str) -> Response {
-    let (rect, resp) = ui.allocate_exact_size(vec2(34.0, 34.0), Sense::click());
+    let side = ui.spacing().interact_size.y.max(34.0);
+    let (rect, resp) = ui.allocate_exact_size(vec2(side, side), Sense::click());
     let fill = if resp.is_pointer_button_down_on() {
         mix(theme.panel, theme.text, 0.14)
     } else if resp.hovered() {
@@ -241,7 +242,7 @@ pub fn secondary_button(ui: &mut Ui, theme: &Theme, text: &str) -> Response {
             .fill(theme.panel)
             .stroke(Stroke::new(1.0, theme.node_border))
             .corner_radius(7)
-            .min_size(vec2(84.0, 32.0)),
+            .min_size(vec2(84.0, ui.spacing().interact_size.y.max(32.0))),
     )
 }
 
