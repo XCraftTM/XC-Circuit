@@ -7,6 +7,36 @@ icon = "user"
 check = "v => v?.constructor?.name === 'User'"
 description = "A Discord account, the same in every server."
 
+[[type.properties]]
+path = "username"
+name = "Username"
+type = "text"
+
+[[type.properties]]
+path = "displayName"
+name = "Display name"
+type = "text"
+
+[[type.properties]]
+path = "id"
+name = "Id"
+type = "text"
+
+[[type.properties]]
+path = "displayAvatarURL"
+name = "Avatar URL"
+type = "text"
+
+[[type.properties]]
+path = "createdAt"
+name = "Account created"
+type = "date"
+
+[[type.properties]]
+path = "bot"
+name = "Is a bot"
+type = "boolean"
+
 [[type]]
 id = "discord.member"
 name = "Member"
@@ -20,6 +50,46 @@ description = "A person inside one server, with roles and a nickname."
 to = "discord.user"
 via = "v => v.user"
 
+[[type.properties]]
+path = "displayName"
+name = "Display name"
+type = "text"
+
+[[type.properties]]
+path = "nickname"
+name = "Nickname"
+type = "text"
+
+[[type.properties]]
+path = "user.username"
+name = "Username"
+type = "text"
+
+[[type.properties]]
+path = "id"
+name = "Id"
+type = "text"
+
+[[type.properties]]
+path = "displayAvatarURL"
+name = "Avatar URL"
+type = "text"
+
+[[type.properties]]
+path = "joinedAt"
+name = "Joined at"
+type = "date"
+
+[[type.properties]]
+path = "roles.highest.name"
+name = "Highest role"
+type = "text"
+
+[[type.properties]]
+path = "guild.name"
+name = "Server name"
+type = "text"
+
 [[type]]
 id = "discord.message"
 name = "Message"
@@ -28,6 +98,36 @@ color = "#7B83FF"
 icon = "message"
 check = "v => v?.constructor?.name === 'Message'"
 description = "A message in a channel."
+
+[[type.properties]]
+path = "content"
+name = "Text"
+type = "text"
+
+[[type.properties]]
+path = "id"
+name = "Id"
+type = "text"
+
+[[type.properties]]
+path = "url"
+name = "Link"
+type = "text"
+
+[[type.properties]]
+path = "author.username"
+name = "Author's username"
+type = "text"
+
+[[type.properties]]
+path = "channel.name"
+name = "Channel name"
+type = "text"
+
+[[type.properties]]
+path = "createdAt"
+name = "Sent at"
+type = "date"
 
 [[type]]
 id = "discord.channel"
@@ -38,6 +138,31 @@ icon = "hash"
 check = "v => typeof v?.isTextBased === 'function'"
 description = "A text, voice, thread or forum channel."
 
+[[type.properties]]
+path = "name"
+name = "Name"
+type = "text"
+
+[[type.properties]]
+path = "id"
+name = "Id"
+type = "text"
+
+[[type.properties]]
+path = "url"
+name = "Link"
+type = "text"
+
+[[type.properties]]
+path = "topic"
+name = "Topic"
+type = "text"
+
+[[type.properties]]
+path = "guild.name"
+name = "Server name"
+type = "text"
+
 [[type]]
 id = "discord.guild"
 name = "Server"
@@ -46,6 +171,36 @@ color = "#7B83FF"
 icon = "shield"
 check = "v => v?.constructor?.name === 'Guild'"
 description = "A Discord server."
+
+[[type.properties]]
+path = "name"
+name = "Name"
+type = "text"
+
+[[type.properties]]
+path = "id"
+name = "Id"
+type = "text"
+
+[[type.properties]]
+path = "memberCount"
+name = "Member count"
+type = "number"
+
+[[type.properties]]
+path = "iconURL"
+name = "Icon URL"
+type = "text"
+
+[[type.properties]]
+path = "ownerId"
+name = "Owner id"
+type = "text"
+
+[[type.properties]]
+path = "createdAt"
+name = "Created at"
+type = "date"
 
 [[type]]
 id = "discord.role"
@@ -56,6 +211,26 @@ icon = "tag"
 check = "v => v?.constructor?.name === 'Role'"
 description = "A role in a server."
 
+[[type.properties]]
+path = "name"
+name = "Name"
+type = "text"
+
+[[type.properties]]
+path = "id"
+name = "Id"
+type = "text"
+
+[[type.properties]]
+path = "hexColor"
+name = "Color"
+type = "text"
+
+[[type.properties]]
+path = "members.size"
+name = "Member count"
+type = "number"
+
 [[type]]
 id = "discord.interaction"
 name = "Interaction"
@@ -64,6 +239,31 @@ color = "#7B83FF"
 icon = "slash"
 check = "v => typeof v?.isRepliable === 'function'"
 description = "A slash command, button press, menu choice or modal submit that can be answered."
+
+[[type.properties]]
+path = "user.username"
+name = "Username"
+type = "text"
+
+[[type.properties]]
+path = "commandName"
+name = "Command name"
+type = "text"
+
+[[type.properties]]
+path = "customId"
+name = "Custom id"
+type = "text"
+
+[[type.properties]]
+path = "channel.name"
+name = "Channel name"
+type = "text"
+
+[[type.properties]]
+path = "guild.name"
+name = "Server name"
+type = "text"
 
 [[type]]
 id = "discord.embed"

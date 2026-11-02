@@ -342,6 +342,13 @@ impl Editor {
         Some(id)
     }
 
+    /// The values texts on block `node` can use: see [`crate::values`].
+    pub fn values_for(&mut self, ws_key: &str, node: &str) -> Vec<crate::values::Avail> {
+        let Editor { reg, engine, project, shapes, define_ctx, .. } = self;
+        let Some(ws) = project.as_ref().and_then(|p| p.workspaces.get(ws_key)) else { return Vec::new() };
+        crate::values::available(ws, node, reg, &mut |id| node_shape(reg, engine, shapes, ws_key, ws, id, define_ctx))
+    }
+
     /// Call after project data (such as slash commands) changes.
     pub fn refresh_define_ctx(&mut self) {
         let data = self.project.as_ref().map(|p| p.meta.data.clone()).unwrap_or_default();

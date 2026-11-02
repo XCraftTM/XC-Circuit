@@ -63,7 +63,14 @@ impl Widget for TextLine<'_> {
         if self.monospace {
             edit = edit.font(egui::TextStyle::Monospace);
         }
-        ui.add(edit)
+        // A fixed id, known before the box is drawn, for the values list.
+        let id = ui.next_auto_id();
+        crate::values::before(ui, id);
+        let mut resp = ui.add(edit.id(id));
+        if !self.password && crate::values::after(ui, &resp, self.value) {
+            resp.mark_changed();
+        }
+        resp
     }
 }
 
@@ -110,7 +117,8 @@ impl Widget for TextArea<'_> {
         let inner = outer.shrink2(PAD);
         let mut child = ui.new_child(UiBuilder::new().max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)));
         child.set_clip_rect(inner.intersect(ui.clip_rect()));
-        let resp = ScrollArea::vertical()
+        crate::values::before(ui, id);
+        let mut resp = ScrollArea::vertical()
             .id_salt(id.with("scroll"))
             .auto_shrink([false, false])
             .show(&mut child, |ui| {
@@ -124,6 +132,9 @@ impl Widget for TextArea<'_> {
                 )
             })
             .inner;
+        if crate::values::after(ui, &resp, self.value) {
+            resp.mark_changed();
+        }
 
         let border = if resp.has_focus() { visuals.selection.stroke } else if resp.hovered() { visuals.widgets.hovered.bg_stroke } else { visuals.widgets.inactive.bg_stroke };
         ui.painter().rect_stroke(outer, visuals.widgets.inactive.corner_radius, border, StrokeKind::Inside);

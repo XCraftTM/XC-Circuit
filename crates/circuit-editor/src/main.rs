@@ -29,6 +29,7 @@ mod stored;
 mod theme;
 mod titlebar;
 mod tour;
+mod values;
 mod ui_strings;
 mod watch;
 mod widgets;

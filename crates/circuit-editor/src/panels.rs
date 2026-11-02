@@ -25,7 +25,11 @@ enum InspectorAsk {
 
 pub fn inspector(ui: &mut Ui, ed: &mut Editor) {
     let mut ask = None;
+    // Text boxes offer the values of earlier blocks after `{`.
+    let values = ed.selected.clone().map(|(ws, node)| std::sync::Arc::new(ed.values_for(&ws, &node)));
+    crate::values::set_scope(ui.ctx(), values);
     inspector_body(ui, ed, &mut ask);
+    crate::values::set_scope(ui.ctx(), None);
     match ask {
         Some(InspectorAsk::EmbedBuilder(ws, node, key)) => crate::embed::open(ed, &ws, &node, &key),
         Some(InspectorAsk::LayoutBuilder(ws, node, key)) => crate::layout::open(ed, &ws, &node, &key),
@@ -242,6 +246,14 @@ pub fn collect_problems(ed: &Editor) -> Vec<ProblemItem> {
                         items.push((format!("{} › {}", ws.name, def.name), format!("`{}` needs a value", f.label(k)), Some((key.clone(), id.clone()))));
                     }
                 }
+            }
+            for (from, count) in ws.split_paths() {
+                let name = ws.nodes.get(&from.node).and_then(|n| ed.reg.block(&n.block)).map(|d| d.name.clone()).or_else(|| ws.zones.get(&from.node).map(|z| format!("Try {}", z.title))).unwrap_or_default();
+                items.push((
+                    format!("{} › {name}", ws.name),
+                    tf!("its {pin} output leads to {count} blocks: an action path can't split. Chain them one after another, or branch with If or Switch", pin = from.pin, count = count),
+                    Some((key.clone(), from.node.clone())),
+                ));
             }
             for link in &ws.links {
                 let from_ok = ws.nodes.contains_key(&link.from.node) || ws.zones.contains_key(&link.from.node);

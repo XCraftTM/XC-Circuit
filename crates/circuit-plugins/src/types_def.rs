@@ -21,6 +21,19 @@ pub struct PinTypeDef {
     pub check: Option<String>,
     pub description: Option<String>,
     pub converts: Vec<Conversion>,
+    /// Properties texts can use after a dot, such as `{user.username}`.
+    pub properties: Vec<Property>,
+}
+
+/// A property of a value of this type: its path (`roles.highest.name`), its
+/// name and its type.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct Property {
+    pub path: String,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub ty: String,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]

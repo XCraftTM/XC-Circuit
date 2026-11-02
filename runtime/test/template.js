@@ -21,4 +21,12 @@ assert.strictEqual(fillTemplate("{who.name}", run, {}, { who: { name: "Ada" } })
 assert.strictEqual(fillTemplate("{nobody} \\d{3}", run, {}), "{nobody} \\d{3}");
 assert.strictEqual(fillTemplate("[{gone}]", run, {}, { gone: null }), "[]");
 
+// {#n1.result} is block n1's output in this run, even when another block has
+// an output of the same name; unknown blocks and outputs stay as they are.
+assert.strictEqual(fillTemplate("{#n1.result} / {#n2.result} / {#n1.other}", run, {}), "42 / {#n2.result} / {#n1.other}");
+const avatar = { id: "7", displayAvatarURL() { return `https://cdn/${this.id}.png`; }, delete() { throw new Error("must not run"); } };
+const withUser = { ...run, outputs: new Map([["n3", { member: avatar }]]) };
+assert.strictEqual(fillTemplate("{#n3.member.displayAvatarURL}", withUser, {}), "https://cdn/7.png", "methods that read are called");
+assert.strictEqual(fillTemplate("[{#n3.member.delete}]", withUser, {}), "[]", "other methods never run");
+
 console.log("template ok");

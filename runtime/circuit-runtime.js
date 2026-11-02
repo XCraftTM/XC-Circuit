@@ -451,22 +451,35 @@ function templated(f) {
   return ["text", "textarea", "string"].includes(String(f.type || "").replace(/\?$/, "")) && !f.choices;
 }
 
+// Methods a placeholder may call, such as {user.displayAvatarURL}: they only
+// read. Any other function in a path gives nothing.
+const READ_METHODS = /^(displayAvatarURL|avatarURL|bannerURL|iconURL|splashURL|toISOString|toLocaleString|toLocaleDateString|toLocaleTimeString|getTime)$/;
+
 /**
  * Fills {name} placeholders: from `placed` (values wired into the field's
  * {name} inputs), then the event, run variables, the block's fields and the
- * latest output of that name earlier in the run.
+ * latest output of that name earlier in the run. {#4.message} is block #4's
+ * Message output in this run. A path after a dot reads properties.
  */
 function fillTemplate(text, run, fields, placed = {}) {
-  return text.replace(/\{([\w$.]+)\}/g, (whole, expr) => {
+  return text.replace(/\{(#?[\w$.]+)\}/g, (whole, expr) => {
     const [head, ...rest] = expr.split(".");
     let value;
-    if (head in placed) value = placed[head];
+    if (head.startsWith("#")) {
+      const outputs = run && run.outputs.get(head.slice(1));
+      if (!outputs || !rest.length || !(rest[0] in outputs)) return whole;
+      value = outputs[rest.shift()];
+    } else if (head in placed) value = placed[head];
     else if (run && run.event && head in run.event) value = run.event[head];
     else if (run && run.vars.has(head)) value = run.vars.get(head);
     else if (head in fields) value = fields[head];
     else if (run && lastOutput(run, head) !== NOT_FOUND) value = lastOutput(run, head);
     else return whole;
-    for (const k of rest) value = value == null ? undefined : value[k];
+    for (const k of rest) {
+      const owner = value;
+      value = value == null ? undefined : value[k];
+      if (typeof value === "function") value = READ_METHODS.test(k) ? value.call(owner) : undefined;
+    }
     return value == null ? "" : String(value);
   });
 }

@@ -213,6 +213,10 @@ impl Workspace {
 
     /// Adds a link. Data inputs take one wire unless `multi`, so an older wire into
     /// the same input is replaced. Action inputs accept any number of wires.
+    ///
+    /// Action paths never split: an output leads to one block, so a new Action
+    /// wire from it replaces the one it had. Branches come from blocks with
+    /// several outputs (If, Switch, For Each).
     pub fn connect(&mut self, link: Link, replace_existing_input: bool) {
         if self.links.contains(&link) {
             return;
@@ -220,7 +224,24 @@ impl Workspace {
         if replace_existing_input {
             self.links.retain(|l| l.to != link.to);
         }
+        if link.to.pin == ACTION_IN {
+            self.links.retain(|l| !(l.from == link.from && l.to.pin == ACTION_IN));
+        }
         self.links.push(link);
+    }
+
+    /// Action outputs that lead to more than one block (made before paths
+    /// couldn't split), with how many.
+    pub fn split_paths(&self) -> Vec<(PinRef, usize)> {
+        let mut out: Vec<(PinRef, usize)> = Vec::new();
+        for l in self.links.iter().filter(|l| l.to.pin == ACTION_IN) {
+            match out.iter_mut().find(|(p, _)| *p == l.from) {
+                Some((_, n)) => *n += 1,
+                None => out.push((l.from.clone(), 1)),
+            }
+        }
+        out.retain(|(_, n)| *n > 1);
+        out
     }
 }
 
@@ -291,5 +312,19 @@ mod tests {
         w.connect("b.x > c.v".parse().unwrap(), true);
         assert_eq!(w.links.len(), 1);
         assert_eq!(w.links[0].from.node, "b");
+    }
+
+    #[test]
+    fn action_paths_never_split() {
+        let mut w = Workspace::new("t");
+        w.connect("a.next > b.in".parse().unwrap(), false);
+        w.connect("a.next > c.in".parse().unwrap(), false);
+        assert_eq!(w.links, vec!["a.next > c.in".parse::<Link>().unwrap()], "the new wire replaces the old one");
+        // Paths may still join: two blocks can run the same next block.
+        w.connect("b.next > c.in".parse().unwrap(), false);
+        assert_eq!(w.links.len(), 2);
+        assert!(w.split_paths().is_empty());
+        w.links.push("a.next > d.in".parse().unwrap());
+        assert_eq!(w.split_paths(), vec![(PinRef::new("a", "next"), 2)]);
     }
 }

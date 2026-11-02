@@ -456,6 +456,11 @@ english_name = "German"
 "Layout" = "Layout"
 "Layout (Components V2)" = "Layout (Components V2)"
 "Text and embeds" = "Text und Embeds"
+"Server name" = "Servername"
+"Author's username" = "Benutzername des Autors"
+"Channel name" = "Kanalname"
+"Owner id" = "ID des Besitzers"
+"Command name" = "Befehlsname"
 
 [blocks."discord.find_channel"]
 name = "Kanal finden"

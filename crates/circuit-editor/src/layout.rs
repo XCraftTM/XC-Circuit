@@ -332,6 +332,10 @@ pub fn open(ed: &mut Editor, ws: &str, node: &str, key: &str) {
 
 /// The Layout Builder tab.
 pub fn tab(ui: &mut Ui, ed: &mut Editor) {
+    let Some((ws, node)) = ed.layout_edit.as_ref().map(|e| (e.ws.clone(), e.node.clone())) else { return };
+    // Texts offer the values of earlier blocks after `{`, and list them on the right.
+    let values = std::sync::Arc::new(ed.values_for(&ws, &node));
+    crate::values::set_scope(ui.ctx(), Some(values.clone()));
     let Some(edit) = &mut ed.layout_edit else { return };
     let theme = ed.theme.clone();
     let icon = ed.reg.icons.get("layers").cloned();
@@ -354,7 +358,11 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
                     ui.add_space(16.0);
                     ui.vertical(|ui| {
                         dialog::section(ui, &theme, t!("Preview"));
-                        ScrollArea::vertical().id_salt("layout-preview").max_height(dialog::remaining_height(ui, 300.0)).auto_shrink([false, true]).show(ui, |ui| preview(ui, &theme, &edit.draft));
+                        let h = (dialog::remaining_height(ui, 300.0) * 0.55).max(200.0);
+                        ScrollArea::vertical().id_salt("layout-preview").max_height(h).auto_shrink([false, true]).show(ui, |ui| preview(ui, &theme, &edit.draft));
+                        ui.add_space(10.0);
+                        dialog::section(ui, &theme, t!("Values from earlier blocks"));
+                        ScrollArea::vertical().id_salt("layout-values").max_height(dialog::remaining_height(ui, 140.0)).auto_shrink([false, true]).show(ui, |ui| crate::values::list(ui, &theme, &values));
                     });
                 });
             }
@@ -373,6 +381,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
             }
         },
     );
+    crate::values::set_scope(ui.ctx(), None);
     if apply {
         let edit = ed.layout_edit.as_ref().unwrap();
         let (ws, node, key, value) = (edit.ws.clone(), edit.node.clone(), edit.key.clone(), edit.draft.clone());

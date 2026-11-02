@@ -690,22 +690,37 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                         painter.rect(bx, 6.0, theme.field, Stroke::new(1.0, if focused { theme.accent } else { theme.node_border }), StrokeKind::Inside);
                         let inner = bx.shrink2(vec2(8.0, 5.0));
                         let mut text = widgets::as_text(ws.nodes[id].values.get(key).or(f.default.as_ref()).unwrap_or(&Value::Null));
+                        // While it has the text cursor or the pointer, it offers the values of
+                        // earlier blocks (after `{`, on right-click and behind its { } button).
+                        let offer = focused || ctx.pointer_hover_pos().is_some_and(|p| (to_global * bx).contains(p)) || crate::values::menu_open(&ctx, edit_id);
+                        if offer {
+                            let values = crate::values::available(ws, id, reg, &mut |n| node_shapes.get(n).cloned());
+                            crate::values::set_scope(&ctx, Some(std::sync::Arc::new(values)));
+                        }
+                        crate::values::before(&cui, edit_id);
                         let resp = cui
                             .scope_builder(UiBuilder::new().id_salt(("field-ui", id, key)).max_rect(inner), |ui| {
                                 // Longer text scrolls inside the box.
                                 egui::ScrollArea::vertical().id_salt("scroll").max_height(inner.height()).auto_shrink([false, false]).show(ui, |ui| {
-                                    ui.add(
+                                    let mut resp = ui.add(
                                         egui::TextEdit::multiline(&mut text)
                                             .id(edit_id)
                                             .frame(egui::Frame::NONE)
                                             .hint_text(f.placeholder.clone().unwrap_or_default())
                                             .desired_width(inner.width())
                                             .min_size(vec2(inner.width(), inner.height())),
-                                    )
+                                    );
+                                    if crate::values::after(ui, &resp, &mut text) {
+                                        resp.mark_changed();
+                                    }
+                                    resp
                                 })
                                 .inner
                             })
                             .inner;
+                        if offer {
+                            crate::values::set_scope(&ctx, None);
+                        }
                         if resp.changed() {
                             ws.nodes.get_mut(id).unwrap().values.insert(key.clone(), Value::String(text));
                             *dirty = true;
@@ -1410,6 +1425,53 @@ mod tests {
         let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1400.0, 900.0))), events, ..Default::default() };
         let mut out = ctx.run_ui(raw, |ui| show(ui, ed, ws));
         out.textures_delta.clear();
+    }
+
+    #[test]
+    fn typing_a_brace_offers_earlier_values() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&root.join("examples/DemoBot"));
+        let ctx = egui::Context::default();
+        let settle = |ed: &mut Editor| {
+            for _ in 0..6 {
+                frame(&ctx, ed, "rank-command", vec![]);
+            }
+        };
+        settle(&mut ed);
+        let field = ("4".to_string(), "text".to_string());
+        let rect = ed.views["rank-command"].text_fields.iter().find(|(k, _)| *k == field).map(|(_, r)| *r).unwrap();
+        let p = rect.center();
+        let press = |pressed: bool| egui::Event::PointerButton { pos: p, button: PointerButton::Primary, pressed, modifiers: Default::default() };
+        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerMoved(p), press(true), press(false)]);
+        settle(&mut ed);
+        let key = |key: Key| egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() };
+        frame(&ctx, &mut ed, "rank-command", vec![key(Key::End), key(Key::Enter)]);
+        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::Text("Hi {us".into())]);
+        settle(&mut ed);
+        // The list is open; Enter puts in the first match instead of a new line.
+        frame(&ctx, &mut ed, "rank-command", vec![key(Key::Enter)]);
+        settle(&mut ed);
+        let text = ed.workspace("rank-command").unwrap().nodes["4"].values["text"].as_str().unwrap().to_string();
+        assert!(text.ends_with("
+Hi {user}"), "{text:?}");
+        // Typing goes on after the placeholder.
+        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::Text("!".into())]);
+        let text = ed.workspace("rank-command").unwrap().nodes["4"].values["text"].as_str().unwrap().to_string();
+        assert!(text.ends_with("{user}!"), "{text:?}");
+    }
+
+    #[test]
+    fn example_action_paths_dont_split() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut dirs = vec![root.join("examples/DemoBot")];
+        dirs.extend(std::fs::read_dir(root.join("examples/templates")).unwrap().map(|e| e.unwrap().path()));
+        for dir in dirs {
+            let project = circuit_core::Project::load(&dir).unwrap();
+            for (key, ws) in &project.workspaces {
+                assert!(ws.split_paths().is_empty(), "{} {key}: {:?}", dir.display(), ws.split_paths());
+            }
+        }
     }
 
     #[test]
