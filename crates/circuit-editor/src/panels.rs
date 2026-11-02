@@ -86,7 +86,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 let text = if pinned { "● pin" } else { "○ pin" };
                                 let color = if pinned { theme.pin_color(&f.ty, reg) } else { theme.text_muted };
-                                if ui.add(egui::Button::new(RichText::new(text).size(11.0).color(color)).frame(false)).on_hover_text("Switch between typing a value and connecting a pin").clicked() {
+                                if ui.add(egui::Button::new(RichText::new(text).size(11.0).color(color)).selected(pinned)).on_hover_text("Switch between typing a value and connecting a pin").clicked() {
                                     toggle = Some(key.clone());
                                 }
                             });
@@ -114,7 +114,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                         if f.template {
                             ui.label(RichText::new("Type {name} to insert a connected value").size(11.0).color(theme.text_muted));
                         }
-                        if f.type_name == "slash-command-ref" && ui.link("Edit slash commands…").clicked() {
+                        if f.type_name == "slash-command-ref" && crate::dialog::small_button(ui, &theme, "Edit slash commands…").clicked() {
                             *ask = Some(InspectorAsk::SlashCommands);
                         }
                     }
@@ -192,7 +192,7 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
                     ui.label(RichText::new(tag).monospace().color(color));
                     ui.label(RichText::new(&line.text).monospace());
                     if let Some(t) = &line.target
-                        && ui.link(RichText::new("show").size(11.0)).on_hover_text("Show the block that wrote this").clicked()
+                        && crate::dialog::small_button(ui, &theme, "Show block").on_hover_text("Show the block that wrote this").clicked()
                     {
                         jump = Some(t.clone());
                     }

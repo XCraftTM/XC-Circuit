@@ -136,7 +136,9 @@ impl Theme {
             state.fg_stroke = Stroke::new(1.0, self.text);
             state.corner_radius = radius;
         }
-        w.inactive.bg_stroke = Stroke::NONE;
+        // Buttons and other controls always show their frame, so they read as
+        // something to press (menus draw their items without one).
+        w.inactive.bg_stroke = Stroke::new(1.0, self.node_border);
         w.hovered.bg_stroke = Stroke::new(1.0, self.node_border);
         w.active.bg_stroke = Stroke::new(1.0, self.accent);
         w.open.bg_stroke = Stroke::new(1.0, self.node_border);
@@ -146,7 +148,7 @@ impl Theme {
         ctx.set_theme(theme);
         ctx.all_styles_mut(|s| {
             s.spacing.item_spacing = egui::vec2(8.0, 6.0);
-            s.spacing.button_padding = egui::vec2(10.0, 4.0);
+            s.spacing.button_padding = egui::vec2(12.0, 6.0);
             s.spacing.menu_margin = Margin::same(6);
         });
     }

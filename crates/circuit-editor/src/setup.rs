@@ -164,7 +164,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, setup: &mut Setup) -> Option<Done> {
         });
         return done;
     }
-    if f.link(RichText::new("Skip setup").color(theme.text_muted)).on_hover_text("You can run it again from Help").clicked() {
+    if crate::dialog::secondary_button(&mut f, &theme, "Skip setup").on_hover_text("You can run it again from Help").clicked() {
         done = Some(Done::Finished { tour: false });
     }
     f.with_layout(Layout::right_to_left(Align::Center), |ui| {
