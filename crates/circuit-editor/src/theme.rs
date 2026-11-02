@@ -105,6 +105,7 @@ impl Theme {
 
     pub fn apply(&self, ctx: &egui::Context) {
         let mut v = if self.dark { Visuals::dark() } else { Visuals::light() };
+        v.interact_cursor = Some(egui::CursorIcon::PointingHand);
         let radius = CornerRadius::same(6);
         v.panel_fill = self.panel;
         v.window_fill = self.panel_header;

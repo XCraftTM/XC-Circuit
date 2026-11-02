@@ -187,27 +187,35 @@ pub fn text_input(ui: &mut Ui, value: &mut String, hint: &str, password: bool) -
     ui.add(crate::inputs::TextLine::new(value).hint(hint).password(password))
 }
 
+/// Adds a button with its own fill and border that still reacts to the
+/// pointer: lighter (or darker, in light themes) on hover and while pressed.
+/// egui's `Button::fill` and `stroke` would turn those effects off.
+pub fn styled_button(ui: &mut Ui, theme: &Theme, button: egui::Button, fill: Color32, stroke: Stroke) -> Response {
+    ui.scope(|ui| {
+        let w = &mut ui.visuals_mut().widgets;
+        let border = |t: f32| if stroke.width > 0.0 { Stroke::new(stroke.width, mix(stroke.color, theme.text, t)) } else { Stroke::NONE };
+        w.inactive.weak_bg_fill = fill;
+        w.inactive.bg_stroke = stroke;
+        w.hovered.weak_bg_fill = mix(fill, theme.text, 0.10);
+        w.hovered.bg_stroke = border(0.35);
+        w.active.weak_bg_fill = mix(fill, theme.text, 0.20);
+        w.active.bg_stroke = border(0.5);
+        ui.add(button)
+    })
+    .inner
+}
+
 pub fn primary_button(ui: &mut Ui, theme: &Theme, text: &str) -> Response {
     let ink = if theme.dark { Color32::from_rgb(0, 24, 28) } else { Color32::WHITE };
-    ui.add(
-        egui::Button::new(RichText::new(text).strong().color(ink))
-            .fill(theme.accent)
-            .stroke(Stroke::NONE)
-            .corner_radius(7)
-            .min_size(vec2(96.0, ui.spacing().interact_size.y.max(32.0))),
-    )
+    let button = egui::Button::new(RichText::new(text).strong().color(ink)).corner_radius(7).min_size(vec2(96.0, ui.spacing().interact_size.y.max(32.0)));
+    styled_button(ui, theme, button, theme.accent, Stroke::NONE)
 }
 
 /// A small framed button, for secondary actions inside a row (where a text
 /// link was used before: it is easier to see and to hit with a finger).
 pub fn small_button(ui: &mut Ui, theme: &Theme, text: &str) -> Response {
-    ui.add(
-        egui::Button::new(RichText::new(text).size(11.5).color(theme.text))
-            .fill(theme.panel)
-            .stroke(Stroke::new(1.0, theme.node_border))
-            .corner_radius(6)
-            .min_size(vec2(0.0, (ui.spacing().interact_size.y - 4.0).max(26.0))),
-    )
+    let button = egui::Button::new(RichText::new(text).size(11.5).color(theme.text)).corner_radius(6).min_size(vec2(0.0, (ui.spacing().interact_size.y - 4.0).max(26.0)));
+    styled_button(ui, theme, button, theme.panel, Stroke::new(1.0, theme.node_border))
 }
 
 /// A framed square button showing an icon (or `fallback` text when the icon is
@@ -237,13 +245,7 @@ pub fn icon_button(ui: &mut Ui, theme: &Theme, icon: Option<&Path>, fallback: &s
 }
 
 pub fn secondary_button(ui: &mut Ui, theme: &Theme, text: &str) -> Response {
-    ui.add(
-        egui::Button::new(RichText::new(text).color(theme.text))
-            .fill(theme.panel)
-            .stroke(Stroke::new(1.0, theme.node_border))
-            .corner_radius(7)
-            .min_size(vec2(84.0, ui.spacing().interact_size.y.max(32.0))),
-    )
+    styled_button(ui, theme, egui::Button::new(RichText::new(text).color(theme.text)).corner_radius(7).min_size(vec2(84.0, ui.spacing().interact_size.y.max(32.0))), theme.panel, Stroke::new(1.0, theme.node_border))
 }
 
 /// A card with a title, a description and a switch on the right.

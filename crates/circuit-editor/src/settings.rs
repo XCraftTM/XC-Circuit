@@ -148,8 +148,8 @@ pub fn language_buttons(ui: &mut Ui, ed: &mut Editor, theme: &Theme) {
         for (code, name) in crate::i18n::languages(&ed.reg) {
             let selected = ed.prefs.language == code;
             let ink = if selected { Color32::from_rgb(0, 24, 28) } else { theme.text };
-            let b = egui::Button::new(RichText::new(&name).size(13.0).color(ink)).fill(if selected { theme.accent } else { theme.field }).min_size(vec2(96.0, ui.spacing().interact_size.y.max(30.0)));
-            if ui.add(b).clicked() && !selected {
+            let b = egui::Button::new(RichText::new(&name).size(13.0).color(ink)).min_size(vec2(96.0, ui.spacing().interact_size.y.max(30.0)));
+            if crate::dialog::styled_button(ui, theme, b, if selected { theme.accent } else { theme.field }, Stroke::NONE).clicked() && !selected {
                 ed.prefs.language = code;
                 ed.apply_language();
             }
@@ -206,8 +206,8 @@ fn appearance(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsVi
         for s in UI_SCALES.iter().rev() {
             let selected = (ed.prefs.ui_scale - s).abs() < 0.01;
             let text = RichText::new(format!("{:.0}%", s * 100.0)).size(12.0).color(if selected { Color32::from_rgb(0, 24, 28) } else { theme.text });
-            let b = egui::Button::new(text).fill(if selected { theme.accent } else { theme.field }).min_size(vec2(46.0, 26.0));
-            if ui.add(b).clicked() && !selected {
+            let b = egui::Button::new(text).min_size(vec2(46.0, 26.0));
+            if crate::dialog::styled_button(ui, theme, b, if selected { theme.accent } else { theme.field }, Stroke::NONE).clicked() && !selected {
                 ed.prefs.ui_scale = *s;
                 ctx.set_zoom_factor(*s);
             }

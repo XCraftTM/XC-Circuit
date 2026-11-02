@@ -1112,7 +1112,7 @@ fn tool_button(ui: &mut Ui, theme: &Theme, icon: Option<&std::path::Path>, text:
         None => egui::Button::new(text),
     };
     let h = ui.spacing().interact_size.y.max(32.0);
-    ui.add(button.fill(theme.panel).stroke(Stroke::new(1.0, theme.node_border)).corner_radius(7).min_size(vec2(h, h)))
+    crate::dialog::styled_button(ui, theme, button.corner_radius(7).min_size(vec2(h, h)), theme.panel, Stroke::new(1.0, theme.node_border))
 }
 
 /// Centers the view on all blocks, at 100% when they fit.
@@ -1486,6 +1486,25 @@ mod tests {
         }
         settle(&mut ed);
         assert!(!ed.views["rank-command"].expanded.contains_key(&field), "the size is reset");
+    }
+
+    #[test]
+    fn toolbar_buttons_show_the_pointer() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&root.join("examples/DemoBot"));
+        let ctx = egui::Context::default();
+        ed.theme.apply(&ctx);
+        // Add block is the first button of the toolbar, bottom left.
+        let over = pos2(60.0, 900.0 - 12.0 - 17.0);
+        let mut cursor = egui::CursorIcon::Default;
+        for _ in 0..4 {
+            let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1400.0, 900.0))), events: vec![egui::Event::PointerMoved(over)], ..Default::default() };
+            let mut out = ctx.run_ui(raw, |ui| show(ui, &mut ed, "rank-command"));
+            out.textures_delta.clear();
+            cursor = out.platform_output.cursor_icon;
+        }
+        assert_eq!(cursor, egui::CursorIcon::PointingHand);
     }
 
     #[test]

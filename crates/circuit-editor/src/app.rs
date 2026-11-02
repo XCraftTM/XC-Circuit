@@ -488,8 +488,8 @@ impl CircuitApp {
             BotState::Starting => t!("Starting…"),
             BotState::Running => t!("Restart"),
         };
-        let run = egui::Button::new(RichText::new(label).strong().color(egui::Color32::from_rgb(4, 33, 13))).fill(theme.action);
-        let run = ui.add_enabled(self.ed.project.is_some(), run);
+        let run = egui::Button::new(RichText::new(label).strong().color(egui::Color32::from_rgb(4, 33, 13)));
+        let run = ui.add_enabled_ui(self.ed.project.is_some(), |ui| crate::dialog::styled_button(ui, &theme, run, theme.action, egui::Stroke::NONE)).inner;
         self.ed.ui_rects.insert("run".into(), run.rect);
         if run.on_hover_text(t!("Run the bot (F5)")).clicked() {
             self.bot.start(&mut self.ed, ui.ctx());
