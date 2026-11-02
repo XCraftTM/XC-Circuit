@@ -349,11 +349,12 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
         |ui, part| match part {
             Part::Body => {
                 ui.horizontal_top(|ui| {
-                    ui.allocate_ui_with_layout(vec2(620.0, 600.0), egui::Layout::top_down(egui::Align::Min), |ui| form(ui, &theme, edit));
+                    let h = dialog::remaining_height(ui, 420.0);
+                    ui.allocate_ui_with_layout(vec2(620.0, h), egui::Layout::top_down(egui::Align::Min), |ui| form(ui, &theme, edit));
                     ui.add_space(16.0);
                     ui.vertical(|ui| {
                         dialog::section(ui, &theme, t!("Preview"));
-                        ScrollArea::vertical().id_salt("layout-preview").max_height(580.0).auto_shrink([false, true]).show(ui, |ui| preview(ui, &theme, &edit.draft));
+                        ScrollArea::vertical().id_salt("layout-preview").max_height(dialog::remaining_height(ui, 300.0)).auto_shrink([false, true]).show(ui, |ui| preview(ui, &theme, &edit.draft));
                     });
                 });
             }
@@ -398,7 +399,7 @@ fn form(ui: &mut Ui, theme: &Theme, edit: &mut LayoutEdit) {
     ui.add_space(8.0);
     if let Some(jt) = &mut edit.json {
         let help = t!("The message as Discord's JSON. Edit it, or paste a Components V2 message or a list of components (from the Discord docs or a message designer); it applies as soon as it is valid.");
-        if let Some(v) = json_view::editor(ui, theme, ui.id().with("layout-json"), jt, 440.0, help) {
+        if let Some(v) = json_view::editor(ui, theme, ui.id().with("layout-json"), jt, help) {
             match from_json(&v) {
                 Ok(l) => edit.draft = l,
                 Err(e) => jt.error = Some(e),
@@ -416,7 +417,7 @@ fn form(ui: &mut Ui, theme: &Theme, edit: &mut LayoutEdit) {
         ui.label(RichText::new(format!("• {p}")).size(12.0).color(theme.warning));
     }
     ui.add_space(6.0);
-    ScrollArea::vertical().id_salt("layout-form").max_height(500.0).auto_shrink([false, false]).show(ui, |ui| {
+    ScrollArea::vertical().id_salt("layout-form").max_height(dialog::remaining_height(ui, 300.0)).auto_shrink([false, false]).show(ui, |ui| {
         ui.set_width(ui.available_width() - 12.0);
         let next = count(components(&edit.draft)) + 1;
         list_editor(ui, theme, list_mut(&mut edit.draft, "components"), true, next);

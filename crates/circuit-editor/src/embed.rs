@@ -304,7 +304,8 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
         |ui, part| match part {
             Part::Body => {
                 ui.horizontal_top(|ui| {
-                    ui.allocate_ui_with_layout(vec2(470.0, 560.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                    let h = dialog::remaining_height(ui, 420.0);
+                    ui.allocate_ui_with_layout(vec2(470.0, h), egui::Layout::top_down(egui::Align::Min), |ui| {
                         if let Some(json) = json_view::switch(ui, &theme, edit.json.is_some()) {
                             if json {
                                 edit.json = Some(JsonText::new(&edit.draft.to_discord()));
@@ -315,7 +316,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
                         ui.add_space(8.0);
                         if let Some(jt) = &mut edit.json {
                             let help = t!("The embed as Discord's JSON. Edit it, or paste an embed or a whole message (from an embed generator, say); it applies as soon as it is valid. \"timestamp\": \"now\" shows when it's sent.");
-                            if let Some(v) = json_view::editor(ui, &theme, ui.id().with("embed-json"), jt, 400.0, help) {
+                            if let Some(v) = json_view::editor(ui, &theme, ui.id().with("embed-json"), jt, help) {
                                 match EmbedData::from_discord(&v) {
                                     Ok(e) => edit.draft = e,
                                     Err(e) => jt.error = Some(e),
@@ -323,7 +324,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
                             }
                             return;
                         }
-                        ScrollArea::vertical().id_salt("embed-form").max_height(510.0).auto_shrink([false, false]).show(ui, |ui| {
+                        ScrollArea::vertical().id_salt("embed-form").max_height(dialog::remaining_height(ui, 300.0)).auto_shrink([false, false]).show(ui, |ui| {
                             ui.set_width(452.0);
                             form(ui, &theme, &mut edit.draft);
                         });

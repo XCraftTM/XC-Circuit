@@ -41,6 +41,19 @@ pub fn show(ctx: &egui::Context, theme: &Theme, spec: Spec, mut content: impl Fn
 /// Shows a dialog inside a dock tab: it can be docked on any side, stacked with
 /// other tabs or dragged out into its own window. For editors and settings. The
 /// tab's own × closes it. The body scrolls; the footer stays at the bottom.
+/// Where a dialog tab's body ends on screen, for [`remaining_height`]. Set
+/// right before the body is drawn, so one key serves every tab.
+const BODY_BOTTOM: &str = "dialog-body-bottom";
+
+/// The room from the cursor down to the bottom of the dialog tab's body (above
+/// its footer), but at least `min`. Builders size their lists, previews and JSON
+/// boxes with it, so they grow and shrink with the tab.
+pub fn remaining_height(ui: &Ui, min: f32) -> f32 {
+    let top = ui.cursor().top();
+    let bottom = ui.ctx().data(|d| d.get_temp::<f32>(Id::new(BODY_BOTTOM))).unwrap_or(top + min);
+    (bottom - top).max(min)
+}
+
 pub fn tab(ui: &mut Ui, theme: &Theme, spec: Spec, mut content: impl FnMut(&mut Ui, Part)) {
     let id = Id::new(("dialog-tab", spec.id));
     egui::Panel::bottom(id.with("footer"))
@@ -53,6 +66,9 @@ pub fn tab(ui: &mut Ui, theme: &Theme, spec: Spec, mut content: impl FnMut(&mut 
             });
         });
     egui::CentralPanel::default().frame(Frame::new().fill(theme.panel)).show(ui, |ui| {
+        // The body's bottom margin is 18.
+        let bottom = ui.max_rect().bottom() - 18.0;
+        ui.ctx().data_mut(|d| d.insert_temp(Id::new(BODY_BOTTOM), bottom));
         egui::ScrollArea::both().id_salt(id.with("body")).auto_shrink([false, false]).show(ui, |ui| {
             // The body is as wide as it was designed for, centred when there is
             // room; in a narrow panel it narrows, and scrolls sideways past that.

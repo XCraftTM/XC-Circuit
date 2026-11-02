@@ -41,9 +41,10 @@ pub fn switch(ui: &mut Ui, theme: &Theme, json: bool) -> Option<bool> {
     picked
 }
 
-/// The JSON as editable text, with Format and Copy. Returns the parsed value
-/// after an edit that parses; a parse error is kept in `jt.error` and shown.
-pub fn editor(ui: &mut Ui, theme: &Theme, id: egui::Id, jt: &mut JsonText, height: f32, help: &str) -> Option<Value> {
+/// The JSON as editable text, with Format and Copy, filling the room left in
+/// the dialog tab. Returns the parsed value after an edit that parses; a parse
+/// error is kept in `jt.error` and shown.
+pub fn editor(ui: &mut Ui, theme: &Theme, id: egui::Id, jt: &mut JsonText, help: &str) -> Option<Value> {
     let mut parsed = None;
     ui.label(RichText::new(help).size(12.0).color(theme.text_muted));
     ui.add_space(4.0);
@@ -66,6 +67,8 @@ pub fn editor(ui: &mut Ui, theme: &Theme, id: egui::Id, jt: &mut JsonText, heigh
     });
     ui.add_space(6.0);
     let before = jt.text.clone();
+    // Less the frame's margins and line.
+    let height = crate::dialog::remaining_height(ui, 220.0) - 18.0;
     egui::Frame::new().fill(theme.field).stroke(Stroke::new(1.0, if jt.error.is_some() { theme.warning } else { theme.node_border })).corner_radius(7).inner_margin(8).show(ui, |ui| {
         egui::ScrollArea::vertical().id_salt(id.with("scroll")).max_height(height).auto_shrink([false, false]).show(ui, |ui| {
             ui.add(

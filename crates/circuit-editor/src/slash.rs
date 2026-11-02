@@ -676,7 +676,8 @@ fn apply_json(edit: &mut SlashEdit, root: &str, v: &Value) -> Result<String, Str
 fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], trash: Option<&std::path::Path>, eye: Option<&std::path::Path>) {
     ui.horizontal_top(|ui| {
         // Command list.
-        ui.allocate_ui_with_layout(vec2(230.0, 520.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+        let h = dialog::remaining_height(ui, 420.0);
+        ui.allocate_ui_with_layout(vec2(230.0, h), egui::Layout::top_down(egui::Align::Min), |ui| {
             dialog::section(ui, theme, t!("Commands"));
             let mut remove = None;
             for (i, c) in edit.commands.iter().enumerate() {
@@ -720,7 +721,7 @@ fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], tra
 
         // The selected command, and on the right how it looks in Discord.
         let form_w = (ui.available_width() - PREVIEW_W - 40.0).max(380.0);
-        ui.allocate_ui_with_layout(vec2(form_w, 560.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+        ui.allocate_ui_with_layout(vec2(form_w, h), egui::Layout::top_down(egui::Align::Min), |ui| {
             if edit.commands.get(edit.selected).is_none() {
                 ui.add_space(40.0);
                 ui.label(RichText::new(t!("No slash commands yet. Click “+ New command”.")).color(theme.text_muted));
@@ -747,7 +748,7 @@ fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], tra
                     command = shown
                 );
                 let shown_now = shown.clone();
-                if let Some(v) = json_view::editor(ui, theme, ui.id().with("slash-json"), jt, 400.0, &help) {
+                if let Some(v) = json_view::editor(ui, theme, ui.id().with("slash-json"), jt, &help) {
                     let mut jt_after = jt.clone();
                     match apply_json(edit, &shown_now, &v) {
                         Ok(first) => edit.json = Some((first, jt_after)),
@@ -759,7 +760,7 @@ fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], tra
                 }
                 return;
             }
-            ScrollArea::vertical().id_salt("slash-form").max_height(500.0).auto_shrink([false, true]).show(ui, |ui| {
+            ScrollArea::vertical().id_salt("slash-form").max_height(dialog::remaining_height(ui, 300.0)).auto_shrink([false, true]).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 command_form(ui, theme, edit, &root);
             });
