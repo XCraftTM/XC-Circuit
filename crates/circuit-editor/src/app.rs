@@ -66,6 +66,8 @@ pub struct CircuitApp {
     bundled_plugins: Option<PathBuf>,
     show_plugins: bool,
     settings: crate::settings::SettingsView,
+    /// The First Start page, while it is open.
+    setup: Option<crate::setup::Setup>,
 }
 
 impl CircuitApp {
@@ -91,6 +93,7 @@ impl CircuitApp {
             Err(e) => panic!("could not start the block sandbox: {e:#}"),
         };
         ed.prefs = prefs;
+        ed.prefs.apply_node();
         ed.restyle();
         ed.theme.apply(&cc.egui_ctx);
 
@@ -122,6 +125,7 @@ impl CircuitApp {
         let repaint = cc.egui_ctx.clone();
         let mut watcher = crate::watch::PluginWatcher::new(move || repaint.request_repaint());
         watcher.watch(&ed.watch_dirs());
+        let setup = (!ed.prefs.setup_done).then(crate::setup::Setup::new);
         CircuitApp {
             ed,
             dock,
@@ -138,6 +142,7 @@ impl CircuitApp {
             native,
             bundled_plugins,
             show_plugins: false,
+            setup,
             settings: Default::default(),
         }
     }
@@ -381,6 +386,9 @@ impl CircuitApp {
                 }
             });
             ui.menu_button("Help", |ui| {
+                if ui.button("Welcome and setup…").clicked() {
+                    self.setup = Some(crate::setup::Setup::new());
+                }
                 if ui.button("About XC™ Circuit").clicked() {
                     self.show_about = true;
                 }
@@ -479,6 +487,9 @@ impl CircuitApp {
         resp.clicked()
     }
 
+    /// Starts the guided tour (see tour.rs).
+    fn start_tour(&mut self) {}
+
     fn open_settings(&mut self) {
         open_center(&mut self.dock, Tab::Settings);
     }
@@ -507,6 +518,7 @@ impl CircuitApp {
                     self.native.sync(&mut self.ed, self.bundled_plugins.as_deref());
                 }
                 Ask::ResetLayout => self.reset_layout(),
+                Ask::NodeSetup => self.setup = Some(crate::setup::Setup::node_only()),
             }
         }
     }
@@ -876,7 +888,7 @@ impl eframe::App for CircuitApp {
             .exact_size(24.0)
             .frame(Frame::new().fill(theme.status_bar).inner_margin(Margin::symmetric(4, 0)))
             .show(ui, |ui| self.status_bar(ui));
-        if self.ed.prefs.activity_bar {
+        if self.ed.prefs.activity_bar && self.setup.is_none() {
             egui::Panel::left("activity")
                 .exact_size(ACTIVITY_W)
                 .resizable(false)
@@ -888,6 +900,19 @@ impl eframe::App for CircuitApp {
         self.problem_count = problems.len();
         // Filled, so the dock's rounded panel corners show the frame color and not
         // whatever is behind the window's content.
+        if let Some(mut setup) = self.setup.take() {
+            let done = egui::CentralPanel::default().frame(Frame::new().fill(theme.frame)).show(ui, |ui| crate::setup::show(ui, &mut self.ed, &mut setup)).inner;
+            match done {
+                Some(crate::setup::Done::Finished { tour }) => {
+                    self.ed.prefs.setup_done = true;
+                    if tour {
+                        self.start_tour();
+                    }
+                }
+                Some(crate::setup::Done::Closed) => {}
+                None => self.setup = Some(setup),
+            }
+        } else {
         egui::CentralPanel::default().frame(Frame::new().fill(theme.frame)).show(ui, |ui| {
             let style = theme.dock_style(ui.style());
             let running = self.bot.state != BotState::Stopped;
@@ -910,6 +935,7 @@ impl eframe::App for CircuitApp {
             let asks = std::mem::take(&mut viewer.asks);
             self.settings_asks(asks, ui.ctx());
         });
+        }
 
         picker::show(&ctx, &mut self.ed);
         if let Some(mut state) = self.palette.take() {

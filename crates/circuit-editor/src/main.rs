@@ -14,6 +14,7 @@ mod palette;
 mod panels;
 mod picker;
 mod settings;
+mod setup;
 mod prefs;
 mod sidebar;
 mod plugin_manager;

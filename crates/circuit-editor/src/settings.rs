@@ -39,6 +39,7 @@ pub enum Ask {
     ReloadPlugins,
     AllowNative(bool),
     ResetLayout,
+    NodeSetup,
 }
 
 #[derive(Default)]
@@ -135,21 +136,8 @@ fn toggle(ui: &mut Ui, theme: &Theme, on: &mut bool) -> bool {
 fn appearance(ui: &mut Ui, ed: &mut Editor, theme: &Theme) {
     let ctx = ui.ctx().clone();
     group(ui, theme, "Theme");
-    let themes: Vec<Theme> = ed.reg.themes.iter().map(Theme::from_def).collect();
+    theme_cards(ui, ed, theme);
     let current = ed.theme.id.clone();
-    let mut pick: Option<String> = None;
-    ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing = vec2(12.0, 12.0);
-        for t in &themes {
-            if theme_card(ui, t, theme, t.id == current, ed.prefs.accent.is_some().then_some(ed.theme.accent)) {
-                pick = Some(t.id.clone());
-            }
-        }
-    });
-    if let Some(id) = pick {
-        ed.set_theme(&id);
-        ed.theme.apply(&ctx);
-    }
     ui.add_space(10.0);
 
     row(ui, theme, "Accent color", "Used for selections, highlights and the open tab. Changes show right away.", |ui| {
@@ -166,27 +154,7 @@ fn appearance(ui: &mut Ui, ed: &mut Editor, theme: &Theme) {
             ed.theme.apply(&ctx);
         }
     });
-    // Quick picks.
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 8.0;
-        ui.add_space(16.0);
-        for (name, hex) in ACCENTS {
-            let Some(c) = crate::color::parse_hex(hex) else { continue };
-            let (r, resp) = ui.allocate_exact_size(vec2(26.0, 26.0), Sense::click());
-            let selected = crate::color::to_hex(ed.theme.accent) == hex;
-            ui.painter().circle_filled(r.center(), 11.0, c);
-            if selected {
-                ui.painter().circle_stroke(r.center(), 13.0, Stroke::new(2.0, theme.text));
-            } else if resp.hovered() {
-                ui.painter().circle_stroke(r.center(), 13.0, Stroke::new(1.5, theme.text_muted));
-            }
-            if resp.on_hover_text(name).on_hover_cursor(CursorIcon::PointingHand).clicked() {
-                ed.prefs.accent = Some(hex.to_string());
-                ed.restyle();
-                ed.theme.apply(&ctx);
-            }
-        }
-    });
+    accent_swatches(ui, ed, theme, 16.0);
     ui.add_space(14.0);
 
     group(ui, theme, "Interface");
@@ -222,7 +190,7 @@ fn appearance(ui: &mut Ui, ed: &mut Editor, theme: &Theme) {
 }
 
 /// A small picture of a theme: title bar, sidebar, canvas with a block and a wire.
-fn theme_card(ui: &mut Ui, t: &Theme, page: &Theme, selected: bool, accent_override: Option<Color32>) -> bool {
+pub fn theme_card(ui: &mut Ui, t: &Theme, page: &Theme, selected: bool, accent_override: Option<Color32>) -> bool {
     let (rect, resp) = ui.allocate_exact_size(vec2(170.0, 132.0), Sense::click());
     let accent = accent_override.unwrap_or(t.accent);
     let preview = Rect::from_min_size(rect.min, vec2(rect.width(), 100.0));
@@ -285,7 +253,12 @@ fn bot(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView, ask
         Some(Err(e)) => (e.clone(), theme.warning),
         None => (String::new(), theme.text_muted),
     };
-    row(ui, theme, "Node.js", "Bots run with Node.js 22 or newer.", |ui| {
+    let which = ed.prefs.node_path.clone().unwrap_or_else(|| "node from the PATH".into());
+    row(ui, theme, "Node.js", &format!("Bots run with Node.js 22 or newer. Using: {which}"), |ui| {
+        if ui.button("Set up…").on_hover_text("Find Node.js on this computer or install it").clicked() {
+            asks.push(Ask::NodeSetup);
+            view.node = None;
+        }
         if ui.button("Check again").clicked() {
             view.node = None;
         }
@@ -412,6 +385,51 @@ fn about(ui: &mut Ui, ed: &Editor, theme: &Theme) {
     }
     ui.add_space(6.0);
     ui.label(RichText::new("Bot tokens are kept in Windows Credential Manager or the Linux Secret Service, never in project files.").size(11.5).color(mix(theme.text_muted, theme.panel, 0.1)));
+}
+
+
+/// The quick accent colors, applied to the whole app when clicked.
+pub fn accent_swatches(ui: &mut Ui, ed: &mut Editor, theme: &Theme, indent: f32) {
+    let ctx = ui.ctx().clone();
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 8.0;
+        ui.add_space(indent);
+        for (name, hex) in ACCENTS {
+            let Some(c) = crate::color::parse_hex(hex) else { continue };
+            let (r, resp) = ui.allocate_exact_size(vec2(26.0, 26.0), Sense::click());
+            let selected = crate::color::to_hex(ed.theme.accent) == hex;
+            ui.painter().circle_filled(r.center(), 11.0, c);
+            if selected {
+                ui.painter().circle_stroke(r.center(), 13.0, Stroke::new(2.0, theme.text));
+            } else if resp.hovered() {
+                ui.painter().circle_stroke(r.center(), 13.0, Stroke::new(1.5, theme.text_muted));
+            }
+            if resp.on_hover_text(name).on_hover_cursor(CursorIcon::PointingHand).clicked() {
+                ed.prefs.accent = Some(hex.to_string());
+                ed.restyle();
+                ed.theme.apply(&ctx);
+            }
+        }
+    });
+}
+
+/// Applies a theme picked from its card.
+pub fn theme_cards(ui: &mut Ui, ed: &mut Editor, theme: &Theme) {
+    let themes: Vec<Theme> = ed.reg.themes.iter().map(Theme::from_def).collect();
+    let current = ed.theme.id.clone();
+    let mut pick: Option<String> = None;
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = vec2(12.0, 12.0);
+        for t in &themes {
+            if theme_card(ui, t, theme, t.id == current, ed.prefs.accent.is_some().then_some(ed.theme.accent)) {
+                pick = Some(t.id.clone());
+            }
+        }
+    });
+    if let Some(id) = pick {
+        ed.set_theme(&id);
+        ed.theme.apply(ui.ctx());
+    }
 }
 
 #[cfg(test)]

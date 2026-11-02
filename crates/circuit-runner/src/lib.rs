@@ -5,6 +5,7 @@
 pub mod bundle;
 pub mod export;
 pub mod node;
+pub mod node_setup;
 pub mod protocol;
 pub mod secrets;
 pub mod session;

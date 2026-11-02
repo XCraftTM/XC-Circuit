@@ -4,7 +4,7 @@
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::sync::mpsc::{Receiver, channel};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -152,7 +152,7 @@ fn prepare_and_spawn(cfg: &SessionConfig, send: &dyn Fn(Msg)) -> Result<Child> {
     let bundle = cfg.run_dir.join("bundle.json");
     fs::write(&bundle, serde_json::to_string(&cfg.bundle)?)?;
 
-    let mut cmd = Command::new("node");
+    let mut cmd = crate::node::node_command();
     cmd.arg(&runtime)
         .arg("--bundle")
         .arg(&bundle)

@@ -19,11 +19,15 @@ pub struct Prefs {
     pub reopen_last_project: bool,
     pub activity_bar: bool,
     pub system_titlebar: bool,
+    /// The Node.js bots run with; `None` uses `node` from the PATH.
+    pub node_path: Option<String>,
+    /// The First Start page was finished or skipped.
+    pub setup_done: bool,
 }
 
 impl Default for Prefs {
     fn default() -> Self {
-        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false }
+        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false }
     }
 }
 
@@ -43,6 +47,11 @@ pub const ACCENTS: [(&str, &str); 8] = [
 ];
 
 impl Prefs {
+    /// Tells the runner which Node.js to use.
+    pub fn apply_node(&self) {
+        circuit_runner::node::set_node_path(self.node_path.as_ref().map(std::path::PathBuf::from));
+    }
+
     /// Puts the overrides on top of a theme's own colors and sizes.
     pub fn style(&self, theme: &mut Theme) {
         if let Some(c) = self.accent.as_deref().and_then(crate::color::parse_hex) {
