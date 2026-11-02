@@ -194,7 +194,7 @@ pub fn window(ctx: &egui::Context, ed: &mut Editor) {
     let theme = ed.theme.clone();
     let icon = ed.reg.icons.get("embed").cloned();
     let (mut apply, mut cancel) = (false, false);
-    let close = dialog::show(
+    let close = dialog::window(
         ctx,
         &theme,
         dialog::Spec {

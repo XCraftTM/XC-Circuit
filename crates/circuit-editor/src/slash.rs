@@ -128,7 +128,7 @@ pub fn window(ctx: &egui::Context, ed: &mut Editor) {
     let icon = ed.reg.icons.get("slash").cloned();
     let issues = problems(&edit.commands);
     let (mut save, mut cancel) = (false, false);
-    let close = dialog::show(
+    let close = dialog::window(
         ctx,
         &theme,
         dialog::Spec {

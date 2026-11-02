@@ -18,7 +18,7 @@ pub enum Ask {
 pub fn window(ctx: &egui::Context, theme: &Theme, ed: &Editor, native: &NativeHost) -> Option<Ask> {
     let mut ask = None;
     let mut allow = native.allow;
-    let close = dialog::show(
+    let close = dialog::window(
         ctx,
         theme,
         dialog::Spec { id: "plugins", title: "Plugins", subtitle: Some("What's loaded, and which native plugins may run"), icon: None, width: 560.0 },

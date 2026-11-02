@@ -259,7 +259,7 @@ impl BotUi {
         let subtitle = format!("{} · stored per project", draft.project_name);
         let store = if cfg!(windows) { "Windows Credential Manager" } else { "the system keyring" };
         let (mut save, mut cancel) = (false, false);
-        let close = dialog::show(
+        let close = dialog::window(
             ctx,
             &theme,
             dialog::Spec { id: "bot-settings", title: "Bot settings", subtitle: Some(&subtitle), icon: icon.as_deref(), width: 520.0 },
@@ -348,7 +348,7 @@ impl BotUi {
         let theme = ed.theme.clone();
         let icon = ed.reg.icons.get("package").cloned();
         let (mut go, mut cancel) = (false, false);
-        let close = dialog::show(
+        let close = dialog::window(
             ctx,
             &theme,
             dialog::Spec {
