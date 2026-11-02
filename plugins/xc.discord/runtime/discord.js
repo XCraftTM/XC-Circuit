@@ -45,44 +45,89 @@ module.exports = {
 // Discord's numbers for option types.
 const OPTION_TYPES = { string: 3, integer: 4, boolean: 5, user: 6, channel: 7, role: 8, mentionable: 9, number: 10, attachment: 11 };
 
-/** A Slash Command Builder command in the shape Discord's API expects. */
-function toDiscordCommand(c) {
-  const options = (c.options || [])
-    // Discord requires required options before optional ones.
-    .slice()
-    .sort((a, b) => Number(Boolean(b.required)) - Number(Boolean(a.required)))
-    .map((o) => {
-      const out = {
-        type: OPTION_TYPES[o.type] || 3,
-        name: o.name,
-        description: String(o.description || o.name).slice(0, 100),
-        required: Boolean(o.required),
-      };
-      const numeric = o.type === "integer" || o.type === "number";
-      if ((o.choices || []).length && (o.type === "string" || numeric)) {
-        out.choices = o.choices.slice(0, 25).map((ch) => ({ name: String(ch.name), value: numeric ? Number(ch.value) : String(ch.value) }));
-      }
-      if (numeric && o.min != null) out.min_value = Number(o.min);
-      if (numeric && o.max != null) out.max_value = Number(o.max);
-      if (o.type === "string" && o.max != null) out.max_length = Number(o.max);
-      if (o.autocomplete && !out.choices && (o.type === "string" || numeric)) out.autocomplete = true;
-      return out;
-    });
-  return { name: c.name, description: String(c.description || "A command made with XC Circuit").slice(0, 100), options };
+/** A Slash Command Builder option in the shape Discord's API expects. */
+function toDiscordOption(o) {
+  const out = {
+    type: OPTION_TYPES[o.type] || 3,
+    name: o.name,
+    description: String(o.description || o.name).slice(0, 100),
+    required: Boolean(o.required),
+  };
+  const numeric = o.type === "integer" || o.type === "number";
+  if ((o.choices || []).length && (o.type === "string" || numeric)) {
+    out.choices = o.choices.slice(0, 25).map((ch) => ({ name: String(ch.name), value: numeric ? Number(ch.value) : String(ch.value) }));
+  }
+  if (numeric && o.min != null) out.min_value = Number(o.min);
+  if (numeric && o.max != null) out.max_value = Number(o.max);
+  if (o.type === "string" && o.max != null) out.max_length = Number(o.max);
+  if (o.autocomplete && !out.choices && (o.type === "string" || numeric)) out.autocomplete = true;
+  return out;
 }
 
+// Discord requires required options before optional ones.
+const optionsOf = (c) => (c.options || []).slice().sort((a, b) => Number(Boolean(b.required)) - Number(Boolean(a.required))).map(toDiscordOption);
+const describe = (c) => String((c && c.description) || "A command made with XC Circuit").slice(0, 100);
+
+/**
+ * The Slash Command Builder's commands in the shape Discord's API expects.
+ * Names with spaces are subcommands: "ticket open" and "ticket close" become
+ * /ticket with two subcommands, and three words make a subcommand group.
+ * `permissionBits` turns a permission name into its bit string.
+ */
+function toDiscordCommands(list, permissionBits = () => undefined) {
+  const roots = new Map();
+  for (const c of list) {
+    const words = String(c.name || "").trim().split(/\s+/).filter(Boolean);
+    if (!words.length) continue;
+    const root = getRoot(roots, words[0]);
+    if (words.length === 1) {
+      root.self = c;
+    } else if (words.length === 2) {
+      root.subs.push({ type: 1, name: words[1], description: describe(c), options: optionsOf(c) });
+    } else {
+      let group = root.groups.get(words[1]);
+      if (!group) root.groups.set(words[1], (group = { type: 2, name: words[1], description: words[1], options: [] }));
+      group.options.push({ type: 1, name: words[2], description: describe(c), options: optionsOf(c) });
+    }
+    root.settings = root.settings || (c.permission || c.dm !== undefined ? c : null);
+  }
+  return [...roots.values()].map((r) => {
+    const nested = [...r.subs, ...r.groups.values()];
+    const out = { name: r.name, description: describe(r.self || { description: nested[0]?.description }), options: nested.length ? nested : r.self ? optionsOf(r.self) : [] };
+    const settings = r.self || r.settings || {};
+    const bits = settings.permission ? permissionBits(settings.permission) : undefined;
+    if (bits !== undefined) out.default_member_permissions = bits;
+    // Contexts: 0 servers, 1 the bot's DMs.
+    out.contexts = settings.dm ? [0, 1] : [0];
+    return out;
+  });
+}
+
+function getRoot(roots, name) {
+  if (!roots.has(name)) roots.set(name, { name, self: null, subs: [], groups: new Map(), settings: null });
+  return roots.get(name);
+}
+
+/** One Builder command (kept for older callers): its root command alone. */
+function toDiscordCommand(c) {
+  return toDiscordCommands([c])[0];
+}
+
+module.exports.toDiscordCommands = toDiscordCommands;
 module.exports.toDiscordCommand = toDiscordCommand;
 
 /** Registers every Slash Command block's command, on the dev server or globally. */
 async function registerCommands(rt, client) {
   const commands = new Map();
-  // Commands from the Slash Command Builder, with their options.
-  for (const c of (rt.bundle.project.data && rt.bundle.project.data.slashCommands) || []) {
-    if (c.name) commands.set(c.name, toDiscordCommand(c));
+  // Commands from the Slash Command Builder, with their options and subcommands.
+  const { PermissionFlagsBits } = rt.require("discord.js");
+  const bits = (name) => (name in PermissionFlagsBits ? PermissionFlagsBits[name].toString() : undefined);
+  for (const c of toDiscordCommands((rt.bundle.project.data && rt.bundle.project.data.slashCommands) || [], bits)) {
+    commands.set(c.name, c);
   }
   // Commands only named on a block still register, without options.
   for (const node of rt.nodesOf("discord.on_slash_command")) {
-    const name = String(node.inline().command || "").trim().toLowerCase();
+    const name = String(node.inline().command || "").trim().toLowerCase().split(/\s+/)[0];
     if (name && !commands.has(name)) commands.set(name, { name, description: "A command made with XC Circuit" });
   }
   // Context Menu Used blocks add right-click entries (type 2: users, 3: messages).

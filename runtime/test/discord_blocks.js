@@ -44,4 +44,25 @@ assert.strictEqual(fmt("subtext", "small"), "-# small");
 assert.strictEqual(fmt("link", "site", { url: "https://x.y" }), "[site](https://x.y)");
 assert.strictEqual(fmt("escape", "*not bold*"), "\\*not bold\\*");
 
+// Slash commands: names with spaces are subcommands and groups.
+const { toDiscordCommands } = require("../../plugins/xc.discord/runtime/discord.js");
+const cmds = toDiscordCommands(
+  [
+    { name: "ping", description: "Pong", options: [], dm: true },
+    { name: "ticket open", description: "Open", options: [{ name: "topic", type: "string", description: "What", autocomplete: true }, { name: "n", type: "integer", description: "N", required: true }], permission: "ManageMessages" },
+    { name: "ticket close", description: "Close", options: [] },
+    { name: "admin config set", description: "Set", options: [] },
+  ],
+  (name) => (name === "ManageMessages" ? "8192" : undefined),
+);
+const byName = Object.fromEntries(cmds.map((c) => [c.name, c]));
+assert.deepStrictEqual(byName.ping.contexts, [0, 1], "works in DMs");
+assert.deepStrictEqual(byName.ticket.options.map((o) => [o.type, o.name]), [[1, "open"], [1, "close"]]);
+assert.deepStrictEqual(byName.ticket.options[0].options.map((o) => o.name), ["n", "topic"], "required options first");
+assert.strictEqual(byName.ticket.options[0].options[1].autocomplete, true);
+assert.strictEqual(byName.ticket.default_member_permissions, "8192");
+assert.deepStrictEqual(byName.ticket.contexts, [0]);
+assert.strictEqual(byName.admin.options[0].type, 2, "three words make a group");
+assert.strictEqual(byName.admin.options[0].options[0].name, "set");
+
 console.log(`${Object.keys(all).length} Discord blocks checked\ndiscord blocks test passed`);

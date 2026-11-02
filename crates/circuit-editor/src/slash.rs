@@ -14,9 +14,15 @@ pub const DATA_KEY: &str = "slashCommands";
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct SlashCommand {
+    /// One word, or two or three for a subcommand: "ticket open".
     pub name: String,
     pub description: String,
     pub options: Vec<SlashOption>,
+    /// The permission needed to see and use it (a discord.js flag name); empty = everyone.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub permission: String,
+    /// Also usable in direct messages with the bot.
+    pub dm: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -33,13 +39,29 @@ pub struct SlashOption {
     pub min: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max: Option<f64>,
+    /// Suggestions come from an Autocomplete block while people type.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub autocomplete: bool,
 }
 
 impl Default for SlashOption {
     fn default() -> Self {
-        SlashOption { name: String::new(), kind: "string".into(), description: String::new(), required: false, choices: Vec::new(), min: None, max: None }
+        SlashOption { name: String::new(), kind: "string".into(), description: String::new(), required: false, choices: Vec::new(), min: None, max: None, autocomplete: false }
     }
 }
+
+/// Who may use a command: the permission it needs.
+const PERMISSIONS: [(&str, &str); 9] = [
+    ("", n("Everyone")),
+    ("ManageMessages", n("Manage Messages")),
+    ("ModerateMembers", n("Time Out Members")),
+    ("KickMembers", n("Kick Members")),
+    ("BanMembers", n("Ban Members")),
+    ("ManageRoles", n("Manage Roles")),
+    ("ManageChannels", n("Manage Channels")),
+    ("ManageGuild", n("Manage Server")),
+    ("Administrator", n("Administrators")),
+];
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
@@ -84,6 +106,16 @@ pub fn open(ed: &mut Editor) {
     ed.slash_edit = Some(SlashEdit { commands, selected: 0, choice_text });
 }
 
+/// A command name: one to three words (the later ones are subcommands), each
+/// following Discord's rules.
+fn command_name_problem(name: &str) -> Option<&'static str> {
+    let words: Vec<&str> = name.split(' ').collect();
+    if words.len() > 3 {
+        return Some(t!("at most three words: command, group and subcommand"));
+    }
+    words.iter().find_map(|w| name_problem(w))
+}
+
 /// Discord's rules: 1–32 lowercase letters, digits, `-` or `_`.
 fn name_problem(name: &str) -> Option<&'static str> {
     if name.is_empty() {
@@ -101,8 +133,12 @@ fn problems(cmds: &[SlashCommand]) -> Vec<String> {
     let mut out = Vec::new();
     for (i, c) in cmds.iter().enumerate() {
         let label = if c.name.is_empty() { format!("Command {}", i + 1) } else { format!("/{}", c.name) };
-        if let Some(p) = name_problem(&c.name) {
+        if let Some(p) = command_name_problem(&c.name) {
             out.push(format!("{label}: {p}"));
+        }
+        // A command with subcommands can't have options of its own.
+        if !c.options.is_empty() && cmds.iter().any(|o| o.name.starts_with(&format!("{} ", c.name))) {
+            out.push(tf!("{command}: has subcommands, so its options belong to them", command = label));
         }
         if cmds.iter().filter(|o| o.name == c.name).count() > 1 && !c.name.is_empty() {
             out.push(format!("{label}: the name is used twice"));
@@ -225,7 +261,7 @@ fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], tra
             }
             ui.add_space(8.0);
             if dialog::secondary_button(ui, theme, t!("+ New command")).clicked() {
-                edit.commands.push(SlashCommand { name: format!("command{}", edit.commands.len() + 1), description: t!("Describe what it does").into(), options: Vec::new() });
+                edit.commands.push(SlashCommand { name: format!("command{}", edit.commands.len() + 1), description: t!("Describe what it does").into(), ..Default::default() });
                 edit.choice_text.push(Vec::new());
                 edit.selected = edit.commands.len() - 1;
             }
@@ -253,11 +289,27 @@ fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], tra
                 ui.set_width(ui.available_width());
                 dialog::section(ui, theme, t!("Command"));
                 ui.columns(2, |cols| {
-                    dialog::field(&mut cols[0], theme, t!("Name"), Some(t!("What people type after /")), |ui| dialog::text_input(ui, &mut cmd.name, "rank", false));
+                    dialog::field(&mut cols[0], theme, t!("Name"), Some(t!("What people type after /. Two words make a subcommand: ticket open")), |ui| dialog::text_input(ui, &mut cmd.name, "rank", false));
                     dialog::field(&mut cols[1], theme, t!("Description"), Some(t!("Shown in Discord's command list")), |ui| {
                         dialog::text_input(ui, &mut cmd.description, t!("Shows your rank"), false)
                     });
                 });
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(t!("Who can use it")).color(theme.text));
+                    let current = PERMISSIONS.iter().find(|(k, _)| *k == cmd.permission).map(|(_, l)| crate::i18n::t(l)).unwrap_or(t!("Everyone"));
+                    ComboBox::from_id_salt(ui.id().with("permission")).width(180.0).selected_text(current).show_ui(ui, |ui| {
+                        for (k, l) in PERMISSIONS {
+                            ui.selectable_value(&mut cmd.permission, k.to_string(), crate::i18n::t(l));
+                        }
+                    })
+                    .response
+                    .on_hover_text(t!("People without this permission don't see the command. Server admins can change it in Server Settings › Integrations."));
+                    ui.add_space(16.0);
+                    ui.label(RichText::new(t!("Works in DMs")).color(theme.text));
+                    crate::widgets::toggle(ui, &mut cmd.dm, theme).on_hover_text(t!("Also usable in direct messages with the bot."));
+                });
+                ui.label(RichText::new(t!("For subcommands, the first one's settings count for the whole command.")).size(11.5).color(theme.text_muted));
                 dialog::section(ui, theme, &tf!("Options · {count} of 25", count = cmd.options.len()));
                 let mut remove = None;
                 for (i, o) in cmd.options.iter_mut().enumerate() {
@@ -296,6 +348,10 @@ fn option_card(ui: &mut Ui, theme: &Theme, o: &mut SlashOption, choices: &mut St
             });
             ui.label(RichText::new(t!("Required")).size(12.0).color(theme.text_muted));
             crate::widgets::toggle(ui, &mut o.required, theme);
+            if matches!(o.kind.as_str(), "string" | "integer" | "number") && choices.trim().is_empty() {
+                ui.label(RichText::new(t!("Autocomplete")).size(12.0).color(theme.text_muted));
+                crate::widgets::toggle(ui, &mut o.autocomplete, theme).on_hover_text(t!("Suggest values while people type, from an Autocomplete block."));
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.add(egui::Button::new(RichText::new(t!("Remove")).color(theme.error)).small()).clicked() {
                     on_remove();

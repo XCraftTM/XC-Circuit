@@ -22,7 +22,7 @@ module.exports = {
   name: "Slash Command",
   description: "Runs when someone uses one of your slash commands. Build them in Bot › Slash Commands.",
   author: "XC Team",
-  version: "2.0.0",
+  version: "2.1.0",
   category: "events",
   icon: "slash",
   kind: "event",
@@ -46,7 +46,10 @@ module.exports = {
 
   define({ values, project }) {
     const commands = commandsOf(project);
-    const choices = Object.fromEntries(commands.map((c) => [c.name, `/${c.name}`]));
+    // Subcommands are listed by their full name (ticket open); a command that only
+    // groups subcommands can't be used on its own, so it isn't listed.
+    const groups = new Set(commands.filter((c) => c.name.includes(" ")).map((c) => c.name.split(" ")[0]));
+    const choices = Object.fromEntries(commands.filter((c) => !groups.has(c.name)).map((c) => [c.name, `/${c.name}`]));
     if (values.command && !(values.command in choices)) choices[values.command] = `/${values.command} (not in the builder)`;
     const command = commands.find((c) => c.name === values.command);
     const outputs = {};
@@ -68,10 +71,12 @@ module.exports = {
   },
 
   listen(ctx, emit) {
-    const name = String(ctx.fields.command || "").toLowerCase();
+    const name = String(ctx.fields.command || "").toLowerCase().trim().replace(/\s+/g, " ");
     const command = commandsOf(ctx.project).find((c) => c.name === name);
     ctx.discord.client.on("interactionCreate", (interaction) => {
-      if (!interaction.isChatInputCommand() || interaction.commandName !== name) return;
+      if (!interaction.isChatInputCommand()) return;
+      const used = [interaction.commandName, interaction.options.getSubcommandGroup(false), interaction.options.getSubcommand(false)].filter(Boolean).join(" ");
+      if (used !== name) return;
       const options = {};
       for (const o of (command && command.options) || []) {
         const read = {
