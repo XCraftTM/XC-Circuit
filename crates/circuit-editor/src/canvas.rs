@@ -691,7 +691,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                         let inner = bx.shrink2(vec2(8.0, 5.0));
                         let mut text = widgets::as_text(ws.nodes[id].values.get(key).or(f.default.as_ref()).unwrap_or(&Value::Null));
                         // While it has the text cursor or the pointer, it offers the values of
-                        // earlier blocks (after `{`, on right-click and behind its { } button).
+                        // earlier blocks (after `{` and on right-click).
                         let offer = focused || ctx.pointer_hover_pos().is_some_and(|p| (to_global * bx).contains(p)) || crate::values::menu_open(&ctx, edit_id);
                         if offer {
                             let values = crate::values::available(ws, id, reg, &mut |n| node_shapes.get(n).cloned());

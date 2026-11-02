@@ -5,9 +5,9 @@
 //! `{#4.message}` for the Message output of block #4, `{name}` for a variable
 //! set earlier in the run, and a property after a dot: `{user.username}`.
 //!
-//! Text boxes offer them while typing after `{`, in a menu on right-click and
-//! behind the `{ }` button in their corner (in any text box drawn while a
-//! block's values are in scope, see [`set_scope`]); builders also list them.
+//! Text boxes offer them while typing after `{` and in a menu on right-click
+//! (in any text box drawn while a block's values are in scope, see
+//! [`set_scope`]); builders also list them.
 //! A value picked or clicked goes where the text cursor was.
 
 use std::collections::HashSet;
@@ -244,26 +244,10 @@ pub fn after(ui: &mut Ui, resp: &egui::Response, text: &mut String) -> bool {
     let Some(values) = scope(&ctx) else { return false };
     let mut changed = false;
 
-    // Right-click, or the { } button in the box's top-right corner (shown while
-    // the pointer is over the box or it has the text cursor): pick a value from
-    // a menu, and it goes in at the text cursor.
+    // Right-click: pick a value from a menu, and it goes in at the text cursor.
     let mut picked = None;
     resp.context_menu(|ui| picked = menu(ui, &values));
-    let menu_id = id.with("values-menu");
-    let visible = resp.rect.intersect(ui.clip_rect());
-    let menu_was_open = egui::Popup::is_id_open(&ctx, menu_id);
-    if ui.rect_contains_pointer(visible) || resp.has_focus() || menu_was_open {
-        let side = 22.0;
-        let top = if visible.height() < side * 2.0 + 8.0 { visible.center().y - side / 2.0 } else { visible.top() + 4.0 };
-        let r = egui::Rect::from_min_size(egui::pos2(visible.right() - side - 4.0, top), vec2(side, side));
-        let b = ui.put(r, egui::Button::new(RichText::new("{}").monospace().size(11.0)).wrap_mode(egui::TextWrapMode::Extend).corner_radius(5)).on_hover_text(t!("Insert a value from earlier blocks (or right-click, or type {)"));
-        egui::Popup::menu(&b).id(menu_id).show(|ui| {
-            if let Some(token) = menu(ui, &values) {
-                picked = Some(token);
-            }
-        });
-    }
-    let open = resp.context_menu_opened() || egui::Popup::is_id_open(&ctx, menu_id);
+    let open = resp.context_menu_opened();
     ctx.data_mut(|d| d.insert_temp(id.with("values-menu-open"), open));
     if let Some(token) = picked {
         let at = cursor(&ctx, id, text);

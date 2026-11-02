@@ -784,7 +784,6 @@ pub const UI_STRINGS: &[&str] = &[
     "Discord bots work the same way, with events like Slash Command and actions like Send Message. Where to next?",
     "Variable",
     "No values yet: connect this block's Action input to an event or other blocks.",
-    "Insert a value from earlier blocks (or right-click, or type {)",
     "Values from earlier blocks · arrow keys and Enter pick one",
     "Nothing comes before this block yet: connect its Action input to an event or other blocks, and their values show up here.",
     "Click a value to put it where the text cursor is, or type { in any text.",
