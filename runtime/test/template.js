@@ -3,7 +3,7 @@
 "use strict";
 
 const assert = require("assert");
-const { fillTemplate } = require("../circuit-runtime.js");
+const { fillTemplate, allowReadMethods } = require("../circuit-runtime.js");
 
 const run = { event: { user: "from the event", guild: { name: "XC" } }, vars: new Map([["count", 3]]), outputs: new Map([["n1", { result: 42 }]]) };
 
@@ -26,6 +26,7 @@ assert.strictEqual(fillTemplate("[{gone}]", run, {}, { gone: null }), "[]");
 assert.strictEqual(fillTemplate("{#n1.result} / {#n2.result} / {#n1.other}", run, {}), "42 / {#n2.result} / {#n1.other}");
 const avatar = { id: "7", displayAvatarURL() { return `https://cdn/${this.id}.png`; }, delete() { throw new Error("must not run"); } };
 const withUser = { ...run, outputs: new Map([["n3", { member: avatar }]]) };
+allowReadMethods(["displayAvatarURL"]); // as the Discord plugin does with its catalog
 assert.strictEqual(fillTemplate("{#n3.member.displayAvatarURL}", withUser, {}), "https://cdn/7.png", "methods that read are called");
 assert.strictEqual(fillTemplate("[{#n3.member.delete}]", withUser, {}), "[]", "other methods never run");
 

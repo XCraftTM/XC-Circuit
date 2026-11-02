@@ -36,6 +36,7 @@ class Runtime {
     this.globalVars = new Map();
     this.workspaceVars = new Map();
     this.errorHandlers = [];
+    this.allowReadMethods = allowReadMethods;
     this.signalHandlers = new Map();
     /** Call Workspace: name -> handlers that start a run and resolve to its return value. */
     this.callHandlers = new Map();
@@ -451,9 +452,12 @@ function templated(f) {
   return ["text", "textarea", "string"].includes(String(f.type || "").replace(/\?$/, "")) && !f.choices;
 }
 
-// Methods a placeholder may call, such as {user.displayAvatarURL}: they only
-// read. Any other function in a path gives nothing.
-const READ_METHODS = /^(displayAvatarURL|avatarURL|bannerURL|iconURL|splashURL|toISOString|toLocaleString|toLocaleDateString|toLocaleTimeString|getTime)$/;
+// Methods a placeholder may call, such as {date.toISOString}: they only read.
+// Plugins add theirs (rt.allowReadMethods); any other function in a path gives nothing.
+const readMethods = new Set(["toISOString", "toLocaleString", "toLocaleDateString", "toLocaleTimeString", "getTime"]);
+function allowReadMethods(names) {
+  for (const n of names || []) readMethods.add(String(n));
+}
 
 /**
  * Fills {name} placeholders: from `placed` (values wired into the field's
@@ -478,7 +482,7 @@ function fillTemplate(text, run, fields, placed = {}) {
     for (const k of rest) {
       const owner = value;
       value = value == null ? undefined : value[k];
-      if (typeof value === "function") value = READ_METHODS.test(k) ? value.call(owner) : undefined;
+      if (typeof value === "function") value = readMethods.has(k) ? value.call(owner) : undefined;
     }
     return value == null ? "" : String(value);
   });
@@ -927,4 +931,4 @@ if (typeof __XC_BUNDLE__ !== "undefined") {
   cli();
 }
 
-module.exports = { start, fillTemplate, coerce, Store, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };
+module.exports = { start, fillTemplate, allowReadMethods, coerce, Store, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };

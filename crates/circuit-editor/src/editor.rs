@@ -340,9 +340,9 @@ impl Editor {
     }
 
     /// The values texts on block `node` can use: see [`crate::values`].
-    pub fn values_for(&mut self, ws_key: &str, node: &str) -> Vec<crate::values::Avail> {
+    pub fn values_for(&mut self, ws_key: &str, node: &str) -> crate::values::Scope {
         let Editor { reg, engine, project, shapes, define_ctx, .. } = self;
-        let Some(ws) = project.as_ref().and_then(|p| p.workspaces.get(ws_key)) else { return Vec::new() };
+        let Some(ws) = project.as_ref().and_then(|p| p.workspaces.get(ws_key)) else { return Default::default() };
         crate::values::available(ws, node, reg, &mut |id| node_shape(reg, engine, shapes, ws_key, ws, id, define_ctx))
     }
 

@@ -1454,11 +1454,11 @@ mod tests {
         settle(&mut ed);
         let text = ed.workspace("rank-command").unwrap().nodes["4"].values["text"].as_str().unwrap().to_string();
         assert!(text.ends_with("
-Hi {user}"), "{text:?}");
+Hi {#1.user}"), "values go in with the block's number: {text:?}");
         // Typing goes on after the placeholder.
         frame(&ctx, &mut ed, "rank-command", vec![egui::Event::Text("!".into())]);
         let text = ed.workspace("rank-command").unwrap().nodes["4"].values["text"].as_str().unwrap().to_string();
-        assert!(text.ends_with("{user}!"), "{text:?}");
+        assert!(text.ends_with("{#1.user}!"), "{text:?}");
 
         // Clicking a value in the list picks it too (pressing takes the text
         // cursor from the box for a moment).
@@ -1473,10 +1473,57 @@ Hi {user}"), "{text:?}");
         frame(&ctx, &mut ed, "rank-command", vec![at(false)]);
         settle(&mut ed);
         let text = ed.workspace("rank-command").unwrap().nodes["4"].values["text"].as_str().unwrap().to_string();
-        assert!(text.ends_with("{user}! {user}"), "{text:?}");
+        assert!(text.ends_with("{#1.user}! {#1.user}"), "{text:?}");
         frame(&ctx, &mut ed, "rank-command", vec![egui::Event::Text("?".into())]);
         let text = ed.workspace("rank-command").unwrap().nodes["4"].values["text"].as_str().unwrap().to_string();
-        assert!(text.ends_with("{user}?"), "the text cursor is back after it: {text:?}");
+        assert!(text.ends_with("{#1.user}?"), "the text cursor is back after it: {text:?}");
+    }
+
+    #[test]
+    fn a_brace_lists_blocks_then_values_then_members() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&root.join("examples/DemoBot"));
+        let ctx = egui::Context::default();
+        let settle = |ed: &mut Editor| {
+            for _ in 0..12 {
+                frame(&ctx, ed, "rank-command", vec![]);
+            }
+        };
+        settle(&mut ed);
+        let field = ("4".to_string(), "text".to_string());
+        let p = ed.views["rank-command"].text_fields.iter().find(|(k, _)| *k == field).map(|(_, r)| r.center()).unwrap();
+        let press = |pressed: bool| egui::Event::PointerButton { pos: p, button: PointerButton::Primary, pressed, modifiers: Default::default() };
+        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerMoved(p), press(true), press(false)]);
+        settle(&mut ed);
+        let key = |key: Key| egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() };
+        let text = |ed: &Editor| ed.workspace("rank-command").unwrap().nodes["4"].values["text"].as_str().unwrap().to_string();
+        let step = |ed: &mut Editor, events: Vec<egui::Event>| {
+            frame(&ctx, ed, "rank-command", events);
+            settle(ed);
+        };
+        step(&mut ed, vec![key(Key::End)]);
+
+        // { lists the blocks; Enter goes into the first (the Slash Command), Enter
+        // again puts in its first value.
+        step(&mut ed, vec![egui::Event::Text(" {".into())]);
+        step(&mut ed, vec![key(Key::Enter)]);
+        step(&mut ed, vec![key(Key::Enter)]);
+        assert!(text(&ed).ends_with(" {#1.interaction}"), "{:?}", text(&ed));
+
+        // → goes into a value's members, ← back out, Enter puts the value in.
+        step(&mut ed, vec![egui::Event::Text(" {".into())]);
+        step(&mut ed, vec![key(Key::Enter)]);
+        step(&mut ed, vec![key(Key::ArrowDown)]);
+        step(&mut ed, vec![key(Key::ArrowRight)]);
+        step(&mut ed, vec![key(Key::ArrowLeft)]);
+        step(&mut ed, vec![key(Key::Enter)]);
+        assert!(text(&ed).ends_with(" {#1.user}"), "{:?}", text(&ed));
+
+        // After a dot: the members of that type, from discord.js.
+        step(&mut ed, vec![egui::Event::Text(" {#1.user.glob".into())]);
+        step(&mut ed, vec![key(Key::Enter)]);
+        assert!(text(&ed).ends_with(" {#1.user.globalName}"), "{:?}", text(&ed));
     }
 
     #[test]

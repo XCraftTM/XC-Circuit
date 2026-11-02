@@ -16,4 +16,4 @@ pub use manifest::PluginManifest;
 pub use mode::{BuildMode, Category};
 pub use registry::{Problem, Registry};
 pub use theme::ThemeDef;
-pub use types_def::PinTypeDef;
+pub use types_def::{ClassDef, Member, PinTypeDef};

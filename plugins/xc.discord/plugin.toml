@@ -14,4 +14,5 @@ circuit = "^1.0"
 buildModes = ["modes/*.toml"]
 blocks     = ["blocks/**/*.{js,cjs,mjs,ts}"]
 pinTypes   = ["types/*.toml"]
+classes    = ["types/*.classes.json"]
 locales = ["locales/*.toml"]

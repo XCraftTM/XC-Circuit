@@ -32,6 +32,10 @@ pub struct Registry {
     pub plugins: Vec<LoadedPlugin>,
     pub blocks: IndexMap<String, BlockDef>,
     pub types: IndexMap<String, PinTypeDef>,
+    /// Class catalogs: class name → members, shared with text boxes.
+    pub classes: std::sync::Arc<HashMap<String, crate::ClassDef>>,
+    /// The class behind each pin type, from the catalogs' `roots`.
+    pub type_classes: HashMap<String, String>,
     pub themes: Vec<ThemeDef>,
     pub modes: Vec<BuildMode>,
     /// Translations, one per language code (files for the same language are merged).
@@ -88,6 +92,16 @@ impl Registry {
                     for t in file.types {
                         self.types.insert(t.id.clone(), t);
                     }
+                }
+                Err(e) => self.problem(display(&path), format!("{e:#}")),
+            }
+        }
+
+        for path in expand(&plugin.dir, &c.classes) {
+            match std::fs::read_to_string(&path).map_err(anyhow::Error::from).and_then(|t| serde_json::from_str::<crate::types_def::ClassFile>(&t).map_err(anyhow::Error::from)) {
+                Ok(file) => {
+                    self.type_classes.extend(file.roots);
+                    std::sync::Arc::make_mut(&mut self.classes).extend(file.classes);
                 }
                 Err(e) => self.problem(display(&path), format!("{e:#}")),
             }

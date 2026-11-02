@@ -51,6 +51,9 @@ pub struct Contributes {
     pub build_modes: Vec<String>,
     pub blocks: Vec<String>,
     pub pin_types: Vec<String>,
+    /// Class catalogs (JSON): the members of the values behind pin types, for
+    /// `{#1.user.username}` in texts.
+    pub classes: Vec<String>,
     pub field_types: Vec<String>,
     pub project_editors: Vec<String>,
     pub runtime_libs: Vec<String>,
