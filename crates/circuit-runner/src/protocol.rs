@@ -27,9 +27,22 @@ pub enum BotEvent {
         error: Option<String>,
     },
     Ready {},
+    /// The bot needs a decision (such as how to start when its saved data is
+    /// empty). Answer with `Session::answer`.
+    Ask {
+        id: String,
+        text: String,
+        choices: Vec<Choice>,
+    },
     /// Anything the bot printed itself (`console.log`), or a line we can't parse.
     #[serde(skip)]
     Plain(String),
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct Choice {
+    pub value: String,
+    pub label: String,
 }
 
 pub fn parse_line(line: &str) -> BotEvent {

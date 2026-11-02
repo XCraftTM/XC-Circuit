@@ -53,6 +53,7 @@ cargo test
 node runtime/test/smoke.js
 node runtime/test/library.js
 node runtime/test/store.js
+node runtime/test/backups.js
 ```
 
 ## Layout

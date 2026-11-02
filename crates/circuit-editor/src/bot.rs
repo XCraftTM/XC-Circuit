@@ -63,11 +63,13 @@ pub struct BotUi {
     jobs: Vec<Receiver<(Level, String)>>,
     /// What the bot did since the last frame, for native plugins.
     pub events: Vec<xc_circuit_plugin::BotEvent>,
+    /// A question from the bot, waiting for an answer.
+    question: Option<(String, String, Vec<circuit_runner::protocol::Choice>)>,
 }
 
 impl BotUi {
     pub fn new() -> Self {
-        BotUi { state: BotState::Stopped, session: None, settings: None, export: None, jobs: Vec::new(), events: Vec::new() }
+        BotUi { state: BotState::Stopped, session: None, settings: None, export: None, jobs: Vec::new(), events: Vec::new(), question: None }
     }
 
     pub fn start(&mut self, ed: &mut Editor, ctx: &egui::Context) {
@@ -137,6 +139,10 @@ impl BotUi {
                         Some(c) => ed.log(Level::Warn, format!("Bot process ended (exit code {c})")),
                     }
                 }
+                Msg::Bot(BotEvent::Ask { id, text, choices }) if !choices.is_empty() => {
+                    ed.log(Level::Warn, format!("The bot asks: {text}"));
+                    self.question = Some((id, text, choices));
+                }
                 Msg::Bot(ev) => {
                     if let Some(e) = plugin_event(&ev) {
                         self.events.push(e);
@@ -198,6 +204,52 @@ impl BotUi {
     pub fn windows(&mut self, ctx: &egui::Context, ed: &mut Editor) {
         self.settings_window(ctx, ed);
         self.export_window(ctx, ed);
+        self.question_window(ctx, ed);
+    }
+
+    /// The bot's question, with one button per answer. The bot waits for it.
+    fn question_window(&mut self, ctx: &egui::Context, ed: &mut Editor) {
+        if self.state == BotState::Stopped {
+            self.question = None;
+        }
+        let Some((id, text, choices)) = self.question.clone() else { return };
+        let theme = ed.theme.clone();
+        let icon = ed.reg.icons.get("database").cloned();
+        let mut picked: Option<(String, String)> = None;
+        dialog::show(
+            ctx,
+            &theme,
+            dialog::Spec { id: "bot-question", title: "Your bot needs a decision", subtitle: Some("It waits until you choose"), icon: icon.as_deref(), width: 520.0 },
+            |ui, part| match part {
+                Part::Body => {
+                    ui.label(RichText::new(&text).size(13.5).color(theme.text));
+                    ui.add_space(10.0);
+                    for (i, c) in choices.iter().enumerate() {
+                        let b = if i == 0 { dialog::primary_button(ui, &theme, &c.label) } else { dialog::secondary_button(ui, &theme, &c.label) };
+                        if b.clicked() {
+                            picked = Some((c.value.clone(), c.label.clone()));
+                        }
+                        ui.add_space(4.0);
+                    }
+                }
+                Part::Footer => {
+                    if dialog::secondary_button(ui, &theme, "Stop the bot").clicked() {
+                        picked = Some((String::new(), String::new()));
+                    }
+                }
+            },
+        );
+        match picked {
+            Some((value, _)) if value.is_empty() => self.stop(ed),
+            Some((value, label)) => {
+                if let Some(s) = &self.session {
+                    s.answer(&id, &value);
+                }
+                ed.log(Level::Info, format!("You chose: {label}"));
+                self.question = None;
+            }
+            None => {}
+        }
     }
 
     fn settings_window(&mut self, ctx: &egui::Context, ed: &mut Editor) {
@@ -435,7 +487,8 @@ fn handle_event(ed: &mut Editor, ev: BotEvent) {
             let error = if phase == "error" { error.or(Some("failed".into())) } else { None };
             ed.activity.insert((ws, zone), Activity { at: Instant::now(), error });
         }
-        BotEvent::Ready {} => {}
+        // Questions are taken in `poll`; one without choices has nothing to show.
+        BotEvent::Ready {} | BotEvent::Ask { .. } => {}
         BotEvent::Plain(text) => {
             if !text.trim().is_empty() {
                 ed.log(Level::Info, text);

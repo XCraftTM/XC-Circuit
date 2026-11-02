@@ -38,10 +38,10 @@ class Runtime {
     this.errorHandlers = [];
     this.signalHandlers = new Map();
     this.startHandlers = [];
-    this.store = new Store(opts.dataDir, this);
+    // Opened in start(), after the saved data was checked and backed up.
+    this.store = null;
     this.runCounter = 0;
     this.log = makeLogger(this, null);
-    if (this.store.note) this.log.warn(this.store.note);
   }
 
   emit(type, data) {
@@ -95,6 +95,12 @@ class Runtime {
   }
 
   async start() {
+    // First: check the saved data, back it up, and ask if it is empty.
+    await prepareStoreFile(this.opts.dataDir, this);
+    this.store = new Store(this.opts.dataDir, this);
+    if (this.store.note) this.log.warn(this.store.note);
+    this.backupTimer = setInterval(() => backupStore(this.opts.dataDir, this, true), BACKUP_EVERY_MS);
+    this.backupTimer.unref?.();
     this.log.info(`Runtime ready · Node ${process.version}`);
     for (const [id, b] of Object.entries(this.bundle.blocks)) {
       try {
@@ -462,6 +468,156 @@ function describeError(err, node) {
 /** Every store, so pending changes can be written when the process ends. */
 const openStores = new Set();
 
+/** How many backups of the saved data are kept, and how often more are made. */
+const BACKUPS_KEPT = 10;
+const BACKUP_EVERY_MS = 6 * 60 * 60 * 1000;
+
+function storePaths(dataDir) {
+  const backups = path.join(dataDir, "backups");
+  return { file: path.join(dataDir, "store.json"), backups };
+}
+
+/** Backups of the saved data, newest first, each with its time. */
+function listStoreBackups(dataDir) {
+  const { backups } = storePaths(dataDir);
+  let names = [];
+  try {
+    names = fs.readdirSync(backups).filter((n) => /^store-.*\.json$/.test(n));
+  } catch {
+    return [];
+  }
+  return names
+    .map((name) => {
+      const file = path.join(backups, name);
+      let time = 0;
+      try {
+        time = fs.statSync(file).mtimeMs;
+      } catch {}
+      return { name, file, time };
+    })
+    .sort((a, b) => b.name.localeCompare(a.name));
+}
+
+/** The saved data's text, or null when there is no file. */
+function readStoreText(file) {
+  try {
+    return fs.readFileSync(file, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+function isValidStore(text) {
+  try {
+    const v = JSON.parse(text);
+    return Boolean(v) && typeof v === "object" && !Array.isArray(v);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Copies store.json into data/backups when it holds valid JSON, keeping the
+ * newest BACKUPS_KEPT copies. A damaged or empty file is never backed up, so
+ * it can't push good backups out.
+ */
+function backupStore(dataDir, rt, flush = false) {
+  const { file, backups } = storePaths(dataDir);
+  // A running bot writes its pending changes first, so the backup is current.
+  if (flush && rt && rt.store) rt.store.flushPending();
+  const text = readStoreText(file);
+  if (text === null || !text.trim() || !isValidStore(text)) return null;
+  try {
+    fs.mkdirSync(backups, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    let target = path.join(backups, `store-${stamp}.json`);
+    for (let i = 2; fs.existsSync(target); i++) target = path.join(backups, `store-${stamp}-${i}.json`);
+    fs.writeFileSync(target, text);
+    for (const old of listStoreBackups(dataDir).slice(BACKUPS_KEPT)) fs.rmSync(old.file, { force: true });
+    return target;
+  } catch (e) {
+    if (rt && rt.log) rt.log.warn(`Could not back up saved data: ${e.message}`);
+    return null;
+  }
+}
+
+/**
+ * Runs before the bot starts: backs up valid saved data, and when the file is
+ * empty (or damaged) asks whether to restore a backup or start from the
+ * default template.
+ */
+async function prepareStoreFile(dataDir, rt) {
+  const { file } = storePaths(dataDir);
+  const text = readStoreText(file);
+  if (text === null) return;
+  if (text.trim() && isValidStore(text)) {
+    backupStore(dataDir, rt);
+    return;
+  }
+  const damaged = Boolean(text.trim());
+  if (damaged) {
+    // Kept as it is, next to the new file.
+    let aside = file.replace(/\.json$/, `.damaged-${Date.now()}.json`);
+    for (let i = 2; fs.existsSync(aside); i++) aside = file.replace(/\.json$/, `.damaged-${Date.now()}-${i}.json`);
+    try {
+      fs.renameSync(file, aside);
+      rt.log.warn(`Saved data couldn't be read; the file was kept as ${path.basename(aside)}.`);
+    } catch (e) {
+      rt.log.error(`Saved data couldn't be read or moved aside (${e.message}); it is left untouched.`);
+      return;
+    }
+  }
+  const valid = listStoreBackups(dataDir).filter((b) => isValidStore(readStoreText(b.file) || ""));
+  const choices = valid.map((b, i) => ({ value: `backup:${b.name}`, label: `Restore the backup from ${new Date(b.time).toLocaleString()}${i === 0 ? " (newest)" : ""}` }));
+  choices.push({ value: "template", label: "Start with empty saved data (the default template)" });
+  const question = damaged ? "The bot's saved data (store.json) was damaged. What should it start with?" : "The bot's saved data (store.json) is empty. What should it start with?";
+  const answer = await askUser(rt, "store-empty", question, choices);
+  if (answer.startsWith("backup:")) {
+    const chosen = valid.find((b) => `backup:${b.name}` === answer);
+    fs.copyFileSync(chosen.file, file);
+    rt.log.success(`Saved data restored from ${chosen.name}.`);
+  } else {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, "{}\n");
+    rt.log.info("Saved data starts empty.");
+  }
+}
+
+/** Questions waiting for XC Circuit's answer (bots started from the editor). */
+const pendingAnswers = new Map();
+
+/**
+ * Asks the person running the bot to pick one of `choices` ({value, label}).
+ * From XC Circuit: a dialog in the app. In a terminal: a numbered list. With
+ * nobody to ask (a service): the first choice, logged.
+ */
+function askUser(rt, id, question, choices) {
+  if (rt.debug && process.argv.includes("--stop-on-input")) {
+    rt.emit("ask", { id, text: question, choices });
+    return new Promise((resolve) => pendingAnswers.set(id, (value) => resolve(choices.some((c) => c.value === value) ? value : choices[0].value)));
+  }
+  if (process.stdin.isTTY) {
+    const readline = require("readline");
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const list = choices.map((c, i) => `  ${i + 1}) ${c.label}`).join("\n");
+    return new Promise((resolve) => {
+      const ask = () =>
+        rl.question(`\n${question}\n${list}\nChoose 1-${choices.length}: `, (reply) => {
+          const n = Number.parseInt(String(reply).trim(), 10);
+          if (n >= 1 && n <= choices.length) {
+            rl.close();
+            resolve(choices[n - 1].value);
+          } else {
+            ask();
+          }
+        });
+      ask();
+    });
+  }
+  rt.log.warn(`${question} Nobody can answer here, so: ${choices[0].label}.`);
+  return Promise.resolve(choices[0].value);
+}
+
 /** Saved data (ctx.store): one JSON file, written safely and in batches. */
 class Store {
   constructor(dir, rt) {
@@ -685,7 +841,18 @@ function listenForStop() {
   let buffer = "";
   process.stdin.on("data", (chunk) => {
     buffer += chunk;
-    if (buffer.split(/\r?\n/).some((l) => l.trim() === "stop")) process.exit(0);
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop();
+    for (const line of lines.map((l) => l.trim())) {
+      if (line === "stop") process.exit(0);
+      // "answer <id> <value>": XC Circuit's reply to an ask event.
+      const m = /^answer (\S+) (.*)$/.exec(line);
+      if (m && pendingAnswers.has(m[1])) {
+        const resolve = pendingAnswers.get(m[1]);
+        pendingAnswers.delete(m[1]);
+        resolve(m[2]);
+      }
+    }
   });
   process.stdin.on("end", () => process.exit(0));
   process.stdin.on("error", () => {});
@@ -698,4 +865,4 @@ if (typeof __XC_BUNDLE__ !== "undefined") {
   cli();
 }
 
-module.exports = { start, fillTemplate, coerce, Store };
+module.exports = { start, fillTemplate, coerce, Store, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };

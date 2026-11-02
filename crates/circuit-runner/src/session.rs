@@ -113,6 +113,16 @@ impl Session {
         self.rx.try_iter().collect()
     }
 
+    /// Replies to a `BotEvent::Ask`.
+    pub fn answer(&self, id: &str, value: &str) {
+        let line = format!("answer {} {}\n", id.replace(char::is_whitespace, ""), value.replace(['\r', '\n'], " "));
+        if let Some(c) = self.child.lock().unwrap().as_mut()
+            && let Some(input) = c.stdin.as_mut()
+        {
+            let _ = input.write_all(line.as_bytes()).and_then(|_| input.flush());
+        }
+    }
+
     /// Asks the bot to stop, so it can write its saved data, and ends it after
     /// a moment if it hasn't.
     pub fn stop(&self) {
@@ -265,6 +275,62 @@ mod tests {
         assert!(stopped && exited, "the bot ran and stopped");
         let saved: serde_json::Value = serde_json::from_str(&fs::read_to_string(data_dir.join("store.json")).expect("store.json written on stop")).unwrap();
         assert_eq!(saved["global"]["starts"], 1);
+    }
+
+    /// An empty store.json makes the bot ask; answering picks a backup.
+    #[test]
+    fn empty_saved_data_asks_and_restores() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let engine = BlockEngine::new().unwrap();
+        let reg = Registry::load(&[root.join("plugins")], &engine);
+        let dir = std::env::temp_dir().join(format!("xc-ask-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let mut project = Project::create(&dir, "Ask Test", "none").unwrap();
+        let ws: Workspace = serde_json::from_value(serde_json::json!({
+            "name": "Main",
+            "nodes": {
+                "1": { "block": "core.on_start@1", "at": [0, 0] },
+                "2": { "block": "core.get_stored@1", "at": [0, 0], "values": { "scope": "global", "key": "level", "fallback": 0 } },
+                "3": { "block": "core.log@1", "at": [0, 0], "values": { "message": "level {value}", "level": "info" } }
+            },
+            "links": ["1.next > 3.in", "2.value > 3.value"]
+        }))
+        .unwrap();
+        project.workspaces.insert("main".into(), ws);
+        let data_dir = dir.join(".circuit/data");
+        fs::create_dir_all(data_dir.join("backups")).unwrap();
+        fs::write(data_dir.join("backups/store-2026-01-01T00-00-00-000Z.json"), r#"{"global":{"level":7}}"#).unwrap();
+        fs::write(data_dir.join("store.json"), "").unwrap();
+
+        let bundle = build_bundle(&project, &reg, None).unwrap();
+        let session = Session::start(
+            SessionConfig { bundle: bundle.value, dependencies: bundle.dependencies, packages_dir: dir.join("packages"), run_dir: dir.join(".circuit/run"), data_dir: data_dir.clone(), env: vec![] },
+            || {},
+        );
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut asked = false;
+        let mut seen = Vec::new();
+        while Instant::now() < deadline {
+            for m in session.poll() {
+                match &m {
+                    Msg::Bot(BotEvent::Ask { id, choices, .. }) => {
+                        assert_eq!(choices.len(), 2, "the backup, then the empty template");
+                        assert!(choices[0].value.starts_with("backup:"));
+                        session.answer(id, &choices[0].value);
+                        asked = true;
+                    }
+                    Msg::Bot(BotEvent::Log { text, .. }) if text == "level 7" => {
+                        assert!(asked);
+                        session.stop();
+                        return;
+                    }
+                    _ => {}
+                }
+                seen.push(format!("{m:?}"));
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        panic!("never restored: {}", seen.join("\n"));
     }
 
     /// A TypeScript block from a project's own plugins/ folder runs in the bot.
