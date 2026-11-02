@@ -6,8 +6,8 @@ use circuit_core::graph::ACTION_IN;
 use circuit_core::{BlockDef, BlockKind, BlockShape, Compat, Link, PinMode, PinRef, PinType, Workspace};
 use circuit_plugins::Registry;
 use eframe::egui::{
-    self, Align2, Color32, CornerRadius, CursorIcon, FontId, Key, LayerId, PointerButton, Pos2, Rect, Sense, Shadow, Shape,
-    Stroke, StrokeKind, Ui, UiBuilder, Vec2, emath::TSTransform, epaint::CubicBezierShape, pos2, vec2,
+    self, Align2, Color32, CornerRadius, CursorIcon, FontId, Key, LayerId, PointerButton, Pos2, Rect, Response, RichText, Sense,
+    Shadow, Shape, Stroke, StrokeKind, Ui, UiBuilder, Vec2, emath::TSTransform, epaint::CubicBezierShape, pos2, vec2,
 };
 use serde_json::Value;
 
@@ -63,9 +63,8 @@ pub struct CanvasView {
     pub focus: Option<String>,
     /// Zone outlines from when the current block drag started.
     pub drag_zones: Vec<(String, Rect)>,
-    /// The wire whose right-click menu is open, and where (screen position).
-    pub wire_menu: Option<(Link, Pos2)>,
-    /// Text fields that open a bigger editor while being edited: (block, field) → editor size.
+    /// The size of the bigger editor each text field opens while being edited:
+    /// (block, field) → size, when the user changed it.
     pub expanded: HashMap<(String, String), Vec2>,
     /// Where the expanded editor was drawn last frame (screen).
     pub overlay_rect: Option<Rect>,
@@ -418,6 +417,9 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
 
     // Try Zones: drawn behind everything, dragged by their title band.
     let mut menu: Option<NodeMenu> = None;
+    // Screen rectangles of the zones' title bands, for their settings buttons.
+    let mut zone_heads: Vec<(String, Rect)> = Vec::new();
+    let mut action_bar: Option<BarFor> = None;
     let mut start_drag: Option<PinEnd> = None;
     let drag = view.drag.clone();
     for layout in &layouts[node_count..] {
@@ -436,7 +438,9 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         if let Some(t) = timeout {
             extra.push(format!("{:.0} s timeout", t as f32 / 1000.0));
         }
-        painter.text(layout.header.right_center() - vec2(14.0, 0.0), Align2::RIGHT_CENTER, extra.join(" · "), FontId::proportional(11.0), theme.text_muted);
+        // Left of the settings button, which is drawn on top in screen space.
+        painter.text(layout.header.right_center() - vec2(14.0 + ZONE_BUTTON / view.zoom, 0.0), Align2::RIGHT_CENTER, extra.join(" · "), FontId::proportional(11.0), theme.text_muted);
+        zone_heads.push((zid.clone(), to_global * layout.header));
         // Outputs panel in the bottom-right corner.
         let panel = Rect::from_min_max(pos2(r.right() - ZONE_PANEL_W, r.bottom() - ZONE_PANEL_H - 8.0), pos2(r.right(), r.bottom() - 8.0));
         painter.rect(panel, CornerRadius { nw: 9, ne: 0, sw: 9, se: 0 }, theme.node, Stroke::new(1.0, theme.node_border), StrokeKind::Inside);
@@ -460,28 +464,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             }
             *dirty = true;
         }
-        band.on_hover_text("A Try Zone catches errors from the blocks inside it. Right-click for settings.").context_menu(|ui| {
-            if let Some(z) = ws.zones.get_mut(&zid) {
-                ui.label("Title");
-                *dirty |= ui.text_edit_singleline(&mut z.title).changed();
-                ui.horizontal(|ui| {
-                    ui.label("Retries");
-                    *dirty |= ui.add(egui::DragValue::new(&mut z.retry).range(0..=10)).changed();
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Timeout (s)");
-                    let mut secs = z.timeout_ms.map(|t| t as f64 / 1000.0).unwrap_or(0.0);
-                    if ui.add(egui::DragValue::new(&mut secs).range(0.0..=600.0).speed(0.5)).changed() {
-                        z.timeout_ms = (secs > 0.0).then_some((secs * 1000.0) as u64);
-                        *dirty = true;
-                    }
-                });
-                ui.separator();
-                if ui.button("Remove Try Zone").clicked() {
-                    menu = Some(NodeMenu::RemoveZone(zid.clone()));
-                }
-            }
-        });
+        band.on_hover_text("A Try Zone catches errors from the blocks inside it. The gear button sets its title, retries and timeout.");
         for spot in &layout.pins {
             let connected = ws.links.iter().any(|l| l.from.node == zid && l.from.pin == spot.pin);
             let candidate = drag.as_ref().map(|d| drag_compat(d, &zid, spot, reg));
@@ -495,7 +478,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     }
 
     // Wires. Action wires light up while the bot runs through them. The wire
-    // under the pointer (on empty canvas) can be clicked or right-clicked.
+    // under the pointer (on empty canvas) can be clicked or right-clicked to select it.
     let over_block = pointer_scene.is_some_and(|p| layouts[..node_count].iter().any(|l| l.rect.expand(8.0).contains(p)));
     let wire_pick = (bg.hovered() && view.drag.is_none() && !over_block).then_some(pointer_scene).flatten();
     let reach = 6.0 / view.zoom.max(0.3);
@@ -510,12 +493,18 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             hovered_wire = Some(link.clone());
         }
     }
-    let wire_selected = |l: &Link| selected_wire.as_ref().is_some_and(|(w, s)| w == ws_key && s == l) || view.wire_menu.as_ref().is_some_and(|(s, _)| s == l);
+    let wire_selected = |l: &Link| selected_wire.as_ref().is_some_and(|(w, s)| w == ws_key && s == l);
+    // Where the selected wire's Delete button goes (screen).
+    let mut wire_mid: Option<Pos2> = None;
     for link in &ws.links {
         let a = pin_at(&(link.from.node.clone(), link.from.pin.clone(), Dir::Out));
         let b = pin_at(&(link.to.node.clone(), link.to.pin.clone(), Dir::In));
         if let (Some(a), Some(b)) = (a, b) {
             let lit = if a.ty.is_action() { glow(&link.to.node) } else { 0.0 };
+            if wire_selected(link) {
+                // A wire's curve is symmetric, so its middle is halfway between its ends.
+                wire_mid = Some(to_global * pos2((a.pos.x + b.pos.x) / 2.0, (a.pos.y + b.pos.y) / 2.0));
+            }
             if wire_selected(link) || hovered_wire.as_ref() == Some(link) {
                 let strength = if wire_selected(link) { 110 } else { 60 };
                 painter.add(CubicBezierShape::from_points_stroke(wire_points(a.pos, b.pos), false, Color32::TRANSPARENT, Stroke::new(theme.wire_width + 6.0, with_alpha(theme.accent, strength))));
@@ -574,15 +563,13 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         let Some(def) = def else {
             painter.text(layout.header.left_center() + vec2(14.0, 0.0), Align2::LEFT_CENTER, "Missing block", FontId::proportional(13.0), theme.error);
             painter.text(layout.header.left_bottom() + vec2(14.0, ROW_H / 2.0 + 4.0), Align2::LEFT_CENTER, &block_ref, FontId::monospace(11.0), theme.text_muted);
-            if body.clicked() {
+            if body.clicked() || body.secondary_clicked() {
                 *selected = Some((ws_key.to_string(), id.clone()));
                 *multi = std::iter::once(id.clone()).collect();
             }
-            body.context_menu(|ui| {
-                if ui.button("Delete block").clicked() {
-                    menu = Some(NodeMenu::Delete(id.clone()));
-                }
-            });
+            if is_selected {
+                action_bar = Some(BarFor { node: id.clone(), rect: to_global * layout.rect, in_zone: false, can_wrap: false, source: None });
+            }
             continue;
         };
 
@@ -658,10 +645,9 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                             painter.text(r.right_center() - vec2(16.0, 0.0), Align2::RIGHT_CENTER, "connect", FontId::proportional(11.0), with_alpha(theme.text_muted, 140));
                         }
                     } else if widgets::is_plain_text(f) {
-                        // Free text: right-click to make it open a bigger editor while editing.
+                        // Free text: clicking into it opens a bigger editor over the block.
                         let wr = Rect::from_min_max(pos2(r.left() + 16.0 + label_w + 6.0, r.top() + 3.0), pos2(r.right() - 12.0, r.bottom() - 3.0));
                         let field_key = (id.clone(), key.clone());
-                        let expands = view.expanded.contains_key(&field_key);
                         let open_here = view.overlay.as_ref().is_some_and(|(n, k, _)| n == id && k == key);
                         let mut text = widgets::as_text(ws.nodes[id].values.get(key).or(f.default.as_ref()).unwrap_or(&Value::Null));
                         let resp = cui.put(
@@ -675,31 +661,10 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                             ws.nodes.get_mut(id).unwrap().values.insert(key.clone(), Value::String(text));
                             *dirty = true;
                         }
-                        if expands && resp.has_focus() && !open_here {
+                        if resp.has_focus() && !open_here {
                             view.overlay = Some((id.clone(), key.clone(), OVERLAY_FOCUS_FRAMES));
                         }
-                        resp.context_menu(|ui| {
-                            if !expands {
-                                if ui.button("Expand when editing").on_hover_text("Edit this field in a bigger box that opens over the block").clicked() {
-                                    view.expanded.insert(field_key.clone(), Vec2::ZERO);
-                                    view.overlay = Some((id.clone(), key.clone(), OVERLAY_FOCUS_FRAMES));
-                                    ui.close();
-                                }
-                            } else {
-                                if ui.button("Stop expanding").clicked() {
-                                    view.expanded.remove(&field_key);
-                                    if open_here {
-                                        view.overlay = None;
-                                    }
-                                    ui.close();
-                                }
-                                if ui.button("Reset size").clicked() {
-                                    view.expanded.insert(field_key.clone(), Vec2::ZERO);
-                                    ui.close();
-                                }
-                            }
-                        });
-                        // Recorded last: the menu or the focus above may just have opened it.
+                        // Recorded last: the focus above may just have opened it.
                         if view.overlay.as_ref().is_some_and(|(n, k, _)| n == id && k == key) {
                             overlay_anchor = Some(to_global * wr);
                         }
@@ -765,27 +730,20 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             *selected = Some((ws_key.to_string(), id.clone()));
             *multi = std::iter::once(id.clone()).collect();
         }
-        let in_zone = ws.nodes[id].zone.is_some();
-        let head = head.on_hover_ui(|ui| block_tooltip(ui, def, theme));
-        for r in [&head, &body] {
-            r.context_menu(|ui| {
-                if ui.button("Duplicate").clicked() {
-                    menu = Some(NodeMenu::Duplicate(id.clone()));
-                }
-                if in_zone {
-                    if ui.button("Take out of Try Zone").clicked() {
-                        menu = Some(NodeMenu::LeaveZone(id.clone()));
-                    }
-                } else if def.kind != BlockKind::Event && ui.button("Wrap in Try Zone").clicked() {
-                    menu = Some(NodeMenu::WrapInZone(id.clone()));
-                }
-                if ui.button("Open block source").clicked() {
-                    menu = Some(NodeMenu::OpenSource(def.source.display().to_string()));
-                }
-                ui.separator();
-                if ui.button("Delete").clicked() {
-                    menu = Some(NodeMenu::Delete(id.clone()));
-                }
+        // Right-click selects too; the selected block's actions are buttons above it.
+        if (head.secondary_clicked() || body.secondary_clicked()) && !multi.contains(id) {
+            *selected = Some((ws_key.to_string(), id.clone()));
+            *multi = std::iter::once(id.clone()).collect();
+        }
+        head.on_hover_ui(|ui| block_tooltip(ui, def, theme));
+        if selected.as_ref().is_some_and(|(w, s)| w == ws_key && s == id) {
+            let in_zone = ws.nodes[id].zone.is_some();
+            action_bar = Some(BarFor {
+                node: id.clone(),
+                rect: to_global * layout.rect,
+                in_zone,
+                can_wrap: !in_zone && def.kind != BlockKind::Event,
+                source: Some(def.source.display().to_string()),
             });
         }
 
@@ -872,12 +830,17 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         }
     }
 
-    // Background: a click selects the wire under the pointer; right-click opens
-    // its menu, or the block picker on empty canvas (Space too).
+    // Background: a click (or right-click) selects the wire under the pointer,
+    // which shows its Delete button; right-click on empty canvas opens the
+    // block picker (Space and the toolbar's Add block too).
     if bg.secondary_clicked() {
         if let Some(p) = pointer.or_else(|| ctx.input(|i| i.pointer.interact_pos())) {
             match hovered_wire.clone() {
-                Some(link) => view.wire_menu = Some((link, p)),
+                Some(link) => {
+                    *selected = None;
+                    multi.clear();
+                    *selected_wire = Some((ws_key.to_string(), link));
+                }
                 None => *picker = Some(Picker::new(ws_key, p, to_global.inverse() * p, None)),
             }
         }
@@ -889,27 +852,133 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     if selected.is_some() {
         *selected_wire = None;
     }
-    if let Some((link, at)) = view.wire_menu.clone() {
-        let mut close = ctx.input(|i| i.key_pressed(Key::Escape));
-        let area = egui::Area::new(cui.id().with("wire-menu")).order(egui::Order::Foreground).fixed_pos(at).show(&ctx, |ui| {
-            egui::Frame::menu(ui.style()).show(ui, |ui| {
-                ui.set_min_width(140.0);
-                if ui.button("Delete wire").clicked() {
-                    ws.links.retain(|l| *l != link);
-                    *dirty = true;
-                    close = true;
-                }
-            });
-        });
-        let outside = ctx.input(|i| i.pointer.any_pressed()) && ctx.input(|i| i.pointer.interact_pos()).is_some_and(|p| !area.response.rect.contains(p)) && !bg.secondary_clicked();
-        if close || outside || !ws.links.contains(&link) {
-            view.wire_menu = None;
-        }
-    }
     let typing = ctx.text_edit_focused();
     if over_canvas && !typing && picker.is_none() && ctx.input(|i| i.key_pressed(Key::Space)) {
         let p = pointer.unwrap();
         *picker = Some(Picker::new(ws_key, p, to_global.inverse() * p, None));
+    }
+
+    // Buttons over the canvas, in screen space and on a layer above it: the
+    // toolbar, the selected block's actions, the selected wire's Delete and
+    // each zone's settings. Everything here works with a finger too. Each
+    // group gets its own small Ui: a layer only takes the clicks inside the
+    // rectangles it uses, so the blocks below stay clickable.
+    let tools_layer = LayerId::new(parent_layer.order, ui.id().with(("canvas-tools", ws_key)));
+    ctx.set_sublayer(parent_layer, tools_layer);
+    let mut tools = |rect: Rect, layout: egui::Layout| {
+        let mut t = ui.new_child(UiBuilder::new().layer_id(tools_layer).max_rect(rect).layout(layout));
+        t.set_clip_rect(outer);
+        t
+    };
+    let row = egui::Layout::left_to_right(egui::Align::Center);
+    let icon = |name: &str| reg.icons.get(name).cloned();
+
+    // Toolbar, bottom left.
+    let bar = Rect::from_min_size(outer.left_bottom() + vec2(12.0, -46.0), vec2(outer.width() - 24.0, 34.0));
+    tools(bar, row).scope(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        let center = outer.center();
+        if tool_button(ui, theme, icon("plus").as_deref(), "Add block").on_hover_text("Add a block (Space or right-click on the canvas)").clicked() {
+            *picker = Some(Picker::new(ws_key, center, to_global.inverse() * center, None));
+        }
+        ui.add_space(6.0);
+        if crate::dialog::icon_button(ui, theme, icon("zoom-out").as_deref(), "−", "Zoom out").clicked() {
+            view.zoom_at(outer.min, center, 1.0 / 1.25);
+        }
+        let percent = format!("{:.0}%", view.zoom * 100.0);
+        if tool_button(ui, theme, None, &percent).on_hover_text("Back to 100%").clicked() {
+            view.zoom_at(outer.min, center, 1.0 / view.zoom);
+        }
+        if crate::dialog::icon_button(ui, theme, icon("zoom-in").as_deref(), "+", "Zoom in").clicked() {
+            view.zoom_at(outer.min, center, 1.25);
+        }
+        if crate::dialog::icon_button(ui, theme, icon("maximize").as_deref(), "Fit", "Show every block").clicked() {
+            fit_view(view, outer, &layouts[..node_count]);
+        }
+    });
+
+    // The selected block's actions, above it (or below when there is no room).
+    if let Some(b) = action_bar.filter(|b| outer.intersects(b.rect) && view.drag.is_none()) {
+        let count = if multi.contains(&b.node) { multi.len().max(1) } else { 1 };
+        let many = |text: &str| if count > 1 { format!("{text} {count}") } else { text.to_string() };
+        let above = b.rect.left_top() - vec2(0.0, ACTION_BAR_H + 8.0);
+        let at = if above.y >= outer.top() + 4.0 { above } else { b.rect.left_bottom() + vec2(0.0, 8.0) };
+        let area = Rect::from_min_size(pos2(at.x.max(outer.left() + 4.0), at.y), vec2(outer.width(), ACTION_BAR_H));
+        tools(area, row).scope(|ui| {
+            egui::Frame::new().fill(theme.panel_header).stroke(Stroke::new(1.0, theme.node_border)).corner_radius(9).inner_margin(4).shadow(ui.visuals().popup_shadow).show(ui, |ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                if b.source.is_some() && tool_button(ui, theme, icon("copy").as_deref(), &many("Duplicate")).clicked() {
+                    menu = Some(NodeMenu::Duplicate(b.node.clone()));
+                }
+                if count == 1 && b.in_zone && tool_button(ui, theme, icon("shield").as_deref(), "Leave Try Zone").clicked() {
+                    menu = Some(NodeMenu::LeaveZone(b.node.clone()));
+                }
+                if count == 1 && b.can_wrap && tool_button(ui, theme, icon("shield").as_deref(), "Try Zone").on_hover_text("Wrap in a Try Zone, which catches its errors").clicked() {
+                    menu = Some(NodeMenu::WrapInZone(b.node.clone()));
+                }
+                if let Some(src) = b.source.as_ref().filter(|_| count == 1)
+                    && tool_button(ui, theme, icon("function").as_deref(), "Source").on_hover_text("Open the block's source file").clicked()
+                {
+                    menu = Some(NodeMenu::OpenSource(src.clone()));
+                }
+                if tool_button(ui, theme, icon("trash").as_deref(), &many("Delete")).on_hover_text("Delete (Del)").clicked() {
+                    menu = Some(NodeMenu::Delete(b.node.clone()));
+                }
+            });
+        });
+    }
+
+    // The selected wire's Delete button, on its middle.
+    if let Some(mid) = wire_mid.filter(|m| outer.shrink(20.0).contains(*m))
+        && let Some((_, link)) = selected_wire.clone()
+    {
+        let r = Rect::from_center_size(mid, vec2(124.0, 34.0));
+        let resp = tool_button(&mut tools(r, egui::Layout::centered_and_justified(egui::Direction::LeftToRight)), theme, icon("trash").as_deref(), "Delete wire").on_hover_text("Delete wire (Del)");
+        if resp.clicked() {
+            ws.links.retain(|l| *l != link);
+            *selected_wire = None;
+            *dirty = true;
+        }
+    }
+
+    // Each zone's settings button, on the right of its title band.
+    for (zid, head) in &zone_heads {
+        let r = Rect::from_center_size(head.right_center() - vec2(ZONE_BUTTON / 2.0 + 6.0, 0.0), Vec2::splat(ZONE_BUTTON.min(head.height() - 2.0).max(18.0)));
+        if !outer.contains_rect(r) {
+            continue;
+        }
+        let t = tools(r, row);
+        let gear = t.interact(r, t.id().with(("zone-settings", zid)), Sense::click()).on_hover_cursor(CursorIcon::PointingHand);
+        let fill = if gear.hovered() { mix(theme.panel, theme.accent, 0.25) } else { theme.panel };
+        t.painter().rect(r, 6.0, fill, Stroke::new(1.0, with_alpha(theme.accent, 120)), StrokeKind::Inside);
+        if let Some(path) = icon("settings") {
+            egui::Image::from_uri(crate::editor::file_uri(&path)).tint(theme.accent).paint_at(&t, r.shrink(r.width() * 0.2));
+        }
+        let gear = gear.on_hover_text("Try Zone settings");
+        egui::Popup::menu(&gear).width(240.0).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+            let Some(z) = ws.zones.get_mut(zid) else { return };
+            ui.spacing_mut().item_spacing.y = 8.0;
+            ui.label(RichText::new("Try Zone").strong());
+            ui.label("Title");
+            *dirty |= ui.add(crate::inputs::TextLine::new(&mut z.title)).changed();
+            ui.horizontal(|ui| {
+                ui.label("Retries");
+                *dirty |= ui.add(egui::DragValue::new(&mut z.retry).range(0..=10)).changed();
+            });
+            ui.horizontal(|ui| {
+                ui.label("Timeout (s)");
+                let mut secs = z.timeout_ms.map(|t| t as f64 / 1000.0).unwrap_or(0.0);
+                if ui.add(egui::DragValue::new(&mut secs).range(0.0..=600.0).speed(0.5)).changed() {
+                    z.timeout_ms = (secs > 0.0).then_some((secs * 1000.0) as u64);
+                    *dirty = true;
+                }
+            });
+            ui.separator();
+            if crate::dialog::small_button(ui, theme, "Remove Try Zone").clicked() {
+                menu = Some(NodeMenu::RemoveZone(zid.clone()));
+                ui.close();
+            }
+        });
     }
 
     match menu {
@@ -1008,12 +1077,31 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         ui_rects.insert(format!("node:{}", l.id), to_global * l.rect);
     }
     expanded_editor(&ctx, cui.id(), view, ws, overlay_anchor, theme, dirty);
+}
 
-    // Zoom readout.
-    let label = format!("{:.0}%", view.zoom * 100.0);
-    let r = Rect::from_min_size(outer.left_bottom() + vec2(12.0, -36.0), vec2(64.0, 24.0));
-    ui.painter().rect(r, 6.0, theme.panel, Stroke::new(1.0, theme.line), StrokeKind::Inside);
-    ui.painter().text(r.center(), Align2::CENTER_CENTER, label, FontId::monospace(11.0), theme.text_muted);
+/// The block whose action bar is shown.
+struct BarFor {
+    node: String,
+    /// The block's rectangle on screen.
+    rect: Rect,
+    in_zone: bool,
+    can_wrap: bool,
+    /// The block's source file; None for a missing block.
+    source: Option<String>,
+}
+
+const ACTION_BAR_H: f32 = 42.0;
+/// The size of a Try Zone's settings button, on screen.
+const ZONE_BUTTON: f32 = 24.0;
+
+/// A framed button for the canvas toolbars: an icon and a label.
+fn tool_button(ui: &mut Ui, theme: &Theme, icon: Option<&std::path::Path>, text: &str) -> Response {
+    let text = RichText::new(text).size(12.5).color(theme.text);
+    let button = match icon {
+        Some(p) => egui::Button::image_and_text(egui::Image::from_uri(crate::editor::file_uri(p)).tint(theme.text).fit_to_exact_size(vec2(14.0, 14.0)), text),
+        None => egui::Button::new(text),
+    };
+    ui.add(button.fill(theme.panel).stroke(Stroke::new(1.0, theme.node_border)).corner_radius(7).min_size(vec2(34.0, 32.0)))
 }
 
 /// Centers the view on all blocks, at 100% when they fit.
@@ -1179,6 +1267,7 @@ fn expanded_editor(ctx: &egui::Context, base: egui::Id, view: &mut CanvasView, w
     let mut text = widgets::as_text(n.values.get(&key).unwrap_or(&Value::Null));
     let mut resized: Option<Vec2> = None;
     let mut resizing = false;
+    let mut reset = false;
 
     let area = egui::Area::new(base.with("expanded-editor")).order(egui::Order::Foreground).fixed_pos(anchor.min - vec2(6.0, 6.0)).show(ctx, |ui| {
         egui::Frame::new()
@@ -1202,11 +1291,14 @@ fn expanded_editor(ctx: &egui::Context, base: egui::Id, view: &mut CanvasView, w
         // Resize grip in the bottom-right corner.
         let frame = ui.min_rect();
         let grip = Rect::from_min_size(frame.right_bottom() - vec2(16.0, 16.0), vec2(14.0, 14.0));
-        let g = ui.interact(grip, base.with(("expanded-grip", &node, &key)), Sense::drag()).on_hover_cursor(CursorIcon::ResizeNwSe);
+        let g = ui.interact(grip, base.with(("expanded-grip", &node, &key)), Sense::click_and_drag()).on_hover_cursor(CursorIcon::ResizeNwSe);
         let c = if g.hovered() || g.dragged() { theme.accent } else { theme.text_muted };
         for i in 1..=3 {
             let o = i as f32 * 4.0;
             ui.painter().line_segment([grip.right_bottom() - vec2(o, 1.0), grip.right_bottom() - vec2(1.0, o)], Stroke::new(1.2, c));
+        }
+        if g.double_clicked() {
+            reset = true;
         }
         if g.dragged() {
             resizing = true;
@@ -1215,18 +1307,25 @@ fn expanded_editor(ctx: &egui::Context, base: egui::Id, view: &mut CanvasView, w
         }
     });
 
-    if let Some(s) = resized {
+    if reset {
+        view.expanded.remove(&field_key);
+    } else if let Some(s) = resized {
         view.expanded.insert(field_key, s);
     }
     let focused = ctx.memory(|m| m.has_focus(edit_id));
     view.overlay_rect = Some(area.response.rect);
     let pointer_inside = ctx.input(|i| i.pointer.interact_pos()).is_some_and(|p| area.response.rect.contains(p));
-    if fresh > 0 || resizing || (!focused && pointer_inside && ctx.input(|i| i.pointer.any_down())) {
+    // It closes on a press outside it, Escape, or the focus moving to another
+    // widget (Tab). Clicks inside it (the grip too) keep it open.
+    let pressed_outside = ctx.input(|i| i.pointer.any_pressed()) && !pointer_inside;
+    let focus_elsewhere = ctx.memory(|m| m.focused()).is_some_and(|f| f != edit_id);
+    let closing = pressed_outside || focus_elsewhere || ctx.input(|i| i.key_pressed(Key::Escape));
+    if fresh > 0 || resizing || (!focused && !closing) {
         // Keep (or put) the text cursor in the big editor.
         ctx.memory_mut(|m| m.request_focus(edit_id));
         view.overlay = Some((node, key, fresh.saturating_sub(1)));
         ctx.request_repaint();
-    } else if !focused {
+    } else if !focused || closing {
         view.overlay = None;
     }
 }
@@ -1330,14 +1429,9 @@ mod tests {
             }
         };
 
-        // Without expanding, clicking the field just edits it in place.
-        frame(&ctx, &mut ed, "rank-command", click(rect.center()));
+        // Clicking into a text field opens the big editor over it.
         settle(&mut ed);
         assert!(!open(&ed));
-
-        // "Expand when editing" is on: clicking into the field opens the big editor.
-        ed.views.get_mut("rank-command").unwrap().expanded.insert(field.clone(), Vec2::ZERO);
-        frame(&ctx, &mut ed, "rank-command", click(pos2(300.0, 850.0)));
         frame(&ctx, &mut ed, "rank-command", click(rect.center()));
         settle(&mut ed);
         assert!(open(&ed), "clicking the field opens the expanded editor");
@@ -1368,6 +1462,19 @@ mod tests {
         frame(&ctx, &mut ed, "rank-command", click(rect.center()));
         settle(&mut ed);
         assert!(open(&ed), "going back in expands it again");
+        assert_eq!(ed.views["rank-command"].overlay_rect.unwrap().size(), after.size(), "it keeps its size");
+
+        // Double-clicking the grip puts the size back.
+        let grip = after.right_bottom() - vec2(8.0, 8.0);
+        // (A second apart from the click above, which would make it a triple-click.)
+        for _ in 0..60 {
+            frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerMoved(grip)]);
+        }
+        for pressed in [true, false, true, false] {
+            frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerButton { pos: grip, button: PointerButton::Primary, pressed, modifiers: Default::default() }]);
+        }
+        settle(&mut ed);
+        assert!(!ed.views["rank-command"].expanded.contains_key(&field), "the size is reset");
     }
 
     #[test]

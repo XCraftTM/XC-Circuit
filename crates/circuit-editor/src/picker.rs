@@ -1,4 +1,4 @@
-//! The block picker: opens on right-click, Space, or a wire dropped on empty canvas.
+//! The block picker: opens from the canvas toolbar's Add block, right-click, Space, or a wire dropped on empty canvas.
 
 use circuit_core::graph::ACTION_IN;
 use circuit_core::{BlockDef, BlockKind, Compat, Link, PinMode, PinRef, PinType};

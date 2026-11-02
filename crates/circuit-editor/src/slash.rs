@@ -127,6 +127,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
     let Some(edit) = &mut ed.slash_edit else { return };
     let theme = ed.theme.clone();
     let icon = ed.reg.icons.get("slash").cloned();
+    let trash = ed.reg.icons.get("trash").cloned();
     let issues = problems(&edit.commands);
     let (mut save, mut cancel) = (false, false);
     dialog::tab(
@@ -140,7 +141,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
             width: 980.0,
         },
         |ui, part| match part {
-            Part::Body => body(ui, &theme, edit, &issues),
+            Part::Body => body(ui, &theme, edit, &issues, trash.as_deref()),
             Part::Footer => {
                 save = ui.add_enabled_ui(issues.is_empty(), |ui| dialog::primary_button(ui, &theme, "Save commands")).inner.clicked();
                 cancel = dialog::secondary_button(ui, &theme, "Cancel").clicked();
@@ -184,7 +185,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
     }
 }
 
-fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String]) {
+fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], trash: Option<&std::path::Path>) {
     ui.horizontal_top(|ui| {
         // Command list.
         ui.allocate_ui_with_layout(vec2(230.0, 520.0), egui::Layout::top_down(egui::Align::Min), |ui| {
@@ -194,12 +195,12 @@ fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String]) {
                 let selected = i == edit.selected;
                 let label = if c.name.is_empty() { "/(no name)".to_string() } else { format!("/{}", c.name) };
                 let text = RichText::new(label).monospace().color(if selected { theme.text } else { theme.text_muted });
-                let resp = ui.add_sized([220.0, 30.0], egui::Button::selectable(selected, text));
-                if resp.clicked() {
-                    edit.selected = i;
-                }
-                resp.context_menu(|ui| {
-                    if ui.button("Delete command").clicked() {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 6.0;
+                    if ui.add_sized([180.0, 34.0], egui::Button::selectable(selected, text)).clicked() {
+                        edit.selected = i;
+                    }
+                    if dialog::icon_button(ui, theme, trash, "×", "Delete this command").clicked() {
                         remove = Some(i);
                     }
                 });

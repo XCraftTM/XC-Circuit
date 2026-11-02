@@ -53,7 +53,7 @@ struct Icons {
 
 impl Icons {
     fn new(ed: &Editor) -> Icons {
-        let names = ["workspace", "folder", "folder-plus", "plus", "slash"];
+        let names = ["workspace", "folder", "folder-plus", "plus", "slash", "more"];
         Icons { paths: names.iter().filter_map(|n| Some((*n, ed.reg.icons.get(*n)?.clone()))).collect() }
     }
 
@@ -106,13 +106,19 @@ fn row(ui: &mut Ui, theme: &Theme, icons: &Icons, id: Id, depth: usize, open: Op
 }
 
 /// A small icon button drawn over the right end of a row.
-fn row_button(ui: &mut Ui, theme: &Theme, icons: &Icons, rect: Rect, id: Id, icon: &str, tip: &str) -> bool {
+fn row_button(ui: &mut Ui, theme: &Theme, icons: &Icons, rect: Rect, id: Id, icon: &str, tip: &str) -> egui::Response {
     let resp = ui.interact(rect, id, Sense::click()).on_hover_text(tip).on_hover_cursor(CursorIcon::PointingHand);
-    if resp.hovered() {
+    if resp.hovered() || egui::Popup::is_id_open(ui.ctx(), egui::Popup::default_response_id(&resp)) {
         ui.painter().rect_filled(rect, 4.0, theme.field);
     }
     icons.paint(ui, icon, rect.center(), 14.0, if resp.hovered() { theme.text } else { theme.text_muted });
-    resp.clicked()
+    resp
+}
+
+/// The ⋯ button on the right of a row, which opens the row's menu (the same
+/// one right-click opens).
+fn more_button(ui: &mut Ui, theme: &Theme, icons: &Icons, row: Rect, id: Id) -> egui::Response {
+    row_button(ui, theme, icons, Rect::from_center_size(pos2(row.right() - 16.0, row.center().y), vec2(24.0, 22.0)), id, "more", "More")
 }
 
 /// The name editor shown in place of a row's label.
@@ -167,9 +173,9 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
         // The project: collapses everything; dropping a workspace here takes it out of its folder.
         let (resp, _) = row(ui, &theme, &icons, Id::new("sidebar-project"), 0, Some(is_open(PROJECT_ROW)), None, &project.meta.name, false, true);
         let buttons = resp.rect;
-        if row_button(ui, &theme, &icons, Rect::from_center_size(pos2(buttons.right() - 16.0, buttons.center().y), vec2(22.0, 22.0)), Id::new("sidebar-new-folder"), "folder-plus", "New folder") {
+        if row_button(ui, &theme, &icons, Rect::from_center_size(pos2(buttons.right() - 16.0, buttons.center().y), vec2(22.0, 22.0)), Id::new("sidebar-new-folder"), "folder-plus", "New folder").clicked() {
             todo.push(Do::NewFolder);
-        } else if row_button(ui, &theme, &icons, Rect::from_center_size(pos2(buttons.right() - 40.0, buttons.center().y), vec2(22.0, 22.0)), Id::new("sidebar-new-ws"), "plus", "New workspace") {
+        } else if row_button(ui, &theme, &icons, Rect::from_center_size(pos2(buttons.right() - 40.0, buttons.center().y), vec2(22.0, 22.0)), Id::new("sidebar-new-ws"), "plus", "New workspace").clicked() {
             todo.push(Do::NewWorkspace(None));
         } else if resp.clicked() {
             todo.push(Do::Toggle(PROJECT_ROW.into()));
@@ -193,12 +199,13 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
                     return;
                 }
                 resp.dnd_set_drag_payload(key.clone());
+                let more = more_button(ui, &theme, &icons, resp.rect, Id::new(("sidebar-ws-more", key)));
                 if resp.double_clicked() {
                     todo.push(Do::StartRename(target.clone(), ws.name.clone()));
                 } else if resp.clicked() {
                     todo.push(Do::Open(key.clone()));
                 }
-                resp.context_menu(|ui| {
+                let mut menu = |ui: &mut Ui| {
                     if ui.button("Open").clicked() {
                         todo.push(Do::Open(key.clone()));
                         ui.close();
@@ -224,7 +231,9 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
                         todo.push(Do::DeleteWorkspace(key.clone()));
                         ui.close();
                     }
-                });
+                };
+                resp.context_menu(|ui| menu(ui));
+                egui::Popup::menu(&more).show(|ui| menu(ui));
             };
 
             for folder in &folders {
@@ -239,6 +248,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
                         None => {}
                     }
                 } else {
+                    let more = more_button(ui, &theme, &icons, resp.rect, Id::new(("sidebar-folder-more", folder)));
                     if resp.double_clicked() {
                         todo.push(Do::StartRename(target.clone(), folder.clone()));
                     } else if resp.clicked() {
@@ -247,7 +257,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
                     if let Some(key) = resp.dnd_release_payload::<String>() {
                         todo.push(Do::Move((*key).clone(), Some(folder.clone())));
                     }
-                    resp.context_menu(|ui| {
+                    let mut menu = |ui: &mut Ui| {
                         if ui.button("New workspace here").clicked() {
                             todo.push(Do::NewWorkspace(Some(folder.clone())));
                             ui.close();
@@ -261,7 +271,9 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
                             todo.push(Do::DeleteFolder(folder.clone()));
                             ui.close();
                         }
-                    });
+                    };
+                    resp.context_menu(|ui| menu(ui));
+                    egui::Popup::menu(&more).show(|ui| menu(ui));
                 }
                 if open {
                     for (key, ws) in project.workspaces.iter().filter(|(_, w)| w.folder.as_ref() == Some(folder)) {

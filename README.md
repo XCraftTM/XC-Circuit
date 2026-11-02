@@ -14,17 +14,18 @@ The first start opens `examples/DemoBot`. Windows and Linux are supported.
 
 | Action | How |
 | --- | --- |
-| Add a block | Right-click empty canvas, or press Space |
+| Add a block | Add block in the canvas toolbar (bottom left), right-click empty canvas, or press Space |
 | Connect | Drag from a pin to another pin |
 | Add a connected block | Drag a wire into empty space; the picker shows only compatible blocks |
 | Move a block | Drag its title bar |
 | Pan / zoom | Drag empty canvas or middle mouse / mouse wheel |
-| Long text | Right-click a text field on a block › Expand when editing: clicking into it then opens a bigger editor over the block (resize it from its corner); right-click again to stop |
+| Long text | Clicking into a text field on a block opens a bigger editor over it; drag its corner to resize, double-click the corner to reset the size |
 | Colors | Click a color swatch for the picker: square and hue bar, hex and RGB, Discord colors and your recent ones |
 | Field as pin | Click a field's faint pin, or "pin" in the Inspector |
 | Select several | Shift-drag a box on empty canvas, or Ctrl+click blocks; Ctrl+A selects all |
-| Delete | Select blocks, press Delete (or right-click › Delete) |
-| Remove a wire | Click it and press Delete, or right-click it › Delete wire; or drag it off its input and drop it on empty canvas |
+| Block actions | Select a block: Duplicate, Try Zone, Source and Delete are buttons above it (Delete key works too) |
+| Remove a wire | Click it, then its Delete wire button (or press Delete); or drag it off its input and drop it on empty canvas |
+| Zoom | The canvas toolbar: − / + , the percentage goes back to 100%, the corners button shows every block; or the mouse wheel |
 | Undo / Redo | Ctrl+Z / Ctrl+Y (per workspace) |
 | Copy / Paste / Duplicate | Ctrl+C / Ctrl+V (at the mouse) / Ctrl+D; works across workspaces and projects |
 | First start | The welcome page sets up Node.js (finds it, or installs it: winget or the official installer on Windows, a private copy on Linux), a theme and an accent; Help › Welcome and setup… opens it again |
@@ -37,9 +38,9 @@ The first start opens `examples/DemoBot`. Windows and Linux are supported.
 | Title bar | Drag to move, double-click to maximize, drag the window edges to resize; View › Use system title bar switches to the system one |
 | Save | Ctrl+S (restarts a running bot) |
 | Panels | Drag tabs to dock anywhere; reopen closed ones from View › Panels |
-| Workspaces | The Workspaces panel lists them in folders: + and the folder button on the project row add them, drag a workspace onto a folder to move it, double-click a name to rename, right-click for more |
+| Workspaces | The Workspaces panel lists them in folders: + and the folder button on the project row add them, drag a workspace onto a folder to move it, double-click a name to rename, the ⋯ button (or right-click) for more |
 | Activity bar | The icons on the far left open Workspaces, Stored Data, Plugins and Bot Settings (View › Show activity bar hides it) |
-| Try Zone | Right-click a block › Wrap in Try Zone; drop blocks in or out; right-click the zone's title for retries and timeout |
+| Try Zone | Select a block › Try Zone; drop blocks in or out; the gear on the zone's title sets retries and timeout |
 | Embeds | Select a Build Embed block › Open Embed Builder; the block shows a live preview |
 | Slash commands | Bot › Slash Commands… (options, choices, permissions); registered when the bot starts |
 | Stored data | View › Panels › Stored Data shows what `ctx.store` saved while running |

@@ -364,7 +364,7 @@ const SHORTCUTS: [(&str, &str); 18] = [
     ("Ctrl+A", "Select all blocks"),
     ("Delete", "Delete the selected blocks or wire"),
     ("Space", "Open the block picker at the mouse"),
-    ("Right-click", "Block picker on the canvas; menus on blocks, wires and fields"),
+    ("Right-click", "Block picker on empty canvas; selects a block or wire (its actions show as buttons)"),
     ("Shift-drag", "Select blocks with a box"),
     ("Mouse wheel", "Zoom the canvas"),
     ("Drag empty canvas", "Pan"),

@@ -70,7 +70,7 @@ const STEPS: [StepDef; 10] = [
     },
     StepDef {
         title: "Add a block",
-        body: "Right-click empty space on the canvas (or press Space), type Math and click it.",
+        body: "Click Add block in the canvas toolbar (or right-click empty canvas, or press Space), type Math and click it.",
         target: Target::Ui("canvas"),
         wait: Some(Wait::AddMath),
         hint: "Waiting for a Math block …",
