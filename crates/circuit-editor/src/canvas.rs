@@ -679,7 +679,8 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                         let mut value = ws.nodes[id].values.get(key).cloned().or_else(|| f.default.clone()).unwrap_or(Value::Null);
                         let wid = cui.id().with(("field", id, key));
                         let changed = cui
-                            .scope_builder(UiBuilder::new().max_rect(wr).layout(egui::Layout::right_to_left(egui::Align::Center)), |ui| {
+                            // A fixed id: number boxes keep their editing state while typing.
+                            .scope_builder(UiBuilder::new().id_salt(("field-ui", id, key)).max_rect(wr).layout(egui::Layout::right_to_left(egui::Align::Center)), |ui| {
                                 widgets::value_editor(ui, wid, f, &mut value, wr.width(), false, theme)
                             })
                             .inner;

@@ -29,6 +29,12 @@ pub fn as_text(value: &Value) -> String {
 
 /// Draws an editor for one field value. Returns true when the value changed.
 pub fn value_editor(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width: f32, multiline: bool, theme: &Theme) -> bool {
+    // Every widget inside gets an id from `id`, not from its place among other
+    // widgets: number boxes and text boxes keep their editing state across frames.
+    ui.push_id(id, |ui| editor(ui, id, field, value, width, multiline, theme)).inner
+}
+
+fn editor(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width: f32, multiline: bool, theme: &Theme) -> bool {
     if field.is_select() {
         return select(ui, id, field, value, width);
     }
