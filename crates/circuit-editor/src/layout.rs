@@ -266,7 +266,7 @@ pub fn summary(layout: &Value) -> Vec<String> {
 fn new_component(what: &str, n: usize) -> Value {
     match what {
         "text" => json!({ "type": kind::TEXT, "content": "Some **text**" }),
-        "section" => json!({ "type": kind::SECTION, "components": [{ "type": kind::TEXT, "content": "Text next to a picture" }], "accessory": { "type": kind::THUMBNAIL, "media": { "url": "{avatar}" } } }),
+        "section" => json!({ "type": kind::SECTION, "components": [{ "type": kind::TEXT, "content": "Text next to a picture" }], "accessory": { "type": kind::THUMBNAIL, "media": { "url": "${avatar}" } } }),
         "container" => json!({ "type": kind::CONTAINER, "accent_color": 0x00D8F0, "components": [{ "type": kind::TEXT, "content": "## A container" }] }),
         "gallery" => json!({ "type": kind::GALLERY, "items": [{ "media": { "url": "https://" } }] }),
         "file" => json!({ "type": kind::FILE, "file": { "url": "attachment://file.txt" } }),
@@ -522,7 +522,7 @@ fn body(ui: &mut Ui, theme: &Theme, c: &mut Value, next: usize) {
                 let current = if is_button { t!("A button") } else { t!("A picture") };
                 crate::widgets::dropdown(ui, ui.id().with("accessory"), 140.0, current, |ui| {
                     if ui.selectable_label(!is_button, t!("A picture")).clicked() && is_button {
-                        c["accessory"] = json!({ "type": kind::THUMBNAIL, "media": { "url": "{avatar}" } });
+                        c["accessory"] = json!({ "type": kind::THUMBNAIL, "media": { "url": "${avatar}" } });
                     }
                     if ui.selectable_label(is_button, t!("A button")).clicked() && !is_button {
                         c["accessory"] = new_button(next);
@@ -697,7 +697,7 @@ fn flag(ui: &mut Ui, theme: &Theme, v: &mut Value, key: &str, label: &str) {
 /// A picture: its address, a description for screen readers and Spoiler.
 fn media_editor(ui: &mut Ui, theme: &Theme, v: &mut Value, spoiler: bool) {
     let media = object_mut(v, "media");
-    line(ui, media, "url", t!("https://…, {avatar} or a file path"), t!("Picture"));
+    line(ui, media, "url", t!("https://…, ${avatar} or a file path"), t!("Picture"));
     line(ui, v, "description", t!("What it shows, for screen readers"), t!("Description"));
     if spoiler {
         ui.horizontal(|ui| flag(ui, theme, v, "spoiler", t!("Spoiler")));
@@ -1088,7 +1088,7 @@ fn picture(ui: &mut Ui, url: &str, size: egui::Vec2, spoiler: bool) {
     if !url.is_empty() && !url.contains("://") && path.is_file() {
         egui::Image::from_uri(crate::editor::file_uri(path)).corner_radius(8).paint_at(ui, r);
     } else {
-        let label = if url.starts_with('{') { url.to_string() } else { file_name(url) };
+        let label = if url.contains("${") { url.to_string() } else { file_name(url) };
         ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, label, FontId::proportional(11.5), discord::MUTED);
     }
     if spoiler {
@@ -1141,8 +1141,8 @@ mod tests {
     fn pasted_layouts_are_read_and_checked() {
         let message = json!({ "flags": 32768, "components": [
             { "type": 17, "accent_color": 5793266, "components": [
-                { "type": 10, "content": "## Hi {user}" },
-                { "type": 9, "components": [{ "type": 10, "content": "Level {level}" }], "accessory": { "type": 11, "media": { "url": "{avatar}" } } },
+                { "type": 10, "content": "## Hi ${user}" },
+                { "type": 9, "components": [{ "type": 10, "content": "Level {level}" }], "accessory": { "type": 11, "media": { "url": "${avatar}" } } },
                 { "type": 14 },
                 { "type": 1, "components": [{ "type": 2, "style": 1, "label": "Claim", "custom_id": "claim" }, { "type": 2, "style": 5, "label": "Site", "url": "https://x.example" }] }
             ] },

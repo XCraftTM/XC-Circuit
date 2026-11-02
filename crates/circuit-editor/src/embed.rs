@@ -517,11 +517,11 @@ mod tests {
     fn embeds_go_to_discord_json_and_back() {
         let e = EmbedData {
             color: "#5865F2".into(),
-            title: "Rank of {user}".into(),
+            title: "Rank of ${user}".into(),
             url: "https://example.com".into(),
-            description: "**{xp}** XP".into(),
-            author: Some(NameIcon { name: "{user}".into(), icon: "{avatar}".into(), url: "https://a.example".into() }),
-            fields: vec![EmbedField { name: "Level".into(), value: "{level}".into(), inline: true }],
+            description: "**${xp}** XP".into(),
+            author: Some(NameIcon { name: "${user}".into(), icon: "${avatar}".into(), url: "https://a.example".into() }),
+            fields: vec![EmbedField { name: "Level".into(), value: "${level}".into(), inline: true }],
             footer: Some(FooterData { text: "DemoBot".into(), icon: String::new() }),
             image: "https://i.example/a.png".into(),
             thumbnail: String::new(),
@@ -530,7 +530,7 @@ mod tests {
         };
         let v = e.to_discord();
         assert_eq!(v["color"], 0x5865F2);
-        assert_eq!(v["author"]["icon_url"], "{avatar}");
+        assert_eq!(v["author"]["icon_url"], "${avatar}");
         assert_eq!(v["timestamp"], "now");
         assert_eq!(EmbedData::from_discord(&v).unwrap(), e);
         // A whole message from an embed generator: its first embed, with a set time.

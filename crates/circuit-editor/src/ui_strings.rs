@@ -272,7 +272,7 @@ pub const UI_STRINGS: &[&str] = &[
     "Remove button",
     "+ Add button",
     "The builder has no controls for this one: edit it in JSON.",
-    "https://…, {avatar} or a file path",
+    "https://…, ${avatar} or a file path",
     "Picture",
     "What it shows, for screen readers",
     "Style",

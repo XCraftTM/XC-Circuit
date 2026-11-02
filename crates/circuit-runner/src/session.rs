@@ -291,7 +291,7 @@ mod tests {
             "nodes": {
                 "1": { "block": "core.on_start@1", "at": [0, 0] },
                 "2": { "block": "core.get_stored@1", "at": [0, 0], "values": { "scope": "global", "key": "level", "fallback": 0 } },
-                "3": { "block": "core.log@1", "at": [0, 0], "values": { "message": "level {value}", "level": "info" } }
+                "3": { "block": "core.log@1", "at": [0, 0], "values": { "message": "level ${value}", "level": "info" } }
             },
             "links": ["1.next > 3.in", "2.value > 3.value"]
         }))
@@ -346,7 +346,7 @@ mod tests {
             "nodes": {
                 "a": { "block": "core.on_start@1", "at": [0, 0] },
                 "lv": { "block": "demo.level_from_xp@1", "at": [0, 0], "values": { "xp": 250, "perLevel": 100 } },
-                "l": { "block": "core.log@1", "at": [0, 0], "values": { "message": "level {lvl}, {toNext} to go", "level": "info" } }
+                "l": { "block": "core.log@1", "at": [0, 0], "values": { "message": "level ${lvl}, ${toNext} to go", "level": "info" } }
             },
             "links": ["a.next > l.in", "lv.level > l.lvl", "lv.toNext > l.toNext"]
         }))
@@ -370,7 +370,7 @@ mod tests {
             "nodes": {
                 "1": { "block": "core.on_start@1", "at": [0, 0] },
                 "2": { "block": "core.math@1", "at": [0, 0], "values": { "a": 20, "op": "add", "b": 22 } },
-                "3": { "block": "core.log@1", "at": [0, 0], "values": { "message": "sum is {result}", "level": "success" } }
+                "3": { "block": "core.log@1", "at": [0, 0], "values": { "message": "sum is ${result}", "level": "success" } }
             },
             "links": ["1.next > 3.in", "2.result > 3.result"]
         }))
