@@ -21,6 +21,8 @@ pub enum Tab {
     Console,
     Problems,
     StoredData,
+    /// The Settings page.
+    Settings,
     /// A native plugin's panel: plugin id, panel id.
     Plugin(String, String),
 }
@@ -41,6 +43,7 @@ const KEY_PROJECT: &str = "project";
 const KEY_SYSTEM_TITLEBAR: &str = "system_titlebar";
 const KEY_NATIVE_ALLOW: &str = "native_allow";
 const KEY_ACTIVITY_BAR: &str = "activity_bar";
+const KEY_PREFS: &str = "prefs";
 const KEY_NATIVE_TRUSTED: &str = "native_trusted";
 const KEY_NATIVE_STORAGE: &str = "native_storage";
 
@@ -58,13 +61,11 @@ pub struct CircuitApp {
     watcher: crate::watch::PluginWatcher,
     palette: Option<palette::Palette>,
     /// Use the operating system's title bar instead of ours.
-    system_titlebar: bool,
     native: crate::native::NativeHost,
     /// The app's own plugins folder.
     bundled_plugins: Option<PathBuf>,
     show_plugins: bool,
-    /// The icon strip on the far left.
-    activity_bar: bool,
+    settings: crate::settings::SettingsView,
 }
 
 impl CircuitApp {
@@ -74,21 +75,29 @@ impl CircuitApp {
         let theme_id: Option<String> = cc.storage.and_then(|s| eframe::get_value(s, KEY_THEME));
         let last_project: Option<PathBuf> = cc.storage.and_then(|s| eframe::get_value(s, KEY_PROJECT));
         let saved_dock: Option<DockState<Tab>> = cc.storage.and_then(|s| eframe::get_value(s, KEY_DOCK));
-        let system_titlebar: bool = cc.storage.and_then(|s| eframe::get_value(s, KEY_SYSTEM_TITLEBAR)).unwrap_or(false);
-        if system_titlebar {
+        let prefs: crate::prefs::Prefs = cc.storage.and_then(|s| eframe::get_value(s, KEY_PREFS)).unwrap_or_else(|| crate::prefs::Prefs {
+            // Settings saved before there was a Settings page.
+            system_titlebar: cc.storage.and_then(|s| eframe::get_value(s, KEY_SYSTEM_TITLEBAR)).unwrap_or(false),
+            activity_bar: cc.storage.and_then(|s| eframe::get_value(s, KEY_ACTIVITY_BAR)).unwrap_or(true),
+            ..Default::default()
+        });
+        if prefs.system_titlebar {
             cc.egui_ctx.send_viewport_cmd(ViewportCommand::Decorations(true));
         }
+        cc.egui_ctx.set_zoom_factor(prefs.ui_scale);
 
         let mut ed = match Editor::new(plugin_dirs, theme_id.as_deref()) {
             Ok(ed) => ed,
             Err(e) => panic!("could not start the block sandbox: {e:#}"),
         };
+        ed.prefs = prefs;
+        ed.restyle();
         ed.theme.apply(&cc.egui_ctx);
 
         let examples_dir = bundled_root.as_ref().map(|r| r.join("examples"));
         let bundled_plugins = bundled_root.map(|r| r.join("plugins"));
         let project = last_project
-            .filter(|p| p.join(circuit_core::project::PROJECT_FILE).is_file())
+            .filter(|p| ed.prefs.reopen_last_project && p.join(circuit_core::project::PROJECT_FILE).is_file())
             .or_else(|| examples_dir.as_ref().map(|e| e.join("DemoBot")).filter(|p| p.is_dir()));
         if let Some(p) = project {
             ed.open_project(&p);
@@ -126,11 +135,10 @@ impl CircuitApp {
             stored: Default::default(),
             watcher,
             palette: None,
-            system_titlebar,
             native,
             bundled_plugins,
             show_plugins: false,
-            activity_bar: cc.storage.and_then(|s| eframe::get_value(s, KEY_ACTIVITY_BAR)).unwrap_or(true),
+            settings: Default::default(),
         }
     }
 
@@ -208,7 +216,7 @@ impl CircuitApp {
 
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
         let theme = self.ed.theme.clone();
-        let custom = !self.system_titlebar;
+        let custom = !self.ed.prefs.system_titlebar;
         let bar = ui.max_rect();
         if custom {
             crate::titlebar::drag_region(ui, bar);
@@ -243,6 +251,9 @@ impl CircuitApp {
                 if ui.add_enabled(self.ed.project.is_some(), egui::Button::new("Save").shortcut_text("Ctrl+S")).clicked() {
                     self.ed.save();
                     self.bot.restart_if_running(&mut self.ed, ui.ctx());
+                }
+                if ui.add(egui::Button::new("Settings…").shortcut_text("Ctrl+,")).clicked() {
+                    self.open_settings();
                 }
                 if ui.button("Reload Plugins").clicked() {
                     self.reload_plugins(ui.ctx());
@@ -302,9 +313,9 @@ impl CircuitApp {
                     }
                 }
                 ui.separator();
-                ui.checkbox(&mut self.activity_bar, "Show activity bar");
-                if ui.checkbox(&mut self.system_titlebar, "Use system title bar").clicked() {
-                    ui.ctx().send_viewport_cmd(ViewportCommand::Decorations(self.system_titlebar));
+                ui.checkbox(&mut self.ed.prefs.activity_bar, "Show activity bar");
+                if ui.checkbox(&mut self.ed.prefs.system_titlebar, "Use system title bar").clicked() {
+                    ui.ctx().send_viewport_cmd(ViewportCommand::Decorations(self.ed.prefs.system_titlebar));
                 }
                 if ui.add(egui::Button::new("Command Palette…").shortcut_text("Ctrl+P")).clicked() {
                     self.palette = Some(Default::default());
@@ -437,7 +448,6 @@ impl CircuitApp {
         ui.painter().vline(line.right() - 0.5, line.y_range(), egui::Stroke::new(1.0, t.line));
         ui.spacing_mut().item_spacing.y = 2.0;
         let open = |dock: &DockState<Tab>, tab: &Tab| dock.find_tab(tab).is_some();
-        let has_project = self.ed.project.is_some();
         if self.activity_item(ui, "layers", "Workspaces", open(&self.dock, &Tab::Workspaces)) {
             self.toggle_panel(Tab::Workspaces);
         }
@@ -448,8 +458,8 @@ impl CircuitApp {
             self.show_plugins = !self.show_plugins;
         }
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
-            if self.activity_item(ui, "settings", "Bot Settings", false) && has_project {
-                self.bot.open_settings(&self.ed);
+            if self.activity_item(ui, "settings", "Settings (Ctrl+,)", open(&self.dock, &Tab::Settings)) {
+                self.toggle_settings();
             }
         });
     }
@@ -467,6 +477,38 @@ impl CircuitApp {
             egui::Image::from_uri(crate::editor::file_uri(path)).tint(color).paint_at(ui, egui::Rect::from_center_size(rect.center(), egui::vec2(20.0, 20.0)));
         }
         resp.clicked()
+    }
+
+    fn open_settings(&mut self) {
+        open_center(&mut self.dock, Tab::Settings);
+    }
+
+    /// The activity bar's gear: opens Settings, or closes it when it is the tab in view.
+    fn toggle_settings(&mut self) {
+        let focused = self.dock.find_active_focused().is_some_and(|(_, t)| *t == Tab::Settings);
+        if focused {
+            self.dock.retain_tabs(|t| *t != Tab::Settings);
+        } else {
+            self.open_settings();
+        }
+    }
+
+    fn settings_asks(&mut self, asks: Vec<crate::settings::Ask>, ctx: &egui::Context) {
+        use crate::settings::Ask;
+        for ask in asks {
+            match ask {
+                Ask::BotSettings => self.bot.open_settings(&self.ed),
+                Ask::SlashCommands => crate::slash::open(&mut self.ed),
+                Ask::Export => self.bot.open_export(&self.ed),
+                Ask::ManagePlugins => self.show_plugins = true,
+                Ask::ReloadPlugins => self.reload_plugins(ctx),
+                Ask::AllowNative(on) => {
+                    self.native.allow = on;
+                    self.native.sync(&mut self.ed, self.bundled_plugins.as_deref());
+                }
+                Ask::ResetLayout => self.reset_layout(),
+            }
+        }
     }
 
     fn reset_layout(&mut self) {
@@ -528,6 +570,7 @@ impl CircuitApp {
         }
         items.push(Item::new("View", "Reset layout", Cmd::ResetLayout));
         items.push(Item::new("Help", "About XC™ Circuit", Cmd::About));
+        items.push(Item::new("File", "Settings", Cmd::OpenSettings).shortcut("Ctrl+,"));
         items.push(Item::new("Plugins", "Manage Plugins…", Cmd::ManagePlugins));
         for p in &self.native.plugins {
             for c in p.commands() {
@@ -585,6 +628,7 @@ impl CircuitApp {
             Cmd::Settings => self.bot.open_settings(&self.ed),
             Cmd::Export => self.bot.open_export(&self.ed),
             Cmd::About => self.show_about = true,
+            Cmd::OpenSettings => self.open_settings(),
             Cmd::ManagePlugins => self.show_plugins = true,
             Cmd::PluginCommand(id) => self.native.queued.push(id),
             Cmd::TogglePluginPanel(plugin, panel) => self.toggle_panel(Tab::Plugin(plugin, panel)),
@@ -791,6 +835,9 @@ impl eframe::App for CircuitApp {
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::SHIFT, egui::Key::F5)) {
             self.bot.stop(&mut self.ed);
         }
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Comma)) {
+            self.open_settings();
+        }
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::P) || i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::P)) {
             self.palette = if self.palette.is_some() { None } else { Some(Default::default()) };
             self.ed.picker = None;
@@ -819,7 +866,7 @@ impl eframe::App for CircuitApp {
         }
 
         let theme = self.ed.theme.clone();
-        let (margin, height) = if self.system_titlebar { (Margin::symmetric(8, 4), None) } else { (Margin { left: 8, right: 0, top: 0, bottom: 0 }, Some(crate::titlebar::HEIGHT)) };
+        let (margin, height) = if self.ed.prefs.system_titlebar { (Margin::symmetric(8, 4), None) } else { (Margin { left: 8, right: 0, top: 0, bottom: 0 }, Some(crate::titlebar::HEIGHT)) };
         let mut top = egui::Panel::top("menu").frame(Frame::new().fill(theme.frame).inner_margin(margin));
         if let Some(h) = height {
             top = top.exact_size(h);
@@ -829,7 +876,7 @@ impl eframe::App for CircuitApp {
             .exact_size(24.0)
             .frame(Frame::new().fill(theme.status_bar).inner_margin(Margin::symmetric(4, 0)))
             .show(ui, |ui| self.status_bar(ui));
-        if self.activity_bar {
+        if self.ed.prefs.activity_bar {
             egui::Panel::left("activity")
                 .exact_size(ACTIVITY_W)
                 .resizable(false)
@@ -844,13 +891,24 @@ impl eframe::App for CircuitApp {
         egui::CentralPanel::default().frame(Frame::new().fill(theme.frame)).show(ui, |ui| {
             let style = theme.dock_style(ui.style());
             let running = self.bot.state != BotState::Stopped;
-            let mut viewer = Viewer { ed: &mut self.ed, problem_count: self.problem_count, problems, stored: &mut self.stored, running, native: &mut self.native };
+            let mut viewer = Viewer {
+                ed: &mut self.ed,
+                problem_count: self.problem_count,
+                problems,
+                stored: &mut self.stored,
+                running,
+                native: &mut self.native,
+                settings: &mut self.settings,
+                asks: Vec::new(),
+            };
             DockArea::new(&mut self.dock)
                 .style(style)
                 .show_add_buttons(false)
                 .show_leaf_close_all_buttons(false)
                 .show_leaf_collapse_buttons(false)
                 .show_inside(ui, &mut viewer);
+            let asks = std::mem::take(&mut viewer.asks);
+            self.settings_asks(asks, ui.ctx());
         });
 
         picker::show(&ctx, &mut self.ed);
@@ -881,7 +939,7 @@ impl eframe::App for CircuitApp {
                 None => {}
             }
         }
-        if !self.system_titlebar {
+        if !self.ed.prefs.system_titlebar {
             crate::titlebar::frame_edges(&ctx, &theme);
         }
 
@@ -903,9 +961,8 @@ impl eframe::App for CircuitApp {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, KEY_DOCK, &self.dock);
         eframe::set_value(storage, KEY_THEME, &self.ed.theme.id);
-        eframe::set_value(storage, KEY_SYSTEM_TITLEBAR, &self.system_titlebar);
         eframe::set_value(storage, KEY_NATIVE_ALLOW, &self.native.allow);
-        eframe::set_value(storage, KEY_ACTIVITY_BAR, &self.activity_bar);
+        eframe::set_value(storage, KEY_PREFS, &self.ed.prefs);
         eframe::set_value(storage, KEY_NATIVE_TRUSTED, &self.native.trusted);
         eframe::set_value(storage, KEY_NATIVE_STORAGE, &self.native.storage);
         if let Some(p) = &self.ed.project {
@@ -923,6 +980,8 @@ struct Viewer<'a> {
     problem_count: usize,
     problems: Vec<panels::ProblemItem>,
     native: &'a mut crate::native::NativeHost,
+    settings: &'a mut crate::settings::SettingsView,
+    asks: Vec<crate::settings::Ask>,
 }
 
 impl TabViewer for Viewer<'_> {
@@ -939,6 +998,7 @@ impl TabViewer for Viewer<'_> {
             Tab::Console => "Console".into(),
             Tab::Problems => format!("Problems  {}", self.problem_count).into(),
             Tab::StoredData => "Stored Data".into(),
+            Tab::Settings => "Settings".into(),
             Tab::Plugin(plugin, panel) => self.native.panel_title(plugin, panel).unwrap_or_else(|| panel.clone()).into(),
             Tab::Canvas(key) => self.ed.workspace(key).map(|w| w.name.clone()).unwrap_or_else(|| key.clone()).into(),
         }
@@ -951,6 +1011,7 @@ impl TabViewer for Viewer<'_> {
             Tab::Console => panels::console(ui, self.ed),
             Tab::Problems => panels::problems(ui, self.ed, std::mem::take(&mut self.problems)),
             Tab::StoredData => crate::stored::panel(ui, self.ed, self.stored, self.running),
+            Tab::Settings => crate::settings::ui(ui, self.ed, self.native, self.settings, &mut self.asks),
             Tab::Plugin(plugin, panel) => {
                 let (plugin, panel) = (plugin.clone(), panel.clone());
                 self.native.panel_ui(ui, self.ed, &plugin, &panel, self.running);
@@ -979,7 +1040,11 @@ fn default_layout() -> DockState<Tab> {
 
 /// Focuses a workspace's canvas tab, or opens it next to the other canvases.
 fn open_canvas(dock: &mut DockState<Tab>, key: String) {
-    let tab = Tab::Canvas(key);
+    open_center(dock, Tab::Canvas(key));
+}
+
+/// Focuses a tab of the main area (canvases, Settings), or opens it there.
+fn open_center(dock: &mut DockState<Tab>, tab: Tab) {
     if let Some(path) = dock.find_tab(&tab) {
         let _ = dock.set_active_tab(path);
         dock.set_focused_node_and_surface(path.node_path());

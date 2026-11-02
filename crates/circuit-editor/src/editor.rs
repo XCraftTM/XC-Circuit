@@ -73,6 +73,8 @@ pub struct Editor {
     /// A selected wire (workspace, link), deleted with Del.
     pub selected_wire: Option<(String, Link)>,
     pub history: Histories,
+    /// App preferences; the theme is styled with them.
+    pub prefs: crate::prefs::Prefs,
     /// Successful saves so far, so others can react to a save.
     pub saves: u64,
     /// What blocks see as `project` in `define()`: `{ data }` of the open project.
@@ -103,6 +105,7 @@ impl Editor {
             multi: HashSet::new(),
             selected_wire: None,
             history: Histories::default(),
+            prefs: Default::default(),
             saves: 0,
             define_ctx: Value::Object(Map::new()),
             embed_edit: None,
@@ -142,6 +145,13 @@ impl Editor {
             .or_else(|| self.reg.themes.first())
             .map(Theme::from_def)
             .unwrap_or_else(Theme::fallback);
+        self.prefs.style(&mut self.theme);
+    }
+
+    /// Re-applies the preferences to the current theme, after they changed.
+    pub fn restyle(&mut self) {
+        let id = self.theme.id.clone();
+        self.set_theme(&id);
     }
 
     /// Plugin folders to watch for changes, including the project's own.

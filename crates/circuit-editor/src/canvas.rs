@@ -287,7 +287,7 @@ fn zone_layout(zid: &str, rect: Rect) -> NodeLayout {
 }
 
 pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
-    let Editor { reg, engine, theme, project, shapes, views, selected, dirty, picker, active_workspace, activity, multi, define_ctx, embed_edit, selected_wire, .. } = ed;
+    let Editor { reg, engine, theme, project, shapes, views, selected, dirty, picker, active_workspace, activity, multi, define_ctx, embed_edit, selected_wire, prefs, .. } = ed;
     let Some(project) = project.as_mut() else { return };
     let mode = reg.mode(&project.meta.mode).or_else(|| reg.modes.first());
     let Some(ws) = project.workspaces.get_mut(ws_key) else {
@@ -410,7 +410,9 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     }
     let painter = cui.painter().clone();
 
-    draw_grid(&painter, visible, theme, view.zoom);
+    if prefs.show_grid {
+        draw_grid(&painter, visible, theme, view.zoom);
+    }
     let recent = |id: &str| activity.get(&(ws_key.to_string(), id.to_string()));
     let glow = |id: &str| recent(id).filter(|a| a.error.is_none()).map(|a| (1.0 - a.at.elapsed().as_secs_f32()).max(0.0)).unwrap_or(0.0);
 

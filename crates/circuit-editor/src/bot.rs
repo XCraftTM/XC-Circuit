@@ -110,8 +110,9 @@ impl BotUi {
     }
 
     /// Restarts a running bot, used after saving.
+    /// After a save: restarts a running bot, unless that is turned off in Settings.
     pub fn restart_if_running(&mut self, ed: &mut Editor, ctx: &egui::Context) {
-        if self.state != BotState::Stopped {
+        if self.state != BotState::Stopped && ed.prefs.auto_restart {
             self.start(ed, ctx);
         }
     }

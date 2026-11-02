@@ -27,6 +27,7 @@ The first start opens `examples/DemoBot`. Windows and Linux are supported.
 | Remove a wire | Click it and press Delete, or right-click it › Delete wire; or drag it off its input and drop it on empty canvas |
 | Undo / Redo | Ctrl+Z / Ctrl+Y (per workspace) |
 | Copy / Paste / Duplicate | Ctrl+C / Ctrl+V (at the mouse) / Ctrl+D; works across workspaces and projects |
+| Settings | Ctrl+, or the gear at the bottom of the activity bar: theme, accent color (changes live), interface size, canvas, window, bot, plugins, shortcuts |
 | Command palette | Ctrl+P or the search box in the title bar: run any command, open a workspace, or jump to a block |
 | Title bar | Drag to move, double-click to maximize, drag the window edges to resize; View › Use system title bar switches to the system one |
 | Save | Ctrl+S (restarts a running bot) |

@@ -31,6 +31,7 @@ pub enum Cmd {
     PluginCommand(String),
     TogglePluginPanel(String, String),
     ManagePlugins,
+    OpenSettings,
 }
 
 pub struct Item {
