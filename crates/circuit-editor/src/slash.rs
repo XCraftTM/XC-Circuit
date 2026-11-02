@@ -799,18 +799,8 @@ fn command_form(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, root: &str) {
         });
         ui.label(RichText::new(t!("People without all of these permissions don't see the command. Server admins can change it in Server Settings › Integrations.")).size(11.5).color(theme.text_muted));
         ui.add_space(6.0);
-        ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new(t!("Works in")).color(theme.text));
-            for (key, _, label) in CONTEXTS {
-                chip_in(ui, theme, &mut cmd.contexts, key, label);
-            }
-        });
-        ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new(t!("When the bot is")).color(theme.text));
-            for (key, _, label) in INSTALLS {
-                chip_in(ui, theme, &mut cmd.installs, key, label);
-            }
-        });
+        pick_row(ui, theme, t!("Works in"), &CONTEXTS, &mut cmd.contexts, t!("Nowhere"));
+        pick_row(ui, theme, t!("When the bot is"), &INSTALLS, &mut cmd.installs, t!("Added to a server"));
         ui.label(RichText::new(t!("Added to an account, the bot's commands work in any server or DM that person is in. Turn it on in the Discord developer portal › Installation too.")).size(11.5).color(theme.text_muted));
     } else {
         ui.label(RichText::new(tf!("Who can use it and where it works are set on /{command}.", command = root)).size(12.0).color(theme.text_muted));
@@ -841,16 +831,15 @@ fn command_form(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, root: &str) {
     ui.label(RichText::new(t!("Discord lists required options first.")).size(11.5).color(theme.text_muted));
 }
 
-/// A switch-like button that puts `key` in `list` or takes it out.
-fn chip_in(ui: &mut Ui, theme: &Theme, list: &mut Vec<String>, key: &str, label: &'static str) {
-    let mut on = list.iter().any(|k| k == key);
-    if dialog::chip(ui, theme, &mut on, crate::i18n::t(label)) {
-        if on {
-            list.push(key.into());
-        } else {
-            list.retain(|k| k != key);
-        }
-    }
+/// A row with a label and a dropdown picking any number of `options` (keys
+/// with their English labels), centered on one line.
+fn pick_row(ui: &mut Ui, theme: &Theme, label: &str, options: &[(&str, u64, &'static str)], list: &mut Vec<String>, none: &str) {
+    ui.horizontal(|ui| {
+        ui.set_min_height(crate::inputs::input_height(ui));
+        ui.label(RichText::new(label).color(theme.text));
+        let options: Vec<(String, &'static str)> = options.iter().map(|(k, _, l)| (k.to_string(), *l)).collect();
+        crate::widgets::multi_select(ui, ui.id().with(label), 260.0, &options, list, none);
+    });
 }
 
 /// Picks any number of permissions; the summary says how many.
@@ -936,13 +925,7 @@ fn option_card(ui: &mut Ui, theme: &Theme, o: &mut SlashOption, i: usize, count:
                 number_box(ui, t!("Largest"), &mut o.max);
             });
         } else if o.kind == "channel" {
-            ui.horizontal_wrapped(|ui| {
-                ui.label(RichText::new(t!("Channel kinds")).size(12.0).color(theme.text_muted));
-                for (key, _, label) in CHANNEL_TYPES {
-                    chip_in(ui, theme, &mut o.channel_types, key, label);
-                }
-            });
-            ui.label(RichText::new(t!("None ticked: every kind can be picked.")).size(11.5).color(theme.text_muted));
+            pick_row(ui, theme, t!("Channel kinds"), &CHANNEL_TYPES, &mut o.channel_types, t!("Every kind"));
         }
         if (texty || numeric) && !o.autocomplete {
             choices(ui, theme, o, numeric);

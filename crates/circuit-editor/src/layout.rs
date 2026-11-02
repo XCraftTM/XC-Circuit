@@ -858,18 +858,13 @@ fn select_editor(ui: &mut Ui, theme: &Theme, sel: &mut Value) {
         }
         t => {
             if t == 8 {
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(RichText::new(t!("Channel kinds")).size(12.5));
+                ui.horizontal(|ui| {
+                    ui.set_min_height(crate::inputs::input_height(ui));
+                    label_column(ui, egui::Label::new(RichText::new(t!("Channel kinds")).size(12.5)));
                     let types = list_mut(sel, "channel_types");
-                    for (n, label) in CHANNEL_TYPES {
-                        let mut on = types.iter().any(|x| x.as_u64() == Some(n));
-                        if dialog::chip(ui, theme, &mut on, crate::i18n::t(label)) {
-                            if on {
-                                types.push(json!(n));
-                            } else {
-                                types.retain(|x| x.as_u64() != Some(n));
-                            }
-                        }
+                    let mut picked: Vec<u64> = types.iter().filter_map(Value::as_u64).collect();
+                    if crate::widgets::multi_select(ui, ui.id().with("channel-kinds"), 220.0, &CHANNEL_TYPES, &mut picked, t!("Every kind")) {
+                        *types = picked.into_iter().map(|n| json!(n)).collect();
                     }
                 });
             }

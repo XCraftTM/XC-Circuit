@@ -97,6 +97,37 @@ pub fn dropdown<R>(ui: &mut Ui, id_salt: egui::Id, width: f32, selected: impl In
     .inner
 }
 
+/// A dropdown with a checkbox per option, for picking any number of them, as
+/// tall as a text box. Closed, it names the first one picked (and how many
+/// more), or says `none`. Options are (key, English label). Returns whether
+/// the picks changed.
+pub fn multi_select<K: PartialEq + Clone>(ui: &mut Ui, id_salt: egui::Id, width: f32, options: &[(K, &'static str)], picked: &mut Vec<K>, none: &str) -> bool {
+    let name = |k: &K| options.iter().find(|(o, _)| o == k).map(|(_, l)| crate::i18n::t(l)).unwrap_or_default().to_string();
+    let summary = match picked.len() {
+        0 => none.to_string(),
+        1 => name(&picked[0]),
+        n => tf!("{first} + {more} more", first = name(&picked[0]), more = n - 1),
+    };
+    let mut changed = false;
+    ui.scope(|ui| {
+        ui.spacing_mut().interact_size.y = crate::inputs::input_height(ui);
+        ComboBox::from_id_salt(id_salt).width(width).selected_text(summary).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show_ui(ui, |ui| {
+            for (key, label) in options {
+                let mut on = picked.contains(key);
+                if ui.checkbox(&mut on, crate::i18n::t(label)).changed() {
+                    if on {
+                        picked.push(key.clone());
+                    } else {
+                        picked.retain(|k| k != key);
+                    }
+                    changed = true;
+                }
+            }
+        });
+    });
+    changed
+}
+
 fn select(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width: f32) -> bool {
     let choices: Vec<(Option<String>, String, String)> = field.choice_list();
     let current = value.as_str().unwrap_or_default().to_string();
