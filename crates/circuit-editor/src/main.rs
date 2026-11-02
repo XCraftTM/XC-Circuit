@@ -13,6 +13,7 @@ mod native;
 mod palette;
 mod panels;
 mod picker;
+mod sidebar;
 mod plugin_manager;
 mod slash;
 mod stored;

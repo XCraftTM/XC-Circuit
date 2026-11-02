@@ -1,5 +1,6 @@
 {
   "name": "Rank command",
+  "folder": "Commands",
   "nodes": {
     "1": {
       "block": "discord.on_slash_command@2",

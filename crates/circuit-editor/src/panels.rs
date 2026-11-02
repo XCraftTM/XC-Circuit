@@ -1,11 +1,11 @@
 //! The side panels: Workspaces, Inspector, Console and Problems.
 
 use circuit_core::graph::ACTION_IN;
-use circuit_core::{PinMode, Workspace};
+use circuit_core::PinMode;
 use eframe::egui::{self, Color32, Frame, Margin, RichText, ScrollArea, Ui};
 use serde_json::Value;
 
-use crate::editor::{Action, Editor, Level, node_shape};
+use crate::editor::{Editor, Level, node_shape};
 use crate::theme::with_alpha;
 use crate::widgets;
 
@@ -14,63 +14,6 @@ fn padded(ui: &mut Ui, add: impl FnOnce(&mut Ui)) {
         ui.set_width(ui.available_width());
         add(ui)
     });
-}
-
-pub fn workspaces(ui: &mut Ui, ed: &mut Editor) {
-    let theme = ed.theme.clone();
-    let Some(project) = ed.project.as_mut() else {
-        padded(ui, |ui| {
-            ui.label(RichText::new("No project open").color(theme.text_muted));
-            ui.label("Use File › Open Project or File › New Project.");
-        });
-        return;
-    };
-    let mut open = None;
-    let mut delete = None;
-    padded(ui, |ui| {
-        ui.label(RichText::new(project.meta.name.to_uppercase()).strong().size(11.0).color(theme.text_muted));
-        ui.add_space(4.0);
-        for (key, ws) in &mut project.workspaces {
-            let active = ed.active_workspace.as_deref() == Some(key.as_str());
-            let text = RichText::new(format!("   {}", ws.name)).color(if active { theme.text } else { theme.text_muted });
-            let resp = ui
-                .with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| ui.add(egui::Button::selectable(active, text).min_size(egui::vec2(0.0, 26.0))))
-                .inner;
-            if resp.clicked() {
-                open = Some(key.clone());
-            }
-            resp.context_menu(|ui| {
-                ui.label("Name");
-                if ui.text_edit_singleline(&mut ws.name).changed() {
-                    ed.dirty = true;
-                }
-                ui.separator();
-                if ui.button("Delete workspace").clicked() {
-                    delete = Some(key.clone());
-                    ui.close();
-                }
-            });
-        }
-        ui.add_space(8.0);
-        if ui.button("+  New workspace").clicked() {
-            let name = format!("Workspace {}", project.workspaces.len() + 1);
-            let key = project.new_workspace_key(&name);
-            project.workspaces.insert(key.clone(), Workspace::new(name));
-            ed.dirty = true;
-            open = Some(key);
-        }
-    });
-    if let Some(key) = delete {
-        if let Some(p) = ed.project.as_mut() {
-            p.workspaces.shift_remove(&key);
-            let _ = std::fs::remove_file(p.workspace_path(&key));
-        }
-        ed.actions.push(Action::CloseWorkspaceTabs(key));
-        ed.dirty = true;
-    }
-    if let Some(key) = open {
-        ed.actions.push(Action::OpenWorkspace(key));
-    }
 }
 
 /// Something the Inspector asks for that needs the whole editor.

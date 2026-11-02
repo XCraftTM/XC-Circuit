@@ -26,6 +26,9 @@ pub struct ProjectMeta {
     /// Project-wide data owned by project editors, such as `slashCommands`.
     #[serde(skip_serializing_if = "Map::is_empty")]
     pub data: Map<String, Value>,
+    /// Workspace folders in sidebar order, kept even while empty.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub folders: Vec<String>,
 }
 
 impl Default for ProjectMeta {
@@ -37,6 +40,7 @@ impl Default for ProjectMeta {
             plugins: IndexMap::new(),
             settings: Map::new(),
             data: Map::new(),
+            folders: Vec::new(),
         }
     }
 }

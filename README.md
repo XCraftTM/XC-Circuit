@@ -31,6 +31,8 @@ The first start opens `examples/DemoBot`. Windows and Linux are supported.
 | Title bar | Drag to move, double-click to maximize, drag the window edges to resize; View › Use system title bar switches to the system one |
 | Save | Ctrl+S (restarts a running bot) |
 | Panels | Drag tabs to dock anywhere; reopen closed ones from View › Panels |
+| Workspaces | The Workspaces panel lists them in folders: + and the folder button on the project row add them, drag a workspace onto a folder to move it, double-click a name to rename, right-click for more |
+| Activity bar | The icons on the far left open Workspaces, Stored Data, Plugins and Bot Settings (View › Show activity bar hides it) |
 | Try Zone | Right-click a block › Wrap in Try Zone; drop blocks in or out; right-click the zone's title for retries and timeout |
 | Embeds | Select a Build Embed block › Open Embed Builder; the block shows a live preview |
 | Slash commands | Bot › Slash Commands… (options, choices, permissions); registered when the bot starts |

@@ -1,5 +1,6 @@
 {
   "name": "Startup",
+  "folder": "Events",
   "nodes": {
     "1": {
       "block": "core.on_start@1",

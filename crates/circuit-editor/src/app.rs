@@ -40,6 +40,7 @@ const KEY_THEME: &str = "theme";
 const KEY_PROJECT: &str = "project";
 const KEY_SYSTEM_TITLEBAR: &str = "system_titlebar";
 const KEY_NATIVE_ALLOW: &str = "native_allow";
+const KEY_ACTIVITY_BAR: &str = "activity_bar";
 const KEY_NATIVE_TRUSTED: &str = "native_trusted";
 const KEY_NATIVE_STORAGE: &str = "native_storage";
 
@@ -62,6 +63,8 @@ pub struct CircuitApp {
     /// The app's own plugins folder.
     bundled_plugins: Option<PathBuf>,
     show_plugins: bool,
+    /// The icon strip on the far left.
+    activity_bar: bool,
 }
 
 impl CircuitApp {
@@ -127,6 +130,7 @@ impl CircuitApp {
             native,
             bundled_plugins,
             show_plugins: false,
+            activity_bar: cc.storage.and_then(|s| eframe::get_value(s, KEY_ACTIVITY_BAR)).unwrap_or(true),
         }
     }
 
@@ -298,6 +302,7 @@ impl CircuitApp {
                     }
                 }
                 ui.separator();
+                ui.checkbox(&mut self.activity_bar, "Show activity bar");
                 if ui.checkbox(&mut self.system_titlebar, "Use system title bar").clicked() {
                     ui.ctx().send_viewport_cmd(ViewportCommand::Decorations(self.system_titlebar));
                 }
@@ -423,6 +428,45 @@ impl CircuitApp {
         if self.native.plugins.iter().any(|p| p.status == crate::native::Status::Loaded) {
             ctx.request_repaint_after(std::time::Duration::from_secs(1));
         }
+    }
+
+    /// The activity bar: icons that open and close the side panels.
+    fn activity(&mut self, ui: &mut egui::Ui) {
+        let t = self.ed.theme.clone();
+        let line = ui.max_rect();
+        ui.painter().vline(line.right() - 0.5, line.y_range(), egui::Stroke::new(1.0, t.line));
+        ui.spacing_mut().item_spacing.y = 2.0;
+        let open = |dock: &DockState<Tab>, tab: &Tab| dock.find_tab(tab).is_some();
+        let has_project = self.ed.project.is_some();
+        if self.activity_item(ui, "layers", "Workspaces", open(&self.dock, &Tab::Workspaces)) {
+            self.toggle_panel(Tab::Workspaces);
+        }
+        if self.activity_item(ui, "database", "Stored Data", open(&self.dock, &Tab::StoredData)) {
+            self.toggle_panel(Tab::StoredData);
+        }
+        if self.activity_item(ui, "plug", "Plugins", self.show_plugins) {
+            self.show_plugins = !self.show_plugins;
+        }
+        ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
+            if self.activity_item(ui, "settings", "Bot Settings", false) && has_project {
+                self.bot.open_settings(&self.ed);
+            }
+        });
+    }
+
+    /// One activity bar icon. Returns true when clicked.
+    fn activity_item(&self, ui: &mut egui::Ui, icon: &str, tip: &str, active: bool) -> bool {
+        let t = &self.ed.theme;
+        let (rect, resp) = ui.allocate_exact_size(egui::vec2(ACTIVITY_W, 40.0), egui::Sense::click());
+        let resp = resp.on_hover_text(tip).on_hover_cursor(egui::CursorIcon::PointingHand);
+        if active {
+            ui.painter().rect_filled(egui::Rect::from_min_size(rect.min, egui::vec2(2.0, rect.height())), 0.0, t.accent);
+        }
+        let color = if active || resp.hovered() { t.text } else { t.text_muted };
+        if let Some(path) = self.ed.reg.icons.get(icon) {
+            egui::Image::from_uri(crate::editor::file_uri(path)).tint(color).paint_at(ui, egui::Rect::from_center_size(rect.center(), egui::vec2(20.0, 20.0)));
+        }
+        resp.clicked()
     }
 
     fn reset_layout(&mut self) {
@@ -785,6 +829,13 @@ impl eframe::App for CircuitApp {
             .exact_size(24.0)
             .frame(Frame::new().fill(theme.status_bar).inner_margin(Margin::symmetric(4, 0)))
             .show(ui, |ui| self.status_bar(ui));
+        if self.activity_bar {
+            egui::Panel::left("activity")
+                .exact_size(ACTIVITY_W)
+                .resizable(false)
+                .frame(Frame::new().fill(theme.frame).inner_margin(Margin::symmetric(0, 6)))
+                .show(ui, |ui| self.activity(ui));
+        }
         let mut problems = panels::collect_problems(&self.ed);
         problems.extend(self.native.problems());
         self.problem_count = problems.len();
@@ -848,6 +899,7 @@ impl eframe::App for CircuitApp {
         eframe::set_value(storage, KEY_THEME, &self.ed.theme.id);
         eframe::set_value(storage, KEY_SYSTEM_TITLEBAR, &self.system_titlebar);
         eframe::set_value(storage, KEY_NATIVE_ALLOW, &self.native.allow);
+        eframe::set_value(storage, KEY_ACTIVITY_BAR, &self.activity_bar);
         eframe::set_value(storage, KEY_NATIVE_TRUSTED, &self.native.trusted);
         eframe::set_value(storage, KEY_NATIVE_STORAGE, &self.native.storage);
         if let Some(p) = &self.ed.project {
@@ -855,6 +907,8 @@ impl eframe::App for CircuitApp {
         }
     }
 }
+
+const ACTIVITY_W: f32 = 44.0;
 
 struct Viewer<'a> {
     ed: &'a mut Editor,
@@ -886,7 +940,7 @@ impl TabViewer for Viewer<'_> {
 
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Tab) {
         match tab {
-            Tab::Workspaces => panels::workspaces(ui, self.ed),
+            Tab::Workspaces => crate::sidebar::panel(ui, self.ed),
             Tab::Inspector => panels::inspector(ui, self.ed),
             Tab::Console => panels::console(ui, self.ed),
             Tab::Problems => panels::problems(ui, self.ed, std::mem::take(&mut self.problems)),

@@ -15,6 +15,9 @@ pub const ACTION_IN: &str = "in";
 #[serde(default)]
 pub struct Workspace {
     pub name: String,
+    /// The sidebar folder it is listed in, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
     pub nodes: IndexMap<String, Node>,
     pub links: Vec<Link>,
     #[serde(skip_serializing_if = "IndexMap::is_empty")]
