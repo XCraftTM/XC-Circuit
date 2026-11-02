@@ -1459,6 +1459,24 @@ Hi {user}"), "{text:?}");
         frame(&ctx, &mut ed, "rank-command", vec![egui::Event::Text("!".into())]);
         let text = ed.workspace("rank-command").unwrap().nodes["4"].values["text"].as_str().unwrap().to_string();
         assert!(text.ends_with("{user}!"), "{text:?}");
+
+        // Clicking a value in the list picks it too (pressing takes the text
+        // cursor from the box for a moment).
+        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::Text(" {us".into())]);
+        settle(&mut ed);
+        let list = crate::values::open_list_rect(&ctx).unwrap_or(Rect::NOTHING);
+        assert!(list.is_positive(), "the list is open");
+        let row = pos2(list.left() + 60.0, list.top() + 40.0);
+        let at = |pressed: bool| egui::Event::PointerButton { pos: row, button: PointerButton::Primary, pressed, modifiers: Default::default() };
+        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerMoved(row)]);
+        frame(&ctx, &mut ed, "rank-command", vec![at(true)]);
+        frame(&ctx, &mut ed, "rank-command", vec![at(false)]);
+        settle(&mut ed);
+        let text = ed.workspace("rank-command").unwrap().nodes["4"].values["text"].as_str().unwrap().to_string();
+        assert!(text.ends_with("{user}! {user}"), "{text:?}");
+        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::Text("?".into())]);
+        let text = ed.workspace("rank-command").unwrap().nodes["4"].values["text"].as_str().unwrap().to_string();
+        assert!(text.ends_with("{user}?"), "the text cursor is back after it: {text:?}");
     }
 
     #[test]

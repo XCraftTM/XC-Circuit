@@ -138,6 +138,13 @@ pub fn available(ws: &Workspace, node: &str, reg: &Registry, shape_of: &mut dyn 
 const SCOPE: &str = "values-scope";
 const LAST_TEXT: &str = "values-last-text";
 const PENDING: &str = "values-pending";
+const OPEN_LIST: &str = "values-open-list";
+
+/// Where the list of values was drawn last (screen), for tests.
+#[cfg(test)]
+pub fn open_list_rect(ctx: &egui::Context) -> Option<egui::Rect> {
+    ctx.data(|d| d.get_temp::<egui::Rect>(Id::new(OPEN_LIST)))
+}
 
 /// The values text boxes offer from now on, until set to `None`.
 pub fn set_scope(ctx: &egui::Context, values: Option<Arc<Vec<Avail>>>) {
@@ -289,9 +296,17 @@ pub fn after(ui: &mut Ui, resp: &egui::Response, text: &mut String) -> bool {
         return true;
     }
     let selected_id = id.with("values-selected");
+    let list_id = id.with("values-list-rect");
     let key = ctx.data_mut(|d| d.remove_temp::<KeyAction>(id.with("values-key")));
-    if !resp.has_focus() {
-        ctx.data_mut(|d| d.remove::<usize>(selected_id));
+    // Pressing on the list takes the text cursor from the box: the list stays
+    // while the pointer is on it, so the click picks (and puts the cursor back).
+    let open = ctx.data(|d| d.get_temp::<usize>(selected_id)).is_some();
+    let on_list = ctx.data(|d| d.get_temp::<egui::Rect>(list_id)).is_some_and(|r| ctx.input(|i| i.pointer.interact_pos()).is_some_and(|p| r.contains(p)));
+    if !resp.has_focus() && !(open && on_list) {
+        ctx.data_mut(|d| {
+            d.remove::<usize>(selected_id);
+            d.remove::<egui::Rect>(list_id);
+        });
         return false;
     }
     // The name being typed after an open brace, up to the cursor.
@@ -346,7 +361,7 @@ pub fn after(ui: &mut Ui, resp: &egui::Response, text: &mut String) -> bool {
 
     // The list, under the box (on the canvas the box is in a zoomed layer).
     let rect = ctx.layer_transform_to_global(resp.layer_id).map_or(resp.rect, |t| t * resp.rect);
-    egui::Area::new(id.with("values-list")).order(egui::Order::Foreground).fixed_pos(rect.left_bottom() + vec2(0.0, 4.0)).show(&ctx, |ui| {
+    let area = egui::Area::new(id.with("values-list")).order(egui::Order::Foreground).fixed_pos(rect.left_bottom() + vec2(0.0, 4.0)).show(&ctx, |ui| {
         let v = ui.visuals().clone();
         egui::Frame::new().fill(v.window_fill).stroke(v.window_stroke).corner_radius(8).inner_margin(6).shadow(v.popup_shadow).show(ui, |ui| {
             ui.set_width(rect.width().clamp(300.0, 460.0));
@@ -364,10 +379,17 @@ pub fn after(ui: &mut Ui, resp: &egui::Response, text: &mut String) -> bool {
             });
         });
     });
+    ctx.data_mut(|d| {
+        d.insert_temp(list_id, area.response.rect);
+        d.insert_temp(Id::new(OPEN_LIST), area.response.rect);
+    });
     match pick {
         Some(i) => {
             put(&ctx, id, text, start - 1, at, &matches[i].token);
-            ctx.data_mut(|d| d.remove::<usize>(selected_id));
+            ctx.data_mut(|d| {
+                d.remove::<usize>(selected_id);
+                d.remove::<egui::Rect>(list_id);
+            });
             changed = true;
         }
         None => {
