@@ -200,7 +200,7 @@ impl CircuitApp {
     fn sync_dialog_tabs(&mut self, ctx: &egui::Context) {
         let wanted = [
             (Tab::EmbedBuilder, self.ed.embed_edit.is_some(), egui::vec2(1060.0, 760.0)),
-            (Tab::SlashCommands, self.ed.slash_edit.is_some(), egui::vec2(1000.0, 700.0)),
+            (Tab::SlashCommands, self.ed.slash_edit.is_some(), egui::vec2(1320.0, 720.0)),
             (Tab::BotSettings, self.bot.settings.is_some(), egui::vec2(540.0, 600.0)),
             (Tab::Export, self.bot.export.is_some(), egui::vec2(560.0, 620.0)),
             (Tab::Plugins, self.plugins.is_some(), egui::vec2(580.0, 560.0)),

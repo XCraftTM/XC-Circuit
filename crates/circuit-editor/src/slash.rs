@@ -7,7 +7,7 @@ use serde_json::Value;
 use crate::dialog::{self, Part};
 use crate::i18n::n;
 use crate::editor::{Editor, Level};
-use crate::theme::{Theme, with_alpha};
+use crate::theme::Theme;
 
 pub const DATA_KEY: &str = "slashCommands";
 
@@ -129,6 +129,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
     let theme = ed.theme.clone();
     let icon = ed.reg.icons.get("slash").cloned();
     let trash = ed.reg.icons.get("trash").cloned();
+    let eye = ed.reg.icons.get("eye").cloned();
     let issues = problems(&edit.commands);
     let (mut save, mut close, mut cancel) = (false, false, false);
     dialog::tab(
@@ -139,10 +140,10 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
             title: t!("Slash Commands"),
             subtitle: Some(t!("Registered automatically when the bot starts")),
             icon: icon.as_deref(),
-            width: 980.0,
+            width: 1300.0,
         },
         |ui, part| match part {
-            Part::Body => body(ui, &theme, edit, &issues, trash.as_deref()),
+            Part::Body => body(ui, &theme, edit, &issues, trash.as_deref(), eye.as_deref()),
             Part::Footer => {
                 ui.add_enabled_ui(issues.is_empty(), |ui| {
                     if dialog::primary_button(ui, &theme, t!("Save and close")).clicked() {
@@ -197,7 +198,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
     }
 }
 
-fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], trash: Option<&std::path::Path>) {
+fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], trash: Option<&std::path::Path>, eye: Option<&std::path::Path>) {
     ui.horizontal_top(|ui| {
         // Command list.
         ui.allocate_ui_with_layout(vec2(230.0, 520.0), egui::Layout::top_down(egui::Align::Min), |ui| {
@@ -239,8 +240,9 @@ fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], tra
         ui.painter().vline(r.right() + 8.0, r.y_range(), Stroke::new(1.0, theme.line));
         ui.add_space(18.0);
 
-        // The selected command.
-        ui.vertical(|ui| {
+        // The selected command, and on the right how it looks in Discord.
+        let form_w = (ui.available_width() - PREVIEW_W - 40.0).max(380.0);
+        ui.allocate_ui_with_layout(vec2(form_w, 560.0), egui::Layout::top_down(egui::Align::Min), |ui| {
             let Some(cmd) = edit.commands.get_mut(edit.selected) else {
                 ui.add_space(40.0);
                 ui.label(RichText::new(t!("No slash commands yet. Click “+ New command”.")).color(theme.text_muted));
@@ -256,7 +258,7 @@ fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], tra
                         dialog::text_input(ui, &mut cmd.description, t!("Shows your rank"), false)
                     });
                 });
-                dialog::section(ui, theme, &format!("Options · {} of 25", cmd.options.len()));
+                dialog::section(ui, theme, &tf!("Options · {count} of 25", count = cmd.options.len()));
                 let mut remove = None;
                 for (i, o) in cmd.options.iter_mut().enumerate() {
                     if texts.len() <= i {
@@ -272,11 +274,12 @@ fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], tra
                     cmd.options.push(SlashOption { name: format!("option{}", cmd.options.len() + 1), description: t!("Describe this option").into(), ..Default::default() });
                     texts.push(String::new());
                 }
-                ui.add_space(12.0);
-                dialog::section(ui, theme, t!("How it looks in Discord"));
-                preview(ui, theme, cmd);
             });
         });
+        if let Some(cmd) = edit.commands.get(edit.selected) {
+            ui.add_space(20.0);
+            discord_preview(ui, theme, cmd, &edit.choice_text[edit.selected], eye);
+        }
     });
 }
 
@@ -323,19 +326,149 @@ fn number_box(ui: &mut Ui, label: &str, v: &mut Option<f64>) {
     }
 }
 
-fn preview(ui: &mut Ui, theme: &Theme, cmd: &SlashCommand) {
-    Frame::new().fill(Color32::from_rgb(0x38, 0x3A, 0x40)).corner_radius(8).inner_margin(Margin::symmetric(12, 10)).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new(format!("/{}", cmd.name)).monospace().color(Color32::WHITE));
-            for o in &cmd.options {
-                let chip = Frame::new().fill(if o.required { Color32::from_rgb(0x4E, 0x50, 0x58) } else { Color32::from_rgb(0x2B, 0x2D, 0x31) }).corner_radius(4).inner_margin(Margin::symmetric(6, 2));
-                chip.show(ui, |ui| {
-                    ui.label(RichText::new(format!("{}{}", o.name, if o.required { "" } else { "?" })).size(12.5).color(Color32::from_rgb(0xDB, 0xDE, 0xE1)));
-                });
-            }
+/// The width of the "How it looks in Discord" column.
+const PREVIEW_W: f32 = 340.0;
+
+/// Discord's own colors, so the preview looks like the real thing in any theme.
+mod discord {
+    use eframe::egui::Color32;
+    pub const PANEL: Color32 = Color32::from_rgb(0x31, 0x33, 0x38);
+    pub const POPUP: Color32 = Color32::from_rgb(0x2B, 0x2D, 0x31);
+    pub const POPUP_HOVER: Color32 = Color32::from_rgb(0x35, 0x37, 0x3C);
+    pub const INPUT: Color32 = Color32::from_rgb(0x38, 0x3A, 0x40);
+    pub const CHIP_ACTIVE: Color32 = Color32::from_rgb(0x4E, 0x50, 0x58);
+    pub const LINE: Color32 = Color32::from_rgb(0x1E, 0x1F, 0x22);
+    pub const HEADER: Color32 = Color32::from_rgb(0xB5, 0xBA, 0xC1);
+    pub const TEXT: Color32 = Color32::from_rgb(0xDB, 0xDE, 0xE1);
+    pub const BRIGHT: Color32 = Color32::from_rgb(0xF2, 0xF3, 0xF5);
+    pub const MUTED: Color32 = Color32::from_rgb(0x94, 0x9B, 0xA4);
+    pub const ACTION: Color32 = Color32::from_rgb(0x3D, 0xFF, 0x6E);
+}
+
+/// The right-hand column: Discord's suggestion popup and chat box for the
+/// command as it is now, and the event block saving makes available.
+fn discord_preview(ui: &mut Ui, theme: &Theme, cmd: &SlashCommand, choice_text: &[String], eye: Option<&std::path::Path>) {
+    let choices_of = |i: usize| -> Vec<String> { choice_text.get(i).map(|t| t.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect()).unwrap_or_default() };
+    // The option the popup shows: the first one with choices.
+    let active = cmd.options.iter().enumerate().find(|(i, _)| !choices_of(*i).is_empty()).map(|(i, _)| i);
+    let name = if cmd.name.is_empty() { "command".to_string() } else { cmd.name.clone() };
+
+    Frame::new().fill(discord::PANEL).corner_radius(10).show(ui, |ui| ui.vertical(|ui| {
+        ui.set_width(PREVIEW_W);
+        ui.spacing_mut().item_spacing = vec2(6.0, 0.0);
+        // Header.
+        Frame::new().inner_margin(Margin::symmetric(16, 12)).show(ui, |ui| {
+            ui.set_width(PREVIEW_W - 32.0);
+            ui.horizontal(|ui| {
+                if let Some(path) = eye {
+                    let (r, _) = ui.allocate_exact_size(vec2(14.0, 14.0), egui::Sense::hover());
+                    egui::Image::from_uri(crate::editor::file_uri(path)).tint(discord::HEADER).paint_at(ui, r);
+                }
+                ui.label(RichText::new(t!("How it looks in Discord")).size(12.0).color(discord::HEADER));
+            });
         });
-        ui.label(RichText::new(&cmd.description).size(12.0).color(with_alpha(Color32::WHITE, 150)));
-    });
-    let _ = theme;
+        let r = ui.min_rect();
+        ui.painter().hline(r.x_range(), r.bottom(), Stroke::new(1.0, discord::LINE));
+
+        Frame::new().inner_margin(Margin { left: 14, right: 14, top: 18, bottom: 14 }).show(ui, |ui| {
+            ui.set_width(PREVIEW_W - 28.0);
+            // The suggestion popup above the chat box.
+            let top = egui::CornerRadius { nw: 8, ne: 8, sw: 0, se: 0 };
+            Frame::new().fill(discord::POPUP).stroke(Stroke::new(1.0, discord::LINE)).corner_radius(top).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                let heading = |ui: &mut Ui, text: String| {
+                    Frame::new().inner_margin(Margin { left: 12, right: 12, top: 10, bottom: 6 }).show(ui, |ui| {
+                        ui.label(RichText::new(text.to_uppercase()).size(11.0).strong().color(discord::HEADER));
+                    });
+                };
+                let row = |ui: &mut Ui, first: bool, main: &str, side: Option<&str>| {
+                    Frame::new().fill(if first { discord::POPUP_HOVER } else { Color32::TRANSPARENT }).inner_margin(Margin::symmetric(12, 7)).show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(main).size(14.0).color(if first { discord::BRIGHT } else { discord::TEXT }));
+                            if let Some(s) = side.filter(|s| !s.is_empty()) {
+                                ui.label(RichText::new(s).size(12.0).color(discord::MUTED));
+                            }
+                        });
+                    });
+                };
+                match active {
+                    Some(i) => {
+                        let o = &cmd.options[i];
+                        heading(ui, format!("{} · {}", o.name, o.description));
+                        for (n, c) in choices_of(i).iter().enumerate() {
+                            row(ui, n == 0, c, None);
+                        }
+                    }
+                    None if !cmd.options.is_empty() => {
+                        heading(ui, t!("Options").to_string());
+                        for (n, o) in cmd.options.iter().enumerate() {
+                            row(ui, n == 0, &o.name, Some(&o.description));
+                        }
+                    }
+                    None => {
+                        heading(ui, t!("Commands").to_string());
+                        row(ui, true, &format!("/{name}"), Some(&cmd.description));
+                    }
+                }
+                ui.add_space(4.0);
+            });
+            // The chat box with the command typed in.
+            let bottom = egui::CornerRadius { nw: 0, ne: 0, sw: 8, se: 8 };
+            Frame::new().fill(discord::INPUT).corner_radius(bottom).inner_margin(Margin::symmetric(12, 10)).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(RichText::new(format!("/{name}")).monospace().size(14.0).color(discord::TEXT));
+                    for (i, o) in cmd.options.iter().enumerate() {
+                        let is_active = Some(i) == active;
+                        let fill = if is_active { discord::CHIP_ACTIVE } else { discord::POPUP };
+                        Frame::new().fill(fill).corner_radius(4).inner_margin(Margin::symmetric(6, 2)).show(ui, |ui| {
+                            ui.spacing_mut().item_spacing.x = 4.0;
+                            let label = if o.required { o.name.clone() } else { format!("{}?", o.name) };
+                            if is_active {
+                                ui.label(RichText::new(label).size(13.0).color(discord::BRIGHT));
+                            } else {
+                                ui.label(RichText::new(label).size(13.0).color(discord::MUTED));
+                                ui.label(RichText::new("…").size(13.0).color(discord::TEXT));
+                            }
+                        });
+                    }
+                });
+            });
+
+            // The event block this command gives you.
+            ui.add_space(18.0);
+            let card = Frame::new().fill(Color32::from_rgb(0x2B, 0x2E, 0x33)).corner_radius(9).inner_margin(Margin::same(12)).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.spacing_mut().item_spacing.y = 8.0;
+                ui.label(RichText::new(t!("Saving makes this event block available in the block picker:")).size(12.0).color(theme.text));
+                Frame::new().fill(Color32::from_rgb(0x36, 0x3A, 0x41)).stroke(Stroke::new(1.0, Color32::from_rgb(0x45, 0x4A, 0x52))).corner_radius(7).inner_margin(Margin::symmetric(10, 8)).show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(tf!("Slash Command · /{name}", name = name)).strong().color(Color32::from_rgb(0xE7, 0xEA, 0xED)));
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let (r, _) = ui.allocate_exact_size(vec2(11.0, 13.0), egui::Sense::hover());
+                            ui.painter().add(egui::Shape::convex_polygon(vec![r.left_top(), r.right_center(), r.left_bottom()], discord::ACTION, Stroke::NONE));
+                        });
+                    });
+                });
+                let outputs: Vec<String> = cmd
+                    .options
+                    .iter()
+                    .map(|o| {
+                        let kind = KINDS.iter().find(|(k, _)| *k == o.kind).map(|(_, l)| crate::i18n::t(l)).unwrap_or(t!("Text"));
+                        format!("{} ({kind})", circuit_core::block::title_case(&o.name))
+                    })
+                    .collect();
+                let text = if outputs.is_empty() { t!("It has no option outputs yet.").to_string() } else { tf!("Its outputs are your options: {list}.", list = outputs.join(", ")) };
+                ui.label(RichText::new(text).size(12.0).color(theme.text_muted));
+            });
+            // Dashed outline, as in "something you can take from here".
+            let r = card.response.rect;
+            let stroke = Stroke::new(1.0, Color32::from_rgb(0x5C, 0x63, 0x6C));
+            let pts = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
+            ui.painter().extend(egui::Shape::dashed_line(&pts, stroke, 4.0, 3.0));
+        });
+    }));
 }
