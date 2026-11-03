@@ -135,6 +135,54 @@ const log = (name) => (...args) => {
   assert.deepStrictEqual([o.owns, o.list[0].status], [true, "active"]);
   await assert.rejects(run("premium/premium.js", { action: "check", for: "server", sku: "s" }, { application: papp }), /Connect a server/);
 
+  // Bans.
+  let bulk;
+  const bg = {
+    bans: {
+      fetch: async (o) => {
+        if (!o) return coll([{ id: "1", user: { id: "1", username: "spammer" }, reason: "spam" }]);
+        if (o.user === "1") return { reason: "spam" };
+        throw Object.assign(new Error("Unknown Ban"), { code: 10026 });
+      },
+      bulkCreate: async (ids, opts) => ((bulk = { ids, opts }), { bannedUsers: ids.slice(0, 1), failedUsers: ids.slice(1) }),
+    },
+  };
+  o = await run("members/bans.js", { action: "check", server: bg, userId: "1" });
+  assert.deepStrictEqual([o.banned, o.reason], [true, "spam"]);
+  o = await run("members/bans.js", { action: "check", server: bg, userId: "2" });
+  assert.strictEqual(o.banned, false, "an unknown ban means not banned");
+  o = await run("members/bans.js", { action: "bulk", server: bg, users: [{ id: "111111111111111111" }], ids: "222222222222222222 111111111111111111", deleteHours: 1 });
+  assert.deepStrictEqual([bulk.ids, bulk.opts.deleteMessageSeconds, o.failedIds], [["111111111111111111", "222222222222222222"], 3600, ["222222222222222222"]]);
+
+  // Prune.
+  let pruned;
+  o = await run("members/prune_members.js", { server: { members: { prune: async (opts) => ((pruned = opts), 4) } }, days: 99 });
+  assert.deepStrictEqual([o.count, pruned.days, pruned.dry], [4, 30, true]);
+
+  // Forward.
+  o = await run("messages/forward_message.js", { message: { forward: async (c) => ({ to: c }) }, channel: { id: "c" } });
+  assert.strictEqual(o.forwarded.to.id, "c");
+
+  // Channel tools.
+  const chans = coll([{ id: "2", name: "b", type: 0, rawPosition: 2 }, { id: "1", name: "a", type: 0, rawPosition: 1 }, { id: "3", name: "v", type: 2, rawPosition: 0 }]);
+  o = await run("channels/channel_tools.js", { action: "list", server: { channels: { fetch: async () => chans } }, type: "text" });
+  assert.deepStrictEqual(o.list.map((c) => c.name), ["a", "b"]);
+  await assert.rejects(run("channels/channel_tools.js", { action: "sync", channel: { parentId: null } }), /isn't in a category/);
+
+  // Forum tags.
+  let setTags;
+  const forum = { availableTags: [{ id: "t1", name: "Solved" }], setAvailableTags: async (t) => ((setTags = t), { availableTags: t }) };
+  o = await run("channels/forum_tags.js", { action: "add", forum, tags: "Bug, solved", emoji: "🐛" });
+  assert.deepStrictEqual([setTags.map((t) => t.name), setTags[1].emoji], [["Solved", "Bug"], { id: null, name: "🐛" }]);
+  let applied;
+  o = await run("channels/forum_tags.js", { action: "apply", post: { parent: forum, setAppliedTags: async (ids) => (applied = ids) }, tags: "solved" });
+  assert.deepStrictEqual([applied, o.names], [["t1"], ["Solved"]]);
+  await assert.rejects(run("channels/forum_tags.js", { action: "apply", post: { parent: forum, setAppliedTags: async () => {} }, tags: "nope" }), /no tag nope/);
+
+  // Delete invite.
+  o = await run("server/delete_invite.js", { code: "https://discord.gg/abc" }, { fetchInvite: async (c) => ({ code: c, uses: 3, delete: log("invite.delete") }) });
+  assert.deepStrictEqual([o.code, o.uses], ["abc", 3]);
+
   console.log("discord actions test passed");
 })().catch((e) => {
   console.error(e);
