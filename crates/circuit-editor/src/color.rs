@@ -163,11 +163,15 @@ fn panel(ctx: &egui::Context, id: Id, button: Rect, state: &mut Open, theme: &Th
                 if picked.is_some() {
                     state.hex = to_hex(current);
                 }
-                ui.horizontal(|ui| {
+                // One height for the whole row, set before anything is placed, so
+                // the swatch, boxes and labels share a center line: the number
+                // boxes' own height (text and button padding), which they keep.
+                let h = ui.spacing().interact_size.y.max(ui.text_style_height(&egui::TextStyle::Body) + 2.0 * ui.spacing().button_padding.y);
+                ui.allocate_ui_with_layout(vec2(ui.available_width(), h), egui::Layout::left_to_right(egui::Align::Center), |ui| {
                     ui.spacing_mut().item_spacing.x = 4.0;
-                    let (sw, _) = ui.allocate_exact_size(vec2(22.0, 22.0), Sense::hover());
+                    let (sw, _) = ui.allocate_exact_size(vec2(h, h), Sense::hover());
                     ui.painter().rect(sw, 5.0, current, Stroke::new(1.0, theme.line), StrokeKind::Inside);
-                    let hex = ui.add(egui::TextEdit::singleline(&mut state.hex).desired_width(66.0).font(egui::TextStyle::Monospace).char_limit(7));
+                    let hex = ui.add_sized([66.0, h], egui::TextEdit::singleline(&mut state.hex).font(egui::TextStyle::Monospace).char_limit(7).vertical_align(egui::Align::Center));
                     if hex.changed()
                         && let Some(c) = parse_hex(&state.hex)
                     {
@@ -181,7 +185,7 @@ fn panel(ctx: &egui::Context, id: Id, button: Rect, state: &mut Open, theme: &Th
                     let mut edited = false;
                     for (i, label) in ["R", "G", "B"].into_iter().enumerate() {
                         ui.label(egui::RichText::new(label).size(10.5).color(theme.text_muted));
-                        edited |= ui.add_sized([34.0, 22.0], egui::DragValue::new(&mut rgb[i]).speed(1.0)).changed();
+                        edited |= ui.add_sized([34.0, h], egui::DragValue::new(&mut rgb[i]).speed(1.0)).changed();
                     }
                     if edited {
                         let c = Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
