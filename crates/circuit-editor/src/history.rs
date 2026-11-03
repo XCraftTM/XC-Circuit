@@ -1,65 +1,167 @@
-//! Undo and redo per workspace. A step is recorded when an edit settles (no mouse
-//! button held, no text box focused), so a whole drag or a whole edit is one step.
+//! Undo and redo per workspace, and whether the project has unsaved changes.
+//! A step is recorded when an edit settles (no mouse button held, no text box
+//! focused), so a whole drag or a whole edit is one step.
+//!
+//! Every recorded state gets a version number. The project is unsaved when
+//! the versions differ from the ones it had when it was last saved, so
+//! undoing back to the saved state makes it saved again.
 
 use std::collections::HashMap;
 
+use circuit_core::project::ProjectMeta;
 use circuit_core::{Project, Workspace};
 
 const LIMIT: usize = 200;
 
-struct History {
-    undo: Vec<Workspace>,
-    redo: Vec<Workspace>,
-    last: Workspace,
+/// The states of one thing (a workspace, or the project's settings and data).
+struct History<T> {
+    undo: Vec<(T, u64)>,
+    redo: Vec<(T, u64)>,
+    last: T,
+    /// The version of `last`.
+    version: u64,
 }
 
+impl<T: Clone + PartialEq> History<T> {
+    fn new(now: &T, version: u64) -> Self {
+        History { undo: Vec::new(), redo: Vec::new(), last: now.clone(), version }
+    }
+
+    /// Records `now` as a step if it changed. Returns whether it did.
+    fn record(&mut self, now: &T, next: &mut u64) -> bool {
+        if *now == self.last {
+            return false;
+        }
+        *next += 1;
+        let prev = std::mem::replace(&mut self.last, now.clone());
+        self.undo.push((prev, std::mem::replace(&mut self.version, *next)));
+        if self.undo.len() > LIMIT {
+            self.undo.remove(0);
+        }
+        self.redo.clear();
+        true
+    }
+
+    fn undo(&mut self, now: &mut T, next: &mut u64) -> bool {
+        // An edit that has not settled yet is undone first.
+        self.record(now, next);
+        let Some((prev, version)) = self.undo.pop() else { return false };
+        self.redo.push((std::mem::replace(now, prev.clone()), self.version));
+        (self.last, self.version) = (prev, version);
+        true
+    }
+
+    fn redo(&mut self, now: &mut T) -> bool {
+        let Some((next, version)) = self.redo.pop() else { return false };
+        self.undo.push((std::mem::replace(now, next.clone()), self.version));
+        (self.last, self.version) = (next, version);
+        true
+    }
+}
+
+/// The key that stands for the project's settings and data (such as the
+/// slash commands) in undo and redo.
+pub const PROJECT: &str = "@project";
+
 #[derive(Default)]
-pub struct Histories(HashMap<String, History>);
+pub struct Histories {
+    workspaces: HashMap<String, History<Workspace>>,
+    project: Option<History<ProjectMeta>>,
+    /// The highest version handed out.
+    next: u64,
+    /// Versions when last saved: per workspace, and the project's. `None`
+    /// when not known (after taking over unsaved changes), which counts as unsaved.
+    saved: Option<(HashMap<String, u64>, u64)>,
+}
 
 impl Histories {
+    /// Forgets every step; what is open now counts as unsaved.
     pub fn clear(&mut self) {
-        self.0.clear();
+        *self = Histories { next: self.next, ..Default::default() };
+    }
+
+    /// Forgets every step and takes `project` as saved, as it is now.
+    pub fn reset_saved(&mut self, project: &Project) {
+        self.clear();
+        self.track(project, true);
+        self.mark_saved();
     }
 
     /// Records changes made since the last settled state.
     pub fn track(&mut self, project: &Project, settled: bool) {
-        self.0.retain(|k, _| project.workspaces.contains_key(k));
+        self.workspaces.retain(|k, _| project.workspaces.contains_key(k));
+        let next = &mut self.next;
         for (key, ws) in &project.workspaces {
-            let h = self.0.entry(key.clone()).or_insert_with(|| History { undo: Vec::new(), redo: Vec::new(), last: ws.clone() });
-            if settled && *ws != h.last {
-                h.undo.push(std::mem::replace(&mut h.last, ws.clone()));
-                if h.undo.len() > LIMIT {
-                    h.undo.remove(0);
+            match self.workspaces.get_mut(key) {
+                Some(h) if settled => {
+                    h.record(ws, next);
                 }
-                h.redo.clear();
+                Some(_) => {}
+                None => {
+                    *next += 1;
+                    self.workspaces.insert(key.clone(), History::new(ws, *next));
+                }
+            }
+        }
+        match &mut self.project {
+            Some(h) if settled => {
+                h.record(&project.meta, next);
+            }
+            Some(_) => {}
+            None => {
+                *next += 1;
+                self.project = Some(History::new(&project.meta, *next));
             }
         }
     }
 
+    /// Takes the recorded state as saved; `track` it first.
+    pub fn mark_saved(&mut self) {
+        let workspaces = self.workspaces.iter().map(|(k, h)| (k.clone(), h.version)).collect();
+        self.saved = Some((workspaces, self.project.as_ref().map_or(0, |h| h.version)));
+    }
+
+    /// Whether the recorded state differs from the saved one.
+    pub fn unsaved(&self) -> bool {
+        let Some((workspaces, project)) = &self.saved else { return true };
+        workspaces.len() != self.workspaces.len()
+            || self.workspaces.iter().any(|(k, h)| workspaces.get(k) != Some(&h.version))
+            || self.project.as_ref().is_some_and(|h| h.version != *project)
+    }
+
     pub fn undo(&mut self, key: &str, ws: &mut Workspace) -> bool {
-        let Some(h) = self.0.get_mut(key) else { return false };
-        // An edit that has not settled yet is undone first.
-        let target = if *ws != h.last { Some(h.last.clone()) } else { h.undo.pop() };
-        let Some(prev) = target else { return false };
-        h.redo.push(std::mem::replace(ws, prev.clone()));
-        h.last = prev;
-        true
+        let Some(h) = self.workspaces.get_mut(key) else { return false };
+        h.undo(ws, &mut self.next)
     }
 
     pub fn redo(&mut self, key: &str, ws: &mut Workspace) -> bool {
-        let Some(h) = self.0.get_mut(key) else { return false };
-        let Some(next) = h.redo.pop() else { return false };
-        h.undo.push(std::mem::replace(ws, next.clone()));
-        h.last = next;
-        true
+        let Some(h) = self.workspaces.get_mut(key) else { return false };
+        h.redo(ws)
+    }
+
+    /// Undo for the project's settings and data.
+    pub fn undo_project(&mut self, meta: &mut ProjectMeta) -> bool {
+        let Some(h) = self.project.as_mut() else { return false };
+        h.undo(meta, &mut self.next)
+    }
+
+    pub fn redo_project(&mut self, meta: &mut ProjectMeta) -> bool {
+        let Some(h) = self.project.as_mut() else { return false };
+        h.redo(meta)
     }
 
     pub fn can_undo(&self, key: &str) -> bool {
-        self.0.get(key).is_some_and(|h| !h.undo.is_empty())
+        match key {
+            PROJECT => self.project.as_ref().is_some_and(|h| !h.undo.is_empty()),
+            _ => self.workspaces.get(key).is_some_and(|h| !h.undo.is_empty()),
+        }
     }
 
     pub fn can_redo(&self, key: &str) -> bool {
-        self.0.get(key).is_some_and(|h| !h.redo.is_empty())
+        match key {
+            PROJECT => self.project.as_ref().is_some_and(|h| !h.redo.is_empty()),
+            _ => self.workspaces.get(key).is_some_and(|h| !h.redo.is_empty()),
+        }
     }
 }
 
@@ -73,7 +175,8 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("xc-history-{}", std::process::id()));
         let mut p = Project::create(&dir, "H", "m").unwrap();
         let mut h = Histories::default();
-        h.track(&p, true);
+        h.reset_saved(&p);
+        assert!(!h.unsaved());
 
         let ws = p.workspaces.get_mut("main").unwrap();
         ws.nodes.insert("a".into(), Node { block: "x@1".into(), ..Default::default() });
@@ -81,11 +184,41 @@ mod tests {
         assert!(!h.can_undo("main"));
         h.track(&p, true);
         assert!(h.can_undo("main"));
+        assert!(h.unsaved());
 
         let ws = p.workspaces.get_mut("main").unwrap();
         assert!(h.undo("main", ws));
         assert!(ws.nodes.is_empty());
+        assert!(!h.unsaved(), "undone back to the saved state");
         assert!(h.redo("main", ws));
         assert_eq!(ws.nodes.len(), 1);
+        assert!(h.unsaved());
+        h.mark_saved();
+        assert!(!h.unsaved());
+
+        // The project's settings and data are tracked and undone too.
+        p.meta.settings.insert("devServer".into(), "1".into());
+        h.track(&p, true);
+        assert!(h.unsaved() && h.can_undo(PROJECT));
+        assert!(h.undo_project(&mut p.meta));
+        assert!(p.meta.settings.is_empty());
+        assert!(!h.unsaved());
+
+        // A new or deleted workspace is a change.
+        p.workspaces.insert("more".into(), Workspace::new("More"));
+        h.track(&p, true);
+        assert!(h.unsaved());
+        p.workspaces.shift_remove("more");
+        h.track(&p, true);
+        assert!(!h.unsaved());
+        p.workspaces.shift_remove("main");
+        h.track(&p, true);
+        assert!(h.unsaved());
+
+        // Taken-over changes count as unsaved until saved.
+        h.clear();
+        h.track(&p, true);
+        assert!(h.unsaved());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

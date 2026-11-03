@@ -293,7 +293,6 @@ mod tests {
         ed.open_project(&root);
         let rename = |ed: &mut Editor, name: &str| {
             ed.project.as_mut().unwrap().workspaces.get_mut("main").unwrap().name = name.into();
-            ed.dirty = true;
         };
         rename(&mut ed, "First");
         ed.save();
@@ -309,14 +308,14 @@ mod tests {
         assert_eq!(p.workspaces["main"].name, "First");
         assert!(!p.workspaces.contains_key("extra"));
         assert!(!p.workspace_path("extra").exists(), "saved: its file is gone");
-        assert!(!ed.dirty);
+        assert!(!ed.unsaved_now());
         // It had just been saved, so its backup already is the version from before.
         assert!(ed.backups.list(&root).iter().any(|s| s.dir == list[0].dir), "the version before restoring was kept");
 
         // One workspace from the second save, as an unsaved change.
         ed.restore_workspace(&list[0], "extra").unwrap();
         assert_eq!(ed.project.as_ref().unwrap().workspaces["extra"].name, "Extra");
-        assert!(ed.dirty);
+        assert!(ed.unsaved_now());
 
         // Restoring over unsaved changes backs them up first.
         ed.restore_project(&list[1]).unwrap();

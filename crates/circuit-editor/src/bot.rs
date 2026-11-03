@@ -459,7 +459,7 @@ impl BotUi {
                         }
                     } else if project.meta.settings.get(&f.key).and_then(Value::as_str) != Some(f.value.as_str()) {
                         project.meta.settings.insert(f.key.clone(), Value::String(f.value.trim().to_string()));
-                        ed.dirty = true;
+                        ed.edited = true;
                     }
                 }
                 for e in errors {

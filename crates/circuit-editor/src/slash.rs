@@ -648,7 +648,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
         }
         if let Some(p) = ed.project.as_mut() {
             p.meta.data.insert(DATA_KEY.into(), serde_json::to_value(&commands).unwrap_or(Value::Null));
-            ed.dirty = true;
+            ed.edited = true;
         }
         ed.refresh_define_ctx();
         ed.log(Level::Success, tf!("Saved {count} slash commands", count = commands.len()));

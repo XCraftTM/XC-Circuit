@@ -362,7 +362,7 @@ fn apply(ed: &mut Editor, ctx: &egui::Context, todo: Vec<Do>, renaming: &mut Opt
                             && ws.name != name
                         {
                             ws.name = name;
-                            ed.dirty = true;
+                            ed.edited = true;
                         }
                     }
                     Target::Folder(old) if old != name => {
@@ -374,7 +374,7 @@ fn apply(ed: &mut Editor, ctx: &egui::Context, todo: Vec<Do>, renaming: &mut Opt
                             Some(i) => project.meta.folders[i] = name,
                             None => project.meta.folders.push(name),
                         }
-                        ed.dirty = true;
+                        ed.edited = true;
                     }
                     Target::Folder(_) => {}
                 }
@@ -390,14 +390,14 @@ fn apply(ed: &mut Editor, ctx: &egui::Context, todo: Vec<Do>, renaming: &mut Opt
                         }
                         uncollapse(ctx, &f);
                     }
-                    ed.dirty = true;
+                    ed.edited = true;
                 }
             }
             Do::DeleteWorkspace(key) => {
                 // The file goes on save, so Don't save brings the workspace back.
                 project.remove_workspace(&key);
                 ed.actions.push(Action::CloseWorkspaceTabs(key));
-                ed.dirty = true;
+                ed.edited = true;
             }
             Do::NewWorkspace(folder) => {
                 let name = unique("Workspace", |n| project.workspaces.values().any(|w| w.name == n));
@@ -409,21 +409,21 @@ fn apply(ed: &mut Editor, ctx: &egui::Context, todo: Vec<Do>, renaming: &mut Opt
                 uncollapse(ctx, PROJECT_ROW);
                 ed.actions.push(Action::OpenWorkspace(key.clone()));
                 *renaming = Some(Renaming { target: Target::Workspace(key), text: name, fresh: true });
-                ed.dirty = true;
+                ed.edited = true;
             }
             Do::NewFolder => {
                 let name = unique(t!("New folder"), |n| project.meta.folders.iter().any(|f| f == n));
                 project.meta.folders.push(name.clone());
                 uncollapse(ctx, PROJECT_ROW);
                 *renaming = Some(Renaming { target: Target::Folder(name.clone()), text: name, fresh: true });
-                ed.dirty = true;
+                ed.edited = true;
             }
             Do::DeleteFolder(name) => {
                 project.meta.folders.retain(|f| *f != name);
                 for ws in project.workspaces.values_mut().filter(|w| w.folder.as_ref() == Some(&name)) {
                     ws.folder = None;
                 }
-                ed.dirty = true;
+                ed.edited = true;
             }
             Do::Toggle(key) => ctx.data_mut(|d| {
                 let list = d.get_persisted_mut_or_default::<Vec<String>>(Id::new(COLLAPSED_KEY));
@@ -512,6 +512,6 @@ mod tests {
         assert!(collapsed.contains(&"Events".to_string()));
         click(&ctx, &mut ed, pos2(260.0 - 16.0, row_at(0).y));
         assert_eq!(ed.project.as_ref().unwrap().meta.folders, ["Commands", "Events", "New folder"]);
-        assert!(ed.dirty);
+        assert!(ed.unsaved_now());
     }
 }

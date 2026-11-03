@@ -15,7 +15,7 @@ pub const WORKSPACE_DIR: &str = "workspaces";
 pub const FORMAT: u32 = 1;
 
 /// `circuit.json`. Secrets never go in here.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ProjectMeta {
     pub format: u32,

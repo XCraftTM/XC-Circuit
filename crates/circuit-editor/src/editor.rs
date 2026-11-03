@@ -59,7 +59,9 @@ pub struct Editor {
     pub plugin_dirs: Vec<PathBuf>,
     pub theme: Theme,
     pub project: Option<Project>,
-    pub dirty: bool,
+    /// Set by every edit, so the history looks for changes on the next
+    /// settled frame. Whether there are unsaved changes is `unsaved()`.
+    pub edited: bool,
     /// Selected node as (workspace key, node id).
     pub selected: Option<(String, String)>,
     pub log: Vec<LogLine>,
@@ -105,7 +107,7 @@ impl Editor {
             plugin_dirs,
             theme: Theme::fallback(),
             project: None,
-            dirty: false,
+            edited: false,
             selected: None,
             log: Vec::new(),
             shapes: HashMap::new(),
@@ -212,11 +214,11 @@ impl Editor {
                 }
                 let first = project.workspaces.keys().next().cloned();
                 self.recovery_offer = self.backups.read_recovery(&project);
+                self.history.reset_saved(&project);
                 self.project = Some(project);
-                self.dirty = false;
+                self.edited = false;
                 self.selected = None;
                 self.multi.clear();
-                self.history.clear();
                 self.views.clear();
                 self.reload_plugins();
                 self.refresh_define_ctx();
@@ -235,7 +237,9 @@ impl Editor {
         let Some(project) = self.project.as_mut() else { return };
         match project.save() {
             Ok(()) => {
-                self.dirty = false;
+                self.history.track(project, true);
+                self.history.mark_saved();
+                self.edited = false;
                 self.saves += 1;
                 let msg = format!("Saved {}", project.meta.name);
                 self.backups.clear_recovery(&project.root);
@@ -273,7 +277,7 @@ impl Editor {
         self.views.clear();
         self.clear_selection();
         self.shapes.clear();
-        self.dirty = true;
+        self.edited = true;
         self.save();
         self.refresh_define_ctx();
         let when = crate::editor::local_time(snap.info.saved_at);
@@ -293,7 +297,7 @@ impl Editor {
         let name = ws.name.clone();
         project.workspaces.insert(key.to_string(), ws);
         self.shapes.retain(|(w, _), _| w != key);
-        self.dirty = true;
+        self.edited = true;
         self.actions.push(Action::OpenWorkspace(key.to_string()));
         self.log(Level::Info, format!("Restored the workspace {name} from {} (not saved yet)", crate::editor::local_time(snap.info.saved_at)));
         Ok(())
@@ -314,8 +318,35 @@ impl Editor {
         }
         self.shapes.clear();
         self.history.clear();
-        self.dirty = true;
+        self.edited = true;
         self.log(Level::Success, "Your unsaved changes are back. Save to keep them.");
+    }
+
+    /// Whether the project has changes that aren't saved, as of the last
+    /// settled frame.
+    pub fn unsaved(&self) -> bool {
+        self.project.is_some() && self.history.unsaved()
+    }
+
+    /// Records changes made since the last settled frame right away.
+    pub fn check_changes(&mut self) {
+        if let Some(p) = &self.project {
+            self.history.track(p, true);
+        }
+        self.edited = false;
+    }
+
+    /// Whether there are unsaved changes, counting ones not recorded yet.
+    pub fn unsaved_now(&mut self) -> bool {
+        self.check_changes();
+        self.unsaved()
+    }
+
+    /// Treats the project as it is now as saved, without saving it (for the
+    /// tour's practice project, which isn't kept).
+    pub fn forget_changes(&mut self) {
+        self.check_changes();
+        self.history.mark_saved();
     }
 
     pub fn mode(&self) -> Option<&BuildMode> {
@@ -339,7 +370,7 @@ impl Editor {
             id.clone(),
             Node { block: def.reference(), at: [at.x, at.y], values: def.default_values(), pins: def.default_pins(), ..Default::default() },
         );
-        self.dirty = true;
+        self.edited = true;
         self.select_only(ws_key, &id);
         Some(id)
     }
@@ -398,7 +429,7 @@ impl Editor {
             }
         }
         if count > 0 {
-            self.dirty = true;
+            self.edited = true;
             self.log(Level::Info, tf!("Changed {count} texts from {name} to ${name}, which holds JavaScript now (save to keep)", count = count));
         }
     }
@@ -430,7 +461,7 @@ impl Editor {
             }
         }
         if upgraded > 0 {
-            self.dirty = true;
+            self.edited = true;
             self.log(Level::Info, format!("Upgraded {upgraded} blocks to newer versions (save to keep)"));
         }
     }
@@ -490,7 +521,7 @@ impl Editor {
     }
 
     fn after_history_jump(&mut self, key: &str) {
-        self.dirty = true;
+        self.edited = true;
         self.shapes.retain(|(w, _), _| w != key);
         let alive: HashSet<String> = self.workspace(key).map(|w| w.nodes.keys().cloned().collect()).unwrap_or_default();
         self.multi.retain(|n| alive.contains(n));
@@ -521,7 +552,7 @@ impl Editor {
             if let Some(ws) = self.project.as_mut().and_then(|p| p.workspaces.get_mut(&key)) {
                 let before = ws.links.len();
                 ws.links.retain(|l| *l != link);
-                self.dirty |= ws.links.len() != before;
+                self.edited |= ws.links.len() != before;
             }
             return;
         }
@@ -532,7 +563,7 @@ impl Editor {
             ws.remove_node(id);
         }
         if !ids.is_empty() {
-            self.dirty = true;
+            self.edited = true;
             self.clear_selection();
         }
     }
@@ -551,7 +582,7 @@ impl Editor {
         };
         let Some(ws) = self.project.as_mut().and_then(|p| p.workspaces.get_mut(&key)) else { return false };
         let ids = ws.paste(&clip, offset);
-        self.dirty = true;
+        self.edited = true;
         self.selected = ids.first().map(|f| (key.clone(), f.clone()));
         self.multi = ids.into_iter().collect();
         true
@@ -692,7 +723,7 @@ mod tests {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
         ed.open_project(&root.join("examples/DemoBot"));
-        assert!(!ed.dirty, "the example is up to date");
+        assert!(!ed.unsaved_now(), "the example is up to date");
         let nodes = &mut ed.project.as_mut().unwrap().workspaces.get_mut("rank-command").unwrap().nodes;
         nodes.get_mut("4").unwrap().values.insert("text".into(), "Hi {user}, {#3.embed.title} x{3}".into());
         nodes.get_mut("3").unwrap().values["embed"]["title"] = "Rank of {user}".into();
@@ -700,7 +731,7 @@ mod tests {
         let nodes = &ed.project.as_ref().unwrap().workspaces["rank-command"].nodes;
         assert_eq!(nodes["4"].values["text"], "Hi ${user}, ${#3.embed.title} x{3}");
         assert_eq!(nodes["3"].values["embed"]["title"], "Rank of ${user}", "texts inside designs too");
-        assert!(ed.dirty);
+        assert!(ed.unsaved_now());
     }
 
     #[test]

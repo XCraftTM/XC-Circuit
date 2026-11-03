@@ -46,7 +46,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
         });
         return;
     };
-    let Editor { reg, engine, project, shapes, dirty, define_ctx, .. } = ed;
+    let Editor { reg, engine, project, shapes, edited, define_ctx, .. } = ed;
     let mode = project.as_ref().and_then(|p| reg.mode(&p.meta.mode));
     let Some(ws) = project.as_mut().and_then(|p| p.workspaces.get_mut(&ws_key)) else { return };
     let Some(shape) = node_shape(reg, engine, shapes, &ws_key, ws, &node_id, define_ctx) else {
@@ -122,7 +122,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                         let id = ui.id().with(("inspector", &node_id, key));
                         if widgets::value_editor(ui, id, f, &mut value, ui.available_width(), true, &theme) {
                             ws.nodes.get_mut(&node_id).unwrap().values.insert(key.clone(), value);
-                            *dirty = true;
+                            *edited = true;
                         }
                         if f.templated() {
                             ui.label(RichText::new(t!("${…} holds JavaScript: type ${ for values from earlier blocks, or ${xp * 2}")).size(11.0).color(theme.text_muted));
@@ -145,7 +145,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
             } else {
                 n.pins.push(key);
             }
-            *dirty = true;
+            *edited = true;
         }
 
         if !shape.outputs.is_empty() {

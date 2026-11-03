@@ -414,7 +414,7 @@ impl api::Host for EditorHost<'_> {
         let slot = project.workspaces.get_mut(key).ok_or_else(|| format!("no workspace `{key}`"))?;
         if *slot != ws {
             *slot = ws;
-            self.ed.dirty = true;
+            self.ed.edited = true;
         }
         Ok(())
     }
@@ -445,7 +445,7 @@ impl api::Host for EditorHost<'_> {
         let project = self.ed.project.as_mut().ok_or("no project is open")?;
         if project.meta.data.get(key) != Some(&value) {
             project.meta.data.insert(key.to_string(), value);
-            self.ed.dirty = true;
+            self.ed.edited = true;
         }
         Ok(())
     }

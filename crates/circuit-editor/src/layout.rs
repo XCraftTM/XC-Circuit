@@ -391,7 +391,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
         }
         if let Some(n) = ed.project.as_mut().and_then(|p| p.workspaces.get_mut(&ws)).and_then(|w| w.nodes.get_mut(&node)) {
             n.values.insert(key, value);
-            ed.dirty = true;
+            ed.edited = true;
         }
     } else if cancel {
         ed.layout_edit = None;

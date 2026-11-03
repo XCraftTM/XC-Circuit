@@ -298,7 +298,7 @@ fn zone_layout(zid: &str, rect: Rect) -> NodeLayout {
 }
 
 pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
-    let Editor { reg, engine, theme, project, shapes, views, selected, dirty, picker, active_workspace, activity, multi, define_ctx, embed_edit, layout_edit, selected_wire, prefs, ui_rects, .. } = ed;
+    let Editor { reg, engine, theme, project, shapes, views, selected, edited, picker, active_workspace, activity, multi, define_ctx, embed_edit, layout_edit, selected_wire, prefs, ui_rects, .. } = ed;
     let Some(project) = project.as_mut() else { return };
     let mode = reg.mode(&project.meta.mode).or_else(|| reg.modes.first());
     let Some(ws) = project.workspaces.get_mut(ws_key) else {
@@ -498,7 +498,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                 n.at[0] += d.x;
                 n.at[1] += d.y;
             }
-            *dirty = true;
+            *edited = true;
         }
         band.on_hover_text(t!("A Try Zone catches errors from the blocks inside it. The gear button sets its title, retries and timeout."));
         for spot in &layout.pins {
@@ -741,7 +741,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                         }
                         if resp.changed() {
                             ws.nodes.get_mut(id).unwrap().values.insert(key.clone(), Value::String(text));
-                            *dirty = true;
+                            *edited = true;
                         }
                         // The grip in its corner resizes it: down for the box, sideways for
                         // the whole block. A double-click puts both back.
@@ -757,7 +757,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                         if g.double_clicked() {
                             node.heights.remove(key);
                             node.width = None;
-                            *dirty = true;
+                            *edited = true;
                         } else if g.dragged() {
                             let d = g.drag_delta();
                             if d.y != 0.0 {
@@ -768,7 +768,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                                 let w = (node.width.unwrap_or(layout.rect.width()) + d.x).clamp(NODE_WIDTH_RANGE.0, NODE_WIDTH_RANGE.1);
                                 node.width = Some(w);
                             }
-                            *dirty |= d != Vec2::ZERO;
+                            *edited |= d != Vec2::ZERO;
                         }
                         view.text_fields.push(((id.clone(), key.clone()), to_global * bx));
                     } else if widgets::is_inline_editable(f) {
@@ -792,7 +792,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                         let changed = drawn.inner;
                         if changed {
                             ws.nodes.get_mut(id).unwrap().values.insert(key.clone(), value);
-                            *dirty = true;
+                            *edited = true;
                         }
                     }
                 }
@@ -823,7 +823,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     node.at[1] += d.y;
                 }
             }
-            *dirty = true;
+            *edited = true;
         }
         if head.drag_started() {
             drag_zones = Some(fitted.clone());
@@ -879,7 +879,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                 start_drag = Some(match existing {
                     Some(link) => {
                         ws.links.retain(|l| *l != link);
-                        *dirty = true;
+                        *edited = true;
                         PinEnd { node: link.from.node.clone(), pin: link.from.pin.clone(), dir: Dir::Out, ty: spot.ty.clone(), picked_up: Some(link) }
                     }
                     None => PinEnd { node: id.clone(), pin: spot.pin.clone(), dir: spot.dir, ty: spot.ty.clone(), picked_up: None },
@@ -905,7 +905,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         } else {
             n.pins.push(pin);
         }
-        *dirty = true;
+        *edited = true;
     }
 
     // The wire being dragged, and what happens when it is dropped.
@@ -933,7 +933,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             match target {
                 Some((node, spot)) => {
                     connect(ws, &d, &node, &spot);
-                    *dirty = true;
+                    *edited = true;
                 }
                 // A picked-up wire dropped on nothing is deleted.
                 None if d.picked_up.is_some() => {}
@@ -1055,7 +1055,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         if resp.clicked() {
             ws.links.retain(|l| *l != link);
             *selected_wire = None;
-            *dirty = true;
+            *edited = true;
         }
     }
 
@@ -1079,17 +1079,17 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             ui.spacing_mut().item_spacing.y = 8.0;
             ui.label(RichText::new(t!("Try Zone")).strong());
             ui.label(t!("Title"));
-            *dirty |= ui.add(crate::inputs::TextLine::new(&mut z.title)).changed();
+            *edited |= ui.add(crate::inputs::TextLine::new(&mut z.title)).changed();
             ui.horizontal(|ui| {
                 ui.label(t!("Retries"));
-                *dirty |= ui.add(egui::DragValue::new(&mut z.retry).range(0..=10)).changed();
+                *edited |= ui.add(egui::DragValue::new(&mut z.retry).range(0..=10)).changed();
             });
             ui.horizontal(|ui| {
                 ui.label(t!("Timeout (s)"));
                 let mut secs = z.timeout_ms.map(|t| t as f64 / 1000.0).unwrap_or(0.0);
                 if ui.add(egui::DragValue::new(&mut secs).range(0.0..=600.0).speed(0.5)).changed() {
                     z.timeout_ms = (secs > 0.0).then_some((secs * 1000.0) as u64);
-                    *dirty = true;
+                    *edited = true;
                 }
             });
             ui.separator();
@@ -1111,14 +1111,14 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                 *selected = None;
                 multi.clear();
             }
-            *dirty = true;
+            *edited = true;
         }
         Some(NodeMenu::Duplicate(n)) => {
             let ids: Vec<String> = if multi.contains(&n) { multi.iter().cloned().collect() } else { vec![n] };
             let new_ids = ws.paste(&ws.extract(&ids), [30.0, 30.0]);
             *selected = new_ids.first().map(|f| (ws_key.to_string(), f.clone()));
             *multi = new_ids.into_iter().collect();
-            *dirty = true;
+            *edited = true;
         }
         Some(NodeMenu::OpenSource(path)) => {
             let _ = open::that(path);
@@ -1129,19 +1129,19 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             if let Some(node) = ws.nodes.get_mut(&n) {
                 node.zone = Some(zid);
             }
-            *dirty = true;
+            *edited = true;
         }
         Some(NodeMenu::LeaveZone(n)) => {
             if let Some(node) = ws.nodes.get_mut(&n) {
                 node.zone = None;
             }
-            *dirty = true;
+            *edited = true;
         }
         Some(NodeMenu::RemoveZone(zid)) => {
             for node in ws.nodes.values_mut().filter(|n| n.zone.as_deref() == Some(zid.as_str())) {
                 node.zone = None;
             }
-            *dirty = true;
+            *edited = true;
         }
         None => {}
     }
@@ -1176,7 +1176,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         let node = ws.nodes.get_mut(&n).unwrap();
         if node.zone != target && (target.is_some() || node.zone.is_some()) {
             node.zone = target;
-            *dirty = true;
+            *edited = true;
         }
     }
     // Zones without blocks disappear, with the wires from their outputs.
@@ -1185,7 +1185,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         ws.zones.retain(|z, _| used.contains(z));
         let zones: std::collections::HashSet<String> = ws.zones.keys().cloned().collect();
         ws.links.retain(|l| ws.nodes.contains_key(&l.from.node) || zones.contains(&l.from.node));
-        *dirty = true;
+        *edited = true;
     }
 
     if let Some(b) = selection_box {

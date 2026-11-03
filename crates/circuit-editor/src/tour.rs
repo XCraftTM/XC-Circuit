@@ -193,7 +193,7 @@ fn do_it(ed: &mut Editor, wait: Wait) -> Option<Ask> {
             let m = math_node(ed)?;
             let ws = ed.project.as_mut()?.workspaces.get_mut(WORKSPACE)?;
             ws.connect(Link { from: PinRef::new(&m, "result"), to: PinRef::new(LOG_NODE, "message") }, true);
-            ed.dirty = true;
+            ed.edited = true;
         }
         Wait::Values => {
             let m = math_node(ed)?;
@@ -202,7 +202,7 @@ fn do_it(ed: &mut Editor, wait: Wait) -> Option<Ask> {
             node.values.insert("b".into(), json!(3));
             node.values.insert("op".into(), json!("add"));
             ed.select_only(WORKSPACE, &m);
-            ed.dirty = true;
+            ed.edited = true;
         }
         Wait::Run => return Some(Ask::Run),
     }

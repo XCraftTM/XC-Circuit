@@ -97,6 +97,8 @@ pub struct CircuitApp {
     restore: crate::restore::RestoreView,
     /// When unsaved changes were last copied for crash recovery.
     last_recovery: std::time::Instant,
+    /// When changes were last looked for.
+    last_check: std::time::Instant,
     /// The First Start page, while it is open.
     setup: Option<crate::setup::Setup>,
     /// The guided tour, while it runs, and the layout to put back afterwards.
@@ -187,6 +189,7 @@ impl CircuitApp {
             settings: Default::default(),
             restore: Default::default(),
             last_recovery: std::time::Instant::now(),
+            last_check: std::time::Instant::now(),
         }
     }
 
@@ -344,7 +347,7 @@ impl CircuitApp {
     }
 
     fn switch_project(&mut self, dir: &Path) {
-        if self.ed.dirty {
+        if self.ed.unsaved_now() {
             self.ed.save();
         }
         self.bot.stop(&mut self.ed);
@@ -420,7 +423,7 @@ impl CircuitApp {
             });
             ui.menu_button(t!("Edit"), |ui| {
                 let key = self.ed.active_workspace.clone().unwrap_or_default();
-                if ui.add_enabled(self.ed.history.can_undo(&key) || self.ed.dirty, egui::Button::new(t!("Undo")).shortcut_text("Ctrl+Z")).clicked() {
+                if ui.add_enabled(self.ed.history.can_undo(&key) || self.ed.edited, egui::Button::new(t!("Undo")).shortcut_text("Ctrl+Z")).clicked() {
                     self.ed.undo();
                 }
                 if ui.add_enabled(self.ed.history.can_redo(&key), egui::Button::new(t!("Redo")).shortcut_text("Ctrl+Y")).clicked() {
@@ -713,7 +716,7 @@ impl CircuitApp {
         let Some(tour) = self.tour.take() else { return };
         self.bot.stop(&mut self.ed);
         // The practice project isn't kept.
-        self.ed.dirty = false;
+        self.ed.forget_changes();
         let target = match exit {
             Exit::DemoBot => self.examples_dir.as_ref().map(|e| e.join("DemoBot")),
             Exit::Return | Exit::NewProject => tour.before,
@@ -1026,7 +1029,7 @@ impl CircuitApp {
                 self.ed.theme.apply(&ctx);
             }
         }
-        let saved = if self.ed.dirty { t!("Unsaved changes") } else { t!("Saved") };
+        let saved = if self.ed.unsaved() { t!("Unsaved changes") } else { t!("Saved") };
         if status_item(&mut right, &t, None, saved).on_hover_text(t!("Save (Ctrl+S)")).clicked() && has_project {
             self.ed.save();
             self.bot.restart_if_running(&mut self.ed, &ctx);
@@ -1155,7 +1158,7 @@ impl eframe::App for CircuitApp {
         let ctx = ui.ctx().clone();
         self.ed.ui_rects.clear();
         // The tour's practice project is never worth a "save changes?" question.
-        if ctx.input(|i| i.viewport().close_requested()) && self.ed.dirty && !self.allow_close && self.tour.is_none() {
+        if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close && self.tour.is_none() && self.ed.unsaved_now() {
             ctx.send_viewport_cmd(ViewportCommand::CancelClose);
             self.confirm_close = true;
         }
@@ -1197,7 +1200,7 @@ impl eframe::App for CircuitApp {
         }
 
         let title = match &self.ed.project {
-            Some(p) => format!("{}{} — XC™ Circuit", if self.ed.dirty { "● " } else { "" }, p.meta.name),
+            Some(p) => format!("{}{} — XC™ Circuit", if self.ed.unsaved() { "● " } else { "" }, p.meta.name),
             None => "XC™ Circuit".into(),
         };
         if title != self.title {
@@ -1320,12 +1323,16 @@ impl eframe::App for CircuitApp {
         }
 
         // Record an undo step once an edit has settled.
+        // Only looked for after an edit or input, or now and then for changes
+        // made some other way, since comparing a big project takes a moment.
         let settled = !ctx.input(|i| i.pointer.any_down()) && !ctx.text_edit_focused();
-        if let Some(p) = &self.ed.project {
-            self.ed.history.track(p, settled);
+        let due = self.ed.edited || ctx.input(|i| !i.events.is_empty()) || self.last_check.elapsed() >= CHECK_EVERY;
+        if settled && due {
+            self.ed.check_changes();
+            self.last_check = std::time::Instant::now();
         }
         // Unsaved changes are copied every 30 seconds, for crash recovery.
-        if self.ed.dirty && settled && self.tour.is_none() && self.last_recovery.elapsed() >= RECOVERY_EVERY {
+        if self.ed.unsaved() && settled && self.tour.is_none() && self.last_recovery.elapsed() >= RECOVERY_EVERY {
             self.last_recovery = std::time::Instant::now();
             if let Some(p) = &self.ed.project
                 && let Err(e) = self.ed.backups.write_recovery(p)
@@ -1333,7 +1340,7 @@ impl eframe::App for CircuitApp {
                 self.ed.log(Level::Warn, format!("Couldn't keep a recovery copy of your unsaved changes: {e:#}"));
             }
         }
-        if self.ed.dirty {
+        if self.ed.unsaved() {
             ctx.request_repaint_after(RECOVERY_EVERY);
         }
     }
@@ -1368,6 +1375,8 @@ impl eframe::App for CircuitApp {
 const ACTIVITY_W: f32 = 44.0;
 /// How often unsaved changes are copied for crash recovery.
 const RECOVERY_EVERY: std::time::Duration = std::time::Duration::from_secs(30);
+/// How often changes are looked for without an edit or input.
+const CHECK_EVERY: std::time::Duration = std::time::Duration::from_secs(1);
 
 struct Viewer<'a> {
     ed: &'a mut Editor,
