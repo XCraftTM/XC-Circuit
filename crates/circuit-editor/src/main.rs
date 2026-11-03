@@ -2,6 +2,7 @@
 
 #[macro_use]
 mod i18n;
+mod graphics;
 mod icon;
 mod app;
 mod bot;
@@ -41,7 +42,6 @@ mod widgets;
 use eframe::egui;
 
 fn main() -> eframe::Result {
-    #[cfg_attr(not(windows), expect(unused_mut))]
     let mut options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("XC™ Circuit")
@@ -54,17 +54,18 @@ fn main() -> eframe::Result {
         window_builder: Some(Box::new(reveal::defer_maximize)),
         ..Default::default()
     };
-    // wgpu also tries OpenGL by default, and NVIDIA's OpenGL driver opens
-    // screen-sized helper windows for that, which flash white at startup.
-    // DirectX 12 and Vulkan cover every Windows XC Circuit runs on; the
-    // WGPU_BACKEND variable still chooses another.
-    #[cfg(windows)]
-    if std::env::var_os("WGPU_BACKEND").is_none()
-        && let eframe::egui_wgpu::WgpuSetup::CreateNew(setup) = &mut options.wgpu_options.wgpu_setup
+    // The best graphics first; when they can't start, the next, more widely
+    // supported ones (see graphics.rs).
+    let stage = graphics::stage();
+    graphics::configure(&mut options, stage);
+    let result = eframe::run_native("XC Circuit", options, Box::new(|cc| Ok(Box::new(app::CircuitApp::new(cc)))));
+    if let Err(e) = &result
+        && graphics::is_graphics_error(e)
+        && let Some(code) = graphics::restart_with_next(stage, e)
     {
-        setup.instance_descriptor.backends = eframe::wgpu::Backends::PRIMARY;
+        std::process::exit(code);
     }
-    eframe::run_native("XC Circuit", options, Box::new(|cc| Ok(Box::new(app::CircuitApp::new(cc)))))
+    result
 }
 
 /// Draws the XC monogram (the C as a wire with two pins, an X inside) into an RGBA icon.

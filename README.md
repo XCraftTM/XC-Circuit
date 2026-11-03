@@ -79,6 +79,8 @@ node runtime/test/backups.js
 
 `XC_FRAME_STATS=1` makes the editor print how many frames a second it draws (to the console of a debug build); idle, that is about one.
 
+Graphics: the editor draws with Vulkan or DirectX 12 (on Windows including WARP, a software renderer for virtual machines and Remote Desktop). When those can't start, it starts itself again with OpenGL, and then with eframe's own OpenGL renderer (glow) for older drivers. The Console says what is used (Graphics: Vulkan · …). `XC_RENDERER=opengl` or `XC_RENDERER=glow` picks a stage by hand.
+
 ## Layout
 
 ```

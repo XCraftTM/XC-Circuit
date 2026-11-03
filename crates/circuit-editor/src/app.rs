@@ -137,6 +137,16 @@ impl CircuitApp {
         ed.prefs.apply_node();
         ed.restyle();
         ed.theme.apply(&cc.egui_ctx);
+        // What draws the app, and whether it had to fall back.
+        let (graphics, software) = crate::graphics::describe(cc);
+        if let Ok(why) = std::env::var(crate::graphics::REASON_VAR) {
+            ed.log(Level::Warn, format!("{why}; drawing with {graphics} instead"));
+        }
+        ed.log(Level::Info, format!("Graphics: {graphics}"));
+        eprintln!("graphics: {graphics}");
+        if software {
+            ed.log(Level::Warn, "No graphics card driver could be used, so the app is drawn in software, which is slower.");
+        }
 
         let examples_dir = bundled_root.as_ref().map(|r| r.join("examples"));
         let bundled_plugins = bundled_root.map(|r| r.join("plugins"));
@@ -1388,7 +1398,7 @@ impl eframe::App for CircuitApp {
         self.ed.theme.frame.to_normalized_gamma_f32()
     }
 
-    fn on_exit(&mut self) {
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         self.bot.stop(&mut self.ed);
     }
 
