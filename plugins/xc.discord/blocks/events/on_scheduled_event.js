@@ -1,4 +1,4 @@
-const KINDS = { created: "An event is created", started: "An event starts", ended: "An event ends", userAdd: "Someone is interested", userRemove: "Someone is no longer interested" };
+const KINDS = { created: "An event is created", started: "An event starts", ended: "An event ends", deleted: "An event is deleted", userAdd: "Someone is interested", userRemove: "Someone is no longer interested" };
 
 module.exports = {
   id: "discord.on_scheduled_event",
@@ -34,6 +34,7 @@ module.exports = {
     const out = (e, user = null) => emit({ event: e, name: e.name, user, server: e.guild });
     const kind = ctx.fields.kind;
     if (kind === "created") c.on("guildScheduledEventCreate", (e) => out(e));
+    else if (kind === "deleted") c.on("guildScheduledEventDelete", (e) => out(e));
     else if (kind === "userAdd") c.on("guildScheduledEventUserAdd", (e, u) => out(e, u));
     else if (kind === "userRemove") c.on("guildScheduledEventUserRemove", (e, u) => out(e, u));
     else

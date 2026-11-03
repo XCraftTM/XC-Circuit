@@ -70,6 +70,7 @@ node runtime/test/library.js
 node runtime/test/template.js
 node runtime/test/helpers.js
 node runtime/test/discord_blocks.js
+node runtime/test/discord_events.js
 node runtime/test/store.js
 node runtime/test/backups.js
 ```
