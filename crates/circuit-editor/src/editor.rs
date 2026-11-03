@@ -68,7 +68,7 @@ pub struct Editor {
     /// Selected node as (workspace key, node id).
     pub selected: Option<(String, String)>,
     pub log: Vec<LogLine>,
-    pub shapes: HashMap<(String, String), (u64, BlockShape)>,
+    pub shapes: ShapeCache,
     pub views: HashMap<String, CanvasView>,
     pub picker: Option<Picker>,
     pub actions: Vec<Action>,
@@ -114,7 +114,7 @@ impl Editor {
             undo_project: false,
             selected: None,
             log: Vec::new(),
-            shapes: HashMap::new(),
+            shapes: ShapeCache::default(),
             views: HashMap::new(),
             picker: None,
             actions: Vec::new(),
@@ -300,7 +300,7 @@ impl Editor {
         project.removed.retain(|r| r != key);
         let name = ws.name.clone();
         project.workspaces.insert(key.to_string(), ws);
-        self.shapes.retain(|(w, _), _| w != key);
+        self.shapes.forget_workspace(key);
         self.edited = true;
         self.actions.push(Action::OpenWorkspace(key.to_string()));
         self.log(Level::Info, format!("Restored the workspace {name} from {} (not saved yet)", crate::editor::local_time(snap.info.saved_at)));
@@ -382,6 +382,7 @@ impl Editor {
     /// The values texts on block `node` can use: see [`crate::values`].
     pub fn values_for(&mut self, ws_key: &str, node: &str) -> crate::values::Scope {
         let Editor { reg, engine, project, shapes, define_ctx, .. } = self;
+        shapes.begin();
         let Some(ws) = project.as_ref().and_then(|p| p.workspaces.get(ws_key)) else { return Default::default() };
         crate::values::available(ws, node, reg, &mut |id| node_shape(reg, engine, shapes, ws_key, ws, id, define_ctx))
     }
@@ -563,7 +564,7 @@ impl Editor {
 
     fn after_history_jump(&mut self, key: &str) {
         self.edited = true;
-        self.shapes.retain(|(w, _), _| w != key);
+        self.shapes.forget_workspace(key);
         let alive: HashSet<String> = self.workspace(key).map(|w| w.nodes.keys().cloned().collect()).unwrap_or_default();
         self.multi.retain(|n| alive.contains(n));
         if self.selected.as_ref().is_some_and(|(w, n)| w == key && !alive.contains(n)) {
@@ -648,23 +649,102 @@ impl Editor {
     }
 }
 
-/// The effective shape of a node, re-running `define()` only when its values or
-/// connected types change.
-pub fn node_shape(
-    reg: &Registry,
-    engine: &BlockEngine,
-    cache: &mut HashMap<(String, String), (u64, BlockShape)>,
-    ws_key: &str,
-    ws: &Workspace,
-    node_id: &str,
-    project: &Value,
-) -> Option<BlockShape> {
-    let node = ws.nodes.get(node_id)?;
-    let def = reg.block(&node.block)?;
-    let connected = connected_types(reg, cache, ws_key, ws, node_id);
-    // Names it gets from earlier blocks need no {name} input (unless one is
-    // wired already). Only event blocks' shapes are needed for them, and events
-    // have nothing before them, so this goes one level deep.
+/// Block shapes, kept until what they are made from changes.
+#[derive(Default)]
+pub struct ShapeCache {
+    blocks: HashMap<(String, String), (u64, BlockShape)>,
+    /// Per workspace: the names each block gets from earlier blocks.
+    known: HashMap<String, Known>,
+    /// Counts passes over the blocks; see `begin`.
+    pass: u64,
+}
+
+/// The names blocks in one workspace get from earlier blocks, and what they
+/// were worked out from.
+#[derive(Default)]
+struct Known {
+    /// The pass in which `structure` was last checked.
+    pass: u64,
+    /// A hash of the wires, the blocks, and the settings of event and
+    /// variable blocks: everything the names depend on.
+    structure: u64,
+    /// A hash of the project data that `define()` sees.
+    project: u64,
+    names: HashMap<String, Vec<String>>,
+}
+
+impl ShapeCache {
+    /// Starts a pass over the blocks (a frame, or a lookup): the workspace's
+    /// structure is checked once per pass, not once per block.
+    pub fn begin(&mut self) {
+        self.pass += 1;
+    }
+
+    pub fn clear(&mut self) {
+        self.blocks.clear();
+        self.known.clear();
+    }
+
+    pub fn forget_workspace(&mut self, key: &str) {
+        self.blocks.retain(|(w, _), _| w != key);
+        self.known.remove(key);
+    }
+
+    pub fn forget(&mut self, ws_key: &str, node: &str) {
+        self.blocks.remove(&(ws_key.to_string(), node.to_string()));
+    }
+
+    fn get(&self, ws_key: &str, node: &str) -> Option<&BlockShape> {
+        self.blocks.get(&(ws_key.to_string(), node.to_string())).map(|(_, s)| s)
+    }
+
+    /// The workspace's names, emptied when what they depend on changed.
+    fn known(&mut self, reg: &Registry, ws_key: &str, ws: &Workspace, project: &Value) -> &mut Known {
+        let pass = self.pass;
+        let k = self.known.entry(ws_key.to_string()).or_default();
+        if k.pass != pass || k.names.is_empty() {
+            let (structure, project) = (structure_hash(reg, ws), text_hash(project));
+            if structure != k.structure || project != k.project {
+                k.names.clear();
+                (k.structure, k.project) = (structure, project);
+            }
+            k.pass = pass;
+        }
+        k
+    }
+}
+
+fn text_hash(v: &impl serde::Serialize) -> u64 {
+    let mut h = DefaultHasher::new();
+    serde_json::to_string(v).unwrap_or_default().hash(&mut h);
+    h.finish()
+}
+
+/// What the names blocks get from earlier blocks depend on.
+fn structure_hash(reg: &Registry, ws: &Workspace) -> u64 {
+    let mut h = DefaultHasher::new();
+    for l in &ws.links {
+        (&l.from.node, &l.from.pin, &l.to.node, &l.to.pin).hash(&mut h);
+    }
+    for (id, n) in &ws.nodes {
+        (id, &n.block, &n.zone).hash(&mut h);
+        let event = reg.block(&n.block).is_some_and(|d| d.kind == circuit_core::BlockKind::Event);
+        if event || n.block_id() == "core.set_variable" {
+            serde_json::to_string(&n.values).unwrap_or_default().hash(&mut h);
+        }
+    }
+    ws.zones.keys().for_each(|z| z.hash(&mut h));
+    h.finish()
+}
+
+/// Names a block gets from earlier blocks, which need no {name} input
+/// (unless one is wired already).
+fn known_names(reg: &Registry, engine: &BlockEngine, cache: &mut ShapeCache, ws_key: &str, ws: &Workspace, node_id: &str, project: &Value) -> Vec<String> {
+    if let Some(names) = cache.known(reg, ws_key, ws, project).names.get(node_id) {
+        return names.clone();
+    }
+    // Only event blocks' shapes are needed for them, and events have nothing
+    // before them, so this goes one level deep.
     let upstream = crate::values::upstream(ws, node_id, reg);
     let mut known = crate::values::known_names(ws, &upstream, reg, &mut |id| {
         let is_event = ws.nodes.get(id).and_then(|n| reg.block(&n.block)).is_some_and(|d| d.kind == circuit_core::BlockKind::Event);
@@ -673,19 +753,30 @@ pub fn node_shape(
     known.retain(|name| ws.links_into(node_id, name).next().is_none());
     let mut known: Vec<String> = known.into_iter().collect();
     known.sort();
+    cache.known(reg, ws_key, ws, project).names.insert(node_id.to_string(), known.clone());
+    known
+}
+
+/// The effective shape of a node, re-running `define()` only when its values or
+/// connected types change. Call `cache.begin()` before a pass over the blocks.
+pub fn node_shape(reg: &Registry, engine: &BlockEngine, cache: &mut ShapeCache, ws_key: &str, ws: &Workspace, node_id: &str, project: &Value) -> Option<BlockShape> {
+    let node = ws.nodes.get(node_id)?;
+    let def = reg.block(&node.block)?;
+    let connected = connected_types(reg, cache, ws_key, ws, node_id);
+    let known = known_names(reg, engine, cache, ws_key, ws, node_id, project);
 
     let mut h = DefaultHasher::new();
     node.block.hash(&mut h);
-    Value::Object(node.values.clone()).to_string().hash(&mut h);
-    Value::Object(connected.clone()).to_string().hash(&mut h);
+    serde_json::to_string(&node.values).unwrap_or_default().hash(&mut h);
+    serde_json::to_string(&connected).unwrap_or_default().hash(&mut h);
     known.hash(&mut h);
     if def.has_define {
-        project.to_string().hash(&mut h);
+        cache.known(reg, ws_key, ws, project).project.hash(&mut h);
     }
     let hash = h.finish();
 
     let key = (ws_key.to_string(), node_id.to_string());
-    if let Some((cached_hash, shape)) = cache.get(&key)
+    if let Some((cached_hash, shape)) = cache.blocks.get(&key)
         && *cached_hash == hash
     {
         return Some(shape.clone());
@@ -698,14 +789,14 @@ pub fn node_shape(
         None
     };
     let shape = BlockShape::build_with(def, &node.values, define.as_ref(), &known.into_iter().collect());
-    cache.insert(key, (hash, shape.clone()));
+    cache.blocks.insert(key, (hash, shape.clone()));
     Some(shape)
 }
 
 /// For each connected input pin of a node, the type string of the output feeding it.
 fn connected_types(
     reg: &Registry,
-    cache: &HashMap<(String, String), (u64, BlockShape)>,
+    cache: &ShapeCache,
     ws_key: &str,
     ws: &Workspace,
     node_id: &str,
@@ -713,7 +804,7 @@ fn connected_types(
     let mut out = Map::new();
     for link in ws.links.iter().filter(|l| l.to.node == node_id && l.to.pin != ACTION_IN) {
         let Some(src) = ws.nodes.get(&link.from.node) else { continue };
-        let cached = cache.get(&(ws_key.to_string(), link.from.node.clone())).and_then(|(_, s)| s.output(&link.from.pin)).map(|o| o.type_name.clone());
+        let cached = cache.get(ws_key, &link.from.node).and_then(|s| s.output(&link.from.pin)).map(|o| o.type_name.clone());
         let ty = cached.or_else(|| reg.block(&src.block).and_then(|d| d.outputs.get(&link.from.pin)).map(|o| o.type_name.clone()));
         if let Some(ty) = ty {
             out.insert(link.to.pin.clone(), Value::String(ty));
@@ -852,7 +943,7 @@ mod tests {
             let project = Project::load(&dir).unwrap();
             assert!(project.unreadable.is_empty(), "{}: {:?}", dir.display(), project.unreadable);
             let meta = serde_json::to_value(&project.meta).unwrap();
-            let mut cache = HashMap::new();
+            let mut cache = ShapeCache::default();
             for (key, ws) in &project.workspaces {
                 let place = format!("{} › {key}", dir.file_name().unwrap().to_string_lossy());
                 let mut shapes = HashMap::new();

@@ -29,6 +29,22 @@ pub fn upstream(ws: &Workspace, node: &str, reg: &Registry) -> Vec<String> {
     // A value block (no Action wire into it) runs for the blocks it feeds,
     // through other value blocks if need be.
     let is_value = |id: &str| ws.nodes.get(id).and_then(|n| reg.block(&n.block)).is_some_and(|d| d.kind == BlockKind::Value);
+    // The wires by block, so the walk doesn't go through all of them at each step.
+    let mut action_into: HashMap<&str, Vec<&str>> = HashMap::new();
+    let mut data_from: HashMap<&str, Vec<&str>> = HashMap::new();
+    for l in &ws.links {
+        if l.to.pin == ACTION_IN {
+            action_into.entry(&l.to.node).or_default().push(&l.from.node);
+        } else {
+            data_from.entry(&l.from.node).or_default().push(&l.to.node);
+        }
+    }
+    let mut zone_blocks: HashMap<&str, Vec<&str>> = HashMap::new();
+    for (id, n) in &ws.nodes {
+        if let Some(z) = &n.zone {
+            zone_blocks.entry(z).or_default().push(id);
+        }
+    }
     let mut start = Vec::new();
     let mut feeds = vec![node.to_string()];
     let mut fed: HashSet<String> = HashSet::new();
@@ -37,7 +53,7 @@ pub fn upstream(ws: &Workspace, node: &str, reg: &Registry) -> Vec<String> {
             continue;
         }
         if is_value(&cur) {
-            feeds.extend(ws.links.iter().filter(|l| l.from.node == cur && l.to.pin != ACTION_IN).map(|l| l.to.node.clone()));
+            feeds.extend(data_from.get(cur.as_str()).into_iter().flatten().map(|n| n.to_string()));
         } else {
             start.push(cur);
         }
@@ -47,14 +63,14 @@ pub fn upstream(ws: &Workspace, node: &str, reg: &Registry) -> Vec<String> {
     let mut order: Vec<String> = Vec::new();
     let mut queue = start.clone();
     while let Some(cur) = queue.pop() {
-        let mut before: Vec<String> = ws.links.iter().filter(|l| l.to.node == cur && l.to.pin == ACTION_IN).map(|l| l.from.node.clone()).collect();
+        let mut before: Vec<&str> = action_into.get(cur.as_str()).cloned().unwrap_or_default();
         // Blocks in the same Try Zone as an entry point ran before it too: the
         // zone's own action input runs the first of them.
-        if let Some(zone) = ws.nodes.get(&cur).and_then(|n| n.zone.clone()) {
-            before.extend(ws.links.iter().filter(|l| l.to.node == zone && l.to.pin == ACTION_IN).map(|l| l.from.node.clone()));
+        if let Some(zone) = ws.nodes.get(&cur).and_then(|n| n.zone.as_deref()) {
+            before.extend(action_into.get(zone).into_iter().flatten());
         }
         for b in before {
-            let inner: Vec<String> = if ws.zones.contains_key(&b) { ws.nodes.iter().filter(|(_, n)| n.zone.as_ref() == Some(&b)).map(|(id, _)| id.clone()).collect() } else { vec![b] };
+            let inner: Vec<String> = if ws.zones.contains_key(b) { zone_blocks.get(b).into_iter().flatten().map(|id| id.to_string()).collect() } else { vec![b.to_string()] };
             for id in inner {
                 if seen.insert(id.clone()) {
                     order.push(id.clone());
@@ -814,6 +830,7 @@ mod tests {
     fn inputs(ed: &mut crate::editor::Editor, ws_key: &str, node: &str) -> Vec<String> {
         let crate::editor::Editor { reg, engine, project, shapes, define_ctx, .. } = ed;
         let ws = &project.as_ref().unwrap().workspaces[ws_key];
+        shapes.begin();
         let shape = crate::editor::node_shape(reg, engine, shapes, ws_key, ws, node, define_ctx).unwrap();
         shape.fields.into_iter().filter(|(_, f)| f.label.as_deref().is_some_and(|l| l.starts_with("${"))).map(|(k, _)| k).collect()
     }

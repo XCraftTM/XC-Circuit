@@ -312,6 +312,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     let ids: Vec<String> = ws.nodes.keys().cloned().collect();
     let mut layouts: Vec<NodeLayout> = Vec::with_capacity(ids.len());
     let mut node_shapes: HashMap<String, BlockShape> = HashMap::new();
+    shapes.begin();
     for id in &ids {
         let node = &ws.nodes[id];
         let def = reg.block(&node.block);
@@ -1105,7 +1106,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             let ids: Vec<String> = if multi.contains(&n) { multi.drain().collect() } else { vec![n] };
             for id in &ids {
                 ws.remove_node(id);
-                shapes.remove(&(ws_key.to_string(), id.clone()));
+                shapes.forget(ws_key, id);
             }
             if selected.as_ref().is_some_and(|(_, s)| ids.contains(s)) {
                 *selected = None;

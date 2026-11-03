@@ -49,6 +49,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
     let Editor { reg, engine, project, shapes, edited, define_ctx, .. } = ed;
     let mode = project.as_ref().and_then(|p| reg.mode(&p.meta.mode));
     let Some(ws) = project.as_mut().and_then(|p| p.workspaces.get_mut(&ws_key)) else { return };
+    shapes.begin();
     let Some(shape) = node_shape(reg, engine, shapes, &ws_key, ws, &node_id, define_ctx) else {
         padded(ui, |ui| {
             ui.label(RichText::new(t!("This block's plugin is not loaded.")).color(theme.error));
