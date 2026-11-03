@@ -24,6 +24,7 @@ mod settings;
 mod setup;
 mod prefs;
 mod restore;
+mod reveal;
 mod sidebar;
 mod plugin_manager;
 mod slash;

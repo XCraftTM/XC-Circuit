@@ -99,6 +99,8 @@ pub struct CircuitApp {
     last_recovery: std::time::Instant,
     /// When changes were last looked for.
     last_check: std::time::Instant,
+    /// Shows the window once it has drawn (no white flash at startup).
+    reveal: crate::reveal::Reveal,
     /// The First Start page, while it is open.
     setup: Option<crate::setup::Setup>,
     /// The guided tour, while it runs, and the layout to put back afterwards.
@@ -190,6 +192,7 @@ impl CircuitApp {
             restore: Default::default(),
             last_recovery: std::time::Instant::now(),
             last_check: std::time::Instant::now(),
+            reveal: crate::reveal::Reveal::new(cc),
         }
     }
 
@@ -1177,6 +1180,7 @@ impl CircuitApp {
 impl eframe::App for CircuitApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        self.reveal.frame(&ctx);
         self.ed.ui_rects.clear();
         // The tour's practice project is never worth a "save changes?" question.
         if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close && self.tour.is_none() && self.ed.unsaved_now() {

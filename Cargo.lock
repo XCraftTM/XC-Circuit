@@ -812,12 +812,14 @@ dependencies = [
  "libloading",
  "notify",
  "open",
+ "raw-window-handle",
  "regex",
  "rfd",
  "serde",
  "serde_json",
  "toml",
  "ureq",
+ "windows-sys 0.61.2",
  "xc-circuit-plugin",
 ]
 
