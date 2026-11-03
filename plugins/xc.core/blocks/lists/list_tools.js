@@ -42,7 +42,7 @@ module.exports = {
     const type = out === "item" ? element : out === "list" ? connected.list || "list<any>" : out;
     return { outputs: { result: { type, label, description: `${label} of the list.` } } };
   },
-  run({ fields: { list, tool, other } }) {
+  run({ fields: { list, tool, other }, ctx }) {
     const l = Array.isArray(list) ? list : list == null ? [] : [...list];
     const n = Number(other);
     const result = {
@@ -59,7 +59,7 @@ module.exports = {
       sort: () => [...l].sort((a, b) => (typeof a === "number" && typeof b === "number" ? a - b : String(a).localeCompare(String(b)))),
       unique: () => [...new Set(l)],
       random: () => l[Math.floor(Math.random() * l.length)],
-      shuffle: () => [...l].sort(() => Math.random() - 0.5),
+      shuffle: () => ctx.util.shuffle(l),
       slice: () => l.slice(0, n),
     }[tool]();
     return { result };

@@ -890,7 +890,16 @@ const UTIL = {
     }
   },
   id: (n = 10) => Array.from({ length: n }, () => "abcdefghijklmnopqrstuvwxyz0123456789"[Math.floor(Math.random() * 36)]).join(""),
-  shuffle: (list) => [...list].sort(() => Math.random() - 0.5),
+  shuffle: (list) => {
+    // Fisher-Yates: every order is equally likely (sorting by a random
+    // comparison is not).
+    const out = [...list];
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+  },
   typeOf: (v) => (v === null ? "null" : Array.isArray(v) ? "list" : typeof v),
 };
 
