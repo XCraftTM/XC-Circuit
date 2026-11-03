@@ -50,6 +50,7 @@ fn main() -> eframe::Result {
             // XC Circuit draws its own title bar; View › Use system title bar turns the system one back on.
             .with_decorations(false)
             .with_icon(app_icon(64)),
+        window_builder: Some(Box::new(reveal::defer_maximize)),
         ..Default::default()
     };
     // wgpu also tries OpenGL by default, and NVIDIA's OpenGL driver opens

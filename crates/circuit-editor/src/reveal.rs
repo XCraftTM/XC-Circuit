@@ -3,11 +3,31 @@
 //! after its first frame, before that frame has reached the screen; a cloaked
 //! window is still drawn by Windows (unlike a hidden one) but not shown, so it
 //! appears with its first frames already there.
+//!
+//! A window that was maximized last time is a second case: eframe creates it
+//! maximized, and Windows shows a window it maximizes, empty and white, long
+//! before anything is drawn. So it is created at its normal size instead and
+//! maximized on the first frame, while cloaked.
+
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use eframe::egui;
 
-/// Frames drawn before the window is shown.
-const FRAMES: u32 = 3;
+/// The window was maximized last time and is maximized once it is cloaked.
+static MAXIMIZE: AtomicBool = AtomicBool::new(false);
+
+/// For eframe's window builder hook: creates the window unmaximized and
+/// remembers to maximize it (on Windows; elsewhere the builder stays as it is).
+pub fn defer_maximize(builder: egui::ViewportBuilder) -> egui::ViewportBuilder {
+    if cfg!(windows) && builder.maximized == Some(true) {
+        MAXIMIZE.store(true, Ordering::Relaxed);
+        return builder.with_maximized(false);
+    }
+    builder
+}
+
+/// Frames drawn before the window is shown (one at its maximized size too).
+const FRAMES: u32 = 4;
 /// Shown after this long in any case, should frames stop while it is cloaked.
 #[cfg(windows)]
 const AT_THE_LATEST: std::time::Duration = std::time::Duration::from_secs(2);
@@ -46,8 +66,12 @@ impl Reveal {
         }
     }
 
-    /// Call once per frame: shows the window after a few drawn frames.
+    /// Call once per frame: maximizes the window if it was, and shows it after
+    /// a few drawn frames.
     pub fn frame(&mut self, ctx: &egui::Context) {
+        if MAXIMIZE.swap(false, Ordering::Relaxed) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
+        }
         #[cfg(windows)]
         if let Some(hwnd) = self.hwnd {
             self.frames += 1;
