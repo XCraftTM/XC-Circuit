@@ -817,6 +817,7 @@ dependencies = [
  "serde",
  "serde_json",
  "toml",
+ "ureq",
  "xc-circuit-plugin",
 ]
 
