@@ -62,6 +62,9 @@ pub struct Editor {
     /// Set by every edit, so the history looks for changes on the next
     /// settled frame. Whether there are unsaved changes is `unsaved()`.
     pub edited: bool,
+    /// Undo and Redo act on the project's settings and data (slash commands,
+    /// bot settings) instead of a workspace: while their tab has focus.
+    pub undo_project: bool,
     /// Selected node as (workspace key, node id).
     pub selected: Option<(String, String)>,
     pub log: Vec<LogLine>,
@@ -108,6 +111,7 @@ impl Editor {
             theme: Theme::fallback(),
             project: None,
             edited: false,
+            undo_project: false,
             selected: None,
             log: Vec::new(),
             shapes: HashMap::new(),
@@ -504,20 +508,57 @@ impl Editor {
         self.active_workspace.clone().filter(|k| self.workspace(k).is_some())
     }
 
-    pub fn undo(&mut self) {
-        let Some(key) = self.edit_target() else { return };
-        let Some(ws) = self.project.as_mut().and_then(|p| p.workspaces.get_mut(&key)) else { return };
-        if self.history.undo(&key, ws) {
-            self.after_history_jump(&key);
+    /// What Undo and Redo act on: a workspace key, or `history::PROJECT`.
+    pub fn undo_key(&self) -> String {
+        if self.undo_project && self.project.is_some() {
+            return crate::history::PROJECT.to_string();
         }
+        self.active_workspace.clone().unwrap_or_default()
     }
 
-    pub fn redo(&mut self) {
-        let Some(key) = self.edit_target() else { return };
-        let Some(ws) = self.project.as_mut().and_then(|p| p.workspaces.get_mut(&key)) else { return };
-        if self.history.redo(&key, ws) {
+    /// Undoes the last change to the project's settings and data.
+    fn undo_project_data(&mut self, redo: bool) -> bool {
+        self.check_changes();
+        let Some(meta) = self.project.as_mut().map(|p| &mut p.meta) else { return false };
+        let done = if redo { self.history.redo_project(meta) } else { self.history.undo_project(meta) };
+        if done {
+            // Open editors show the data as it is now.
+            if self.slash_edit.is_some() {
+                crate::slash::open(self);
+            }
+            self.shapes.clear();
+            self.refresh_define_ctx();
+            self.edited = true;
+        }
+        done
+    }
+
+    /// Returns whether something was undone.
+    pub fn undo(&mut self) -> bool {
+        if self.undo_project {
+            return self.undo_project_data(false);
+        }
+        let Some(key) = self.edit_target() else { return false };
+        let Some(ws) = self.project.as_mut().and_then(|p| p.workspaces.get_mut(&key)) else { return false };
+        let done = self.history.undo(&key, ws);
+        if done {
             self.after_history_jump(&key);
         }
+        done
+    }
+
+    /// Returns whether something was redone.
+    pub fn redo(&mut self) -> bool {
+        if self.undo_project {
+            return self.undo_project_data(true);
+        }
+        let Some(key) = self.edit_target() else { return false };
+        let Some(ws) = self.project.as_mut().and_then(|p| p.workspaces.get_mut(&key)) else { return false };
+        let done = self.history.redo(&key, ws);
+        if done {
+            self.after_history_jump(&key);
+        }
+        done
     }
 
     fn after_history_jump(&mut self, key: &str) {
@@ -715,6 +756,33 @@ pub fn ago(ms: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Undo in the Slash Commands tab takes back a saved change to the
+    /// commands, and the open builder shows them as they were.
+    #[test]
+    fn undo_takes_back_project_data() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let dir = std::env::temp_dir().join(format!("xc-undo-data-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        Project::create(&dir, "U", "discord-bot").unwrap();
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&dir);
+        let commands = serde_json::json!([{ "name": "ping", "description": "Pong", "options": [] }]);
+        ed.project.as_mut().unwrap().meta.data.insert("slashCommands".into(), commands);
+        assert!(ed.unsaved_now());
+        crate::slash::open(&mut ed);
+        assert_eq!(ed.slash_edit.as_ref().unwrap().commands.len(), 1);
+
+        ed.undo_project = true;
+        assert_eq!(ed.undo_key(), crate::history::PROJECT);
+        assert!(ed.undo());
+        assert!(ed.project.as_ref().unwrap().meta.data.is_empty());
+        assert!(ed.slash_edit.as_ref().unwrap().commands.is_empty(), "the builder shows the commands as they are now");
+        assert!(!ed.unsaved_now(), "back as saved");
+        assert!(ed.redo());
+        assert_eq!(ed.slash_edit.as_ref().unwrap().commands.len(), 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     /// Every bundled block's define() runs in the sandbox with its defaults
     /// and with each choice of its select fields, and gives a usable shape.

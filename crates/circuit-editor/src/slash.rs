@@ -195,7 +195,7 @@ const KINDS: [(&str, &str, u64); 9] = [
 ];
 
 pub struct SlashEdit {
-    commands: Vec<SlashCommand>,
+    pub(crate) commands: Vec<SlashCommand>,
     selected: usize,
     /// While switched to JSON: the command (first word) shown, and its text.
     json: Option<(String, JsonText)>,

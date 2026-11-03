@@ -422,12 +422,12 @@ impl CircuitApp {
                 }
             });
             ui.menu_button(t!("Edit"), |ui| {
-                let key = self.ed.active_workspace.clone().unwrap_or_default();
+                let key = self.ed.undo_key();
                 if ui.add_enabled(self.ed.history.can_undo(&key) || self.ed.edited, egui::Button::new(t!("Undo")).shortcut_text("Ctrl+Z")).clicked() {
-                    self.ed.undo();
+                    self.undo();
                 }
                 if ui.add_enabled(self.ed.history.can_redo(&key), egui::Button::new(t!("Redo")).shortcut_text("Ctrl+Y")).clicked() {
-                    self.ed.redo();
+                    self.redo();
                 }
                 ui.separator();
                 let has_sel = !self.ed.selection(&key).is_empty();
@@ -839,7 +839,7 @@ impl CircuitApp {
     fn palette_items(&self) -> Vec<Item> {
         let has_project = self.ed.project.is_some();
         let running = self.bot.state != BotState::Stopped;
-        let key = self.ed.active_workspace.clone().unwrap_or_default();
+        let key = self.ed.undo_key();
         let has_sel = !self.ed.selection(&key).is_empty();
         let mut items = Vec::new();
         if has_project {
@@ -937,8 +937,8 @@ impl CircuitApp {
                 self.bot.restart_if_running(&mut self.ed, ctx);
             }
             Cmd::ReloadPlugins => self.reload_plugins(ctx),
-            Cmd::Undo => self.ed.undo(),
-            Cmd::Redo => self.ed.redo(),
+            Cmd::Undo => self.undo(),
+            Cmd::Redo => self.redo(),
             Cmd::Duplicate => self.ed.duplicate(),
             Cmd::Delete => self.ed.delete_selection(),
             Cmd::SelectAll => self.ed.select_all(),
@@ -1036,8 +1036,29 @@ impl CircuitApp {
         }
     }
 
+    fn undo(&mut self) {
+        if self.ed.undo() {
+            self.reopen_bot_settings();
+        }
+    }
+
+    fn redo(&mut self) {
+        if self.ed.redo() {
+            self.reopen_bot_settings();
+        }
+    }
+
+    /// The Bot Settings tab shows the settings as they are after undo or redo.
+    fn reopen_bot_settings(&mut self) {
+        if self.ed.undo_project && self.bot.settings.is_some() {
+            self.bot.open_settings(&mut self.ed);
+        }
+    }
+
     /// Undo, clipboard and selection shortcuts, unless a text box has focus.
     fn edit_shortcuts(&mut self, ctx: &egui::Context) {
+        // The settings and data tabs undo changes to them; others a workspace.
+        self.ed.undo_project = self.dock.find_active_focused().is_some_and(|(_, t)| matches!(t, Tab::SlashCommands | Tab::BotSettings));
         if ctx.text_edit_focused() || self.ed.picker.is_some() {
             return;
         }
@@ -1045,9 +1066,9 @@ impl CircuitApp {
         let cmd = Modifiers::COMMAND;
         let cmd_shift = Modifiers::COMMAND | Modifiers::SHIFT;
         if ctx.input_mut(|i| i.consume_key(cmd_shift, Key::Z) || i.consume_key(cmd, Key::Y)) {
-            self.ed.redo();
+            self.redo();
         } else if ctx.input_mut(|i| i.consume_key(cmd, Key::Z)) {
-            self.ed.undo();
+            self.undo();
         }
         if ctx.input_mut(|i| i.consume_key(cmd, Key::D)) {
             self.ed.duplicate();
