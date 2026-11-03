@@ -187,8 +187,24 @@ impl BlockEngine {
 }
 
 /// Lets block files use `export default { … }` instead of `module.exports = { … }`.
+/// Only a line starting with it counts, never the words inside a string or
+/// a comment.
 fn esm_to_commonjs(source: &str) -> String {
-    source.replacen("export default", "module.exports =", 1)
+    let mut done = false;
+    let lines: Vec<String> = source
+        .split('\n')
+        .map(|line| {
+            let rest = line.trim_start();
+            match rest.strip_prefix("export default").filter(|r| !done && r.starts_with(|c: char| c.is_whitespace() || c == '{' || c == '(')) {
+                Some(r) => {
+                    done = true;
+                    format!("{}module.exports ={r}", &line[..line.len() - rest.len()])
+                }
+                None => line.to_string(),
+            }
+        })
+        .collect();
+    lines.join("\n")
 }
 
 #[cfg(test)]
@@ -196,6 +212,14 @@ mod tests {
     use super::*;
     use circuit_core::{BlockKind, BlockShape};
     use serde_json::json;
+
+    #[test]
+    fn export_default_only_at_the_start_of_a_line() {
+        let src = "// says \"export default\" here\nconst s = \"export default\";\nexport default { id: \"x\" };";
+        assert_eq!(esm_to_commonjs(src), "// says \"export default\" here\nconst s = \"export default\";\nmodule.exports = { id: \"x\" };");
+        assert_eq!(esm_to_commonjs("  export default{}"), "  module.exports ={}");
+        assert_eq!(esm_to_commonjs("module.exports = {};"), "module.exports = {};");
+    }
 
     const FOR_EACH: &str = r#"
         const lodash = require("lodash");

@@ -106,7 +106,7 @@ class Runtime {
     this.log.info(`Runtime ready · Node ${process.version}`);
     for (const [id, b] of Object.entries(this.bundle.blocks)) {
       try {
-        this.blocks.set(id, this.loadModule(b.source.replace("export default", "module.exports ="), b.file));
+        this.blocks.set(id, this.loadModule(esmToCommonJs(b.source), b.file));
       } catch (e) {
         this.log.error(`Could not load block ${id}: ${e.message}`);
       }
@@ -230,6 +230,14 @@ class Runtime {
       this.log.error(`${node.graph.name} › ${node.def.name || node.blockId} (#${node.id}): ${details.message}`);
     }
   }
+}
+
+/**
+ * Lets block files use `export default { … }`: only a line starting with it
+ * counts, never the words inside a string or a comment.
+ */
+function esmToCommonJs(source) {
+  return source.replace(/^([ 	]*)export\s+default(?=[\s{(])/m, "$1module.exports =");
 }
 
 /** Where a block runs outside every Try Zone. */
