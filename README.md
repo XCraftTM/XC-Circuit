@@ -77,6 +77,8 @@ node runtime/test/store.js
 node runtime/test/backups.js
 ```
 
+`XC_FRAME_STATS=1` makes the editor print how many frames a second it draws (to the console of a debug build); idle, that is about one.
+
 ## Layout
 
 ```

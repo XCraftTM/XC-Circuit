@@ -101,6 +101,8 @@ pub struct CircuitApp {
     last_check: std::time::Instant,
     /// Shows the window once it has drawn (no white flash at startup).
     reveal: crate::reveal::Reveal,
+    /// With XC_FRAME_STATS set: frames drawn since the last report, and when it was.
+    frame_stats: Option<(u32, std::time::Instant)>,
     /// The First Start page, while it is open.
     setup: Option<crate::setup::Setup>,
     /// The guided tour, while it runs, and the layout to put back afterwards.
@@ -193,6 +195,7 @@ impl CircuitApp {
             last_recovery: std::time::Instant::now(),
             last_check: std::time::Instant::now(),
             reveal: crate::reveal::Reveal::new(cc),
+            frame_stats: std::env::var_os("XC_FRAME_STATS").map(|_| (0, std::time::Instant::now())),
         }
     }
 
@@ -1181,6 +1184,15 @@ impl eframe::App for CircuitApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.reveal.frame(&ctx);
+        // XC_FRAME_STATS=1 prints how many frames a second are drawn, to find
+        // what keeps the app busy.
+        if let Some((frames, since)) = &mut self.frame_stats {
+            *frames += 1;
+            if since.elapsed() >= std::time::Duration::from_secs(1) {
+                eprintln!("frames: {frames}/s");
+                (*frames, *since) = (0, std::time::Instant::now());
+            }
+        }
         self.ed.ui_rects.clear();
         // The tour's practice project is never worth a "save changes?" question.
         if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close && self.tour.is_none() && self.ed.unsaved_now() {
