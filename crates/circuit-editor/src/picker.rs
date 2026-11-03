@@ -263,7 +263,8 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                         ui.spacing_mut().item_spacing.x = 6.0;
                         let options = [(None, t!("All")), (Some(BlockKind::Event), t!("Events")), (Some(BlockKind::Action), t!("Actions")), (Some(BlockKind::Value), t!("Values"))];
                         for (kind, label) in options {
-                            if filter_chip(ui, &theme, label, kind, kind == kind_filter).clicked() {
+                            let color = kind.map(|k| kind_color(k, &theme)).unwrap_or(theme.text);
+                            if crate::dialog::filter_chip(ui, &theme, label, color, kind == kind_filter).clicked() {
                                 new_filter = Some(kind);
                             }
                         }
@@ -445,23 +446,6 @@ fn paint_kind_chip(ui: &egui::Ui, theme: &Theme, kind: BlockKind, right: f32, ce
     ui.painter().rect_filled(rect, 99.0, with_alpha(color, 32));
     ui.painter().galley(rect.center() - galley.size() / 2.0, galley, color);
     rect
-}
-
-/// A chip in the kind filter row: filled when chosen.
-fn filter_chip(ui: &mut egui::Ui, theme: &Theme, label: &str, kind: Option<BlockKind>, on: bool) -> egui::Response {
-    let color = kind.map(|k| kind_color(k, theme)).unwrap_or(theme.text);
-    let galley = ui.painter().layout_no_wrap(label.to_string(), egui::FontId::proportional(12.0), if on { color } else { theme.text_muted });
-    let (rect, resp) = ui.allocate_exact_size(galley.size() + vec2(20.0, 8.0), egui::Sense::click());
-    let fill = if on {
-        with_alpha(color, 40)
-    } else if resp.hovered() {
-        theme.panel_header
-    } else {
-        egui::Color32::TRANSPARENT
-    };
-    ui.painter().rect(rect, 99.0, fill, Stroke::new(1.0, if on { with_alpha(color, 120) } else { theme.line }), egui::StrokeKind::Inside);
-    ui.painter().galley(rect.center() - galley.size() / 2.0, galley, if on || resp.hovered() { color } else { theme.text_muted });
-    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
 /// A small icon button in the search row, with its name as a tooltip.

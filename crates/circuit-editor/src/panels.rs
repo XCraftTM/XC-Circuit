@@ -183,26 +183,65 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
     });
 }
 
+/// The console's level filter, kept between sessions: None shows every line.
+const CONSOLE_LEVEL_KEY: &str = "console-level";
+
+/// A level's tag in the console and its color.
+fn level_look(level: Level, theme: &crate::theme::Theme) -> (&'static str, Color32) {
+    match level {
+        Level::Info => ("INFO ", Color32::from_rgb(0x6F, 0xA8, 0xFF)),
+        Level::Success => ("DONE ", Color32::from_rgb(0x3D, 0xDC, 0x97)),
+        Level::Warn => ("WARN ", theme.warning),
+        Level::Error => ("ERROR", theme.error),
+    }
+}
+
 pub fn console(ui: &mut Ui, ed: &mut Editor) {
     let theme = ed.theme.clone();
-    // A toolbar row like the Stored Data panel's, with the button in its middle.
+    let key = egui::Id::new(CONSOLE_LEVEL_KEY);
+    let level: Option<Level> = ui.ctx().data_mut(|d| d.get_persisted::<u8>(key)).and_then(|n| match n {
+        1 => Some(Level::Info),
+        2 => Some(Level::Success),
+        3 => Some(Level::Warn),
+        4 => Some(Level::Error),
+        _ => None,
+    });
+    // A toolbar row like the Stored Data panel's: Clear, then chips that show
+    // one level of lines, each with how many there are.
     Frame::new().inner_margin(Margin::symmetric(12, 8)).show(ui, |ui| {
         ui.horizontal(|ui| {
             if crate::dialog::button(ui, &theme, t!("Clear")).clicked() {
                 ed.log.clear();
+            }
+            ui.add_space(6.0);
+            ui.spacing_mut().item_spacing.x = 6.0;
+            let count = |l: Level| ed.log.iter().filter(|x| x.level == l).count();
+            let options = [
+                (None, t!("All").to_string(), theme.text),
+                (Some(Level::Info), format!("{} {}", t!("Info"), count(Level::Info)), level_look(Level::Info, &theme).1),
+                (Some(Level::Success), format!("{} {}", t!("Done"), count(Level::Success)), level_look(Level::Success, &theme).1),
+                (Some(Level::Warn), format!("{} {}", t!("Warnings"), count(Level::Warn)), theme.warning),
+                (Some(Level::Error), format!("{} {}", t!("Errors"), count(Level::Error)), theme.error),
+            ];
+            for (l, label, color) in options {
+                if crate::dialog::filter_chip(ui, &theme, &label, color, l == level).clicked() {
+                    let n: u8 = match l {
+                        None => 0,
+                        Some(Level::Info) => 1,
+                        Some(Level::Success) => 2,
+                        Some(Level::Warn) => 3,
+                        Some(Level::Error) => 4,
+                    };
+                    ui.ctx().data_mut(|d| d.insert_persisted(key, n));
+                }
             }
         });
     });
     let mut jump: Option<(String, String)> = None;
     ScrollArea::vertical().auto_shrink([false, false]).stick_to_bottom(true).show(ui, |ui| {
         Frame::new().inner_margin(Margin::symmetric(12, 6)).show(ui, |ui| {
-            for line in &ed.log {
-                let (tag, color) = match line.level {
-                    Level::Info => ("INFO ", Color32::from_rgb(0x6F, 0xA8, 0xFF)),
-                    Level::Success => ("DONE ", Color32::from_rgb(0x3D, 0xDC, 0x97)),
-                    Level::Warn => ("WARN ", theme.warning),
-                    Level::Error => ("ERROR", theme.error),
-                };
+            for line in ed.log.iter().filter(|l| level.is_none_or(|want| l.level == want)) {
+                let (tag, color) = level_look(line.level, &theme);
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(&line.time).monospace().color(theme.text_muted));
                     ui.label(RichText::new(tag).monospace().color(color));

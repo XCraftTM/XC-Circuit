@@ -230,6 +230,23 @@ pub fn primary_button(ui: &mut Ui, theme: &Theme, text: &str) -> Response {
 /// A framed button for actions inside a row or a panel. Every such button
 /// has this size: as tall as a text box, so buttons, boxes and dropdowns in a
 /// row line up, and easy to hit with a finger.
+/// A rounded chip for filtering a list (the block picker's kinds, the
+/// console's levels): filled in `color` when chosen.
+pub fn filter_chip(ui: &mut Ui, theme: &Theme, label: &str, color: Color32, on: bool) -> Response {
+    let galley = ui.painter().layout_no_wrap(label.to_string(), egui::FontId::proportional(12.0), if on { color } else { theme.text_muted });
+    let (rect, resp) = ui.allocate_exact_size(galley.size() + vec2(20.0, 8.0), Sense::click());
+    let fill = if on {
+        with_alpha(color, 40)
+    } else if resp.hovered() {
+        theme.panel_header
+    } else {
+        Color32::TRANSPARENT
+    };
+    ui.painter().rect(rect, 99.0, fill, Stroke::new(1.0, if on { with_alpha(color, 120) } else { theme.line }), egui::StrokeKind::Inside);
+    ui.painter().galley(rect.center() - galley.size() / 2.0, galley, if on || resp.hovered() { color } else { theme.text_muted });
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
 pub fn button(ui: &mut Ui, theme: &Theme, text: impl Into<RichText>) -> Response {
     framed(ui, theme, text.into().color(theme.text))
 }
