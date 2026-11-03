@@ -9,13 +9,20 @@ interface Fields {
 
 export default defineBlock({
   id: "demo.level_from_xp",
-  name: "Level From XP",
-  description: "Turns an XP total into a level and the XP still needed for the next one.",
-  author: "You",
-  version: "1.0.0",
-  category: "math",
-  icon: "hash",
   kind: "value",
+  info: {
+    name: "Level From XP",
+    description: "Turns an XP total into a level and the XP still needed for the next one.",
+    author: "You",
+    version: "1.0.0",
+  },
+  search: {
+    category: "numbers",
+    aliases: ["Rank", "XP to level"],
+  },
+  look: {
+    icon: "hash",
+  },
   fields: {
     xp: { type: "number", pin: true, description: "The XP total." },
     perLevel: { type: "number", default: 100, label: "XP per level" },

@@ -100,8 +100,11 @@ A block is one `.js`, `.cjs` or `.ts` file in a plugin's `blocks/` folder. Plugi
 import { defineBlock } from "@xc-circuit/sdk";
 
 export default defineBlock({
-  id: "demo.level_from_xp", name: "Level from XP", kind: "value",
-  description: "Turns XP into a level.", author: "You", version: "1.0.0",
+  id: "demo.level_from_xp",
+  kind: "value",
+  info: { name: "Level from XP", description: "Turns XP into a level.", author: "You", version: "1.0.0" },
+  search: { category: "numbers", aliases: ["Rank", "XP to level"], tags: ["leveling"] },
+  look: { icon: "hash" },
   fields: { xp: { type: "number" }, perLevel: { type: "number", default: 100 } },
   outputs: { level: { type: "number" }, toNext: { type: "number" } },
   run({ fields }) {
@@ -110,6 +113,14 @@ export default defineBlock({
   },
 });
 ```
+
+What describes a block goes in groups: `info` (name, description, author, version, docs, deprecated), `search` (category, aliases, tags), `look` (icon, width, preview) and `requires` (Discord `intents`, npm `dependencies`). Fields, outputs, flows and the functions stay at the top. Blocks are written in English.
+
+- **category** is one of the build mode's categories, listed in order under `[[categories]]` in `plugins/xc.discord/modes/discord.toml`: events (`events_bot`, `events_commands`, `events_messages`, `events_members`, `events_server`), Discord (`send`, `design`, `components`, `reactions`, `manage_messages`, `members`, `moderation`, `roles`, `channels`, `server`, `bot`, `voice`, `format`) and logic and data (`flow`, `calls`, `time`, `variables`, `data`, `text`, `numbers`, `lists`, `web`, `code`). A test keeps every bundled block in one of them.
+- **aliases** are other English names the block picker finds it by ("Reply" for Send Message). A match there ranks like one in the name; aliases aren't shown.
+- **tags** are further search words, ranked after name and aliases.
+
+The keys may also stand on their own at the top, as in older block files. The picker's categories open and close, with buttons to open or close them all.
 
 See `examples/DemoBot/plugins/demo.custom` and `sdk/index.d.ts`.
 
