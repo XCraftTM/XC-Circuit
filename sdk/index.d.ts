@@ -88,24 +88,52 @@ export interface Ctx {
   discord?: { client: any };
 }
 
-export interface BlockDef<F = Record<string, any>> {
-  id: string;
+/** What the block is. */
+export interface BlockInfo {
   name: string;
   description: string;
   author: string;
   version: string;
-  kind: "event" | "action" | "value";
-  category?: string;
-  icon?: string;
-  tags?: string[];
   docs?: string;
+  deprecated?: string | boolean;
+}
+
+/** How it is found in the block picker. */
+export interface BlockSearch {
+  /** A category id of the build mode, such as "send" or "moderation". */
+  category?: string;
+  tags?: string[];
+}
+
+/** How it looks on the canvas. */
+export interface BlockLook {
+  icon?: string;
+  width?: number;
+  preview?: string;
+}
+
+/** What it needs to run. */
+export interface BlockRequires {
+  /** Discord gateway intents, such as "GuildMessages". */
+  intents?: string[];
+  /** npm packages: name → version. */
+  dependencies?: Record<string, string>;
+}
+
+/**
+ * A block. What describes it goes in the groups `info`, `search`, `look`
+ * and `requires`; each of their keys may also stand on its own at the top.
+ */
+export interface BlockDef<F = Record<string, any>> extends Partial<BlockInfo>, BlockSearch, BlockLook, BlockRequires {
+  id: string;
+  kind: "event" | "action" | "value";
+  info?: BlockInfo;
+  search?: BlockSearch;
+  look?: BlockLook;
+  requires?: BlockRequires;
   fields?: Record<string, FieldDef>;
   outputs?: Record<string, OutputDef>;
   flows?: string[];
-  intents?: string[];
-  dependencies?: Record<string, string>;
-  width?: number;
-  preview?: string;
   pure?: boolean;
   define?(args: DefineArgs): DefineResult;
   migrate?(values: Record<string, any>, fromVersion: string): Record<string, any>;

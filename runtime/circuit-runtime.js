@@ -106,7 +106,7 @@ class Runtime {
     this.log.info(`Runtime ready · Node ${process.version}`);
     for (const [id, b] of Object.entries(this.bundle.blocks)) {
       try {
-        this.blocks.set(id, this.loadModule(esmToCommonJs(b.source), b.file));
+        this.blocks.set(id, ungroupBlock(this.loadModule(esmToCommonJs(b.source), b.file)));
       } catch (e) {
         this.log.error(`Could not load block ${id}: ${e.message}`);
       }
@@ -251,6 +251,25 @@ class Runtime {
  */
 function esmToCommonJs(source) {
   return source.replace(/^([ \t]*)export\s+default(?=[\s{(])/m, "$1module.exports =");
+}
+
+/** How a block file groups what describes it (the editor reads the same). */
+const BLOCK_GROUPS = {
+  info: ["name", "description", "author", "version", "docs", "deprecated"],
+  search: ["category", "aliases", "tags"],
+  look: ["icon", "width", "preview"],
+  requires: ["intents", "dependencies"],
+};
+
+/** Moves the keys in a block's groups (`info`, `search`, …) to the top. */
+function ungroupBlock(block) {
+  if (!block || typeof block !== "object") return block;
+  for (const [group, keys] of Object.entries(BLOCK_GROUPS)) {
+    const found = block[group];
+    if (!found || typeof found !== "object") continue;
+    for (const key of keys) if (key in found && !(key in block)) block[key] = found[key];
+  }
+  return block;
 }
 
 /** Where a block runs outside every Try Zone. */
@@ -1082,4 +1101,4 @@ if (typeof __XC_BUNDLE__ !== "undefined") {
   cli();
 }
 
-module.exports = { start, fillTemplate, expressionEnd, coerce, Store, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };
+module.exports = { start, ungroupBlock, fillTemplate, expressionEnd, coerce, Store, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };

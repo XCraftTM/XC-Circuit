@@ -159,6 +159,40 @@ impl OutputDef {
     }
 }
 
+/// How a block file groups what describes it. A key may also stand on its
+/// own at the top, as block files did before the groups.
+pub const BLOCK_GROUPS: [(&str, &[&str]); 4] = [
+    ("info", &["name", "description", "author", "version", "docs", "deprecated"]),
+    ("search", &["category", "aliases", "tags"]),
+    ("look", &["icon", "width", "preview"]),
+    ("requires", &["intents", "dependencies"]),
+];
+
+/// Moves the keys in a block file's groups (`info`, `search`, `look`,
+/// `requires`) to the top, where `BlockDef` reads them. Returns problems:
+/// keys a group doesn't have, and keys given both in a group and on top.
+pub fn ungroup(block: &mut Value) -> Vec<String> {
+    let mut problems = Vec::new();
+    let Some(obj) = block.as_object_mut() else { return problems };
+    for (group, keys) in BLOCK_GROUPS {
+        let Some(found) = obj.remove(group) else { continue };
+        let Value::Object(entries) = found else {
+            problems.push(format!("`{group}` should be an object"));
+            continue;
+        };
+        for (key, value) in entries {
+            if !keys.contains(&key.as_str()) {
+                problems.push(format!("`{group}` has no `{key}` (it takes {})", keys.join(", ")));
+            } else if obj.contains_key(&key) {
+                problems.push(format!("`{key}` is given twice: in `{group}` and on its own"));
+            } else {
+                obj.insert(key, value);
+            }
+        }
+    }
+    problems
+}
+
 /// A block as described by its block file. Function keys arrive as `has_*` flags.
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(default)]
@@ -200,6 +234,9 @@ pub struct BlockDef {
     /// JavaScript made from a TypeScript file (or one with `import` lines); runs instead of `source`.
     #[serde(skip)]
     pub compiled: Option<String>,
+    /// Problems found while reading the file (see `ungroup`), reported by `finish`.
+    #[serde(skip)]
+    pub load_problems: Vec<String>,
 }
 
 impl BlockDef {
@@ -211,7 +248,7 @@ impl BlockDef {
         for o in self.outputs.values_mut() {
             o.finish();
         }
-        let mut problems = Vec::new();
+        let mut problems = std::mem::take(&mut self.load_problems);
         for (key, value) in [
             ("id", &self.id),
             ("name", &self.name),

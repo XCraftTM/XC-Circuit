@@ -128,8 +128,11 @@ impl BlockEngine {
     /// Loads a block file. `key` identifies it for later `define()` calls.
     pub fn load_block(&self, key: &str, source: &str) -> Result<BlockDef> {
         let source = esm_to_commonjs(source);
-        let value = self.call("__load", (key.to_string(), source))?;
-        Ok(serde_json::from_value(value)?)
+        let mut value = self.call("__load", (key.to_string(), source))?;
+        let problems = circuit_core::block::ungroup(&mut value);
+        let mut def: BlockDef = serde_json::from_value(value)?;
+        def.load_problems = problems;
+        Ok(def)
     }
 
     /// Runs a block's `define()`. `project` is what blocks see as `project`
@@ -212,6 +215,30 @@ mod tests {
     use super::*;
     use circuit_core::{BlockKind, BlockShape};
     use serde_json::json;
+
+    #[test]
+    fn grouped_block_files_load_like_flat_ones() {
+        let engine = BlockEngine::new().unwrap();
+        let src = r#"module.exports = {
+            id: "x.grouped",
+            kind: "action",
+            info: { name: "Grouped", description: "D", author: "A", version: "2.1.0" },
+            search: { category: "send", aliases: ["Reply"], tags: ["dm"] },
+            look: { icon: "message", width: 300 },
+            requires: { intents: ["Guilds"], dependencies: { "left-pad": "1" } },
+            run() {},
+        };"#;
+        let mut def = engine.load_block("grouped", src).unwrap();
+        assert!(def.finish().is_empty());
+        assert_eq!((def.name.as_str(), def.version.as_str(), def.category.as_deref(), def.icon.as_deref()), ("Grouped", "2.1.0", Some("send"), Some("message")));
+        assert_eq!((def.tags.clone(), def.intents.clone(), def.width), (vec!["dm".to_string()], vec!["Guilds".to_string()], Some(300.0)));
+        assert_eq!(def.dependencies["left-pad"], "1");
+
+        let wrong = r#"module.exports = { id: "x.w", kind: "action", name: "W", info: { name: "W", description: "D", author: "A", version: "1.0.0", colour: "red" }, run() {} };"#;
+        let problems = engine.load_block("wrong", wrong).unwrap().finish();
+        assert!(problems.iter().any(|p| p.contains("`info` has no `colour`")), "{problems:?}");
+        assert!(problems.iter().any(|p| p.contains("`name` is given twice")), "{problems:?}");
+    }
 
     #[test]
     fn export_default_only_at_the_start_of_a_line() {
