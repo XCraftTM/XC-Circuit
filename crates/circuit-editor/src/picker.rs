@@ -14,6 +14,9 @@ const PICKER_W: f32 = 700.0;
 const BODY_H: f32 = 380.0;
 const LIST_W: f32 = 290.0;
 const ROW_H: f32 = 32.0;
+const HEADER_H: f32 = 24.0;
+/// Categories closed in the picker, kept between sessions.
+const COLLAPSED_KEY: &str = "picker-collapsed";
 
 #[derive(Clone, Debug)]
 pub struct PendingWire {
@@ -139,19 +142,27 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
     } else {
         list.sort_by(|a, b| rank(a.0).cmp(&rank(b.0)).then_with(|| a.0.name.cmp(&b.0.name)));
     }
-    if !list.is_empty() {
-        picker.highlighted = picker.highlighted.min(list.len() - 1);
+    // Closed categories hide their blocks, except while searching.
+    let collapsed: Vec<String> = ctx.data_mut(|d| d.get_persisted::<Vec<String>>(egui::Id::new(COLLAPSED_KEY)).unwrap_or_default());
+    let category_of = |d: &BlockDef| d.category.clone().unwrap_or_default();
+    let shown: Vec<usize> = (0..list.len()).filter(|&i| searching || !collapsed.contains(&category_of(list[i].0))).collect();
+    if !shown.contains(&picker.highlighted) {
+        picker.highlighted = shown.iter().copied().find(|&i| i >= picker.highlighted).or(shown.last().copied()).unwrap_or(0);
     }
 
     let (up, down, enter, escape) = ctx.input(|i| (i.key_pressed(Key::ArrowUp), i.key_pressed(Key::ArrowDown), i.key_pressed(Key::Enter), i.key_pressed(Key::Escape)));
-    if up {
-        picker.highlighted = picker.highlighted.saturating_sub(1);
+    let at = shown.iter().position(|&i| i == picker.highlighted);
+    if up && let Some(at) = at {
+        picker.highlighted = shown[at.saturating_sub(1)];
     }
-    if down && picker.highlighted + 1 < list.len() {
-        picker.highlighted += 1;
+    if down && let Some(at) = at {
+        picker.highlighted = shown[(at + 1).min(shown.len() - 1)];
     }
 
-    let mut chosen: Option<(String, Option<String>)> = if enter { list.get(picker.highlighted).map(|(d, pin, _)| (d.id.clone(), pin.clone())) } else { None };
+    let mut chosen: Option<(String, Option<String>)> =
+        if enter && at.is_some() { list.get(picker.highlighted).map(|(d, pin, _)| (d.id.clone(), pin.clone())) } else { None };
+    // A category header clicked, or Expand all / Collapse all.
+    let mut fold: Option<Fold> = None;
     let mut close = escape;
 
     let screen = ctx.content_rect();
@@ -178,10 +189,11 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                             TextEdit::singleline(&mut picker.query)
                                 .hint_text(t!("Search blocks"))
                                 .frame(Frame::new())
-                                .desired_width(size.x - 140.0)
+                                .desired_width(size.x - 210.0)
                                 .font(egui::FontId::proportional(15.0)),
                         );
-                        if picker.opened_frames <= 2 {
+                        // Typing always searches, also after a category was clicked.
+                        if picker.opened_frames <= 2 || ui.ctx().memory(|m| m.focused().is_none()) {
                             edit.request_focus();
                         }
                         if edit.changed() {
@@ -192,6 +204,16 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                             Frame::new().fill(theme.panel_header).corner_radius(99).inner_margin(Margin::symmetric(8, 2)).show(ui, |ui| {
                                 ui.label(RichText::new(tag).small().color(theme.text_muted));
                             });
+                            if !searching {
+                                ui.add_space(8.0);
+                                ui.spacing_mut().item_spacing.x = 4.0;
+                                if fold_button(ui, &theme, "unfold", t!("Expand all"), &ed.reg).clicked() {
+                                    fold = Some(Fold::All(false));
+                                }
+                                if fold_button(ui, &theme, "fold", t!("Collapse all"), &ed.reg).clicked() {
+                                    fold = Some(Fold::All(true));
+                                }
+                            }
                         });
                     });
                 });
@@ -206,16 +228,17 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                             let category_name = |cat: &str| mode.as_ref().and_then(|m| m.category(cat)).map(|c| crate::i18n::tr(&c.name).into_owned()).unwrap_or(cat.to_string());
                             let mut last_cat: Option<String> = None;
                             for (i, (def, pin, found)) in list.iter().enumerate() {
-                                let cat = def.category.clone().unwrap_or_default();
+                                let cat = category_of(def);
                                 if !searching && last_cat.as_deref() != Some(cat.as_str()) {
-                                    let name = category_name(&cat);
-                                    ui.add_space(6.0);
-                                    ui.horizontal(|ui| {
-                                        ui.add_space(12.0);
-                                        ui.label(RichText::new(name.to_uppercase()).size(10.0).color(theme.text_muted));
-                                    });
-                                    ui.add_space(2.0);
+                                    let closed = collapsed.contains(&cat);
+                                    let count = list.iter().filter(|(d, _, _)| category_of(d) == cat).count();
+                                    if category_header(ui, &theme, &category_name(&cat), count, closed).clicked() {
+                                        fold = Some(Fold::One(cat.clone()));
+                                    }
                                     last_cat = Some(cat.clone());
+                                }
+                                if !shown.contains(&i) {
+                                    continue;
                                 }
                                 let selected = i == picker.highlighted;
                                 let (rect, resp) = ui.allocate_exact_size(vec2(LIST_W - 8.0, ROW_H), egui::Sense::click());
@@ -295,12 +318,74 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
         && picker.opened_frames > 2;
     close |= clicked_outside;
 
+    if let Some(fold) = fold {
+        let cats: Vec<String> = list.iter().map(|(d, _, _)| category_of(d)).collect();
+        ctx.data_mut(|d| {
+            let closed = d.get_persisted_mut_or_default::<Vec<String>>(egui::Id::new(COLLAPSED_KEY));
+            match fold {
+                Fold::One(cat) if closed.contains(&cat) => closed.retain(|c| *c != cat),
+                Fold::One(cat) => closed.push(cat),
+                Fold::All(false) => closed.clear(),
+                Fold::All(true) => {
+                    for cat in cats {
+                        if !closed.contains(&cat) {
+                            closed.push(cat);
+                        }
+                    }
+                }
+            }
+        });
+    }
     if let Some((block_id, pin)) = chosen {
         let picker = ed.picker.take().unwrap();
         place(ed, &picker, &block_id, pin);
     } else if close {
         ed.picker = None;
     }
+}
+
+/// Opening or closing categories in the list.
+enum Fold {
+    /// One category, by id.
+    One(String),
+    /// Every category: closed (`true`) or open.
+    All(bool),
+}
+
+/// A category's row: an arrow (right when closed, down when open), its name
+/// and how many blocks it has. The whole row opens or closes it.
+fn category_header(ui: &mut egui::Ui, theme: &Theme, name: &str, count: usize, closed: bool) -> egui::Response {
+    ui.add_space(4.0);
+    let (rect, resp) = ui.allocate_exact_size(vec2(LIST_W - 8.0, HEADER_H), egui::Sense::click());
+    let rect = rect.translate(vec2(4.0, 0.0));
+    if resp.hovered() {
+        ui.painter().rect_filled(rect, 6.0, theme.panel_header);
+    }
+    let color = if resp.hovered() { theme.text } else { theme.text_muted };
+    let c = rect.left_center() + vec2(14.0, 0.0);
+    let arrow = if closed {
+        vec![c + vec2(-2.5, -4.0), c + vec2(3.0, 0.0), c + vec2(-2.5, 4.0)]
+    } else {
+        vec![c + vec2(-4.0, -2.5), c + vec2(4.0, -2.5), c + vec2(0.0, 3.0)]
+    };
+    ui.painter().add(egui::Shape::convex_polygon(arrow, color, Stroke::NONE));
+    let font = egui::FontId::proportional(10.5);
+    let label = ui.painter().text(rect.left_center() + vec2(26.0, 0.0), Align2::LEFT_CENTER, name.to_uppercase(), font.clone(), color);
+    ui.painter().text(egui::pos2(label.right() + 6.0, rect.center().y), Align2::LEFT_CENTER, count.to_string(), font, with_alpha(theme.text_muted, 140));
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+/// A small icon button in the search row, with its name as a tooltip.
+fn fold_button(ui: &mut egui::Ui, theme: &Theme, icon: &str, tip: &str, reg: &Registry) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(24.0, 24.0), egui::Sense::click());
+    if resp.hovered() {
+        ui.painter().rect_filled(rect, 6.0, theme.panel_header);
+    }
+    let tint = if resp.hovered() { theme.text } else { theme.text_muted };
+    if let Some(path) = reg.icons.get(icon) {
+        egui::Image::from_uri(crate::editor::file_uri(path)).tint(tint).paint_at(ui, egui::Rect::from_center_size(rect.center(), vec2(14.0, 14.0)));
+    }
+    resp.on_hover_text(tip)
 }
 
 fn details(ui: &mut egui::Ui, def: &BlockDef, reg: &Registry, theme: &Theme) {

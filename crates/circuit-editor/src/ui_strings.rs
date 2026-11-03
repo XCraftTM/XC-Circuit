@@ -402,6 +402,8 @@ pub const UI_STRINGS: &[&str] = &[
     "Search blocks",
     "Only compatible",
     "All blocks",
+    "Expand all",
+    "Collapse all",
     "   No blocks match",
     "Enter: place",
     "Up/Down: move",
