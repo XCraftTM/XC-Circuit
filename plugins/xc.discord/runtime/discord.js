@@ -1,6 +1,7 @@
 // Runtime library for the Discord Bot mode: creates the discord.js client with the
 // intents the project's event blocks need, logs in, and registers slash commands.
-// Blocks reach it as ctx.discord.
+// Blocks reach it as ctx.discord: the client, and the music player (discord-player)
+// that the music blocks share.
 
 module.exports = {
   id: "discord",
@@ -14,7 +15,7 @@ module.exports = {
     if (!intents.length) intents.push(GatewayIntentBits.Guilds);
     const client = new Client({ intents, partials: [Partials.Channel, Partials.Message, Partials.Reaction] });
     rt.log.info(`Intents: ${names.length ? names.join(", ") : "Guilds"}`);
-    return { client };
+    return { client, music: createMusic(rt, client) };
   },
 
   async start(rt, api) {
@@ -41,6 +42,130 @@ module.exports = {
     }
   },
 };
+
+/**
+ * The music player the music blocks share, made with discord-player the first
+ * time one needs it (its packages are only installed when a music block is
+ * used). Music Player Ready chooses the sources and defaults; credentials come
+ * from Bot › Settings › Music.
+ */
+function createMusic(rt, client) {
+  let options = {};
+  let ready = null;
+  const engines = {};
+  const music = {
+    /** Sources and queue defaults, set by Music Player Ready before the player starts. */
+    configure(o) {
+      options = { ...options, ...o };
+    },
+    /** The discord-player Player. Waits a moment first, so every block's settings are in. */
+    get() {
+      if (!ready) {
+        ready = new Promise((r) => setImmediate(r)).then(start);
+        ready.catch(() => (ready = null));
+      }
+      return ready;
+    },
+    /** Queue options for a new queue, from the defaults. */
+    nodeOptions(metadata) {
+      const d = options;
+      return {
+        metadata,
+        volume: d.volume ?? 80,
+        leaveOnEmpty: d.leaveOnEmpty ?? true,
+        leaveOnEmptyCooldown: (d.leaveOnEmptySeconds ?? 60) * 1000,
+        leaveOnEnd: d.leaveOnEnd ?? true,
+        leaveOnEndCooldown: (d.leaveOnEndSeconds ?? 60) * 1000,
+        selfDeaf: d.selfDeaf ?? true,
+      };
+    },
+    /** A server's queue, or null when nothing plays there. */
+    async queue(server) {
+      const player = await music.get();
+      return player.nodes.get(server) ?? null;
+    },
+    /** Like queue(), but fails with a clear message. */
+    async needQueue(server) {
+      if (!server) throw new Error("Connect a server");
+      const q = await music.queue(server);
+      if (!q) throw new Error("Nothing is playing on this server");
+      return q;
+    },
+    /** The search engine for a source name (youtube, spotify …), or auto. */
+    engine(source) {
+      return engines[source] ? `ext:${engines[source]}` : "auto";
+    },
+    info: trackInfo,
+  };
+
+  async function start() {
+    const o = { youtube: true, spotify: true, soundcloud: true, deezer: false, appleMusic: false, tts: false, ttsLanguage: "en", ...options };
+    if (!process.env.FFMPEG_PATH) {
+      try {
+        process.env.FFMPEG_PATH = rt.require("ffmpeg-static");
+      } catch {
+        // ffmpeg from the PATH, if there is one.
+      }
+    }
+    const { Player } = rt.require("discord-player");
+    const player = new Player(client);
+    const loaded = [];
+    const use = async (name, key, load, opts) => {
+      try {
+        const extractor = load();
+        await player.extractors.register(extractor, opts);
+        engines[key] = extractor.identifier;
+        loaded.push(name);
+      } catch (e) {
+        rt.log.warn(`Music: ${name} couldn't be loaded: ${e.message}`);
+      }
+    };
+    const secret = (name) => rt.secret(name) || undefined;
+    if (o.youtube) await use("YouTube", "youtube", () => rt.require("discord-player-youtubei").YoutubeExtractor, { cookie: secret("youtubeCookie") });
+    if (o.spotify) {
+      const clientId = String(rt.setting("spotifyClientId") || "").trim() || undefined;
+      await use("Spotify", "spotify", () => rt.require("discord-player-spotify").SpotifyExtractor, { clientId, clientSecret: secret("spotifyClientSecret") });
+    }
+    if (o.soundcloud) await use("SoundCloud", "soundcloud", () => rt.require("discord-player-soundcloud").SoundcloudExtractor, {});
+    if (o.deezer) {
+      const arl = secret("deezerArl");
+      if (arl) await use("Deezer", "deezer", () => rt.require("discord-player-deezer").DeezerExtractor, { arl, decryptionKey: secret("deezerDecryptionKey") });
+      else rt.log.warn("Music: Deezer needs its ARL cookie in Bot › Settings › Music");
+    }
+    if (o.appleMusic) await use("Apple Music", "appleMusic", () => rt.require("discord-player-applemusic").AppleMusicExtractor, {});
+    if (o.tts) await use("Text to speech", "tts", () => rt.require("discord-player-tts").TTSExtractor, { language: o.ttsLanguage || "en", slow: false });
+    const base = rt.require("@discord-player/extractor");
+    await use("Files and links", "files", () => base.AttachmentExtractor, {});
+    await use("Vimeo", "vimeo", () => base.VimeoExtractor, {});
+    await use("Reverbnation", "reverbnation", () => base.ReverbnationExtractor, {});
+    player.events.on("error", (queue, e) => rt.log.error(`Music (${queue.guild?.name ?? "?"}): ${e.message}`));
+    player.events.on("playerError", (queue, e, track) => rt.log.error(`Music: couldn't play ${track?.title ?? "a track"}: ${e.message}`));
+    rt.log.info(`Music ready: ${loaded.join(", ")}`);
+    player.xcSources = loaded;
+    return player;
+  }
+  return music;
+}
+
+/** What blocks show of a discord-player track. */
+function trackInfo(track) {
+  if (!track) return null;
+  return {
+    title: track.cleanTitle || track.title || "",
+    author: track.author || "",
+    url: track.url || "",
+    duration: track.duration || "",
+    durationMs: track.durationMS ?? 0,
+    thumbnail: track.thumbnail || "",
+    source: track.source || track.extractor?.identifier || "",
+    live: Boolean(track.live),
+    requestedBy: track.requestedBy ?? null,
+    track,
+  };
+}
+
+module.exports.trackInfo = trackInfo;
+module.exports.createMusic = createMusic;
 
 // Discord's numbers for option types, places, install types and channel kinds.
 const OPTION_TYPES = { string: 3, integer: 4, boolean: 5, user: 6, channel: 7, role: 8, mentionable: 9, number: 10, attachment: 11 };
