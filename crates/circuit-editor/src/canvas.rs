@@ -469,8 +469,6 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
 
     // Try Zones: drawn behind everything, dragged by their title band.
     let mut menu: Option<NodeMenu> = None;
-    // Screen rectangles of the zones' title bands, for their settings buttons.
-    let mut zone_heads: Vec<(String, Rect)> = Vec::new();
     let mut action_bar: Option<BarFor> = None;
     let mut start_drag: Option<PinEnd> = None;
     let drag = view.drag.clone();
@@ -494,14 +492,6 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         }
         // Left of the settings button, which is drawn on top in screen space.
         painter.text(layout.header.right_center() - vec2(14.0 + zone_button / view.zoom, 0.0), Align2::RIGHT_CENTER, extra.join(" · "), FontId::proportional(11.0), theme.text_muted);
-        zone_heads.push((zid.clone(), to_global * layout.header));
-        // Outputs panel in the bottom-right corner.
-        let panel = Rect::from_min_max(pos2(r.right() - ZONE_PANEL_W, r.bottom() - ZONE_PANEL_H - 8.0), pos2(r.right(), r.bottom() - 8.0));
-        painter.rect(panel, CornerRadius { nw: 9, ne: 0, sw: 9, se: 0 }, theme.node, Stroke::new(1.0, theme.node_border), StrokeKind::Inside);
-        for spot in &layout.pins {
-            let color = if spot.pin == "error" { theme.error } else if spot.ty.is_action() { theme.text } else { theme.text_muted };
-            painter.text(spot.pos - vec2(16.0, 0.0), Align2::RIGHT_CENTER, &spot.label, FontId::proportional(12.0), color);
-        }
         if let Some(err) = &failed {
             painter.text(r.left_bottom() + vec2(14.0, -16.0), Align2::LEFT_CENTER, format!("Caught: {err}"), FontId::proportional(11.5), theme.error);
         }
@@ -519,10 +509,45 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             *edited = true;
         }
         band.on_hover_text(t!("A Try Zone catches errors from the blocks inside it. The gear button sets its title, retries and timeout."));
+
+        // The settings button, on the right of the title band. On the canvas
+        // (not over it), so blocks and their buttons cover it; as big on
+        // screen at every zoom.
+        let side = if theme.touch { zone_button } else { zone_button.min(layout.header.height() * view.zoom - 2.0).max(18.0) } / view.zoom;
+        let gr = Rect::from_center_size(layout.header.right_center() - vec2(side / 2.0 + 6.0 / view.zoom, 0.0), Vec2::splat(side));
+        let gear = cui.interact(gr, cui.id().with(("zone-settings", &zid)), Sense::click()).on_hover_cursor(CursorIcon::PointingHand);
+        let fill = if gear.hovered() { mix(theme.panel, theme.accent, 0.25) } else { theme.panel };
+        painter.rect(gr, 6.0 / view.zoom, fill, Stroke::new(1.0 / view.zoom, with_alpha(theme.accent, 120)), StrokeKind::Inside);
+        if let Some(path) = reg.icons.get("settings") {
+            egui::Image::from_uri(crate::editor::file_uri(path)).tint(theme.accent).paint_at(&cui, gr.shrink(gr.width() * 0.2));
+        }
+        let gear = gear.on_hover_text(t!("Try Zone settings"));
+        egui::Popup::menu(&gear).width(240.0).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+            let Some(z) = ws.zones.get_mut(&zid) else { return };
+            ui.spacing_mut().item_spacing.y = 8.0;
+            ui.label(RichText::new(t!("Try Zone")).strong());
+            ui.label(t!("Title"));
+            *edited |= ui.add(crate::inputs::TextLine::new(&mut z.title)).changed();
+            ui.horizontal(|ui| {
+                ui.label(t!("Retries"));
+                *edited |= ui.add(egui::DragValue::new(&mut z.retry).range(0..=10)).changed();
+            });
+            ui.horizontal(|ui| {
+                ui.label(t!("Timeout (s)"));
+                let mut secs = z.timeout_ms.map(|t| t as f64 / 1000.0).unwrap_or(0.0);
+                if ui.add(egui::DragValue::new(&mut secs).range(0.0..=600.0).speed(0.5)).changed() {
+                    z.timeout_ms = (secs > 0.0).then_some((secs * 1000.0) as u64);
+                    *edited = true;
+                }
+            });
+            ui.separator();
+            if crate::dialog::button(ui, theme, t!("Remove Try Zone")).clicked() {
+                menu = Some(NodeMenu::RemoveZone(zid.clone()));
+                ui.close();
+            }
+        });
+
         for spot in &layout.pins {
-            let connected = ws.links.iter().any(|l| l.from.node == zid && l.from.pin == spot.pin);
-            let candidate = drag.as_ref().map(|d| drag_compat(d, &zid, spot, reg, flow.as_ref()));
-            draw_pin(&painter, spot, connected, candidate, theme, reg);
             let resp = cui.interact(Rect::from_center_size(spot.pos, Vec2::splat(pin_hit)), cui.id().with(("zpin", &zid, &spot.pin)), Sense::click_and_drag());
             if resp.drag_started() {
                 start_drag = Some(PinEnd { node: zid.clone(), pin: spot.pin.clone(), dir: Dir::Out, ty: spot.ty.clone(), picked_up: None });
@@ -568,6 +593,21 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     }
     if hovered_wire.is_some() {
         ctx.set_cursor_icon(CursorIcon::PointingHand);
+    }
+
+    // Zones' outputs panels, in their bottom-right corners: over the wires,
+    // as blocks are, with their pins on top.
+    for layout in &layouts[node_count..] {
+        let r = layout.rect;
+        let panel = Rect::from_min_max(pos2(r.right() - ZONE_PANEL_W, r.bottom() - ZONE_PANEL_H - 8.0), pos2(r.right(), r.bottom() - 8.0));
+        painter.rect(panel, CornerRadius { nw: 9, ne: 0, sw: 9, se: 0 }, theme.node, Stroke::new(1.0, theme.node_border), StrokeKind::Inside);
+        for spot in &layout.pins {
+            let color = if spot.pin == "error" { theme.error } else if spot.ty.is_action() { theme.text } else { theme.text_muted };
+            painter.text(spot.pos - vec2(16.0, 0.0), Align2::RIGHT_CENTER, &spot.label, FontId::proportional(12.0), color);
+            let connected = ws.links.iter().any(|l| l.from.node == layout.id && l.from.pin == spot.pin);
+            let candidate = drag.as_ref().map(|d| drag_compat(d, &layout.id, spot, reg, flow.as_ref()));
+            draw_pin(&painter, spot, connected, candidate, theme, reg);
+        }
     }
 
     // Blocks.
@@ -1100,47 +1140,6 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             *selected_wire = None;
             *edited = true;
         }
-    }
-
-    // Each zone's settings button, on the right of its title band.
-    for (zid, head) in &zone_heads {
-        let side = if theme.touch { zone_button } else { zone_button.min(head.height() - 2.0).max(18.0) };
-        let r = Rect::from_center_size(head.right_center() - vec2(side / 2.0 + 6.0, 0.0), Vec2::splat(side));
-        if !outer.contains_rect(r) {
-            continue;
-        }
-        let t = tools(r, row);
-        let gear = t.interact(r, t.id().with(("zone-settings", zid)), Sense::click()).on_hover_cursor(CursorIcon::PointingHand);
-        let fill = if gear.hovered() { mix(theme.panel, theme.accent, 0.25) } else { theme.panel };
-        t.painter().rect(r, 6.0, fill, Stroke::new(1.0, with_alpha(theme.accent, 120)), StrokeKind::Inside);
-        if let Some(path) = icon("settings") {
-            egui::Image::from_uri(crate::editor::file_uri(&path)).tint(theme.accent).paint_at(&t, r.shrink(r.width() * 0.2));
-        }
-        let gear = gear.on_hover_text(t!("Try Zone settings"));
-        egui::Popup::menu(&gear).width(240.0).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
-            let Some(z) = ws.zones.get_mut(zid) else { return };
-            ui.spacing_mut().item_spacing.y = 8.0;
-            ui.label(RichText::new(t!("Try Zone")).strong());
-            ui.label(t!("Title"));
-            *edited |= ui.add(crate::inputs::TextLine::new(&mut z.title)).changed();
-            ui.horizontal(|ui| {
-                ui.label(t!("Retries"));
-                *edited |= ui.add(egui::DragValue::new(&mut z.retry).range(0..=10)).changed();
-            });
-            ui.horizontal(|ui| {
-                ui.label(t!("Timeout (s)"));
-                let mut secs = z.timeout_ms.map(|t| t as f64 / 1000.0).unwrap_or(0.0);
-                if ui.add(egui::DragValue::new(&mut secs).range(0.0..=600.0).speed(0.5)).changed() {
-                    z.timeout_ms = (secs > 0.0).then_some((secs * 1000.0) as u64);
-                    *edited = true;
-                }
-            });
-            ui.separator();
-            if crate::dialog::button(ui, theme, t!("Remove Try Zone")).clicked() {
-                menu = Some(NodeMenu::RemoveZone(zid.clone()));
-                ui.close();
-            }
-        });
     }
 
     match menu {
