@@ -1219,9 +1219,11 @@ impl eframe::App for CircuitApp {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
         self.edit_shortcuts(&ctx);
-        if !self.ed.activity.is_empty() {
+        // A block that just ran glows and fades out, so repaint while one does.
+        // Failed blocks stay marked, but their mark doesn't move: no repaints.
+        self.ed.activity.retain(|_, a| a.error.is_some() || a.at.elapsed().as_secs_f32() < 1.2);
+        if self.ed.activity.values().any(|a| a.error.is_none()) {
             ctx.request_repaint_after(std::time::Duration::from_millis(33));
-            self.ed.activity.retain(|_, a| a.error.is_some() || a.at.elapsed().as_secs_f32() < 1.2);
         }
 
         let title = match &self.ed.project {
