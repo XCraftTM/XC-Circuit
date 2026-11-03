@@ -13,6 +13,7 @@ mod color;
 mod dialog;
 mod editor;
 mod embed;
+mod exchange;
 mod history;
 mod inputs;
 mod json_view;

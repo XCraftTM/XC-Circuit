@@ -27,6 +27,8 @@ pub enum Cmd {
     SlashCommands,
     Settings,
     Export,
+    ImportWorkspaces,
+    ExportWorkspaces,
     About,
     OpenWorkspace(String),
     RevealBlock(String, String),

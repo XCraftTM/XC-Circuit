@@ -100,6 +100,9 @@ pub struct Editor {
     /// The bot's name and picture, for message previews.
     pub bot_profile: crate::bot_profile::Profile,
     pub slash_edit: Option<crate::slash::SlashEdit>,
+    /// The Export Workspaces and Import Workspaces tabs.
+    pub ws_export: Option<crate::exchange::ExportDraft>,
+    pub ws_import: Option<crate::exchange::ImportDraft>,
 }
 
 impl Editor {
@@ -136,6 +139,8 @@ impl Editor {
             layout_edit: None,
             bot_profile: Default::default(),
             slash_edit: None,
+            ws_export: None,
+            ws_import: None,
         };
         ed.set_theme(theme_id.unwrap_or("graphite"));
         ed.log_plugin_summary();
@@ -233,6 +238,8 @@ impl Editor {
                 self.selected = None;
                 self.multi.clear();
                 self.views.clear();
+                self.ws_export = None;
+                self.ws_import = None;
                 self.reload_plugins();
                 self.refresh_define_ctx();
                 self.upgrade_blocks();

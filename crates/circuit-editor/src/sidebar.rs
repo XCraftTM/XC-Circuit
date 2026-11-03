@@ -45,6 +45,8 @@ enum Do {
     DeleteFolder(String),
     Toggle(String),
     SlashCommands,
+    Export(crate::exchange::Preselect),
+    Import,
 }
 
 /// Icon files by name, looked up before the project is borrowed.
@@ -186,6 +188,25 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
         if let Some(key) = resp.dnd_release_payload::<String>() {
             todo.push(Do::Move((*key).clone(), None));
         }
+        resp.context_menu(|ui| {
+            if ui.button(t!("New workspace")).clicked() {
+                todo.push(Do::NewWorkspace(None));
+                ui.close();
+            }
+            if ui.button(t!("New folder")).clicked() {
+                todo.push(Do::NewFolder);
+                ui.close();
+            }
+            ui.separator();
+            if ui.button(t!("Import workspaces…")).clicked() {
+                todo.push(Do::Import);
+                ui.close();
+            }
+            if ui.add_enabled(!project.workspaces.is_empty(), egui::Button::new(t!("Export all workspaces…"))).clicked() {
+                todo.push(Do::Export(crate::exchange::Preselect::All));
+                ui.close();
+            }
+        });
 
         if is_open(PROJECT_ROW) {
             let workspace_row = |ui: &mut Ui, key: &String, ws: &Workspace, depth: usize, todo: &mut Vec<Do>, renaming: &mut Option<Renaming>| {
@@ -229,6 +250,10 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
                             }
                         }
                     });
+                    if ui.button(t!("Export…")).clicked() {
+                        todo.push(Do::Export(crate::exchange::Preselect::Workspace(key.clone())));
+                        ui.close();
+                    }
                     ui.separator();
                     if ui.button(RichText::new(t!("Delete workspace")).color(theme.error)).clicked() {
                         todo.push(Do::DeleteWorkspace(key.clone()));
@@ -267,6 +292,11 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
                         }
                         if ui.button(t!("Rename")).clicked() {
                             todo.push(Do::StartRename(target.clone(), folder.clone()));
+                            ui.close();
+                        }
+                        let filled = project.workspaces.values().any(|w| w.folder.as_ref() == Some(folder));
+                        if ui.add_enabled(filled, egui::Button::new(t!("Export folder…"))).clicked() {
+                            todo.push(Do::Export(crate::exchange::Preselect::Folder(folder.clone())));
                             ui.close();
                         }
                         ui.separator();
@@ -435,6 +465,8 @@ fn apply(ed: &mut Editor, ctx: &egui::Context, todo: Vec<Do>, renaming: &mut Opt
                 }
             }),
             Do::SlashCommands => crate::slash::open(ed),
+            Do::Export(preselect) => crate::exchange::open_export(ed, preselect),
+            Do::Import => crate::exchange::pick_import(ed),
         }
     }
 }

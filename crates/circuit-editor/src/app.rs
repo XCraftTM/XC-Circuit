@@ -35,6 +35,8 @@ pub enum Tab {
     BotSettings,
     Export,
     Plugins,
+    WorkspaceExport,
+    WorkspaceImport,
 }
 
 /// Where a tab belongs in the window.
@@ -56,7 +58,7 @@ impl Tab {
 
     /// The editors that open in their own floating window.
     fn floats(&self) -> bool {
-        matches!(self, Tab::EmbedBuilder | Tab::LayoutBuilder | Tab::SlashCommands | Tab::BotSettings | Tab::Export | Tab::Plugins)
+        matches!(self, Tab::EmbedBuilder | Tab::LayoutBuilder | Tab::SlashCommands | Tab::BotSettings | Tab::Export | Tab::Plugins | Tab::WorkspaceExport | Tab::WorkspaceImport)
     }
 
     const PANELS: [(Tab, &'static str); 3] = [(Tab::Inspector, n("Inspector")), (Tab::Console, n("Console")), (Tab::Problems, n("Problems"))];
@@ -223,6 +225,8 @@ impl CircuitApp {
             (Tab::BotSettings, self.bot.settings.is_some(), egui::vec2(540.0, 600.0)),
             (Tab::Export, self.bot.export.is_some(), egui::vec2(560.0, 620.0)),
             (Tab::Plugins, self.plugins.is_some(), egui::vec2(580.0, 560.0)),
+            (Tab::WorkspaceExport, self.ed.ws_export.is_some(), egui::vec2(660.0, 680.0)),
+            (Tab::WorkspaceImport, self.ed.ws_import.is_some(), egui::vec2(660.0, 680.0)),
         ];
         for (tab, open, size) in wanted {
             match (open, self.dock.find_tab(&tab)) {
@@ -427,6 +431,13 @@ impl CircuitApp {
                     self.ed.save();
                     self.bot.restart_if_running(&mut self.ed, ui.ctx());
                 }
+                if ui.add_enabled(self.ed.project.is_some(), egui::Button::new(t!("Import workspaces…"))).clicked() {
+                    crate::exchange::pick_import(&mut self.ed);
+                }
+                if ui.add_enabled(self.ed.project.as_ref().is_some_and(|p| !p.workspaces.is_empty()), egui::Button::new(t!("Export workspaces…"))).clicked() {
+                    crate::exchange::open_export(&mut self.ed, crate::exchange::Preselect::All);
+                }
+                ui.separator();
                 if ui.add_enabled(self.ed.project.is_some(), egui::Button::new(t!("Restore from backup…"))).clicked() {
                     open_center(&mut self.dock, Tab::Backups);
                 }
@@ -873,6 +884,8 @@ impl CircuitApp {
             items.push(Item::new(t!("Bot"), t!("Bot Settings…"), Cmd::Settings));
             items.push(Item::new(t!("Bot"), "Export…", Cmd::Export));
             items.push(Item::new(t!("File"), "Save", Cmd::Save).shortcut("Ctrl+S"));
+            items.push(Item::new(t!("File"), t!("Import workspaces…"), Cmd::ImportWorkspaces));
+            items.push(Item::new(t!("File"), t!("Export workspaces…"), Cmd::ExportWorkspaces));
         }
         items.push(Item::new(t!("File"), t!("New Project…"), Cmd::NewProject));
         items.push(Item::new(t!("File"), t!("Open Project…"), Cmd::OpenProject));
@@ -974,6 +987,8 @@ impl CircuitApp {
             Cmd::SlashCommands => crate::slash::open(&mut self.ed),
             Cmd::Settings => self.bot.open_settings(&mut self.ed),
             Cmd::Export => self.bot.open_export(&self.ed),
+            Cmd::ImportWorkspaces => crate::exchange::pick_import(&mut self.ed),
+            Cmd::ExportWorkspaces => crate::exchange::open_export(&mut self.ed, crate::exchange::Preselect::All),
             Cmd::About => self.show_about = true,
             Cmd::OpenSettings => self.open_settings(),
             Cmd::Tour => self.start_tour(),
@@ -1475,6 +1490,8 @@ impl TabViewer for Viewer<'_> {
             Tab::BotSettings => t!("Bot settings").into(),
             Tab::Export => t!("Export bot").into(),
             Tab::Plugins => t!("Plugins").into(),
+            Tab::WorkspaceExport => t!("Export workspaces").into(),
+            Tab::WorkspaceImport => t!("Import workspaces").into(),
         }
     }
 
@@ -1495,6 +1512,8 @@ impl TabViewer for Viewer<'_> {
             Tab::BotSettings => self.bot.settings = None,
             Tab::Export => self.bot.export = None,
             Tab::Plugins => *self.plugins = None,
+            Tab::WorkspaceExport => self.ed.ws_export = None,
+            Tab::WorkspaceImport => self.ed.ws_import = None,
             _ => {}
         }
         OnCloseResponse::Close
@@ -1529,6 +1548,8 @@ impl TabViewer for Viewer<'_> {
             Tab::SlashCommands => crate::slash::tab(ui, self.ed),
             Tab::BotSettings => self.bot.settings_tab(ui, self.ed),
             Tab::Export => self.bot.export_tab(ui, self.ed),
+            Tab::WorkspaceExport => crate::exchange::export_tab(ui, self.ed),
+            Tab::WorkspaceImport => crate::exchange::import_tab(ui, self.ed),
             Tab::Plugins => {
                 use crate::plugin_manager::Ask;
                 let theme = self.ed.theme.clone();
