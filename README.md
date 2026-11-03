@@ -123,7 +123,7 @@ What describes a block goes in groups: `info` (name, description, author, versio
 - **aliases** are other English names the block picker finds it by ("Reply" for Send Message). A match there ranks like one in the name; aliases aren't shown.
 - **tags** are further search words, ranked after name and aliases.
 
-The keys may also stand on their own at the top, as in older block files. The picker's categories open and close, with buttons to open or close them all.
+The keys may also stand on their own at the top, as in older block files. The picker's categories open and close, with buttons to open or close them all. Each block shows its kind as a chip (Event, Action or Value), events come first in a category, and chips at the top show only one kind.
 
 See `examples/DemoBot/plugins/demo.custom` and `sdk/index.d.ts`.
 

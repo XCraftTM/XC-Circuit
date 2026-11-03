@@ -10,13 +10,42 @@ use crate::editor::Editor;
 use crate::theme::{Theme, with_alpha};
 
 /// Picker size: the result list on the left, details of the highlighted block on the right.
-const PICKER_W: f32 = 700.0;
+const PICKER_W: f32 = 760.0;
 const BODY_H: f32 = 380.0;
-const LIST_W: f32 = 290.0;
+const LIST_W: f32 = 340.0;
 const ROW_H: f32 = 32.0;
 const HEADER_H: f32 = 24.0;
 /// Categories closed in the picker, kept between sessions.
 const COLLAPSED_KEY: &str = "picker-collapsed";
+/// The kind filter (All, Events, Actions, Values), kept between sessions.
+const KIND_KEY: &str = "picker-kind";
+
+/// What a block is, as its chip says it: an event starts a flow, an action
+/// does something on the way, a value gives a value to other blocks.
+fn kind_name(kind: BlockKind) -> &'static str {
+    match kind {
+        BlockKind::Event => t!("Event"),
+        BlockKind::Action => t!("Action"),
+        BlockKind::Value => t!("Value"),
+    }
+}
+
+fn kind_color(kind: BlockKind, theme: &Theme) -> egui::Color32 {
+    match kind {
+        BlockKind::Event => theme.action,
+        BlockKind::Action => theme.accent,
+        BlockKind::Value => theme.text_muted,
+    }
+}
+
+/// Events first in a category: that's where a flow starts.
+fn kind_order(kind: BlockKind) -> u8 {
+    match kind {
+        BlockKind::Event => 0,
+        BlockKind::Action => 1,
+        BlockKind::Value => 2,
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct PendingWire {
@@ -120,6 +149,13 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
     picker.opened_frames += 1;
 
     let searching = !picker.query.trim().is_empty();
+    // None shows every kind.
+    let kind_filter: Option<BlockKind> = ctx.data_mut(|d| d.get_persisted::<u8>(egui::Id::new(KIND_KEY))).and_then(|k| match k {
+        1 => Some(BlockKind::Event),
+        2 => Some(BlockKind::Action),
+        3 => Some(BlockKind::Value),
+        _ => None,
+    });
     let mut list: Vec<(&BlockDef, Option<String>, Found)> = ed
         .reg
         .blocks
@@ -129,6 +165,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                 || project_root.as_ref().is_some_and(|r| d.source.starts_with(r))
         })
         .filter(|d| d.deprecated.is_none())
+        .filter(|d| kind_filter.is_none_or(|k| d.kind == k))
         .filter_map(|d| search(d, &picker.query).map(|found| (d, found)))
         .filter_map(|(d, found)| match &picker.pending {
             Some(p) => matching_pin(d, p, &ed.reg).map(|pin| (d, Some(pin), found)),
@@ -137,11 +174,11 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
         .collect();
     let rank = |d: &BlockDef| mode.as_ref().map(|m| m.category_rank(d.category.as_deref().unwrap_or(""))).unwrap_or(usize::MAX);
     if searching {
-        // Best matches first: by name or another name, then the rest.
+        // Best matches first (by name or another name), events first among them.
         let strength = |f: &Found| if *f == Found::Elsewhere { 1 } else { 0 };
-        list.sort_by(|a, b| strength(&a.2).cmp(&strength(&b.2)).then_with(|| a.0.name.cmp(&b.0.name)));
+        list.sort_by(|a, b| strength(&a.2).cmp(&strength(&b.2)).then_with(|| kind_order(a.0.kind).cmp(&kind_order(b.0.kind))).then_with(|| a.0.name.cmp(&b.0.name)));
     } else {
-        list.sort_by(|a, b| rank(a.0).cmp(&rank(b.0)).then_with(|| a.0.name.cmp(&b.0.name)));
+        list.sort_by(|a, b| rank(a.0).cmp(&rank(b.0)).then_with(|| kind_order(a.0.kind).cmp(&kind_order(b.0.kind))).then_with(|| a.0.name.cmp(&b.0.name)));
     }
     // Closed categories hide their blocks, except while searching.
     let collapsed: Vec<String> = ctx.data_mut(|d| d.get_persisted::<Vec<String>>(egui::Id::new(COLLAPSED_KEY)).unwrap_or_default());
@@ -164,12 +201,14 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
         if enter && at.is_some() { list.get(picker.highlighted).map(|(d, pin, _)| (d.id.clone(), pin.clone())) } else { None };
     // A category header clicked, or Expand all / Collapse all.
     let mut fold: Option<Fold> = None;
+    // A kind filter chip clicked.
+    let mut new_filter: Option<Option<BlockKind>> = None;
     let mut close = escape;
 
     let screen = ctx.content_rect();
     // Smaller windows get a smaller picker.
     let body_h = BODY_H.min(screen.height() - 120.0).max(160.0);
-    let size = vec2(PICKER_W.min(screen.width() - 16.0), body_h + 90.0);
+    let size = vec2(PICKER_W.min(screen.width() - 16.0), body_h + 126.0);
     let mut pos = picker.screen_pos;
     pos.x = pos.x.min(screen.right() - size.x - 8.0);
     pos.y = pos.y.min(screen.bottom() - size.y - 8.0);
@@ -218,6 +257,18 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                         });
                     });
                 });
+                // Kind filter: All, Events, Actions, Values.
+                Frame::new().inner_margin(Margin { left: 12, right: 12, top: 0, bottom: 8 }).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 6.0;
+                        let options = [(None, t!("All")), (Some(BlockKind::Event), t!("Events")), (Some(BlockKind::Action), t!("Actions")), (Some(BlockKind::Value), t!("Values"))];
+                        for (kind, label) in options {
+                            if filter_chip(ui, &theme, label, kind, kind == kind_filter).clicked() {
+                                new_filter = Some(kind);
+                            }
+                        }
+                    });
+                });
                 ui.painter().hline(ui.min_rect().x_range(), ui.min_rect().bottom(), Stroke::new(1.0, theme.line));
 
                 let column = egui::Layout::top_down(egui::Align::Min);
@@ -255,14 +306,15 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                                     egui::Image::from_uri(crate::editor::file_uri(&path)).tint(tint).paint_at(ui, icon);
                                 }
                                 let name_rect = ui.painter().text(rect.left_center() + vec2(36.0, 0.0), Align2::LEFT_CENTER, &def.name, egui::FontId::proportional(14.0), theme.text);
-                                // While searching, the category it is in.
+                                // Its kind as a chip at the right; while searching, its category before that.
+                                let chip = paint_kind_chip(ui, &theme, def.kind, rect.right() - 8.0, rect.center().y);
                                 if searching {
                                     let note = category_name(&cat);
                                     let font = egui::FontId::proportional(11.5);
-                                    let room = rect.right() - 8.0 - (name_rect.right() + 8.0);
+                                    let room = chip.left() - 8.0 - (name_rect.right() + 8.0);
                                     let galley = ui.painter().layout(note, font, theme.text_muted, f32::INFINITY);
                                     if galley.size().x <= room {
-                                        ui.painter().galley(egui::pos2(rect.right() - 8.0 - galley.size().x, rect.center().y - galley.size().y / 2.0), galley, theme.text_muted);
+                                        ui.painter().galley(egui::pos2(chip.left() - 8.0 - galley.size().x, rect.center().y - galley.size().y / 2.0), galley, theme.text_muted);
                                     }
                                 }
                                 if resp.hovered() {
@@ -315,6 +367,18 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
         && picker.opened_frames > 2;
     close |= clicked_outside;
 
+    if let Some(kind) = new_filter {
+        let stored: u8 = match kind {
+            None => 0,
+            Some(BlockKind::Event) => 1,
+            Some(BlockKind::Action) => 2,
+            Some(BlockKind::Value) => 3,
+        };
+        ctx.data_mut(|d| d.insert_persisted(egui::Id::new(KIND_KEY), stored));
+        if let Some(p) = ed.picker.as_mut() {
+            p.highlighted = 0;
+        }
+    }
     if let Some(fold) = fold {
         let cats: Vec<String> = list.iter().map(|(d, _, _)| category_of(d)).collect();
         ctx.data_mut(|d| {
@@ -372,6 +436,34 @@ fn category_header(ui: &mut egui::Ui, theme: &Theme, name: &str, count: usize, c
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
+/// A kind's chip, its right edge at `right`. Returns where it was painted.
+fn paint_kind_chip(ui: &egui::Ui, theme: &Theme, kind: BlockKind, right: f32, center_y: f32) -> egui::Rect {
+    let color = kind_color(kind, theme);
+    let galley = ui.painter().layout_no_wrap(kind_name(kind).to_string(), egui::FontId::proportional(10.5), color);
+    let size = galley.size() + vec2(12.0, 4.0);
+    let rect = egui::Rect::from_min_size(egui::pos2(right - size.x, center_y - size.y / 2.0), size);
+    ui.painter().rect_filled(rect, 99.0, with_alpha(color, 32));
+    ui.painter().galley(rect.center() - galley.size() / 2.0, galley, color);
+    rect
+}
+
+/// A chip in the kind filter row: filled when chosen.
+fn filter_chip(ui: &mut egui::Ui, theme: &Theme, label: &str, kind: Option<BlockKind>, on: bool) -> egui::Response {
+    let color = kind.map(|k| kind_color(k, theme)).unwrap_or(theme.text);
+    let galley = ui.painter().layout_no_wrap(label.to_string(), egui::FontId::proportional(12.0), if on { color } else { theme.text_muted });
+    let (rect, resp) = ui.allocate_exact_size(galley.size() + vec2(20.0, 8.0), egui::Sense::click());
+    let fill = if on {
+        with_alpha(color, 40)
+    } else if resp.hovered() {
+        theme.panel_header
+    } else {
+        egui::Color32::TRANSPARENT
+    };
+    ui.painter().rect(rect, 99.0, fill, Stroke::new(1.0, if on { with_alpha(color, 120) } else { theme.line }), egui::StrokeKind::Inside);
+    ui.painter().galley(rect.center() - galley.size() / 2.0, galley, if on || resp.hovered() { color } else { theme.text_muted });
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
 /// A small icon button in the search row, with its name as a tooltip.
 fn fold_button(ui: &mut egui::Ui, theme: &Theme, icon: &str, tip: &str, reg: &Registry) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(24.0, 24.0), egui::Sense::click());
@@ -386,7 +478,15 @@ fn fold_button(ui: &mut egui::Ui, theme: &Theme, icon: &str, tip: &str, reg: &Re
 }
 
 fn details(ui: &mut egui::Ui, def: &BlockDef, reg: &Registry, theme: &Theme) {
-    ui.label(RichText::new(&def.name).strong().size(16.0));
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(&def.name).strong().size(16.0));
+        let what = match def.kind {
+            BlockKind::Event => t!("Event: starts a flow"),
+            BlockKind::Action => t!("Action: does something"),
+            BlockKind::Value => t!("Value: gives a value"),
+        };
+        ui.label(RichText::new(what).size(11.5).color(kind_color(def.kind, theme)));
+    });
     ui.label(RichText::new(format!("by {} · v{} · {}", def.author, def.version, def.plugin)).size(12.0).color(theme.text_muted));
     ui.label(&def.description);
     let fields: Vec<String> = def.fields.iter().filter(|(_, f)| !f.advanced).map(|(k, f)| f.label(k)).collect();
