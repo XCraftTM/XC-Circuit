@@ -147,7 +147,12 @@ class Runtime {
     this.emit("ready", {});
   }
 
-  ctxFor(run, node) {
+  /**
+   * What a block gets as `ctx`. `path` is where it runs: the Try Zones it is
+   * in and their abort signal. Each path carries its own, so blocks running
+   * side by side never see each other's zones.
+   */
+  ctxFor(run, node, path = NO_ZONES) {
     const rt = this;
     const graph = node.graph;
     const ctx = {
@@ -163,17 +168,17 @@ class Runtime {
       signal: {
         emit: (name, data) => rt.fireSignal(name, data),
       },
-      abortSignal: run ? run.abortSignal : undefined,
+      abortSignal: path.signal,
       next: async (flow, outputs) => {
         if (!run) throw new Error("ctx.next() can only be used while a block runs");
         if (outputs) run.setOutputs(node.id, outputs);
-        await graph.follow(run, node.id, flow);
+        await graph.follow(run, node.id, flow, path);
       },
       set: (output, value) => {
         if (run) run.setOutputs(node.id, { [output]: value });
       },
       /** Reads the block's inputs again (for loops whose condition changes). */
-      resolve: async () => (run ? node.resolve(run) : node.inline()),
+      resolve: async () => (run ? node.resolve(run, new Map(), path) : node.inline()),
       /** Sets what this run gives back to a Call Workspace block. */
       returnValue: (value) => {
         if (run) run.returned = value;
@@ -226,6 +231,9 @@ class Runtime {
     }
   }
 }
+
+/** Where a block runs outside every Try Zone. */
+const NO_ZONES = Object.freeze({ zones: [], signal: undefined });
 
 class Graph {
   constructor(rt, key, data) {
@@ -282,39 +290,38 @@ class Graph {
     );
   }
 
-  async follow(run, nodeId, flow) {
+  async follow(run, nodeId, flow, path = NO_ZONES) {
     const targets = this.flowsOut.get(`${nodeId}.${flow}`) || [];
-    await Promise.all(targets.map((t) => this.execute(run, t, run.zoneStack)));
+    await Promise.all(targets.map((t) => this.execute(run, t, path)));
   }
 
   /** Runs an action block, entering its Try Zone when needed. */
-  async execute(run, nodeId, zoneStack) {
+  async execute(run, nodeId, path) {
     const node = this.nodes.get(nodeId);
     if (!node) return;
     const zone = node.data.zone;
-    if (zone && this.zones.has(zone) && !zoneStack.includes(zone)) {
-      return this.runZone(run, zone, nodeId, zoneStack);
+    if (zone && this.zones.has(zone) && !path.zones.includes(zone)) {
+      return this.runZone(run, zone, nodeId, path);
     }
-    if (!zone && zoneStack.length) {
+    if (!zone && path.zones.length) {
       // An Action wire may only leave a zone through its own outputs; treat it as leaving.
-      return this.execute(run, nodeId, []);
+      return this.execute(run, nodeId, NO_ZONES);
     }
-    return this.executeNode(run, node, zoneStack);
+    return this.executeNode(run, node, path);
   }
 
-  async executeNode(run, node, zoneStack) {
+  async executeNode(run, node, path) {
     const t0 = performance.now();
     this.rt.emit("node", { ws: this.key, node: node.id, phase: "enter", run: run.id });
-    const prevStack = run.zoneStack;
-    run.zoneStack = zoneStack;
     try {
-      if (run.abortSignal && run.abortSignal.aborted) throw new Error("timed out");
-      const fields = await node.resolve(run);
-      const ctx = this.rt.ctxFor(run, node);
+      // A zone that timed out stops at its next block.
+      if (path.signal && path.signal.aborted) throw new Error("timed out");
+      const fields = await node.resolve(run, new Map(), path);
+      const ctx = this.rt.ctxFor(run, node, path);
       const result = await node.def.run({ fields, ctx, node: { id: node.id, workspace: this.key } });
       if (result && typeof result === "object") run.setOutputs(node.id, result);
       this.rt.emit("node", { ws: this.key, node: node.id, phase: "exit", run: run.id, ms: +(performance.now() - t0).toFixed(1) });
-      if (!node.def.flows) await this.follow(run, node.id, "next");
+      if (!node.def.flows) await this.follow(run, node.id, "next", path);
     } catch (e) {
       if (!e.__xcReported) {
         e.__xcReported = true;
@@ -322,22 +329,20 @@ class Graph {
         this.rt.emit("node", { ws: this.key, node: node.id, phase: "error", run: run.id, error: String(e.message || e) });
       }
       throw e;
-    } finally {
-      run.zoneStack = prevStack;
     }
   }
 
-  async runZone(run, zoneId, entryId, zoneStack) {
+  async runZone(run, zoneId, entryId, path) {
     const zone = this.zones.get(zoneId);
     const attempts = 1 + Math.max(0, zone.retry || 0);
     let lastError;
     for (let attempt = 1; attempt <= attempts; attempt++) {
       const controller = new AbortController();
-      const parentSignal = run.abortSignal;
-      run.abortSignal = controller.signal;
+      // An outer zone timing out stops this one too.
+      const signal = path.signal ? AbortSignal.any([path.signal, controller.signal]) : controller.signal;
       let timer;
       try {
-        const work = this.execute(run, entryId, [...zoneStack, zoneId]);
+        const work = this.execute(run, entryId, { zones: [...path.zones, zoneId], signal });
         if (zone.timeoutMs) {
           const timeout = new Promise((_, reject) => {
             timer = setTimeout(() => {
@@ -350,13 +355,11 @@ class Graph {
           await work;
         }
         clearTimeout(timer);
-        run.abortSignal = parentSignal;
         this.rt.emit("zone", { ws: this.key, zone: zoneId, phase: "done", run: run.id });
-        return this.follow(run, zoneId, "done");
+        return this.follow(run, zoneId, "done", path);
       } catch (e) {
         clearTimeout(timer);
         controller.abort();
-        run.abortSignal = parentSignal;
         lastError = e;
         if (attempt < attempts) {
           this.rt.log.warn(`${this.name} › Try ${zone.title || zoneId}: ${e.message} · retry ${attempt}/${attempts - 1}`);
@@ -370,7 +373,7 @@ class Graph {
     if (!handlers.length) {
       this.rt.log.warn(`${this.name} › Try ${zone.title || zoneId} caught: ${details.message}`);
     }
-    return this.follow(run, zoneId, "error");
+    return this.follow(run, zoneId, "error", path);
   }
 
   /** Reads an output: from blocks that already ran in this run, or by computing a value block. */
@@ -380,7 +383,7 @@ class Graph {
    * two inputs gives both the same number. The next block reads it afresh,
    * so in a loop it can change on every pass.
    */
-  async read(run, nodeId, pin, memo = new Map()) {
+  async read(run, nodeId, pin, memo = new Map(), path = NO_ZONES) {
     const done = run.outputs.get(nodeId);
     if (done && pin in done) return done[pin];
     const node = this.nodes.get(nodeId);
@@ -390,8 +393,8 @@ class Graph {
       memo.set(
         nodeId,
         (async () => {
-          const fields = await node.resolve(run, memo);
-          return (await node.def.run({ fields, ctx: this.rt.ctxFor(run, node), node: { id: node.id, workspace: this.key } })) || {};
+          const fields = await node.resolve(run, memo, path);
+          return (await node.def.run({ fields, ctx: this.rt.ctxFor(run, node, path), node: { id: node.id, workspace: this.key } })) || {};
         })(),
       );
     }
@@ -418,13 +421,13 @@ class GraphNode {
   }
 
   /** Fields for run(): wires first, then inline values, with {placeholders} filled. */
-  async resolve(run, memo = new Map()) {
+  async resolve(run, memo = new Map(), path = NO_ZONES) {
     const fields = this.inline();
     const wired = new Set();
     for (const [key, sources] of this.graph.inputs) {
       const [nodeId, pin] = splitPin(key);
       if (nodeId !== this.id) continue;
-      const values = await Promise.all(sources.map((s) => this.graph.read(run, s.node, s.pin, memo)));
+      const values = await Promise.all(sources.map((s) => this.graph.read(run, s.node, s.pin, memo, path)));
       const def = (this.def.fields || {})[pin];
       fields[pin] = def && def.multi ? values.flat() : values[0];
       wired.add(pin);
@@ -448,8 +451,6 @@ class Run {
     this.event = event;
     this.outputs = new Map();
     this.vars = new Map();
-    this.zoneStack = [];
-    this.abortSignal = undefined;
   }
 
   setOutputs(nodeId, outputs) {

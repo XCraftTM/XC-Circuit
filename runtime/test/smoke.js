@@ -25,6 +25,7 @@ const bundle = {
     "core.log": block("debug/log.js"),
     "core.throw": block("debug/throw.js"),
     "core.increase_stored": block("data/increase_stored.js"),
+    "core.wait": block("flow/wait.js"),
   },
   libs: [],
   workspaces: {
@@ -71,6 +72,21 @@ const bundle = {
       },
       links: ["s.next > inc.in", "inc.next > log.in", "e.next > elog.in"],
     },
+    // A Try Zone that times out stops at its next block, while a path next to
+    // it (an old project's split path) keeps running outside the zone.
+    timeouts: {
+      name: "Timeouts",
+      nodes: {
+        go: { block: "core.on_start@1", at: [0, 0] },
+        slow: { block: "core.wait@1", at: [0, 0], values: { seconds: 0.3 }, zone: "zt" },
+        late: { block: "core.log@1", at: [0, 0], values: { message: "zone kept going", level: "error" }, zone: "zt" },
+        gave: { block: "core.log@1", at: [0, 0], values: { message: "zone gave up", level: "info" } },
+        side: { block: "core.wait@1", at: [0, 0], values: { seconds: 0.1 } },
+        sideLog: { block: "core.log@1", at: [0, 0], values: { message: "side path ran", level: "info" } },
+      },
+      links: ["go.next > slow.in", "go.next > side.in", "slow.next > late.in", "zt.error > gave.in", "side.next > sideLog.in"],
+      zones: { zt: { title: "Slow", rect: [0, 0, 10, 10], timeoutMs: 50 } },
+    },
   },
 };
 
@@ -95,6 +111,9 @@ setTimeout(() => {
   const has = (s) => assert.ok(logs.some((l) => l.includes(s)), `expected a log containing "${s}"`);
   has("success: answer 42");
   has("info: signal hello");
+  has("info: zone gave up");
+  has("info: side path ran");
+  assert.ok(!logs.some((l) => l.includes("zone kept going")), "a zone that timed out stops");
   has("warn: Main › Try Risky: boom · retry 1/1");
   has("warn: boom");
   has("info: on error: uncaught one in Throw Error");
