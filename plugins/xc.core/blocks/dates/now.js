@@ -9,15 +9,21 @@ const FORMATS = {
 
 module.exports = {
   id: "core.date",
-  name: "Date & Time",
-  description: "The current time (or a given date), moved by an amount and formatted.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "dates",
-  icon: "clock",
   kind: "value",
+  info: {
+    name: "Date & Time",
+    description: "The current time (or a given date), moved by an amount and formatted.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "dates",
+    tags: ["now", "time", "timestamp", "format"],
+  },
+  look: {
+    icon: "clock",
+  },
   pure: false,
-  tags: ["now", "time", "timestamp", "format"],
   fields: {
     date: { type: "date?", pin: true, description: "Start from this date. Empty = now." },
     addMinutes: { type: "number", default: 0, label: "Add minutes", description: "Use negative numbers to go back." },

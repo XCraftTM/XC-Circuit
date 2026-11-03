@@ -1,13 +1,21 @@
 module.exports = {
   id: "discord.on_member_leave",
-  name: "Member Leaves",
-  description: "Runs when someone leaves (or is kicked from) a server the bot is in.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "events",
-  icon: "user",
   kind: "event",
-  intents: ["Guilds", "GuildMembers"],
+  info: {
+    name: "Member Leaves",
+    description: "Runs when someone leaves (or is kicked from) a server the bot is in.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "events",
+  },
+  look: {
+    icon: "user",
+  },
+  requires: {
+    intents: ["Guilds", "GuildMembers"],
+  },
   fields: {
     serverId: { type: "text", pin: false, default: "", label: "Server id", description: "Only this server. Empty = all servers." },
   },

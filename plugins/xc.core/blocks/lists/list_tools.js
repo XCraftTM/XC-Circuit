@@ -19,15 +19,21 @@ const TOOLS = {
 
 module.exports = {
   id: "core.list_tools",
-  name: "List Tools",
-  description: "Reads or changes a list: length, first/last, contains, add, remove, join, sort, random …",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "lists",
-  icon: "repeat",
   kind: "value",
+  info: {
+    name: "List Tools",
+    description: "Reads or changes a list: length, first/last, contains, add, remove, join, sort, random …",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "lists",
+    tags: ["array", "length", "join", "sort", "random", "contains"],
+  },
+  look: {
+    icon: "repeat",
+  },
   pure: false,
-  tags: ["array", "length", "join", "sort", "random", "contains"],
   fields: {
     list: { type: "list<any>", pin: "only", required: true, description: "The list." },
     tool: { type: "select", pin: false, default: "length", choices: Object.fromEntries(Object.entries(TOOLS).map(([k, [l]]) => [k, l])), description: "What to do." },

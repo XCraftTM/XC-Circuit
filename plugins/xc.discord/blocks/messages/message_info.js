@@ -25,13 +25,19 @@ const INFO = {
 
 module.exports = {
   id: "discord.message_info",
-  name: "Message Info",
-  description: "Reads one piece of information about a message.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "messages",
-  icon: "message",
   kind: "value",
+  info: {
+    name: "Message Info",
+    description: "Reads one piece of information about a message.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "messages",
+  },
+  look: {
+    icon: "message",
+  },
   fields: {
     message: { type: "discord.message", pin: "only", required: true, description: "The message to read from." },
     info: { type: "select", pin: false, default: "content", choices: Object.fromEntries(Object.entries(INFO).map(([k, [l]]) => [k, l])), description: "Which detail about the message to get." },

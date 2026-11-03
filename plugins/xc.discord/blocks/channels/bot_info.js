@@ -19,14 +19,20 @@ const CHOICES = Object.fromEntries(Object.entries(INFO).map(([k, [label]]) => [k
 
 module.exports = {
   id: "discord.bot_info",
-  name: "Bot Info",
-  description: "Reads something about the bot itself: ping, uptime, servers, its user, an invite link.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "channels",
-  icon: "bolt",
   kind: "value",
-  tags: ["ping", "latency", "uptime", "stats", "invite"],
+  info: {
+    name: "Bot Info",
+    description: "Reads something about the bot itself: ping, uptime, servers, its user, an invite link.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "channels",
+    tags: ["ping", "latency", "uptime", "stats", "invite"],
+  },
+  look: {
+    icon: "bolt",
+  },
   fields: {
     info: { type: "select", pin: false, default: "ping", choices: CHOICES, description: "What to read." },
   },

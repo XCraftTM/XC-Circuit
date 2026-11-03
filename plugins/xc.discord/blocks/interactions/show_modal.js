@@ -1,13 +1,19 @@
 module.exports = {
   id: "discord.show_modal",
-  name: "Show Modal",
-  description: "Opens a form with text inputs. It must be the first answer to a command, button or menu (no Send Message before it). Answers arrive at Modal Submitted.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "interactions",
-  icon: "text",
   kind: "action",
-  tags: ["form", "popup", "dialog", "ask"],
+  info: {
+    name: "Show Modal",
+    description: "Opens a form with text inputs. It must be the first answer to a command, button or menu (no Send Message before it). Answers arrive at Modal Submitted.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "interactions",
+    tags: ["form", "popup", "dialog", "ask"],
+  },
+  look: {
+    icon: "text",
+  },
   fields: {
     interaction: { type: "discord.interaction", pin: "only", required: true, description: "The command use, button press or menu use to answer with the form." },
     customId: { type: "text", default: "my-form", label: "Custom id", description: "Identifies the form in Modal Submitted." },

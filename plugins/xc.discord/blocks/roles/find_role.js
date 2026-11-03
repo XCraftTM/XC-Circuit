@@ -1,13 +1,19 @@
 module.exports = {
   id: "discord.find_role",
-  name: "Find Role",
-  description: "Looks up a role of a server by id, name or mention.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "roles",
-  icon: "tag",
   kind: "action",
-  tags: ["get", "lookup", "fetch"],
+  info: {
+    name: "Find Role",
+    description: "Looks up a role of a server by id, name or mention.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "roles",
+    tags: ["get", "lookup", "fetch"],
+  },
+  look: {
+    icon: "tag",
+  },
   fields: {
     server: { type: "discord.guild", pin: "only", required: true, description: "The server the role is in." },
     role: { type: "text", required: true, default: "", label: "Id or name", description: "A role id, a name such as Moderator, or a mention." },

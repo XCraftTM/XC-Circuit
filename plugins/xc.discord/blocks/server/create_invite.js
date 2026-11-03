@@ -1,13 +1,19 @@
 module.exports = {
   id: "discord.create_invite",
-  name: "Create Invite",
-  description: "Makes an invite link to a channel.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "server",
-  icon: "user-plus",
   kind: "action",
-  tags: ["invite link", "join link"],
+  info: {
+    name: "Create Invite",
+    description: "Makes an invite link to a channel.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "server",
+    tags: ["invite link", "join link"],
+  },
+  look: {
+    icon: "user-plus",
+  },
   fields: {
     channel: { type: "discord.channel", pin: "only", required: true, description: "Where the invite leads." },
     hours: { type: "number", default: 24, min: 0, max: 168, description: "How long it works. 0 = forever." },

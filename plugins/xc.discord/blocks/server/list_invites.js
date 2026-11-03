@@ -1,13 +1,19 @@
 module.exports = {
   id: "discord.list_invites",
-  name: "List Invites",
-  description: "A server's invite links with their uses and who made them. For invite tracking. The bot needs Manage Server.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "server",
-  icon: "user-plus",
   kind: "action",
-  tags: ["invite tracking", "uses"],
+  info: {
+    name: "List Invites",
+    description: "A server's invite links with their uses and who made them. For invite tracking. The bot needs Manage Server.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "server",
+    tags: ["invite tracking", "uses"],
+  },
+  look: {
+    icon: "user-plus",
+  },
   fields: {
     server: { type: "discord.guild", pin: "only", required: true, description: "The server." },
   },

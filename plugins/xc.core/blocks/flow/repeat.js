@@ -1,14 +1,20 @@
 module.exports = {
   id: "core.repeat",
-  name: "Repeat",
-  description: "Runs Each a number of times, then Done.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "flow",
-  icon: "repeat",
   kind: "action",
+  info: {
+    name: "Repeat",
+    description: "Runs Each a number of times, then Done.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "flow",
+    tags: ["loop", "times", "for"],
+  },
+  look: {
+    icon: "repeat",
+  },
   flows: ["each", "done"],
-  tags: ["loop", "times", "for"],
   fields: {
     times: { type: "number", default: 3, min: 0, step: 1, description: "How many times." },
   },

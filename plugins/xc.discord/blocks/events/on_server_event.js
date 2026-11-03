@@ -2,15 +2,23 @@ const KINDS = { joined: "The bot is added to a server", left: "The bot is remove
 
 module.exports = {
   id: "discord.on_server_event",
-  name: "Bot Added to Server",
-  description: "Runs when the bot joins a server, or is removed from one.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "events",
-  icon: "layers",
   kind: "event",
-  intents: ["Guilds"],
-  tags: ["guild create", "invite", "kicked", "joined"],
+  info: {
+    name: "Bot Added to Server",
+    description: "Runs when the bot joins a server, or is removed from one.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "events",
+    tags: ["guild create", "invite", "kicked", "joined"],
+  },
+  look: {
+    icon: "layers",
+  },
+  requires: {
+    intents: ["Guilds"],
+  },
   fields: {
     kind: { type: "select", pin: false, default: "joined", label: "When", choices: KINDS, description: "Added or removed." },
   },

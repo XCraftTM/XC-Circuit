@@ -1,14 +1,20 @@
 module.exports = {
   id: "core.loop_while",
-  name: "Loop While",
-  description: "Runs Each again and again while a condition stays true (checked before every round), then Done.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "flow",
-  icon: "repeat",
   kind: "action",
+  info: {
+    name: "Loop While",
+    description: "Runs Each again and again while a condition stays true (checked before every round), then Done.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "flow",
+    tags: ["while", "until", "loop"],
+  },
+  look: {
+    icon: "repeat",
+  },
   flows: ["each", "done"],
-  tags: ["while", "until", "loop"],
   fields: {
     condition: { type: "boolean", pin: true, description: "Keep going while this is true. It is read again before each round." },
     max: { type: "number", default: 1000, min: 1, max: 100000, step: 1, advanced: true, label: "At most", description: "A safety limit on rounds." },

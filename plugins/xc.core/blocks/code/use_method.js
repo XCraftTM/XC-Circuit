@@ -12,14 +12,20 @@ function parseArg(line) {
 
 module.exports = {
   id: "core.use_method",
-  name: "Use Method",
-  description: "Calls any method, or reads or sets any property, of an object or of the Discord client: anything the library can do. Such as members.fetch, setNickname or guild.rulesChannel.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "code",
-  icon: "function",
   kind: "action",
-  tags: ["call", "method", "property", "discord.js", "advanced", "api"],
+  info: {
+    name: "Use Method",
+    description: "Calls any method, or reads or sets any property, of an object or of the Discord client: anything the library can do. Such as members.fetch, setNickname or guild.rulesChannel.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "code",
+    tags: ["call", "method", "property", "discord.js", "advanced", "api"],
+  },
+  look: {
+    icon: "function",
+  },
   fields: {
     source: { type: "select", pin: false, default: "object", choices: SOURCES, description: "What to start from." },
     object: { type: "any", pin: "only", required: true, show: { source: ["object"] }, description: "Any object, such as a member, channel or message." },

@@ -1,14 +1,22 @@
 module.exports = {
   id: "discord.on_automod",
-  name: "AutoMod Action",
-  description: "Runs when Discord's AutoMod blocks a message, alerts or times someone out.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "events",
-  icon: "shield",
   kind: "event",
-  intents: ["Guilds", "AutoModerationExecution"],
-  tags: ["filter", "bad words", "spam", "moderation"],
+  info: {
+    name: "AutoMod Action",
+    description: "Runs when Discord's AutoMod blocks a message, alerts or times someone out.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "events",
+    tags: ["filter", "bad words", "spam", "moderation"],
+  },
+  look: {
+    icon: "shield",
+  },
+  requires: {
+    intents: ["Guilds", "AutoModerationExecution"],
+  },
   fields: {},
   outputs: {
     userId: { type: "text", label: "User id", description: "Who triggered it." },

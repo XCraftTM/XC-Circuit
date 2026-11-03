@@ -1,13 +1,19 @@
 module.exports = {
   id: "core.on_called",
-  name: "When Called",
-  description: "Runs when a Call block with the same name runs. End the flow with Return to give a value back.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "events",
-  icon: "function",
   kind: "event",
-  tags: ["function", "subroutine", "reuse"],
+  info: {
+    name: "When Called",
+    description: "Runs when a Call block with the same name runs. End the flow with Return to give a value back.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "events",
+    tags: ["function", "subroutine", "reuse"],
+  },
+  look: {
+    icon: "function",
+  },
   fields: {
     name: { type: "text", pin: false, required: true, default: "my-function", description: "The name Call blocks use." },
   },

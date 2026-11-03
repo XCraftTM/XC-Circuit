@@ -2,14 +2,20 @@ const STYLES = { short: "One line", paragraph: "Several lines" };
 
 module.exports = {
   id: "discord.text_input",
-  name: "Text Input",
-  description: "A box to type into, for Show Modal. Its answer comes out of Modal Submitted under its id.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "interactions",
-  icon: "text",
   kind: "value",
-  tags: ["form", "modal", "field", "question"],
+  info: {
+    name: "Text Input",
+    description: "A box to type into, for Show Modal. Its answer comes out of Modal Submitted under its id.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "interactions",
+    tags: ["form", "modal", "field", "question"],
+  },
+  look: {
+    icon: "text",
+  },
   fields: {
     inputId: { type: "text", default: "answer", label: "Input id", description: "The answer's name in Modal Submitted." },
     label: { type: "text", default: "Your answer", description: "The question above the box (up to 45 characters)." },

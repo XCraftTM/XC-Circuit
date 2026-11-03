@@ -2,14 +2,20 @@ const SCOPES = { global: "Whole bot", server: "Server", user: "User", member: "M
 
 module.exports = {
   id: "core.delete_stored",
-  name: "Delete Stored Value",
-  description: "Removes a saved value, as if it had never been set.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "data",
-  icon: "database",
   kind: "action",
-  tags: ["remove", "reset", "clear"],
+  info: {
+    name: "Delete Stored Value",
+    description: "Removes a saved value, as if it had never been set.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "data",
+    tags: ["remove", "reset", "clear"],
+  },
+  look: {
+    icon: "database",
+  },
   fields: {
     scope: { type: "select", default: "user", pin: false, choices: SCOPES, description: "Who the value belongs to." },
     target: { type: "any", pin: true, description: "The user, server or channel (or its id).", show: { scope: ["server", "user", "member", "channel"] } },

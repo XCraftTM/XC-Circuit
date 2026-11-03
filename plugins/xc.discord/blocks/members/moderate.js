@@ -11,14 +11,20 @@ const ACTIONS = {
 
 module.exports = {
   id: "discord.moderate",
-  name: "Moderate Member",
-  description: "Times out, kicks, bans or unbans a member, removes a role or changes a nickname. The bot needs the matching permission.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "members",
-  icon: "shield",
   kind: "action",
-  tags: ["kick", "ban", "mute", "timeout", "role", "nickname"],
+  info: {
+    name: "Moderate Member",
+    description: "Times out, kicks, bans or unbans a member, removes a role or changes a nickname. The bot needs the matching permission.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "members",
+    tags: ["kick", "ban", "mute", "timeout", "role", "nickname"],
+  },
+  look: {
+    icon: "shield",
+  },
   fields: {
     action: { type: "select", pin: false, default: "timeout", choices: ACTIONS, description: "What happens to the member: time out, kick, ban, unban or remove a role." },
     member: { type: "discord.member", pin: "only", required: true, description: "Who to moderate.", show: { action: ["timeout", "untimeout", "kick", "ban", "removeRole", "nickname"] } },

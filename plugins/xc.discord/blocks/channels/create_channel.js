@@ -2,14 +2,20 @@ const TYPES = { text: "Text", voice: "Voice", category: "Category", announcement
 
 module.exports = {
   id: "discord.create_channel",
-  name: "Create Channel",
-  description: "Makes a new channel or category. The bot needs Manage Channels.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "channels",
-  icon: "hash",
   kind: "action",
-  tags: ["new channel", "ticket", "category", "voice"],
+  info: {
+    name: "Create Channel",
+    description: "Makes a new channel or category. The bot needs Manage Channels.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "channels",
+    tags: ["new channel", "ticket", "category", "voice"],
+  },
+  look: {
+    icon: "hash",
+  },
   fields: {
     server: { type: "discord.guild", pin: "only", required: true, description: "Where to create it." },
     type: { type: "select", pin: false, default: "text", choices: TYPES, description: "What kind of channel." },

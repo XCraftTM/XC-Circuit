@@ -3,14 +3,20 @@ const tri = (v) => (v === "on" ? true : v === "off" ? false : undefined);
 
 module.exports = {
   id: "discord.edit_channel",
-  name: "Edit Channel",
-  description: "Changes a channel's name, topic, slowmode and more. Empty fields stay as they are.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "channels",
-  icon: "hash",
   kind: "action",
-  tags: ["rename", "topic", "slowmode", "move"],
+  info: {
+    name: "Edit Channel",
+    description: "Changes a channel's name, topic, slowmode and more. Empty fields stay as they are.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "channels",
+    tags: ["rename", "topic", "slowmode", "move"],
+  },
+  look: {
+    icon: "hash",
+  },
   fields: {
     channel: { type: "discord.channel", pin: "only", required: true, description: "The channel to change." },
     name: { type: "text", default: "", description: "New name. Empty keeps it." },

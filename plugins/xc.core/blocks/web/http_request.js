@@ -2,14 +2,20 @@ const METHODS = { GET: "GET", POST: "POST", PUT: "PUT", PATCH: "PATCH", DELETE: 
 
 module.exports = {
   id: "core.http_request",
-  name: "Web Request",
-  description: "Calls a web address (API) and gives back the answer. Fails on HTTP errors, so wrap it in a Try Zone.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "web",
-  icon: "send",
   kind: "action",
-  tags: ["http", "api", "fetch", "url", "json"],
+  info: {
+    name: "Web Request",
+    description: "Calls a web address (API) and gives back the answer. Fails on HTTP errors, so wrap it in a Try Zone.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "web",
+    tags: ["http", "api", "fetch", "url", "json"],
+  },
+  look: {
+    icon: "send",
+  },
   fields: {
     url: { type: "text", template: true, required: true, default: "https://", label: "URL", description: "The address. ${…} works." },
     method: { type: "select", pin: false, default: "GET", choices: METHODS, description: "GET reads, POST sends new data, PUT and PATCH change it, DELETE removes it." },

@@ -3,14 +3,20 @@ const ARCHIVE = { "60": "1 hour", "1440": "1 day", "4320": "3 days", "10080": "1
 
 module.exports = {
   id: "discord.create_thread",
-  name: "Create Thread",
-  description: "Starts a thread from a message, or a new one in a channel (private threads for tickets).",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "channels",
-  icon: "message",
   kind: "action",
-  tags: ["ticket", "discussion", "reply chain"],
+  info: {
+    name: "Create Thread",
+    description: "Starts a thread from a message, or a new one in a channel (private threads for tickets).",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "channels",
+    tags: ["ticket", "discussion", "reply chain"],
+  },
+  look: {
+    icon: "message",
+  },
   fields: {
     from: { type: "select", pin: false, default: "message", choices: FROM, description: "Where the thread starts." },
     message: { type: "discord.message", pin: "only", required: true, show: { from: ["message"] }, description: "The message to start it from." },

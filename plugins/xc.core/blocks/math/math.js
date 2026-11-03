@@ -2,13 +2,19 @@ const OPS = { add: "+ Add", subtract: "- Subtract", multiply: "× Multiply", div
 
 module.exports = {
   id: "core.math",
-  name: "Math",
-  description: "Calculates with two numbers.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "math",
-  icon: "hash",
   kind: "value",
+  info: {
+    name: "Math",
+    description: "Calculates with two numbers.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "math",
+  },
+  look: {
+    icon: "hash",
+  },
   fields: {
     a: { type: "number", default: 0, description: "The first number." },
     op: { type: "select", default: "add", pin: false, choices: OPS, label: "Operation", description: "What to do with the two numbers." },

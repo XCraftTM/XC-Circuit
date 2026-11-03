@@ -2,15 +2,23 @@ const KINDS = { add: "A vote is added", remove: "A vote is taken back" };
 
 module.exports = {
   id: "discord.on_poll_vote",
-  name: "Poll Vote",
-  description: "Runs when someone votes in a poll (or takes a vote back).",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "events",
-  icon: "scale",
   kind: "event",
-  intents: ["Guilds", "GuildMessagePolls"],
-  tags: ["poll", "vote"],
+  info: {
+    name: "Poll Vote",
+    description: "Runs when someone votes in a poll (or takes a vote back).",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "events",
+    tags: ["poll", "vote"],
+  },
+  look: {
+    icon: "scale",
+  },
+  requires: {
+    intents: ["Guilds", "GuildMessagePolls"],
+  },
   fields: {
     kind: { type: "select", pin: false, default: "add", label: "When", choices: KINDS, description: "Votes added or removed." },
   },

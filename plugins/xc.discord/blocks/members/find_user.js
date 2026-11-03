@@ -1,13 +1,19 @@
 module.exports = {
   id: "discord.find_user",
-  name: "Find User",
-  description: "Looks up any Discord user by id, also people who share no server with the bot.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "members",
-  icon: "user",
   kind: "action",
-  tags: ["fetch user", "lookup", "id"],
+  info: {
+    name: "Find User",
+    description: "Looks up any Discord user by id, also people who share no server with the bot.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "members",
+    tags: ["fetch user", "lookup", "id"],
+  },
+  look: {
+    icon: "user",
+  },
   fields: {
     id: { type: "text", required: true, default: "", label: "User id", description: "The user's id, or a mention." },
   },

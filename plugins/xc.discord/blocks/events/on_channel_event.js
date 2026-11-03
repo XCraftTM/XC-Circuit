@@ -2,15 +2,23 @@ const KINDS = { created: "Created", deleted: "Deleted", updated: "Changed" };
 
 module.exports = {
   id: "discord.on_channel_event",
-  name: "Channel Created / Deleted",
-  description: "Runs when a channel is created, deleted or changed. For server logs.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "events",
-  icon: "hash",
   kind: "event",
-  intents: ["Guilds"],
-  tags: ["log", "channel update", "server log"],
+  info: {
+    name: "Channel Created / Deleted",
+    description: "Runs when a channel is created, deleted or changed. For server logs.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "events",
+    tags: ["log", "channel update", "server log"],
+  },
+  look: {
+    icon: "hash",
+  },
+  requires: {
+    intents: ["Guilds"],
+  },
   fields: {
     kind: { type: "select", pin: false, default: "created", label: "When", choices: KINDS, description: "Which event runs it." },
   },

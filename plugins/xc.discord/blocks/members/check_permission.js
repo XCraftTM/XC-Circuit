@@ -52,14 +52,20 @@ const WHO = { member: "A member", bot: "The bot" };
 
 module.exports = {
   id: "discord.check_permission",
-  name: "Check Permission",
-  description: "Whether a member (or the bot) has a permission, in the server or in one channel.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "members",
-  icon: "shield",
   kind: "value",
-  tags: ["can", "allowed", "admin", "mod only"],
+  info: {
+    name: "Check Permission",
+    description: "Whether a member (or the bot) has a permission, in the server or in one channel.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "members",
+    tags: ["can", "allowed", "admin", "mod only"],
+  },
+  look: {
+    icon: "shield",
+  },
   fields: {
     who: { type: "select", pin: false, default: "member", choices: WHO, description: "Whose permission to check." },
     member: { type: "discord.member", pin: "only", required: true, show: { who: ["member"] }, description: "The member." },

@@ -1,12 +1,18 @@
 module.exports = {
   id: "discord.list_roles",
-  name: "List Roles",
-  description: "Every role of a server, highest first.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "roles",
-  icon: "tag",
   kind: "value",
+  info: {
+    name: "List Roles",
+    description: "Every role of a server, highest first.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "roles",
+  },
+  look: {
+    icon: "tag",
+  },
   fields: {
     server: { type: "discord.guild", pin: "only", required: true, description: "The server." },
     everyone: { type: "boolean", default: false, label: "Include @everyone", description: "Also list the @everyone role." },

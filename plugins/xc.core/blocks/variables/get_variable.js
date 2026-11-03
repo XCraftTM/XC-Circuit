@@ -2,15 +2,21 @@ const SCOPES = { run: "This run only", workspace: "This workspace", global: "Who
 
 module.exports = {
   id: "core.get_variable",
-  name: "Get Variable",
-  description: "Reads a value remembered with Set Variable.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "variables",
-  icon: "function",
   kind: "value",
+  info: {
+    name: "Get Variable",
+    description: "Reads a value remembered with Set Variable.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "variables",
+    tags: ["var", "read"],
+  },
+  look: {
+    icon: "function",
+  },
   pure: false,
-  tags: ["var", "read"],
   fields: {
     name: { type: "text", pin: false, required: true, default: "", description: "The variable name." },
     scope: { type: "select", pin: false, default: "run", choices: SCOPES, description: "Where it was set." },

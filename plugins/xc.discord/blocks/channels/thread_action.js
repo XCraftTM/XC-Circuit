@@ -2,14 +2,20 @@ const ACTIONS = { archive: "Archive (hide)", unarchive: "Unarchive", lock: "Lock
 
 module.exports = {
   id: "discord.thread_action",
-  name: "Thread Action",
-  description: "Archives, locks, renames a thread, or adds and removes members (for private threads).",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "channels",
-  icon: "message",
   kind: "action",
-  tags: ["archive", "lock", "close", "add member", "ticket"],
+  info: {
+    name: "Thread Action",
+    description: "Archives, locks, renames a thread, or adds and removes members (for private threads).",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "channels",
+    tags: ["archive", "lock", "close", "add member", "ticket"],
+  },
+  look: {
+    icon: "message",
+  },
   fields: {
     thread: { type: "discord.channel", pin: "only", required: true, description: "The thread." },
     action: { type: "select", pin: false, default: "archive", choices: ACTIONS, description: "What to do." },

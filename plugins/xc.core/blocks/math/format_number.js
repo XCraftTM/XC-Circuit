@@ -8,14 +8,20 @@ function ordinal(n) {
 
 module.exports = {
   id: "core.format_number",
-  name: "Format Number",
-  description: "Writes a number nicely: with separators, as percent, money, 1.2K or 1st.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "math",
-  icon: "hash",
   kind: "value",
-  tags: ["thousands", "currency", "money", "percent", "ordinal", "round"],
+  info: {
+    name: "Format Number",
+    description: "Writes a number nicely: with separators, as percent, money, 1.2K or 1st.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "math",
+    tags: ["thousands", "currency", "money", "percent", "ordinal", "round"],
+  },
+  look: {
+    icon: "hash",
+  },
   fields: {
     number: { type: "number", pin: true, default: 0, description: "The number." },
     style: { type: "select", pin: false, default: "plain", choices: STYLES, description: "How to write it." },

@@ -14,14 +14,20 @@ function parseOptions(text) {
 
 module.exports = {
   id: "discord.select_menu",
-  name: "Select Menu",
-  description: "A dropdown to attach to a message. Picks arrive at Select Menu Used with the same custom id.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "interactions",
-  icon: "pointer",
   kind: "value",
-  tags: ["dropdown", "component", "choose", "roles menu"],
+  info: {
+    name: "Select Menu",
+    description: "A dropdown to attach to a message. Picks arrive at Select Menu Used with the same custom id.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "interactions",
+    tags: ["dropdown", "component", "choose", "roles menu"],
+  },
+  look: {
+    icon: "pointer",
+  },
   fields: {
     menuType: { type: "select", pin: false, default: "string", label: "Choose from", choices: TYPES, description: "What people pick: options you list, or users, roles or channels of the server." },
     customId: { type: "text", default: "my-menu", label: "Custom id", description: "Identifies the menu in Select Menu Used." },

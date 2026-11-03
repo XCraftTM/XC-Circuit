@@ -1,13 +1,19 @@
 module.exports = {
   id: "discord.poll_results",
-  name: "Poll Results",
-  description: "Reads a poll's votes, and can end it now.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "messages",
-  icon: "scale",
   kind: "action",
-  tags: ["votes", "end poll", "winner"],
+  info: {
+    name: "Poll Results",
+    description: "Reads a poll's votes, and can end it now.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "messages",
+    tags: ["votes", "end poll", "winner"],
+  },
+  look: {
+    icon: "scale",
+  },
   fields: {
     message: { type: "discord.message", pin: "only", required: true, description: "The poll's message." },
     end: { type: "boolean", default: false, label: "End it now", description: "Close the poll before reading." },

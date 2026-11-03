@@ -2,14 +2,20 @@ const LEVELS = { keep: "Keep as is", "0": "None", "1": "Low (verified email)", "
 
 module.exports = {
   id: "discord.edit_server",
-  name: "Edit Server",
-  description: "Changes the server's name, icon, banner, description, system channel or verification level. Empty fields stay as they are. The bot needs Manage Server.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "server",
-  icon: "layers",
   kind: "action",
-  tags: ["guild settings", "rename server", "icon"],
+  info: {
+    name: "Edit Server",
+    description: "Changes the server's name, icon, banner, description, system channel or verification level. Empty fields stay as they are. The bot needs Manage Server.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "server",
+    tags: ["guild settings", "rename server", "icon"],
+  },
+  look: {
+    icon: "layers",
+  },
   fields: {
     server: { type: "discord.guild", pin: "only", required: true, description: "The server." },
     name: { type: "text", default: "", description: "New name." },

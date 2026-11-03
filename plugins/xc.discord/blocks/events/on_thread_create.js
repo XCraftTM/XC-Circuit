@@ -1,14 +1,22 @@
 module.exports = {
   id: "discord.on_thread_create",
-  name: "Thread Created",
-  description: "Runs when a thread or forum post is created.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "events",
-  icon: "message",
   kind: "event",
-  intents: ["Guilds"],
-  tags: ["forum post", "thread"],
+  info: {
+    name: "Thread Created",
+    description: "Runs when a thread or forum post is created.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "events",
+    tags: ["forum post", "thread"],
+  },
+  look: {
+    icon: "message",
+  },
+  requires: {
+    intents: ["Guilds"],
+  },
   fields: {
     parent: { type: "text", pin: false, default: "", label: "In channel id", description: "Only threads in this channel or forum. Empty = any." },
   },

@@ -3,15 +3,21 @@ const MENTION = { user: (id) => `<@${id}>`, member: (id) => `<@${id}>`, channel:
 
 module.exports = {
   id: "core.leaderboard",
-  name: "Leaderboard",
-  description: "Ranks everyone by a stored number, such as XP or coins: the top ones, and someone's place.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "data",
-  icon: "scale",
   kind: "value",
+  info: {
+    name: "Leaderboard",
+    description: "Ranks everyone by a stored number, such as XP or coins: the top ones, and someone's place.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "data",
+    tags: ["top", "rank", "xp", "levels", "economy", "scores"],
+  },
+  look: {
+    icon: "scale",
+  },
   pure: false,
-  tags: ["top", "rank", "xp", "levels", "economy", "scores"],
   fields: {
     scope: { type: "select", pin: false, default: "user", choices: SCOPES, description: "Whose values are ranked." },
     server: { type: "any", pin: "only", show: { scope: ["member"] }, description: "The server whose members are ranked." },

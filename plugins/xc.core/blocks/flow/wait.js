@@ -1,12 +1,18 @@
 module.exports = {
   id: "core.wait",
-  name: "Wait",
-  description: "Pauses this branch for a number of seconds, then continues.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "flow",
-  icon: "clock",
   kind: "action",
+  info: {
+    name: "Wait",
+    description: "Pauses this branch for a number of seconds, then continues.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "flow",
+  },
+  look: {
+    icon: "clock",
+  },
   fields: {
     seconds: { type: "number", default: 1, min: 0, step: 0.5, description: "How long to wait." },
   },

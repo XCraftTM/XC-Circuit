@@ -2,14 +2,20 @@ const STYLES = { primary: "Blurple", secondary: "Grey", success: "Green", danger
 
 module.exports = {
   id: "discord.button",
-  name: "Button",
-  description: "A button to attach to a message. Presses arrive at the Button Pressed event with the same custom id.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "messages",
-  icon: "pointer",
   kind: "value",
-  tags: ["component", "click"],
+  info: {
+    name: "Button",
+    description: "A button to attach to a message. Presses arrive at the Button Pressed event with the same custom id.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "messages",
+    tags: ["component", "click"],
+  },
+  look: {
+    icon: "pointer",
+  },
   fields: {
     label: { type: "text", template: true, default: "Click me", description: "The text on the button." },
     style: { type: "select", pin: false, default: "primary", choices: STYLES, description: "The color of the button, or Link to open a web page." },

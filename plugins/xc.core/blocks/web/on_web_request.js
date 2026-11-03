@@ -27,14 +27,20 @@ function serve(port, log) {
 
 module.exports = {
   id: "core.on_web_request",
-  name: "Web Request Received",
-  description: "Runs when a web address of the bot is called, such as by a dashboard, a webhook from another service or a form. Answer with Web Response.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "web",
-  icon: "send",
   kind: "event",
-  tags: ["http", "server", "api", "webhook", "endpoint", "dashboard"],
+  info: {
+    name: "Web Request Received",
+    description: "Runs when a web address of the bot is called, such as by a dashboard, a webhook from another service or a form. Answer with Web Response.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "web",
+    tags: ["http", "server", "api", "webhook", "endpoint", "dashboard"],
+  },
+  look: {
+    icon: "send",
+  },
   fields: {
     port: { type: "number", pin: false, default: 3000, min: 1, max: 65535, step: 1, description: "The port to listen on (http://your-server:3000)." },
     path: { type: "text", pin: false, template: false, default: "/hook", description: "The path, such as /hook." },

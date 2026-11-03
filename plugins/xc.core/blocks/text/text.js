@@ -1,12 +1,18 @@
 module.exports = {
   id: "core.text",
-  name: "Text",
-  description: "A piece of text. ${…} holds JavaScript, such as ${count * 2}.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "text",
-  icon: "text",
   kind: "value",
+  info: {
+    name: "Text",
+    description: "A piece of text. ${…} holds JavaScript, such as ${count * 2}.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "text",
+  },
+  look: {
+    icon: "text",
+  },
   fields: {
     text: { type: "textarea", pin: false, template: true, default: "", description: "The text." },
   },

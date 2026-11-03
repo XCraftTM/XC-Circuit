@@ -1,14 +1,20 @@
 module.exports = {
   id: "core.switch",
-  name: "Switch",
-  description: "Continues on the output whose case matches the value. Type one case per line; Other runs when none match.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "flow",
-  icon: "branch",
   kind: "action",
+  info: {
+    name: "Switch",
+    description: "Continues on the output whose case matches the value. Type one case per line; Other runs when none match.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "flow",
+    tags: ["case", "match", "choose"],
+  },
+  look: {
+    icon: "branch",
+  },
   flows: ["other"],
-  tags: ["case", "match", "choose"],
   fields: {
     value: { type: "any", pin: true, description: "The value to check." },
     cases: { type: "textarea", pin: false, default: "a\nb", description: "One case per line. Each becomes an Action output." },

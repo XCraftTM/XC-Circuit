@@ -1,13 +1,19 @@
 module.exports = {
   id: "discord.get_messages",
-  name: "Get Messages",
-  description: "Reads a channel's latest messages, such as for a ticket transcript.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "messages",
-  icon: "message",
   kind: "action",
-  tags: ["history", "fetch", "transcript", "read"],
+  info: {
+    name: "Get Messages",
+    description: "Reads a channel's latest messages, such as for a ticket transcript.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "messages",
+    tags: ["history", "fetch", "transcript", "read"],
+  },
+  look: {
+    icon: "message",
+  },
   fields: {
     channel: { type: "discord.channel", pin: "only", required: true, description: "The channel." },
     count: { type: "number", default: 50, min: 1, max: 1000, step: 1, description: "How many (up to 1000, read 100 at a time)." },

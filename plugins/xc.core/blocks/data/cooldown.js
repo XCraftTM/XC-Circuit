@@ -3,15 +3,21 @@ const ENDS = new Map();
 
 module.exports = {
   id: "core.cooldown",
-  name: "Cooldown",
-  description: "Lets something happen only once per so many seconds, per person (or channel, or for everyone). Ready starts the wait; Waiting runs while it lasts.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "data",
-  icon: "clock",
   kind: "action",
+  info: {
+    name: "Cooldown",
+    description: "Lets something happen only once per so many seconds, per person (or channel, or for everyone). Ready starts the wait; Waiting runs while it lasts.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "data",
+    tags: ["rate limit", "spam", "daily", "timeout", "throttle"],
+  },
+  look: {
+    icon: "clock",
+  },
   flows: ["ready", "waiting"],
-  tags: ["rate limit", "spam", "daily", "timeout", "throttle"],
   fields: {
     name: { type: "text", default: "daily", description: "Which cooldown (different commands use different names)." },
     who: { type: "any", pin: "only", description: "Whose cooldown: a user, member, channel or server (or an id). Empty = one for everyone." },

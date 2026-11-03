@@ -1,14 +1,22 @@
 module.exports = {
   id: "discord.on_presence",
-  name: "Presence Changed",
-  description: "Runs when someone's status or activity changes (online, playing a game …). Needs the Presence intent turned on in the developer portal.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "events",
-  icon: "user",
   kind: "event",
-  intents: ["Guilds", "GuildMembers", "GuildPresences"],
-  tags: ["status", "online", "playing", "streaming"],
+  info: {
+    name: "Presence Changed",
+    description: "Runs when someone's status or activity changes (online, playing a game …). Needs the Presence intent turned on in the developer portal.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "events",
+    tags: ["status", "online", "playing", "streaming"],
+  },
+  look: {
+    icon: "user",
+  },
+  requires: {
+    intents: ["Guilds", "GuildMembers", "GuildPresences"],
+  },
   fields: {
     ignoreBots: { type: "boolean", pin: false, default: true, label: "Ignore bots", description: "Skip bots." },
   },

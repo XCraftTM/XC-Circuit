@@ -1,13 +1,21 @@
 module.exports = {
   id: "discord.on_member_join",
-  name: "Member Joins",
-  description: "Runs when someone joins a server the bot is in.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "events",
-  icon: "user-plus",
   kind: "event",
-  intents: ["Guilds", "GuildMembers"],
+  info: {
+    name: "Member Joins",
+    description: "Runs when someone joins a server the bot is in.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "events",
+  },
+  look: {
+    icon: "user-plus",
+  },
+  requires: {
+    intents: ["Guilds", "GuildMembers"],
+  },
   fields: {
     serverId: { type: "text", pin: false, default: "", label: "Server id", description: "Only this server. Empty = all servers." },
   },

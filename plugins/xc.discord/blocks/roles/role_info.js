@@ -16,13 +16,19 @@ const CHOICES = Object.fromEntries(Object.entries(INFO).map(([k, [label]]) => [k
 
 module.exports = {
   id: "discord.role_info",
-  name: "Role Info",
-  description: "Reads one piece of information about a role. Member lists need the Server Members intent.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "roles",
-  icon: "tag",
   kind: "value",
+  info: {
+    name: "Role Info",
+    description: "Reads one piece of information about a role. Member lists need the Server Members intent.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "roles",
+  },
+  look: {
+    icon: "tag",
+  },
   fields: {
     role: { type: "discord.role", pin: "only", required: true, description: "The role to read from." },
     info: { type: "select", pin: false, default: "name", choices: CHOICES, description: "What to read." },

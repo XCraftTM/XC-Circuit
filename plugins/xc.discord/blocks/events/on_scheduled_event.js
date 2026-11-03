@@ -2,15 +2,23 @@ const KINDS = { created: "An event is created", started: "An event starts", ende
 
 module.exports = {
   id: "discord.on_scheduled_event",
-  name: "Server Event",
-  description: "Runs for a server's scheduled events: created, starting, ending, or someone marking interest.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "events",
-  icon: "clock",
   kind: "event",
-  intents: ["Guilds", "GuildScheduledEvents"],
-  tags: ["scheduled event", "calendar", "stage", "meetup"],
+  info: {
+    name: "Server Event",
+    description: "Runs for a server's scheduled events: created, starting, ending, or someone marking interest.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "events",
+    tags: ["scheduled event", "calendar", "stage", "meetup"],
+  },
+  look: {
+    icon: "clock",
+  },
+  requires: {
+    intents: ["Guilds", "GuildScheduledEvents"],
+  },
   fields: {
     kind: { type: "select", pin: false, default: "started", label: "When", choices: KINDS, description: "Which event runs it." },
   },

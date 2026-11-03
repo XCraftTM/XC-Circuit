@@ -1,13 +1,19 @@
 module.exports = {
   id: "discord.remove_reaction",
-  name: "Remove Reaction",
-  description: "Removes reactions from a message: one person's, or all of one emoji, or every reaction.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "messages",
-  icon: "message",
   kind: "action",
-  tags: ["unreact", "clear reactions"],
+  info: {
+    name: "Remove Reaction",
+    description: "Removes reactions from a message: one person's, or all of one emoji, or every reaction.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "messages",
+    tags: ["unreact", "clear reactions"],
+  },
+  look: {
+    icon: "message",
+  },
   fields: {
     message: { type: "discord.message", pin: "only", required: true, description: "The message." },
     emoji: { type: "text", default: "", description: "The emoji. Empty removes every reaction." },

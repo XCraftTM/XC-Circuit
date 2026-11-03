@@ -23,16 +23,22 @@ function eachMedia(list, fn) {
 
 module.exports = {
   id: "discord.build_layout",
-  name: "Build Layout",
   description:
     "Designs a whole message with Components V2: containers, text, sections with a picture or button, galleries, files, separators, buttons and menus. Connect it to Send Message set to Layout.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "messages",
-  icon: "layers",
   kind: "action",
-  width: 300,
-  tags: ["components v2", "container", "section", "gallery", "embed"],
+  info: {
+    name: "Build Layout",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "messages",
+    tags: ["components v2", "container", "section", "gallery", "embed"],
+  },
+  look: {
+    icon: "layers",
+    width: 300,
+  },
   fields: {
     layout: {
       type: "layout",

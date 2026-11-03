@@ -2,14 +2,20 @@ const keysOf = (text) => String(text || "").split(/\r?\n|,/).map((s) => s.trim()
 
 module.exports = {
   id: "core.make_object",
-  name: "Make Object",
-  description: "Builds an object from named values, such as for a web request or JSON.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "lists",
-  icon: "function",
   kind: "value",
-  tags: ["json", "dictionary", "map", "record", "body"],
+  info: {
+    name: "Make Object",
+    description: "Builds an object from named values, such as for a web request or JSON.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "lists",
+    tags: ["json", "dictionary", "map", "record", "body"],
+  },
+  look: {
+    icon: "function",
+  },
   fields: {
     keys: { type: "textarea", pin: false, template: false, default: "name\nvalue", label: "Names", description: "One name per line. Each gets an input below to type or connect its value." },
   },

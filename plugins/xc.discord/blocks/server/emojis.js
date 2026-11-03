@@ -2,14 +2,20 @@ const ACTIONS = { create: "Add an emoji", delete: "Delete an emoji", list: "List
 
 module.exports = {
   id: "discord.emojis",
-  name: "Server Emojis",
-  description: "Adds or deletes a server's custom emojis, or lists its emojis and stickers. The bot needs Manage Expressions to change them.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "server",
-  icon: "message",
   kind: "action",
-  tags: ["emoji", "emote", "sticker", "upload"],
+  info: {
+    name: "Server Emojis",
+    description: "Adds or deletes a server's custom emojis, or lists its emojis and stickers. The bot needs Manage Expressions to change them.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "server",
+    tags: ["emoji", "emote", "sticker", "upload"],
+  },
+  look: {
+    icon: "message",
+  },
   fields: {
     action: { type: "select", pin: false, default: "list", choices: ACTIONS, description: "What to do." },
     server: { type: "discord.guild", pin: "only", required: true, description: "The server." },

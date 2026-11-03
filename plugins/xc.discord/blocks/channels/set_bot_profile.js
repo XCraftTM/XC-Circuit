@@ -1,13 +1,19 @@
 module.exports = {
   id: "discord.set_bot_profile",
-  name: "Set Bot Profile",
-  description: "Changes the bot's username, avatar or banner. Discord allows only a few changes per hour.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "channels",
-  icon: "bolt",
   kind: "action",
-  tags: ["avatar", "rename bot", "username"],
+  info: {
+    name: "Set Bot Profile",
+    description: "Changes the bot's username, avatar or banner. Discord allows only a few changes per hour.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "channels",
+    tags: ["avatar", "rename bot", "username"],
+  },
+  look: {
+    icon: "bolt",
+  },
   fields: {
     username: { type: "text", default: "", description: "New username. Empty keeps it." },
     avatar: { type: "text", default: "", label: "Avatar URL", description: "New avatar image. Empty keeps it." },

@@ -18,15 +18,23 @@ const idsOf = (text) => String(text || "").split(/\r?\n|,/).map((s) => s.trim())
 
 module.exports = {
   id: "discord.on_modal",
-  name: "Modal Submitted",
-  description: "Runs when someone sends a form opened with Show Modal. Each text input's answer is an output.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "interactions",
-  icon: "text",
   kind: "event",
-  intents: ["Guilds"],
-  tags: ["form", "popup", "input", "dialog"],
+  info: {
+    name: "Modal Submitted",
+    description: "Runs when someone sends a form opened with Show Modal. Each text input's answer is an output.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "interactions",
+    tags: ["form", "popup", "input", "dialog"],
+  },
+  look: {
+    icon: "text",
+  },
+  requires: {
+    intents: ["Guilds"],
+  },
   fields: {
     customId: { type: "text", pin: false, template: false, required: true, default: "", label: "Custom id", description: "The id given to the modal in Show Modal." },
     match: { type: "select", pin: false, default: "equals", choices: MATCH, description: "How the id is compared." },

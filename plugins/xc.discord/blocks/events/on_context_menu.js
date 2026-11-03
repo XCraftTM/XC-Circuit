@@ -2,15 +2,23 @@ const TARGETS = { user: "A user (right-click a person)", message: "A message (ri
 
 module.exports = {
   id: "discord.on_context_menu",
-  name: "Context Menu Used",
-  description: "Adds an entry to Discord's right-click menu (Apps) for users or messages, and runs when someone uses it.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "interactions",
-  icon: "pointer",
   kind: "event",
-  intents: ["Guilds"],
-  tags: ["right-click", "apps", "user command", "message command"],
+  info: {
+    name: "Context Menu Used",
+    description: "Adds an entry to Discord's right-click menu (Apps) for users or messages, and runs when someone uses it.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "interactions",
+    tags: ["right-click", "apps", "user command", "message command"],
+  },
+  look: {
+    icon: "pointer",
+  },
+  requires: {
+    intents: ["Guilds"],
+  },
   fields: {
     name: { type: "text", pin: false, template: false, required: true, default: "Report", description: "The menu entry's name (up to 32 characters, spaces allowed). Registered when the bot starts." },
     target: { type: "select", pin: false, default: "user", choices: TARGETS, description: "What the entry appears on." },

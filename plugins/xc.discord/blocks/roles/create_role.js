@@ -50,14 +50,20 @@ function permissionList(text) {
 
 module.exports = {
   id: "discord.create_role",
-  name: "Create Role",
-  description: "Makes a new role in a server. The bot needs Manage Roles.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "roles",
-  icon: "tag",
   kind: "action",
-  tags: ["new role", "rank"],
+  info: {
+    name: "Create Role",
+    description: "Makes a new role in a server. The bot needs Manage Roles.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "roles",
+    tags: ["new role", "rank"],
+  },
+  look: {
+    icon: "tag",
+  },
   fields: {
     server: { type: "discord.guild", pin: "only", required: true, description: "Where to create it." },
     name: { type: "text", required: true, default: "New role", description: "The role's name." },

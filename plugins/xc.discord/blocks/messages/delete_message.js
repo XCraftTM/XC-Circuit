@@ -1,13 +1,19 @@
 module.exports = {
   id: "discord.delete_message",
-  name: "Delete Message",
-  description: "Deletes a message, optionally after a delay.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "messages",
-  icon: "message",
   kind: "action",
-  tags: ["remove"],
+  info: {
+    name: "Delete Message",
+    description: "Deletes a message, optionally after a delay.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "messages",
+    tags: ["remove"],
+  },
+  look: {
+    icon: "message",
+  },
   fields: {
     message: { type: "discord.message", pin: "only", required: true, description: "The message to delete." },
     afterSeconds: { type: "number", default: 0, min: 0, label: "After (s)", description: "Wait this long first. 0 = now." },

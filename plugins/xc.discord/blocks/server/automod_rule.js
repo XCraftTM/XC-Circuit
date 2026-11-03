@@ -2,14 +2,20 @@ const ACTIONS = { create: "Create a word filter", list: "List rules", delete: "D
 
 module.exports = {
   id: "discord.automod_rule",
-  name: "AutoMod Rule",
-  description: "Sets up Discord's built-in AutoMod: block messages with certain words, alert a channel, or time people out. The bot needs Manage Server.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "server",
-  icon: "shield",
   kind: "action",
-  tags: ["filter", "bad words", "blocklist", "moderation"],
+  info: {
+    name: "AutoMod Rule",
+    description: "Sets up Discord's built-in AutoMod: block messages with certain words, alert a channel, or time people out. The bot needs Manage Server.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "server",
+    tags: ["filter", "bad words", "blocklist", "moderation"],
+  },
+  look: {
+    icon: "shield",
+  },
   fields: {
     action: { type: "select", pin: false, default: "create", choices: ACTIONS, description: "What to do." },
     server: { type: "discord.guild", pin: "only", required: true, description: "The server." },

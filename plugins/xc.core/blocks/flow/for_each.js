@@ -1,12 +1,18 @@
 module.exports = {
   id: "core.for_each",
-  name: "For Each",
-  description: "Runs Each once for every item in a list, then Done.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "flow",
-  icon: "repeat",
   kind: "action",
+  info: {
+    name: "For Each",
+    description: "Runs Each once for every item in a list, then Done.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "flow",
+  },
+  look: {
+    icon: "repeat",
+  },
   flows: ["each", "done"],
   fields: {
     list: { type: "list<any>", pin: "only", required: true, description: "The list to go through." },

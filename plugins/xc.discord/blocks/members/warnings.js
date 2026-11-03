@@ -2,14 +2,20 @@ const ACTIONS = { add: "Add a warning", list: "List warnings", remove: "Remove t
 
 module.exports = {
   id: "discord.warnings",
-  name: "Warnings",
-  description: "Keeps warnings for members in stored data: add one, list them, remove the latest or clear them.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "members",
-  icon: "shield",
   kind: "action",
-  tags: ["warn", "strike", "moderation", "infractions"],
+  info: {
+    name: "Warnings",
+    description: "Keeps warnings for members in stored data: add one, list them, remove the latest or clear them.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "members",
+    tags: ["warn", "strike", "moderation", "infractions"],
+  },
+  look: {
+    icon: "shield",
+  },
   fields: {
     action: { type: "select", pin: false, default: "add", choices: ACTIONS, description: "What to do." },
     member: { type: "discord.member", pin: "only", required: true, description: "The member." },

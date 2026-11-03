@@ -2,14 +2,22 @@ const emojiText = (e) => (e.id ? `<${e.animated ? "a" : ""}:${e.name}:${e.id}>` 
 
 module.exports = {
   id: "discord.on_reaction_remove",
-  name: "Reaction Removed",
-  description: "Runs when someone takes their reaction back. For reaction roles.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "events",
-  icon: "message",
   kind: "event",
-  intents: ["Guilds", "GuildMessageReactions"],
+  info: {
+    name: "Reaction Removed",
+    description: "Runs when someone takes their reaction back. For reaction roles.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "events",
+  },
+  look: {
+    icon: "message",
+  },
+  requires: {
+    intents: ["Guilds", "GuildMessageReactions"],
+  },
   fields: {
     emoji: { type: "text", pin: false, default: "", description: "Only this emoji (such as 👍 or a custom emoji name). Empty = any." },
     messageId: { type: "text", pin: false, default: "", label: "Message id", description: "Only reactions on this message. Empty = any." },

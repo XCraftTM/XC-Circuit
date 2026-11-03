@@ -2,14 +2,20 @@ const ACTIONS = { pin: "Pin", unpin: "Unpin" };
 
 module.exports = {
   id: "discord.pin_message",
-  name: "Pin Message",
-  description: "Pins a message to its channel, or unpins it.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "messages",
-  icon: "message",
   kind: "action",
-  tags: ["unpin", "pinned"],
+  info: {
+    name: "Pin Message",
+    description: "Pins a message to its channel, or unpins it.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "messages",
+    tags: ["unpin", "pinned"],
+  },
+  look: {
+    icon: "message",
+  },
   fields: {
     message: { type: "discord.message", pin: "only", required: true, description: "The message." },
     action: { type: "select", pin: false, default: "pin", choices: ACTIONS, description: "Pin or unpin." },

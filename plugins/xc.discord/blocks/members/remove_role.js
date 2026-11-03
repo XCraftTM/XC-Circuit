@@ -1,13 +1,19 @@
 module.exports = {
   id: "discord.remove_role",
-  name: "Remove Role",
-  description: "Takes a role away from a member. The bot's own role must sit higher than this role.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "members",
-  icon: "tag",
   kind: "action",
-  tags: ["take role", "unrank"],
+  info: {
+    name: "Remove Role",
+    description: "Takes a role away from a member. The bot's own role must sit higher than this role.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "members",
+    tags: ["take role", "unrank"],
+  },
+  look: {
+    icon: "tag",
+  },
   fields: {
     member: { type: "discord.member", pin: "only", required: true, description: "The member who loses the role." },
     role: { type: "any", required: true, default: "", label: "Role", description: "A role, or its id." },

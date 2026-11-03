@@ -2,14 +2,20 @@ const MODES = { test: "Does it match?", first: "First match", all: "All matches"
 
 module.exports = {
   id: "core.regex",
-  name: "Regex",
-  description: "Finds patterns in text with a regular expression: test, get matches and their groups, or replace.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "text",
-  icon: "text",
   kind: "value",
-  tags: ["pattern", "match", "regular expression", "extract", "find"],
+  info: {
+    name: "Regex",
+    description: "Finds patterns in text with a regular expression: test, get matches and their groups, or replace.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "text",
+    tags: ["pattern", "match", "regular expression", "extract", "find"],
+  },
+  look: {
+    icon: "text",
+  },
   fields: {
     text: { type: "text", pin: true, default: "", description: "The text to search." },
     pattern: { type: "text", template: false, default: "\\d+", description: "The regular expression, such as \\d+ or (\\w+)@(\\w+)." },

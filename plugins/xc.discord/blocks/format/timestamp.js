@@ -2,14 +2,20 @@ const STYLES = { R: "Relative (in 5 minutes)", t: "Short time (16:20)", T: "Long
 
 module.exports = {
   id: "discord.timestamp",
-  name: "Timestamp",
-  description: "A time that each reader sees in their own time zone and language, such as “in 5 minutes”.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "format",
-  icon: "clock",
   kind: "value",
-  tags: ["time", "date", "countdown", "relative"],
+  info: {
+    name: "Timestamp",
+    description: "A time that each reader sees in their own time zone and language, such as “in 5 minutes”.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "format",
+    tags: ["time", "date", "countdown", "relative"],
+  },
+  look: {
+    icon: "clock",
+  },
   fields: {
     date: { type: "any", pin: true, description: "A date, a number of milliseconds since 1970, or text. Empty = now." },
     style: { type: "select", pin: false, default: "R", choices: STYLES, description: "How it is shown." },

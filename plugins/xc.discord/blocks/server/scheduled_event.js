@@ -3,14 +3,20 @@ const WHERE = { external: "Somewhere else (a place or link)", voice: "A voice ch
 
 module.exports = {
   id: "discord.scheduled_event",
-  name: "Scheduled Event",
-  description: "Creates, changes, starts, ends, deletes or lists a server's scheduled events.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "server",
-  icon: "clock",
   kind: "action",
-  tags: ["event", "calendar", "meetup", "stage"],
+  info: {
+    name: "Scheduled Event",
+    description: "Creates, changes, starts, ends, deletes or lists a server's scheduled events.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "server",
+    tags: ["event", "calendar", "meetup", "stage"],
+  },
+  look: {
+    icon: "clock",
+  },
   fields: {
     action: { type: "select", pin: false, default: "create", choices: ACTIONS, description: "What to do." },
     server: { type: "discord.guild", pin: "only", required: true, show: { action: ["create", "list"] }, description: "The server." },

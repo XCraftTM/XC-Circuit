@@ -1,13 +1,19 @@
 module.exports = {
   id: "discord.find_channel",
-  name: "Find Channel",
-  description: "Looks up a channel by id, or by name inside a server.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "channels",
-  icon: "hash",
   kind: "action",
-  tags: ["fetch", "get", "lookup"],
+  info: {
+    name: "Find Channel",
+    description: "Looks up a channel by id, or by name inside a server.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "channels",
+    tags: ["fetch", "get", "lookup"],
+  },
+  look: {
+    icon: "hash",
+  },
   fields: {
     channel: { type: "text", required: true, default: "", label: "Id or name", description: "A channel id, or a name such as welcome." },
     server: { type: "discord.guild?", pin: true, description: "Needed when looking up by name." },

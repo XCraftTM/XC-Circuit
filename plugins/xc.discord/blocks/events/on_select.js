@@ -16,15 +16,23 @@ function matcher(match, wanted) {
 
 module.exports = {
   id: "discord.on_select",
-  name: "Select Menu Used",
-  description: "Runs when someone picks from a select menu whose custom id matches.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "interactions",
-  icon: "pointer",
   kind: "event",
-  intents: ["Guilds"],
-  tags: ["dropdown", "menu", "choose", "component"],
+  info: {
+    name: "Select Menu Used",
+    description: "Runs when someone picks from a select menu whose custom id matches.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "interactions",
+    tags: ["dropdown", "menu", "choose", "component"],
+  },
+  look: {
+    icon: "pointer",
+  },
+  requires: {
+    intents: ["Guilds"],
+  },
   fields: {
     customId: { type: "text", pin: false, template: false, required: true, default: "", label: "Custom id", description: "The id given to the menu when it was built." },
     match: { type: "select", pin: false, default: "equals", choices: MATCH, description: "How the id is compared." },

@@ -1,13 +1,19 @@
 module.exports = {
   id: "discord.get_reactions",
-  name: "Get Reactions",
-  description: "Who reacted to a message with an emoji, and how many. For giveaways and starboards.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "messages",
-  icon: "message",
   kind: "action",
-  tags: ["giveaway", "starboard", "votes", "count"],
+  info: {
+    name: "Get Reactions",
+    description: "Who reacted to a message with an emoji, and how many. For giveaways and starboards.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "messages",
+    tags: ["giveaway", "starboard", "votes", "count"],
+  },
+  look: {
+    icon: "message",
+  },
   fields: {
     message: { type: "discord.message", pin: "only", required: true, description: "The message." },
     emoji: { type: "text", required: true, default: "🎉", description: "The emoji." },

@@ -1,13 +1,19 @@
 module.exports = {
   id: "discord.find_member",
-  name: "Find Member",
-  description: "Looks up a server member by id or name. Use it to turn a User into a Member.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "members",
-  icon: "user",
   kind: "action",
-  tags: ["fetch", "get", "lookup"],
+  info: {
+    name: "Find Member",
+    description: "Looks up a server member by id or name. Use it to turn a User into a Member.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "members",
+    tags: ["fetch", "get", "lookup"],
+  },
+  look: {
+    icon: "user",
+  },
   fields: {
     server: { type: "discord.guild", pin: "only", required: true, description: "The server to look in." },
     by: { type: "select", pin: false, default: "id", choices: { id: "User or id", name: "Name (search)" }, description: "How to find them." },

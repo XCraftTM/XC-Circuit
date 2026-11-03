@@ -1,13 +1,19 @@
 module.exports = {
   id: "core.set_property",
-  name: "Set Property",
-  description: "A copy of an object with one property set (or removed). Dots reach deeper: settings.color.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "lists",
-  icon: "function",
   kind: "value",
-  tags: ["object", "assign", "update", "json"],
+  info: {
+    name: "Set Property",
+    description: "A copy of an object with one property set (or removed). Dots reach deeper: settings.color.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "lists",
+    tags: ["object", "assign", "update", "json"],
+  },
+  look: {
+    icon: "function",
+  },
   fields: {
     object: { type: "object", pin: true, description: "The object (it isn't changed itself)." },
     path: { type: "text", template: false, required: true, default: "name", description: "The property, such as name or settings.color." },

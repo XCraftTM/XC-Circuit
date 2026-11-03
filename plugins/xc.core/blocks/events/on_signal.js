@@ -1,12 +1,18 @@
 module.exports = {
   id: "core.on_signal",
-  name: "On Signal",
-  description: "Runs when Emit Signal sends a signal with the same name, from any workspace.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "events",
-  icon: "bolt",
   kind: "event",
+  info: {
+    name: "On Signal",
+    description: "Runs when Emit Signal sends a signal with the same name, from any workspace.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "events",
+  },
+  look: {
+    icon: "bolt",
+  },
   fields: {
     name: { type: "text", pin: false, required: true, default: "", description: "The signal name to listen for." },
   },

@@ -1,13 +1,19 @@
 module.exports = {
   id: "core.json",
-  name: "JSON",
-  description: "Turns text into an object (parse) or an object into text (stringify).",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "data",
-  icon: "database",
   kind: "value",
-  tags: ["parse", "stringify", "object", "text"],
+  info: {
+    name: "JSON",
+    description: "Turns text into an object (parse) or an object into text (stringify).",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "data",
+    tags: ["parse", "stringify", "object", "text"],
+  },
+  look: {
+    icon: "database",
+  },
   fields: {
     input: { type: "any", pin: true, description: "Text to parse, or a value to turn into text." },
     direction: { type: "select", pin: false, default: "parse", choices: { parse: "Text → object", stringify: "Object → text" }, description: "Turn JSON text into an object, or an object into JSON text." },

@@ -2,15 +2,21 @@ const KINDS = { message: "A message in a channel", button: "A button or menu on 
 
 module.exports = {
   id: "discord.wait_for",
-  name: "Wait for Reply",
-  description: "Waits for someone to answer: a message, a button press or a reaction. Continues on Received, or on Timed out.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "messages",
-  icon: "clock",
   kind: "action",
+  info: {
+    name: "Wait for Reply",
+    description: "Waits for someone to answer: a message, a button press or a reaction. Continues on Received, or on Timed out.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "messages",
+    tags: ["collector", "await", "answer", "confirm", "question"],
+  },
+  look: {
+    icon: "clock",
+  },
   flows: ["received", "timedOut"],
-  tags: ["collector", "await", "answer", "confirm", "question"],
   fields: {
     kind: { type: "select", pin: false, default: "message", label: "Wait for", choices: KINDS, description: "What counts as an answer." },
     channel: { type: "discord.channel", pin: "only", required: true, show: { kind: ["message"] }, description: "Where to listen." },

@@ -9,13 +9,19 @@ const MENTIONS = { all: "Everyone mentioned", users: "Only users", usersRoles: "
 
 module.exports = {
   id: "discord.send_message",
-  name: "Send Message",
-  description: "Replies to a command or button, or sends, replies to and edits messages in channels.",
-  author: "XC Team",
-  version: "3.3.0",
-  category: "messages",
-  icon: "send",
   kind: "action",
+  info: {
+    name: "Send Message",
+    description: "Replies to a command or button, or sends, replies to and edits messages in channels.",
+    author: "XC Team",
+    version: "3.3.0",
+  },
+  search: {
+    category: "messages",
+  },
+  look: {
+    icon: "send",
+  },
   fields: {
     mode: { type: "select", pin: false, default: "reply", choices: MODES, description: "What kind of message to send." },
     format: {

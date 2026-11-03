@@ -1,12 +1,18 @@
 module.exports = {
   id: "core.on_error",
-  name: "On Error",
-  description: "Runs when a block outside any Try Zone fails. Use it to log or report errors.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "events",
-  icon: "info",
   kind: "event",
+  info: {
+    name: "On Error",
+    description: "Runs when a block outside any Try Zone fails. Use it to log or report errors.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "events",
+  },
+  look: {
+    icon: "info",
+  },
   outputs: {
     message: { type: "text", description: "What went wrong." },
     block: { type: "text", description: "Name of the block that failed." },

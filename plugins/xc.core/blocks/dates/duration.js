@@ -30,14 +30,20 @@ function write(ms) {
 
 module.exports = {
   id: "core.duration",
-  name: "Duration",
-  description: "Turns text such as 10m or 1h 30m into milliseconds, or milliseconds into text such as 1 h 30 min.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "dates",
-  icon: "clock",
   kind: "value",
-  tags: ["time", "minutes", "seconds", "ms", "timeout length"],
+  info: {
+    name: "Duration",
+    description: "Turns text such as 10m or 1h 30m into milliseconds, or milliseconds into text such as 1 h 30 min.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "dates",
+    tags: ["time", "minutes", "seconds", "ms", "timeout length"],
+  },
+  look: {
+    icon: "clock",
+  },
   fields: {
     direction: { type: "select", pin: false, default: "parse", choices: DIRS, description: "Which way to convert." },
     input: { type: "any", pin: true, default: "10m", description: "Text such as 10m, 2h or 1d 12h; or a number of milliseconds." },

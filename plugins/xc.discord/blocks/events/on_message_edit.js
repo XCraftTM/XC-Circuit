@@ -1,14 +1,22 @@
 module.exports = {
   id: "discord.on_message_edit",
-  name: "Message Edited",
-  description: "Runs when someone edits a message the bot can see. For edit logs.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "events",
-  icon: "message",
   kind: "event",
-  intents: ["Guilds", "GuildMessages", "MessageContent"],
-  tags: ["log", "changed", "update"],
+  info: {
+    name: "Message Edited",
+    description: "Runs when someone edits a message the bot can see. For edit logs.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "events",
+    tags: ["log", "changed", "update"],
+  },
+  look: {
+    icon: "message",
+  },
+  requires: {
+    intents: ["Guilds", "GuildMessages", "MessageContent"],
+  },
   fields: {
     ignoreBots: { type: "boolean", pin: false, default: true, label: "Ignore bots", description: "Skip messages written by bots." },
   },

@@ -17,13 +17,19 @@ const INFO = {
 
 module.exports = {
   id: "discord.user_info",
-  name: "User Info",
-  description: "Reads one piece of information about a user (works for members too).",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "members",
-  icon: "user",
   kind: "value",
+  info: {
+    name: "User Info",
+    description: "Reads one piece of information about a user (works for members too).",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "members",
+  },
+  look: {
+    icon: "user",
+  },
   fields: {
     user: { type: "discord.user", pin: "only", required: true, description: "A user or member." },
     info: { type: "select", pin: false, default: "username", choices: Object.fromEntries(Object.entries(INFO).map(([k, [l]]) => [k, l])), description: "Which detail about the user to get." },

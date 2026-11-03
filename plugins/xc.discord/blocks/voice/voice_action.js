@@ -2,14 +2,20 @@ const ACTIONS = { move: "Move to a channel", disconnect: "Disconnect", mute: "Se
 
 module.exports = {
   id: "discord.voice_action",
-  name: "Voice Member",
-  description: "Moves a member to another voice channel, disconnects, mutes or deafens them. The bot needs Move, Mute or Deafen Members.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "voice",
-  icon: "bolt",
   kind: "action",
-  tags: ["move", "disconnect", "kick from voice", "mute", "deafen", "vc"],
+  info: {
+    name: "Voice Member",
+    description: "Moves a member to another voice channel, disconnects, mutes or deafens them. The bot needs Move, Mute or Deafen Members.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "voice",
+    tags: ["move", "disconnect", "kick from voice", "mute", "deafen", "vc"],
+  },
+  look: {
+    icon: "bolt",
+  },
   fields: {
     member: { type: "discord.member", pin: "only", required: true, description: "Who (must be in a voice channel)." },
     action: { type: "select", pin: false, default: "move", choices: ACTIONS, description: "What to do." },

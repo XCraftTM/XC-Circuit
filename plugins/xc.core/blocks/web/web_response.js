@@ -1,13 +1,19 @@
 module.exports = {
   id: "core.web_response",
-  name: "Web Response",
-  description: "Answers the request that started this flow (from Web Request Received).",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "web",
-  icon: "send",
   kind: "action",
-  tags: ["http", "reply", "api", "json"],
+  info: {
+    name: "Web Response",
+    description: "Answers the request that started this flow (from Web Request Received).",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "web",
+    tags: ["http", "reply", "api", "json"],
+  },
+  look: {
+    icon: "send",
+  },
   fields: {
     status: { type: "number", default: 200, min: 100, max: 599, step: 1, description: "The status code: 200 OK, 400 bad request, 404 not found …" },
     body: { type: "any", pin: true, default: "OK", description: "Text, or an object (sent as JSON)." },

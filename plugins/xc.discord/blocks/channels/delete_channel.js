@@ -1,13 +1,19 @@
 module.exports = {
   id: "discord.delete_channel",
-  name: "Delete Channel",
-  description: "Deletes a channel, thread or category. The bot needs Manage Channels.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "channels",
-  icon: "trash",
   kind: "action",
-  tags: ["remove channel", "close ticket"],
+  info: {
+    name: "Delete Channel",
+    description: "Deletes a channel, thread or category. The bot needs Manage Channels.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "channels",
+    tags: ["remove channel", "close ticket"],
+  },
+  look: {
+    icon: "trash",
+  },
   fields: {
     channel: { type: "discord.channel", pin: "only", required: true, description: "The channel to delete." },
     after: { type: "number", default: 0, min: 0, label: "After (s)", description: "Wait this many seconds first (to let people read a last message)." },

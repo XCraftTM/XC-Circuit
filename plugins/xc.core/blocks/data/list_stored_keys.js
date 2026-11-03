@@ -2,13 +2,19 @@ const SCOPES = { global: "Whole bot", server: "Server", user: "User", member: "M
 
 module.exports = {
   id: "core.list_stored_keys",
-  name: "List Stored Keys",
-  description: "The names of every value saved for a user, server, channel or the whole bot.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "data",
-  icon: "database",
   kind: "value",
+  info: {
+    name: "List Stored Keys",
+    description: "The names of every value saved for a user, server, channel or the whole bot.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "data",
+  },
+  look: {
+    icon: "database",
+  },
   pure: false,
   fields: {
     scope: { type: "select", default: "user", pin: false, choices: SCOPES, description: "Whose values." },

@@ -6,12 +6,13 @@
 const fs = require("fs");
 const path = require("path");
 const assert = require("assert");
+const { ungroupBlock } = require("../circuit-runtime.js");
 
 const dir = path.join(__dirname, "..", "..", "plugins", "xc.discord", "blocks");
 const all = {};
 for (const group of fs.readdirSync(dir)) {
   for (const f of fs.readdirSync(path.join(dir, group))) {
-    const block = require(path.join(dir, group, f));
+    const block = ungroupBlock(require(path.join(dir, group, f)));
     assert.ok(block.id && block.name && block.description, `${group}/${f}: id, name and description`);
     assert.ok(["event", "action", "value"].includes(block.kind), `${block.id}: kind`);
     assert.ok(!all[block.id], `${block.id}: unique id`);

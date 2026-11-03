@@ -2,15 +2,23 @@ const KINDS = { ban: "Banned", unban: "Unbanned" };
 
 module.exports = {
   id: "discord.on_ban",
-  name: "Member Banned",
-  description: "Runs when someone is banned from (or unbanned in) a server.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "events",
-  icon: "shield",
   kind: "event",
-  intents: ["Guilds", "GuildModeration"],
-  tags: ["log", "unban", "moderation"],
+  info: {
+    name: "Member Banned",
+    description: "Runs when someone is banned from (or unbanned in) a server.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "events",
+    tags: ["log", "unban", "moderation"],
+  },
+  look: {
+    icon: "shield",
+  },
+  requires: {
+    intents: ["Guilds", "GuildModeration"],
+  },
   fields: {
     kind: { type: "select", pin: false, default: "ban", label: "When", choices: KINDS, description: "Bans or unbans." },
   },

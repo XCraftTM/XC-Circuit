@@ -2,14 +2,20 @@ const KINDS = { auto: "Detect it", user: "User", role: "Role", channel: "Channel
 
 module.exports = {
   id: "discord.mention",
-  name: "Mention",
-  description: "The text that pings someone or links a role or channel: <@id>, <@&id>, <#id>.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "format",
-  icon: "user",
   kind: "value",
-  tags: ["ping", "tag", "@", "link channel"],
+  info: {
+    name: "Mention",
+    description: "The text that pings someone or links a role or channel: <@id>, <@&id>, <#id>.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "format",
+    tags: ["ping", "tag", "@", "link channel"],
+  },
+  look: {
+    icon: "user",
+  },
   fields: {
     target: { type: "any", pin: "only", required: true, description: "A user, member, role or channel (or an id)." },
     kind: { type: "select", pin: false, default: "auto", choices: KINDS, description: "What it is, when only an id is connected." },

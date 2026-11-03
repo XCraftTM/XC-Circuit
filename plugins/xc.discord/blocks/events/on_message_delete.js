@@ -1,14 +1,22 @@
 module.exports = {
   id: "discord.on_message_delete",
-  name: "Message Deleted",
-  description: "Runs when a message is deleted, one run per message (also for bulk deletes). For delete logs.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "events",
-  icon: "trash",
   kind: "event",
-  intents: ["Guilds", "GuildMessages", "MessageContent"],
-  tags: ["log", "removed"],
+  info: {
+    name: "Message Deleted",
+    description: "Runs when a message is deleted, one run per message (also for bulk deletes). For delete logs.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "events",
+    tags: ["log", "removed"],
+  },
+  look: {
+    icon: "trash",
+  },
+  requires: {
+    intents: ["Guilds", "GuildMessages", "MessageContent"],
+  },
   fields: {
     ignoreBots: { type: "boolean", pin: false, default: true, label: "Ignore bots", description: "Skip messages written by bots (when known)." },
   },

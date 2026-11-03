@@ -1,14 +1,20 @@
 module.exports = {
   id: "core.random_number",
-  name: "Random Number",
-  description: "A random number between Min and Max (both included).",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "math",
-  icon: "hash",
   kind: "value",
+  info: {
+    name: "Random Number",
+    description: "A random number between Min and Max (both included).",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "math",
+    tags: ["dice", "roll", "chance"],
+  },
+  look: {
+    icon: "hash",
+  },
   pure: false,
-  tags: ["dice", "roll", "chance"],
   fields: {
     min: { type: "number", default: 1, description: "The smallest possible number." },
     max: { type: "number", default: 100, description: "The largest possible number." },

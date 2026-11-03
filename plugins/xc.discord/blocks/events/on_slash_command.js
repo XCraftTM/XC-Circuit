@@ -19,14 +19,22 @@ const outputKey = (name) => (BUILT_IN.includes(name) ? `${name}Option` : name);
 
 module.exports = {
   id: "discord.on_slash_command",
-  name: "Slash Command",
-  description: "Runs when someone uses one of your slash commands. Build them in Bot › Slash Commands.",
-  author: "XC Team",
-  version: "2.1.0",
-  category: "events",
-  icon: "slash",
   kind: "event",
-  intents: ["Guilds"],
+  info: {
+    name: "Slash Command",
+    description: "Runs when someone uses one of your slash commands. Build them in Bot › Slash Commands.",
+    author: "XC Team",
+    version: "2.1.0",
+  },
+  search: {
+    category: "events",
+  },
+  look: {
+    icon: "slash",
+  },
+  requires: {
+    intents: ["Guilds"],
+  },
   fields: {
     command: {
       type: "slash-command-ref",

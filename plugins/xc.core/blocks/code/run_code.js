@@ -4,14 +4,20 @@ const OWN = ["code", "inputs", "outputs"];
 
 module.exports = {
   id: "core.run_code",
-  name: "Run Code",
-  description: "Runs your own JavaScript, for anything the other blocks don't do. Inputs arrive as inputs.name; return an object with your outputs. ctx gives the bot (ctx.discord.client), stored data (ctx.store), variables and more.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "code",
-  icon: "terminal",
   kind: "action",
-  tags: ["javascript", "script", "custom", "advanced", "eval"],
+  info: {
+    name: "Run Code",
+    description: "Runs your own JavaScript, for anything the other blocks don't do. Inputs arrive as inputs.name; return an object with your outputs. ctx gives the bot (ctx.discord.client), stored data (ctx.store), variables and more.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "code",
+    tags: ["javascript", "script", "custom", "advanced", "eval"],
+  },
+  look: {
+    icon: "terminal",
+  },
   fields: {
     inputs: { type: "text", pin: false, template: false, default: "a, b", description: "Input names, comma separated. Each gets an input to connect or type a value." },
     outputs: { type: "text", pin: false, template: false, default: "result", description: "Output names, comma separated. Return them: return { result: … }." },

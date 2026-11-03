@@ -2,14 +2,20 @@ const TARGETS = { channel: "A channel (the bot makes a webhook)", url: "A webhoo
 
 module.exports = {
   id: "discord.webhook_send",
-  name: "Send via Webhook",
-  description: "Sends a message under any name and avatar, through a webhook.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "messages",
-  icon: "send",
   kind: "action",
-  tags: ["impersonate", "custom name", "avatar", "announce"],
+  info: {
+    name: "Send via Webhook",
+    description: "Sends a message under any name and avatar, through a webhook.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "messages",
+    tags: ["impersonate", "custom name", "avatar", "announce"],
+  },
+  look: {
+    icon: "send",
+  },
   fields: {
     target: { type: "select", pin: false, default: "channel", choices: TARGETS, description: "Where it goes." },
     channel: { type: "discord.channel", pin: "only", required: true, show: { target: ["channel"] }, description: "The channel. The bot needs Manage Webhooks." },

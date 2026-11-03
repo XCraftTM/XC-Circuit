@@ -53,14 +53,20 @@ const MODES = { change: "Allow and deny", reset: "Back to the defaults (remove t
 
 module.exports = {
   id: "discord.set_permissions",
-  name: "Set Channel Permissions",
-  description: "Allows or denies permissions on one channel for a role or a member, such as giving a ticket's creator access.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "channels",
-  icon: "shield",
   kind: "action",
-  tags: ["overwrite", "access", "private", "ticket"],
+  info: {
+    name: "Set Channel Permissions",
+    description: "Allows or denies permissions on one channel for a role or a member, such as giving a ticket's creator access.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "channels",
+    tags: ["overwrite", "access", "private", "ticket"],
+  },
+  look: {
+    icon: "shield",
+  },
   fields: {
     channel: { type: "discord.channel", pin: "only", required: true, description: "The channel." },
     who: { type: "select", pin: false, default: "target", choices: WHO, description: "Whose permissions change." },

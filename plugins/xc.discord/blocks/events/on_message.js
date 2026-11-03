@@ -1,13 +1,21 @@
 module.exports = {
   id: "discord.on_message",
-  name: "Message Sent",
-  description: "Runs when a message is sent in a channel the bot can see.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "events",
-  icon: "message",
   kind: "event",
-  intents: ["Guilds", "GuildMessages", "MessageContent"],
+  info: {
+    name: "Message Sent",
+    description: "Runs when a message is sent in a channel the bot can see.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "events",
+  },
+  look: {
+    icon: "message",
+  },
+  requires: {
+    intents: ["Guilds", "GuildMessages", "MessageContent"],
+  },
   fields: {
     contains: { type: "text", pin: false, default: "", description: "Only messages containing this text. Empty = every message." },
     ignoreBots: { type: "boolean", pin: false, default: true, label: "Ignore bots", description: "Skip messages sent by bots, including this one." },

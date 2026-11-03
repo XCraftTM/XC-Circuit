@@ -2,14 +2,20 @@ const ACTIONS = { lock: "Lock (nobody can write)", unlock: "Unlock" };
 
 module.exports = {
   id: "discord.lock_channel",
-  name: "Lock Channel",
-  description: "Stops (or lets again) a role, @everyone by default, from writing in a channel.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "channels",
-  icon: "shield",
   kind: "action",
-  tags: ["lockdown", "unlock", "mute channel"],
+  info: {
+    name: "Lock Channel",
+    description: "Stops (or lets again) a role, @everyone by default, from writing in a channel.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "channels",
+    tags: ["lockdown", "unlock", "mute channel"],
+  },
+  look: {
+    icon: "shield",
+  },
   fields: {
     channel: { type: "discord.channel", pin: "only", required: true, description: "The channel." },
     action: { type: "select", pin: false, default: "lock", choices: ACTIONS, description: "Lock or unlock." },

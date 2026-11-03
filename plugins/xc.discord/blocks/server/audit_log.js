@@ -2,14 +2,20 @@ const TYPES = { any: "Anything", MemberKick: "Kicks", MemberBanAdd: "Bans", Memb
 
 module.exports = {
   id: "discord.audit_log",
-  name: "Audit Log",
-  description: "Reads the server's audit log: who did what (kicks, bans, deletes, role changes …). The bot needs View Audit Log.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "server",
-  icon: "shield",
   kind: "action",
-  tags: ["who did it", "moderation log", "history"],
+  info: {
+    name: "Audit Log",
+    description: "Reads the server's audit log: who did what (kicks, bans, deletes, role changes …). The bot needs View Audit Log.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "server",
+    tags: ["who did it", "moderation log", "history"],
+  },
+  look: {
+    icon: "shield",
+  },
   fields: {
     server: { type: "discord.guild", pin: "only", required: true, description: "The server." },
     type: { type: "select", pin: false, default: "any", choices: TYPES, description: "Which actions." },

@@ -17,14 +17,20 @@ const TOOLS = {
 
 module.exports = {
   id: "core.text_tools",
-  name: "Text Tools",
-  description: "Changes or checks text: upper/lower case, trim, contains, replace, split, length …",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "text",
-  icon: "text",
   kind: "value",
-  tags: ["string", "replace", "split", "uppercase", "regex"],
+  info: {
+    name: "Text Tools",
+    description: "Changes or checks text: upper/lower case, trim, contains, replace, split, length …",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "text",
+    tags: ["string", "replace", "split", "uppercase", "regex"],
+  },
+  look: {
+    icon: "text",
+  },
   fields: {
     text: { type: "text", pin: true, description: "The text." },
     tool: { type: "select", pin: false, default: "upper", choices: Object.fromEntries(Object.entries(TOOLS).map(([k, [l]]) => [k, l])), description: "What to do." },

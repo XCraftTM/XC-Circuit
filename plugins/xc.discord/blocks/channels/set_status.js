@@ -3,14 +3,20 @@ const STATUS = { online: "Online", idle: "Idle", dnd: "Do not disturb", invisibl
 
 module.exports = {
   id: "discord.set_status",
-  name: "Set Bot Status",
-  description: "Changes the bot's status and activity, such as “Watching 3 servers”.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "channels",
-  icon: "bolt",
   kind: "action",
-  tags: ["presence", "activity", "playing"],
+  info: {
+    name: "Set Bot Status",
+    description: "Changes the bot's status and activity, such as “Watching 3 servers”.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "channels",
+    tags: ["presence", "activity", "playing"],
+  },
+  look: {
+    icon: "bolt",
+  },
   fields: {
     status: { type: "select", pin: false, default: "online", choices: STATUS, description: "Online, idle, do not disturb or invisible." },
     activity: { type: "select", pin: false, default: "Watching", choices: ACTIVITY, description: "The word shown before the text, such as Watching or Playing." },

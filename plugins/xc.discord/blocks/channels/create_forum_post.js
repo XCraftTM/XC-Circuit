@@ -1,13 +1,19 @@
 module.exports = {
   id: "discord.create_forum_post",
-  name: "Create Forum Post",
-  description: "Starts a post in a forum channel, with tags.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "channels",
-  icon: "message",
   kind: "action",
-  tags: ["forum", "post", "thread", "suggestion"],
+  info: {
+    name: "Create Forum Post",
+    description: "Starts a post in a forum channel, with tags.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "channels",
+    tags: ["forum", "post", "thread", "suggestion"],
+  },
+  look: {
+    icon: "message",
+  },
   fields: {
     forum: { type: "discord.channel", pin: "only", required: true, description: "The forum channel." },
     title: { type: "text", required: true, default: "New post", description: "The post's title." },

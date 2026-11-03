@@ -2,15 +2,23 @@ const commandsOf = (project) => (project && project.data && project.data.slashCo
 
 module.exports = {
   id: "discord.on_autocomplete",
-  name: "Autocomplete",
-  description: "Runs while someone types into a slash command option that has Autocomplete on. Answer with Respond to Autocomplete.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "interactions",
-  icon: "slash",
   kind: "event",
-  intents: ["Guilds"],
-  tags: ["suggest", "search", "options"],
+  info: {
+    name: "Autocomplete",
+    description: "Runs while someone types into a slash command option that has Autocomplete on. Answer with Respond to Autocomplete.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "interactions",
+    tags: ["suggest", "search", "options"],
+  },
+  look: {
+    icon: "slash",
+  },
+  requires: {
+    intents: ["Guilds"],
+  },
   fields: {
     command: { type: "slash-command-ref", pin: false, required: true, default: "", description: "Which command's options this suggests for." },
     option: { type: "text", pin: false, template: false, default: "", description: "Only this option. Empty = any of the command's autocomplete options." },

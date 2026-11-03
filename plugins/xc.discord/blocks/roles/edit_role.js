@@ -52,14 +52,20 @@ const tri = (v) => (v === "on" ? true : v === "off" ? false : undefined);
 
 module.exports = {
   id: "discord.edit_role",
-  name: "Edit Role",
-  description: "Changes a role's name, color, permissions and more. Empty fields stay as they are.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "roles",
-  icon: "tag",
   kind: "action",
-  tags: ["rename", "color", "permissions"],
+  info: {
+    name: "Edit Role",
+    description: "Changes a role's name, color, permissions and more. Empty fields stay as they are.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "roles",
+    tags: ["rename", "color", "permissions"],
+  },
+  look: {
+    icon: "tag",
+  },
   fields: {
     role: { type: "discord.role", pin: "only", required: true, description: "The role to change." },
     name: { type: "text", default: "", description: "New name. Empty keeps it." },

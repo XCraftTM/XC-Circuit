@@ -1,13 +1,19 @@
 module.exports = {
   id: "discord.emoji",
-  name: "Emoji",
-  description: "A server's custom emoji by name, as text to put in messages and reactions.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "format",
-  icon: "message",
   kind: "value",
-  tags: ["custom emoji", "emote"],
+  info: {
+    name: "Emoji",
+    description: "A server's custom emoji by name, as text to put in messages and reactions.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "format",
+    tags: ["custom emoji", "emote"],
+  },
+  look: {
+    icon: "message",
+  },
   fields: {
     name: { type: "text", required: true, default: "", description: "The emoji's name, without colons." },
     server: { type: "discord.guild?", pin: "only", description: "Look only in this server. Empty = every server the bot is in." },

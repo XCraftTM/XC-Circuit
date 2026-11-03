@@ -1,13 +1,19 @@
 module.exports = {
   id: "discord.bulk_delete",
-  name: "Bulk Delete",
-  description: "Deletes many recent messages at once (purge). Discord only allows messages under 14 days old.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "messages",
-  icon: "trash",
   kind: "action",
-  tags: ["purge", "clear", "clean", "prune"],
+  info: {
+    name: "Bulk Delete",
+    description: "Deletes many recent messages at once (purge). Discord only allows messages under 14 days old.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "messages",
+    tags: ["purge", "clear", "clean", "prune"],
+  },
+  look: {
+    icon: "trash",
+  },
   fields: {
     channel: { type: "discord.channel", pin: "only", required: true, description: "The channel to clean." },
     count: { type: "number", default: 10, min: 1, max: 100, step: 1, description: "How many of the latest messages to look at (up to 100)." },

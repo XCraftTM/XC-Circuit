@@ -1,14 +1,22 @@
 module.exports = {
   id: "discord.list_members",
-  name: "List Members",
-  description: "The members of a server, or only those with a role. Needs the Server Members intent.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "members",
-  icon: "user",
   kind: "action",
-  intents: ["Guilds", "GuildMembers"],
-  tags: ["everyone", "all members", "role members", "count"],
+  info: {
+    name: "List Members",
+    description: "The members of a server, or only those with a role. Needs the Server Members intent.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "members",
+    tags: ["everyone", "all members", "role members", "count"],
+  },
+  look: {
+    icon: "user",
+  },
+  requires: {
+    intents: ["Guilds", "GuildMembers"],
+  },
   fields: {
     server: { type: "discord.guild", pin: "only", required: true, description: "The server." },
     role: { type: "discord.role?", pin: "only", description: "Only members with this role. Empty = everyone." },

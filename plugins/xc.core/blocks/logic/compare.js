@@ -11,13 +11,19 @@ const OPS = {
 
 module.exports = {
   id: "core.compare",
-  name: "Compare",
-  description: "Compares two values and gives true or false.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "logic",
-  icon: "scale",
   kind: "value",
+  info: {
+    name: "Compare",
+    description: "Compares two values and gives true or false.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "logic",
+  },
+  look: {
+    icon: "scale",
+  },
   fields: {
     a: { type: "any", pin: true, description: "The value to check." },
     op: { type: "select", default: "eq", pin: false, choices: OPS, label: "Check", description: "How to compare." },

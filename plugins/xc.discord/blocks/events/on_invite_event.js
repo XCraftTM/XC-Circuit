@@ -2,15 +2,23 @@ const KINDS = { created: "Created", deleted: "Deleted" };
 
 module.exports = {
   id: "discord.on_invite_event",
-  name: "Invite Created / Deleted",
-  description: "Runs when an invite link is made or deleted.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "events",
-  icon: "user-plus",
   kind: "event",
-  intents: ["Guilds", "GuildInvites"],
-  tags: ["invite tracking", "log"],
+  info: {
+    name: "Invite Created / Deleted",
+    description: "Runs when an invite link is made or deleted.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "events",
+    tags: ["invite tracking", "log"],
+  },
+  look: {
+    icon: "user-plus",
+  },
+  requires: {
+    intents: ["Guilds", "GuildInvites"],
+  },
   fields: {
     kind: { type: "select", pin: false, default: "created", label: "When", choices: KINDS, description: "Created or deleted." },
   },

@@ -2,15 +2,23 @@ const KINDS = { created: "Created", deleted: "Deleted", updated: "Changed" };
 
 module.exports = {
   id: "discord.on_role_event",
-  name: "Role Created / Deleted",
-  description: "Runs when a role is created, deleted or changed. For server logs.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "events",
-  icon: "tag",
   kind: "event",
-  intents: ["Guilds"],
-  tags: ["log", "role update", "server log"],
+  info: {
+    name: "Role Created / Deleted",
+    description: "Runs when a role is created, deleted or changed. For server logs.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "events",
+    tags: ["log", "role update", "server log"],
+  },
+  look: {
+    icon: "tag",
+  },
+  requires: {
+    intents: ["Guilds"],
+  },
   fields: {
     kind: { type: "select", pin: false, default: "created", label: "When", choices: KINDS, description: "Which event runs it." },
   },

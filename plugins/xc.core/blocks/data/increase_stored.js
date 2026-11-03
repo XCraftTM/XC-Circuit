@@ -2,13 +2,19 @@ const SCOPES = { global: "Whole bot", server: "Server", user: "User", member: "M
 
 module.exports = {
   id: "core.increase_stored",
-  name: "Increase Stored Value",
-  description: "Adds to a stored number, starting from 0. Use a negative amount to subtract.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "data",
-  icon: "plus-circle",
   kind: "action",
+  info: {
+    name: "Increase Stored Value",
+    description: "Adds to a stored number, starting from 0. Use a negative amount to subtract.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "data",
+  },
+  look: {
+    icon: "plus-circle",
+  },
   fields: {
     scope: { type: "select", default: "user", pin: false, choices: SCOPES, description: "Who the value belongs to." },
     target: {

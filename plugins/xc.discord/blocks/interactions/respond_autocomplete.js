@@ -1,13 +1,19 @@
 module.exports = {
   id: "discord.respond_autocomplete",
-  name: "Respond to Autocomplete",
-  description: "Shows suggestions while someone types into an autocomplete option. Up to 25.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "interactions",
-  icon: "slash",
   kind: "action",
-  tags: ["suggest", "search"],
+  info: {
+    name: "Respond to Autocomplete",
+    description: "Shows suggestions while someone types into an autocomplete option. Up to 25.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "interactions",
+    tags: ["suggest", "search"],
+  },
+  look: {
+    icon: "slash",
+  },
   fields: {
     interaction: { type: "discord.interaction", pin: "only", required: true, description: "From the Autocomplete event." },
     suggestions: { type: "textarea", default: "", description: "Suggestions, one per line: value | Label, or only a label." },

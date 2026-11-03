@@ -2,15 +2,23 @@ const CHANGES = { any: "Any change", join: "Joins a voice channel", leave: "Leav
 
 module.exports = {
   id: "discord.on_voice_state",
-  name: "Voice Changed",
-  description: "Runs when someone joins, leaves or moves between voice channels, mutes, deafens or streams. For temporary voice channels and voice logs.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "voice",
-  icon: "bolt",
   kind: "event",
-  intents: ["Guilds", "GuildVoiceStates"],
-  tags: ["voice", "join", "leave", "temp channel", "vc"],
+  info: {
+    name: "Voice Changed",
+    description: "Runs when someone joins, leaves or moves between voice channels, mutes, deafens or streams. For temporary voice channels and voice logs.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "voice",
+    tags: ["voice", "join", "leave", "temp channel", "vc"],
+  },
+  look: {
+    icon: "bolt",
+  },
+  requires: {
+    intents: ["Guilds", "GuildVoiceStates"],
+  },
   fields: {
     change: { type: "select", pin: false, default: "any", choices: CHANGES, description: "Which change runs it." },
     ignoreBots: { type: "boolean", pin: false, default: true, label: "Ignore bots", description: "Skip bots (such as music bots)." },

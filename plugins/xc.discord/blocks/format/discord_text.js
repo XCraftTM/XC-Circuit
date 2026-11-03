@@ -18,14 +18,20 @@ const STYLES = {
 
 module.exports = {
   id: "discord.discord_text",
-  name: "Discord Text",
-  description: "Formats text with Discord markdown: bold, code blocks, spoilers, headings, quotes, links …",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "format",
-  icon: "text",
   kind: "value",
-  tags: ["markdown", "bold", "code", "spoiler", "format"],
+  info: {
+    name: "Discord Text",
+    description: "Formats text with Discord markdown: bold, code blocks, spoilers, headings, quotes, links …",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "format",
+    tags: ["markdown", "bold", "code", "spoiler", "format"],
+  },
+  look: {
+    icon: "text",
+  },
   fields: {
     text: { type: "textarea", pin: true, default: "", description: "The text." },
     style: { type: "select", pin: false, default: "bold", choices: STYLES, description: "How to format it." },

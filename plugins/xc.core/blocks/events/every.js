@@ -15,14 +15,20 @@ function nextAt(now, time, weekday) {
 
 module.exports = {
   id: "core.every",
-  name: "Every",
-  description: "Runs again and again: every so many minutes, every day at a time, or every week. Times use the clock of the computer the bot runs on.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "events",
-  icon: "clock",
   kind: "event",
-  tags: ["timer", "schedule", "interval", "cron", "daily", "repeat"],
+  info: {
+    name: "Every",
+    description: "Runs again and again: every so many minutes, every day at a time, or every week. Times use the clock of the computer the bot runs on.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "events",
+    tags: ["timer", "schedule", "interval", "cron", "daily", "repeat"],
+  },
+  look: {
+    icon: "clock",
+  },
   fields: {
     mode: { type: "select", pin: false, default: "interval", choices: MODES, description: "How often." },
     every: { type: "number", pin: false, default: 10, min: 1, show: { mode: ["interval"] }, description: "How many units between runs." },

@@ -1,13 +1,21 @@
 module.exports = {
   id: "discord.on_reaction",
-  name: "Reaction Added",
-  description: "Runs when someone reacts to a message. Good for reaction roles.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "events",
-  icon: "message",
   kind: "event",
-  intents: ["Guilds", "GuildMessageReactions"],
+  info: {
+    name: "Reaction Added",
+    description: "Runs when someone reacts to a message. Good for reaction roles.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "events",
+  },
+  look: {
+    icon: "message",
+  },
+  requires: {
+    intents: ["Guilds", "GuildMessageReactions"],
+  },
   fields: {
     emoji: { type: "text", pin: false, default: "", description: "Only this emoji (such as 👍 or a custom emoji name). Empty = any." },
     messageId: { type: "text", pin: false, default: "", label: "Message id", description: "Only reactions on this message. Empty = any." },

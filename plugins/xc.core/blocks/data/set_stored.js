@@ -2,13 +2,19 @@ const SCOPES = { global: "Whole bot", server: "Server", user: "User", member: "M
 
 module.exports = {
   id: "core.set_stored",
-  name: "Set Stored Value",
-  description: "Saves a value so it survives bot restarts.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "data",
-  icon: "database",
   kind: "action",
+  info: {
+    name: "Set Stored Value",
+    description: "Saves a value so it survives bot restarts.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "data",
+  },
+  look: {
+    icon: "database",
+  },
   fields: {
     scope: { type: "select", default: "user", pin: false, choices: SCOPES, description: "Who the value belongs to." },
     target: {

@@ -2,15 +2,23 @@ const CHANGES = { any: "Any change", roles: "Roles", nickname: "Nickname", timeo
 
 module.exports = {
   id: "discord.on_member_update",
-  name: "Member Updated",
-  description: "Runs when a member's roles, nickname, time out or boosting change.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "events",
-  icon: "user",
   kind: "event",
-  intents: ["Guilds", "GuildMembers"],
-  tags: ["log", "role added", "nickname", "boost", "timeout"],
+  info: {
+    name: "Member Updated",
+    description: "Runs when a member's roles, nickname, time out or boosting change.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "events",
+    tags: ["log", "role added", "nickname", "boost", "timeout"],
+  },
+  look: {
+    icon: "user",
+  },
+  requires: {
+    intents: ["Guilds", "GuildMembers"],
+  },
   fields: {
     change: { type: "select", pin: false, default: "any", choices: CHANGES, description: "Which change runs it." },
   },

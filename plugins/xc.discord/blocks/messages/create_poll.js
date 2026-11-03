@@ -1,13 +1,19 @@
 module.exports = {
   id: "discord.create_poll",
-  name: "Create Poll",
-  description: "Posts a Discord poll. Read the results with Poll Results.",
-  author: "XC Team",
-  version: "1.0.0",
-  category: "messages",
-  icon: "scale",
   kind: "action",
-  tags: ["vote", "survey"],
+  info: {
+    name: "Create Poll",
+    description: "Posts a Discord poll. Read the results with Poll Results.",
+    author: "XC Team",
+    version: "1.0.0",
+  },
+  search: {
+    category: "messages",
+    tags: ["vote", "survey"],
+  },
+  look: {
+    icon: "scale",
+  },
   fields: {
     channel: { type: "discord.channel", pin: "only", required: true, description: "Where to post it." },
     question: { type: "text", required: true, default: "What do you think?", description: "The question (up to 300 characters)." },
