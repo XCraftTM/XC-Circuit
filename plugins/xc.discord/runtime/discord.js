@@ -13,8 +13,10 @@ module.exports = {
     if (unknown.length) rt.log.warn(`Unknown intents ignored: ${unknown.join(", ")}`);
     const intents = names.filter((n) => n in GatewayIntentBits).map((n) => GatewayIntentBits[n]);
     if (!intents.length) intents.push(GatewayIntentBits.Guilds);
-    const client = new Client({ intents, partials: [Partials.Channel, Partials.Message, Partials.Reaction] });
+    const sharding = shardOptions(rt.setting("shards"));
+    const client = new Client({ intents, partials: [Partials.Channel, Partials.Message, Partials.Reaction], ...sharding });
     rt.log.info(`Intents: ${names.length ? names.join(", ") : "Guilds"}`);
+    if (sharding.shards) rt.log.info(`Shards: ${sharding.shardCount ?? "chosen by Discord"}`);
     return { client, music: createMusic(rt, client) };
   },
 
@@ -42,6 +44,20 @@ module.exports = {
     }
   },
 };
+
+/**
+ * Client options for the Shards setting: auto lets Discord choose, a number
+ * over 1 runs that many; all in this process (discord.js's internal sharding).
+ */
+function shardOptions(setting) {
+  const s = String(setting ?? "").trim().toLowerCase();
+  if (s === "auto") return { shards: "auto" };
+  const n = Number(s);
+  if (Number.isInteger(n) && n > 1) return { shards: [...Array(n).keys()], shardCount: n };
+  return {};
+}
+
+module.exports.shardOptions = shardOptions;
 
 /**
  * The music player the music blocks share, made with discord-player the first

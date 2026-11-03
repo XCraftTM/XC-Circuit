@@ -66,7 +66,13 @@ assert.strictEqual(fmt("escape", "*not bold*"), "\\*not bold\\*");
 }
 
 // Slash commands: names with spaces are subcommands and groups.
-const { toDiscordCommands, registrationPlan } = require("../../plugins/xc.discord/runtime/discord.js");
+const { toDiscordCommands, registrationPlan, shardOptions } = require("../../plugins/xc.discord/runtime/discord.js");
+
+// The Shards setting.
+assert.deepStrictEqual(shardOptions(""), {});
+assert.deepStrictEqual(shardOptions("1"), {}, "one shard is no sharding");
+assert.deepStrictEqual(shardOptions(" Auto "), { shards: "auto" });
+assert.deepStrictEqual(shardOptions("3"), { shards: [0, 1, 2], shardCount: 3 });
 
 // Registering slash commands: only when something changed, and old ones are cleared.
 {
