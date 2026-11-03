@@ -948,8 +948,9 @@ impl CircuitApp {
             for (wk, ws) in &p.workspaces {
                 for (id, node) in &ws.nodes {
                     let block = node.block.split('@').next().unwrap_or(&node.block);
-                    let name = self.ed.reg.block(block).map(|d| d.name.clone()).unwrap_or_else(|| block.to_string());
-                    items.push(Item::new(t!("Block"), name, Cmd::RevealBlock(wk.clone(), id.clone())).detail(format!("{} · #{id}", ws.name)));
+                    let def = self.ed.reg.block(block);
+                    let name = def.map(|d| d.name.clone()).unwrap_or_else(|| block.to_string());
+                    items.push(Item::new(t!("Block"), name, Cmd::RevealBlock(wk.clone(), id.clone())).detail(format!("{} · #{id}", ws.name)).content(block_texts(def, &node.values)));
                 }
             }
         }
@@ -1775,6 +1776,31 @@ fn status_item(ui: &mut egui::Ui, theme: &crate::theme::Theme, dot: Option<egui:
     }
     ui.painter().galley(egui::pos2(x, rect.center().y - galley.size().y / 2.0), galley, theme.status_text);
     resp
+}
+
+/// The texts typed into a block, for the search: (field label, text). Texts
+/// inside embeds, layouts and lists count; picked choices don't.
+fn block_texts(def: Option<&circuit_core::block::BlockDef>, values: &serde_json::Map<String, serde_json::Value>) -> Vec<(String, String)> {
+    fn strings(v: &serde_json::Value, out: &mut Vec<String>) {
+        match v {
+            serde_json::Value::String(s) if !s.trim().is_empty() => out.push(s.clone()),
+            serde_json::Value::Array(items) => items.iter().for_each(|i| strings(i, out)),
+            serde_json::Value::Object(map) => map.values().for_each(|i| strings(i, out)),
+            _ => {}
+        }
+    }
+    let mut texts = Vec::new();
+    for (key, value) in values {
+        let field = def.and_then(|d| d.fields.get(key));
+        if field.is_some_and(|f| f.choices.is_some()) {
+            continue;
+        }
+        let label = field.map(|f| f.label(key)).unwrap_or_else(|| circuit_core::block::title_case(key));
+        let mut found = Vec::new();
+        strings(value, &mut found);
+        texts.extend(found.into_iter().map(|t| (label.clone(), t)));
+    }
+    texts
 }
 
 #[cfg(test)]
