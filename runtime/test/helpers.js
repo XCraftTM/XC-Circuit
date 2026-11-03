@@ -24,7 +24,7 @@ const n = (block, values = {}, extra = {}) => ({ block: block + "@1", at: [0, 0]
 const log = (message) => n("core.log", { message, level: "info" });
 
 // Actions run one after another: start > a > b > … (value blocks are read by the logs).
-const chain = ["start", "cd1", "cd2", "sx1", "sx2", "lbLog", "keysLog", "del", "delLog", "iset", "loop", "after", "call", "callLog", "fmt", "obj", "code", "codeLog", "up", "len", "useLog"];
+const chain = ["start", "cd1", "cd2", "sx1", "sx2", "lbLog", "keysLog", "del", "delLog", "iset", "loop", "after", "call", "callLog", "fmt", "obj", "code", "codeLog", "up", "len", "useLog", "rndLog"];
 const nodes = {
   start: n("core.on_start"),
   // Cooldown: the first use is ready, the second waits.
@@ -73,6 +73,9 @@ const nodes = {
   up: n("core.use_method", { mode: "call", path: "toUpperCase" }),
   len: n("core.use_method", { mode: "read", path: "length" }),
   useLog: log("use ${upper} ${length}"),
+  // One value block read by two inputs gives both the same value.
+  rnd: n("core.random_number", { min: 1, max: 1000000000, whole: true }),
+  rndLog: log("random ${a} ${b}"),
   // Every: once at start, then each second.
   tick: n("core.every", { mode: "interval", every: 1, unit: "seconds", now: true }),
   tickLog: log("tick ${count}"),
@@ -115,6 +118,8 @@ links.push(
   "word.text > len.object",
   "up.result > useLog.upper",
   "len.result > useLog.length",
+  "rnd.number > rndLog.a",
+  "rnd.number > rndLog.b",
 );
 
 const bundle = { project: { name: "Helpers", mode: "test", settings: {}, data: {} }, blocks, libs: [], workspaces: { main: { name: "Main", nodes, links } } };
@@ -148,6 +153,8 @@ setTimeout(() => {
   has("use HELLO 5");
   has("tick 1");
   has("tick 2");
+  const random = logs.map((l) => /random (\d+) (\d+)/.exec(l)).find(Boolean);
+  assert.ok(random && random[1] === random[2], "both inputs got the same random number");
   assert.ok(!logs.some((l) => l.startsWith("error")), "no errors");
   console.log("\nhelpers test passed");
 }, 2600);

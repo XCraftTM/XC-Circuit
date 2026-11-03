@@ -374,15 +374,28 @@ class Graph {
   }
 
   /** Reads an output: from blocks that already ran in this run, or by computing a value block. */
-  async read(run, nodeId, pin) {
+  /**
+   * An output of a block. A value block runs when it is read, once for all
+   * the inputs being filled together (`memo`): one Random Number wired into
+   * two inputs gives both the same number. The next block reads it afresh,
+   * so in a loop it can change on every pass.
+   */
+  async read(run, nodeId, pin, memo = new Map()) {
     const done = run.outputs.get(nodeId);
     if (done && pin in done) return done[pin];
     const node = this.nodes.get(nodeId);
     if (!node) return undefined;
     if (node.def.kind !== "value") return done ? done[pin] : undefined;
-    const fields = await node.resolve(run);
-    const result = (await node.def.run({ fields, ctx: this.rt.ctxFor(run, node), node: { id: node.id, workspace: this.key } })) || {};
-    return result[pin];
+    if (!memo.has(nodeId)) {
+      memo.set(
+        nodeId,
+        (async () => {
+          const fields = await node.resolve(run, memo);
+          return (await node.def.run({ fields, ctx: this.rt.ctxFor(run, node), node: { id: node.id, workspace: this.key } })) || {};
+        })(),
+      );
+    }
+    return (await memo.get(nodeId))[pin];
   }
 }
 
@@ -405,13 +418,13 @@ class GraphNode {
   }
 
   /** Fields for run(): wires first, then inline values, with {placeholders} filled. */
-  async resolve(run) {
+  async resolve(run, memo = new Map()) {
     const fields = this.inline();
     const wired = new Set();
     for (const [key, sources] of this.graph.inputs) {
       const [nodeId, pin] = splitPin(key);
       if (nodeId !== this.id) continue;
-      const values = await Promise.all(sources.map((s) => this.graph.read(run, s.node, s.pin)));
+      const values = await Promise.all(sources.map((s) => this.graph.read(run, s.node, s.pin, memo)));
       const def = (this.def.fields || {})[pin];
       fields[pin] = def && def.multi ? values.flat() : values[0];
       wired.add(pin);
