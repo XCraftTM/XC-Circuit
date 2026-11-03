@@ -180,7 +180,11 @@ pub fn layout(painter: &Painter, e: &EmbedData, width: f32, max_desc_lines: Opti
     // Discord's markdown where Discord reads it (None: plain, as in the author and footer).
     let marked = |s: &str, md: Option<Kind>, size: f32, color: Color32, wrap: f32| match md {
         Some(kind) => crate::markdown::layout(painter, s, kind, size * scale, color, wrap),
-        None => Marked::plain(painter.layout_job(crate::chips::job(s, FontId::proportional(size * scale), color, wrap))),
+        // The author is bold in Discord (it comes in STRONG), the footer not.
+        None => {
+            let font = if color == STRONG { crate::fonts::bold(size * scale) } else { FontId::proportional(size * scale) };
+            Marked::plain(painter.layout_job(crate::fonts::usable(painter.ctx(), crate::chips::job(s, font, color, wrap))))
+        }
     };
     #[allow(clippy::too_many_arguments)]
     let text = |pieces: &mut Vec<(Pos2, Marked)>, s: &str, md: Option<Kind>, size: f32, color: Color32, wrap: f32, y: &mut f32, x: f32, gap: f32| {

@@ -4,7 +4,7 @@
 //! <t:…> timestamps. Each `${…}` is a chip (see `chips`), since its value is
 //! only known when the bot runs.
 //!
-//! The built-in fonts have no bold weight, so bold text is drawn brighter.
+//! Bold text uses the bundled bold font (see `fonts`).
 
 use std::ops::Range;
 use std::sync::Arc;
@@ -29,7 +29,8 @@ pub mod colors {
 use colors::*;
 
 /// What may be in the text: everything (message text, embed descriptions and
-/// field values), or only what works inside one line (embed titles, field names).
+/// field values), or only what works inside one line (embed titles and field
+/// names, which Discord writes in bold).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Kind {
     Full,
@@ -91,7 +92,7 @@ impl Marked {
 /// Lays out `text` at `size` in `color`, wrapped at `wrap`.
 pub fn layout(painter: &Painter, text: &str, kind: Kind, size: f32, color: Color32, wrap: f32) -> Marked {
     let built = build(text, kind, size, color, wrap);
-    let galley = painter.layout_job(built.job);
+    let galley = painter.layout_job(crate::fonts::usable(painter.ctx(), built.job));
     Marked { galley, quotes: built.quotes, code: built.code, width: wrap }
 }
 
@@ -160,7 +161,7 @@ pub fn build(text: &str, kind: Kind, size: f32, color: Color32, wrap: f32) -> Bu
     let chars: Vec<char> = text.chars().collect();
     // ${…} spans (from just after "${" to the "}"), never read as markdown.
     let expressions: Vec<(usize, usize)> = circuit_core::template::expressions(text);
-    let base = Line { size, color, strong: false, indent: 0.0, quote: false };
+    let base = Line { size, color, strong: kind == Kind::Inline, indent: 0.0, quote: false };
     let mut style = Style::default();
     let mut quote_rest = false;
     let mut i = 0;
@@ -308,8 +309,9 @@ fn code_block(chars: &[char], from: usize) -> (String, usize) {
 }
 
 fn format(line: Line, style: Style) -> TextFormat {
-    let color = if style.bold || line.strong { STRONG } else { line.color };
-    let mut f = text_format(FontId::proportional(line.size), color);
+    let font = if style.bold || line.strong { crate::fonts::bold(line.size) } else { FontId::proportional(line.size) };
+    let color = line.color;
+    let mut f = text_format(font, color);
     f.italics = style.italic;
     if style.underline {
         f.underline = Stroke::new(1.0, color);
@@ -565,7 +567,7 @@ fn parts(b: &Built) -> Vec<(String, &'static str)> {
                 "underline"
             } else if f.strikethrough.width > 0.0 {
                 "strike"
-            } else if f.color == STRONG {
+            } else if f.font_id.family == eframe::egui::FontFamily::Name("bold".into()) {
                 "bold"
             } else if f.color == MUTED {
                 "muted"
@@ -630,7 +632,7 @@ mod tests {
         assert_eq!(code, " \nlet x = 1;\nlet y = 2;\n ");
 
         // Titles: only what fits in a line.
-        let b = build("# not a heading **but bold**", Kind::Inline, 14.0, TEXT, 400.0);
-        assert_eq!(parts(&b), [p("# not a heading ", "plain"), p("but bold", "bold")]);
+        let b = build("# not a heading *but italic*", Kind::Inline, 14.0, TEXT, 400.0);
+        assert_eq!(parts(&b), [p("# not a heading ", "bold"), p("but italic", "italic")], "titles are bold, without headings");
     }
 }

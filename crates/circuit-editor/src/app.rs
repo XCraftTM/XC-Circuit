@@ -120,6 +120,7 @@ pub struct CircuitApp {
 impl CircuitApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         egui_extras::install_image_loaders(&cc.egui_ctx);
+        crate::fonts::install(&cc.egui_ctx);
         let (plugin_dirs, bundled_root) = find_plugin_dirs();
         let theme_id: Option<String> = cc.storage.and_then(|s| eframe::get_value(s, KEY_THEME));
         let last_project: Option<PathBuf> = cc.storage.and_then(|s| eframe::get_value(s, KEY_PROJECT));

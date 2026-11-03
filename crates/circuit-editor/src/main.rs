@@ -14,6 +14,7 @@ mod dialog;
 mod editor;
 mod embed;
 mod exchange;
+mod fonts;
 mod history;
 mod inputs;
 mod json_view;

@@ -89,7 +89,7 @@ Graphics: the editor draws with Vulkan or DirectX 12 (on Windows including WARP,
 crates/circuit-core      graph model, pin types, block definitions, project format
 crates/circuit-plugins   plugin.toml, contributions, QuickJS sandbox for block files
 crates/circuit-runner    bundles, npm packages, the bot process, debug protocol, secrets, export
-crates/circuit-editor    the egui app (bin: xc-circuit)
+crates/circuit-editor    the egui app (bin: xc-circuit); assets/fonts holds Ubuntu Bold (Ubuntu Font Licence, LICENCE.txt next to it)
 crates/xc-circuit-plugin the crate native Rust plugins are written with
 runtime/                 the Node.js runtime that executes block graphs (also inside exports)
 plugins/xc.core          flow/text/math/logic/data/debug blocks, icons, themes
