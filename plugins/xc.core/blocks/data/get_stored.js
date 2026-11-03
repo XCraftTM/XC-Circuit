@@ -11,6 +11,7 @@ module.exports = {
   },
   search: {
     category: "data",
+    aliases: ["Load", "Database get", "Gespeicherten Wert lesen", "Laden"],
   },
   look: {
     icon: "database",

@@ -19,7 +19,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "members",
+    category: "moderation",
+    aliases: ["Ban", "Kick", "Timeout", "Mute", "Unban", "Bannen", "Kicken", "Stummschalten"],
     tags: ["kick", "ban", "mute", "timeout", "role", "nickname"],
   },
   look: {

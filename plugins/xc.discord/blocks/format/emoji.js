@@ -9,6 +9,7 @@ module.exports = {
   },
   search: {
     category: "format",
+    aliases: ["Smiley", "Reaction emoji"],
     tags: ["custom emoji", "emote"],
   },
   look: {

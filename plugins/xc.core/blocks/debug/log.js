@@ -10,7 +10,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "debug",
+    category: "code",
+    aliases: ["Print", "Console", "Debug", "Ausgeben", "Konsole"],
   },
   look: {
     icon: "terminal",

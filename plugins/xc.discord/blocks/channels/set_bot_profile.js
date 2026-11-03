@@ -8,7 +8,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "channels",
+    category: "bot",
+    aliases: ["Bot avatar", "Bot name", "Bot-Profil setzen"],
     tags: ["avatar", "rename bot", "username"],
   },
   look: {

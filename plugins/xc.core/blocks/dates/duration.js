@@ -38,7 +38,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "dates",
+    category: "time",
+    aliases: ["Time span", "Parse time", "Dauer", "Zeitspanne"],
     tags: ["time", "minutes", "seconds", "ms", "timeout length"],
   },
   look: {

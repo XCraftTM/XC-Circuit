@@ -10,7 +10,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "messages",
+    category: "components",
+    aliases: ["Link button", "Knopf"],
     tags: ["component", "click"],
   },
   look: {

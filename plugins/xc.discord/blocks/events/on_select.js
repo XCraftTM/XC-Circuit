@@ -24,7 +24,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "interactions",
+    category: "events_commands",
+    aliases: ["Dropdown chosen", "Auswahlmenü benutzt"],
     tags: ["dropdown", "menu", "choose", "component"],
   },
   look: {

@@ -8,7 +8,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "messages",
+    category: "manage_messages",
+    aliases: ["Fetch message", "Get message by id", "Nachricht finden"],
     tags: ["fetch", "get", "lookup", "link"],
   },
   look: {

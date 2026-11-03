@@ -8,7 +8,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "flow",
+    category: "time",
+    aliases: ["Delay", "Sleep", "Pause", "Warten"],
   },
   look: {
     icon: "clock",

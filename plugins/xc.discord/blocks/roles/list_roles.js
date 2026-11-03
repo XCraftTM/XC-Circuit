@@ -9,6 +9,7 @@ module.exports = {
   },
   search: {
     category: "roles",
+    aliases: ["All roles", "Rollen auflisten"],
   },
   look: {
     icon: "tag",

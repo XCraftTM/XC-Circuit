@@ -8,7 +8,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events",
+    category: "events_bot",
+    aliases: ["Catch errors", "Bei Fehler", "Fehler abfangen"],
   },
   look: {
     icon: "info",

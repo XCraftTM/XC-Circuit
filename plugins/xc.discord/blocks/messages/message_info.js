@@ -33,7 +33,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "messages",
+    category: "manage_messages",
+    aliases: ["Message details", "Nachrichteninfo"],
   },
   look: {
     icon: "message",

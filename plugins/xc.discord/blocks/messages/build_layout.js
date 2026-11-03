@@ -32,7 +32,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "messages",
+    category: "design",
+    aliases: ["Components V2", "Container", "Layout erstellen"],
     tags: ["components v2", "container", "section", "gallery", "embed"],
   },
   look: {

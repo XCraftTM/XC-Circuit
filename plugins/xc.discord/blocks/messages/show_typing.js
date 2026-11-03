@@ -8,7 +8,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "messages",
+    category: "send",
+    aliases: ["Typing indicator", "Tippen anzeigen"],
     tags: ["typing indicator", "busy"],
   },
   look: {

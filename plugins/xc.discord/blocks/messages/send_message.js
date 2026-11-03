@@ -17,7 +17,8 @@ module.exports = {
     version: "3.3.0",
   },
   search: {
-    category: "messages",
+    category: "send",
+    aliases: ["Reply", "Respond", "Send DM", "Nachricht senden", "Antworten"],
   },
   look: {
     icon: "send",

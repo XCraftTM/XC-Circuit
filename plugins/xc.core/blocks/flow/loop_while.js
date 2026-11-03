@@ -9,6 +9,7 @@ module.exports = {
   },
   search: {
     category: "flow",
+    aliases: ["While", "Solange"],
     tags: ["while", "until", "loop"],
   },
   look: {

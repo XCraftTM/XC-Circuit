@@ -8,7 +8,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "debug",
+    category: "code",
+    aliases: ["Fail", "Raise error", "Fehler auslösen"],
   },
   look: {
     icon: "info",

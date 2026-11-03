@@ -26,6 +26,7 @@ module.exports = {
   },
   search: {
     category: "text",
+    aliases: ["Uppercase", "Replace", "Split", "Trim", "Textwerkzeuge"],
     tags: ["string", "replace", "split", "uppercase", "regex"],
   },
   look: {

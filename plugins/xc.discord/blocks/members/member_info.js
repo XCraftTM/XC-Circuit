@@ -38,6 +38,7 @@ module.exports = {
   },
   search: {
     category: "members",
+    aliases: ["Member details", "Joined at", "Mitgliedsinfo"],
   },
   look: {
     icon: "user",

@@ -357,6 +357,30 @@ mod tests {
         assert!(reg.theme("graphite").is_some());
     }
 
+    /// Every bundled block sits in one of the Discord mode's categories (not
+    /// the folder it happens to be in) and has other names to be found by.
+    #[test]
+    fn bundled_blocks_have_a_known_category_and_aliases() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+        let engine = BlockEngine::new().unwrap();
+        let reg = Registry::load(&[root], &engine);
+        let mode = reg.mode("discord-bot").unwrap();
+        let mut wrong = Vec::new();
+        for def in reg.blocks.values().filter(|d| d.plugin == "xc.core" || d.plugin == "xc.discord") {
+            let cat = def.category.as_deref().unwrap_or("");
+            if mode.categories.iter().all(|c| c.id != cat) {
+                wrong.push(format!("{}: unknown category `{cat}`", def.id));
+            }
+            if def.aliases.is_empty() {
+                wrong.push(format!("{}: no aliases", def.id));
+            }
+        }
+        assert!(wrong.is_empty(), "{wrong:#?}");
+        // No category is left empty.
+        let empty: Vec<&str> = mode.categories.iter().filter(|c| !reg.blocks.values().any(|d| d.category.as_deref() == Some(c.id.as_str()))).map(|c| c.id.as_str()).collect();
+        assert!(empty.is_empty(), "categories without blocks: {empty:?}");
+    }
+
     /// The Discord blocks' define() and migrate() as the editor calls them.
     #[test]
     fn discord_blocks_define_and_migrate() {

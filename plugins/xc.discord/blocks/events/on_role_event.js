@@ -10,7 +10,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events",
+    category: "events_server",
+    aliases: ["Role created", "Role deleted", "Rolle erstellt"],
     tags: ["log", "role update", "server log"],
   },
   look: {

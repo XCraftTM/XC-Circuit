@@ -8,7 +8,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "messages",
+    category: "reactions",
+    aliases: ["Vote", "Survey", "Umfrage erstellen"],
     tags: ["vote", "survey"],
   },
   look: {

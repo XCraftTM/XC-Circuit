@@ -9,6 +9,7 @@ module.exports = {
   },
   search: {
     category: "channels",
+    aliases: ["Forum", "Forenbeitrag erstellen"],
     tags: ["forum", "post", "thread", "suggestion"],
   },
   look: {

@@ -17,7 +17,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "dates",
+    category: "time",
+    aliases: ["Now", "Time", "Datum", "Uhrzeit"],
     tags: ["now", "time", "timestamp", "format"],
   },
   look: {

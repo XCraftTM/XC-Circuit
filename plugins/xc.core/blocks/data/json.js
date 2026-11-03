@@ -8,7 +8,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "data",
+    category: "lists",
+    aliases: ["Parse JSON", "Stringify"],
     tags: ["parse", "stringify", "object", "text"],
   },
   look: {

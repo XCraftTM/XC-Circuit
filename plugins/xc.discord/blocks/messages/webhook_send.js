@@ -10,7 +10,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "messages",
+    category: "send",
+    aliases: ["Webhook", "Per Webhook senden"],
     tags: ["impersonate", "custom name", "avatar", "announce"],
   },
   look: {

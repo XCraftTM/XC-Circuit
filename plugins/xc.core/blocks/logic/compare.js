@@ -19,7 +19,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "logic",
+    category: "numbers",
+    aliases: ["Equals", "Greater than", "Vergleichen"],
   },
   look: {
     icon: "scale",

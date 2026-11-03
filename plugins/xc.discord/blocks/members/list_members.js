@@ -9,6 +9,7 @@ module.exports = {
   },
   search: {
     category: "members",
+    aliases: ["All members", "Member list", "Mitglieder auflisten"],
     tags: ["everyone", "all members", "role members", "count"],
   },
   look: {

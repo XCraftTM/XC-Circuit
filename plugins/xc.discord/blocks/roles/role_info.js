@@ -25,6 +25,7 @@ module.exports = {
   },
   search: {
     category: "roles",
+    aliases: ["Role details", "Rolleninfo"],
   },
   look: {
     icon: "tag",

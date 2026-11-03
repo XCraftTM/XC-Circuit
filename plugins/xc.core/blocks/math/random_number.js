@@ -8,7 +8,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "math",
+    category: "numbers",
+    aliases: ["Dice", "Random", "Zufallszahl", "Würfeln"],
     tags: ["dice", "roll", "chance"],
   },
   look: {

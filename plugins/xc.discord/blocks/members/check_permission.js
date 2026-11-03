@@ -60,7 +60,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "members",
+    category: "roles",
+    aliases: ["Is admin", "Has permission", "Berechtigung prüfen"],
     tags: ["can", "allowed", "admin", "mod only"],
   },
   look: {

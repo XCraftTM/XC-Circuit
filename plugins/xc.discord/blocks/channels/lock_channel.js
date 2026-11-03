@@ -10,7 +10,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "channels",
+    category: "moderation",
+    aliases: ["Lockdown", "Unlock", "Kanal sperren"],
     tags: ["lockdown", "unlock", "mute channel"],
   },
   look: {

@@ -61,7 +61,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "channels",
+    category: "roles",
+    aliases: ["Permission overwrite", "Channel access", "Kanalrechte setzen"],
     tags: ["overwrite", "access", "private", "ticket"],
   },
   look: {

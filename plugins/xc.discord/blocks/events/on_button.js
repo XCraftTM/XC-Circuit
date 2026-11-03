@@ -24,7 +24,8 @@ module.exports = {
     version: "1.1.0",
   },
   search: {
-    category: "events",
+    category: "events_commands",
+    aliases: ["Button clicked", "Click", "Button geklickt", "Knopf gedrückt"],
   },
   look: {
     icon: "pointer",

@@ -8,7 +8,8 @@ module.exports = {
     version: "2.0.0",
   },
   search: {
-    category: "members",
+    category: "roles",
+    aliases: ["Give role", "Assign role", "Rolle vergeben", "Rolle hinzufügen"],
     tags: ["rank", "permissions"],
   },
   look: {

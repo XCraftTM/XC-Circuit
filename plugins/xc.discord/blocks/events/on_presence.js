@@ -8,7 +8,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events",
+    category: "events_members",
+    aliases: ["Status changed", "Online", "Status geändert"],
     tags: ["status", "online", "playing", "streaming"],
   },
   look: {

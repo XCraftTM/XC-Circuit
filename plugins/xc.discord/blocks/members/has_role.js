@@ -8,7 +8,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "members",
+    category: "roles",
+    aliases: ["Check role", "Hat Rolle"],
     tags: ["role", "check", "permission"],
   },
   look: {

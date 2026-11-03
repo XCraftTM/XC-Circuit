@@ -10,7 +10,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "server",
+    category: "moderation",
+    aliases: ["Word filter", "Spam filter", "AutoMod-Regel"],
     tags: ["filter", "bad words", "blocklist", "moderation"],
   },
   look: {

@@ -10,7 +10,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "server",
+    category: "moderation",
+    aliases: ["Mod log", "Who did it", "Audit-Log"],
     tags: ["who did it", "moderation log", "history"],
   },
   look: {

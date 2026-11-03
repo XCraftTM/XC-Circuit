@@ -9,6 +9,7 @@ module.exports = {
   },
   search: {
     category: "text",
+    aliases: ["String", "Zeichenkette"],
   },
   look: {
     icon: "text",

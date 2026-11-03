@@ -11,6 +11,7 @@ module.exports = {
   },
   search: {
     category: "channels",
+    aliases: ["New channel", "Ticket channel", "Kanal erstellen"],
     tags: ["new channel", "ticket", "category", "voice"],
   },
   look: {

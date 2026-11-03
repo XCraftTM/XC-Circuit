@@ -8,15 +8,56 @@ runtime     = "node"
 runtimeLibs = ["xc.discord/runtime/discord.js"]
 exporter    = "xc.discord/node-bundle"
 
+# Block picker categories, in this order. A block names one with `search.category`.
 [[categories]]
-id = "events"
-name = "Events"
+id = "events_bot"
+name = "Events: Bot & Timing"
 icon = "bolt"
 
 [[categories]]
-id = "messages"
-name = "Messages"
+id = "events_commands"
+name = "Events: Commands & Menus"
+icon = "slash"
+
+[[categories]]
+id = "events_messages"
+name = "Events: Messages"
 icon = "message"
+
+[[categories]]
+id = "events_members"
+name = "Events: Members"
+icon = "user"
+
+[[categories]]
+id = "events_server"
+name = "Events: Server"
+icon = "layers"
+
+[[categories]]
+id = "send"
+name = "Send Messages"
+icon = "send"
+
+[[categories]]
+id = "design"
+name = "Embeds & Layouts"
+icon = "embed"
+
+[[categories]]
+id = "components"
+name = "Buttons, Menus & Forms"
+icon = "pointer"
+
+[[categories]]
+id = "reactions"
+name = "Reactions & Polls"
+icon = "check"
+
+[[categories]]
+id = "manage_messages"
+name = "Manage Messages"
+icon = "copy"
 
 [[categories]]
 id = "members"
@@ -24,24 +65,29 @@ name = "Members"
 icon = "user"
 
 [[categories]]
-id = "interactions"
-name = "Menus & Forms"
-icon = "pointer"
+id = "moderation"
+name = "Moderation"
+icon = "shield"
 
 [[categories]]
 id = "roles"
-name = "Roles"
-icon = "tag"
+name = "Roles & Permissions"
+icon = "key"
 
 [[categories]]
 id = "channels"
-name = "Channels & Bot"
+name = "Channels & Threads"
 icon = "hash"
 
 [[categories]]
 id = "server"
 name = "Server"
 icon = "layers"
+
+[[categories]]
+id = "bot"
+name = "Bot"
+icon = "settings"
 
 [[categories]]
 id = "voice"
@@ -59,34 +105,19 @@ name = "Flow"
 icon = "branch"
 
 [[categories]]
+id = "calls"
+name = "Calls & Signals"
+icon = "workspace"
+
+[[categories]]
+id = "time"
+name = "Time & Cooldowns"
+icon = "clock"
+
+[[categories]]
 id = "variables"
 name = "Variables"
 icon = "function"
-
-[[categories]]
-id = "lists"
-name = "Lists & Objects"
-icon = "repeat"
-
-[[categories]]
-id = "logic"
-name = "Logic"
-icon = "scale"
-
-[[categories]]
-id = "text"
-name = "Text"
-icon = "text"
-
-[[categories]]
-id = "math"
-name = "Math"
-icon = "hash"
-
-[[categories]]
-id = "dates"
-name = "Dates"
-icon = "clock"
 
 [[categories]]
 id = "data"
@@ -94,18 +125,28 @@ name = "Stored Data"
 icon = "database"
 
 [[categories]]
+id = "text"
+name = "Text"
+icon = "text"
+
+[[categories]]
+id = "numbers"
+name = "Numbers & Logic"
+icon = "scale"
+
+[[categories]]
+id = "lists"
+name = "Lists & Objects"
+icon = "repeat"
+
+[[categories]]
 id = "web"
 name = "Web"
-icon = "send"
+icon = "plug"
 
 [[categories]]
 id = "code"
-name = "Code"
-icon = "terminal"
-
-[[categories]]
-id = "debug"
-name = "Debug"
+name = "Code & Debug"
 icon = "terminal"
 
 # Shown in Bot › Settings, grouped by `group`, in this order. `pattern` is a regular

@@ -12,6 +12,7 @@ module.exports = {
   },
   search: {
     category: "channels",
+    aliases: ["New thread", "Thread erstellen"],
     tags: ["ticket", "discussion", "reply chain"],
   },
   look: {

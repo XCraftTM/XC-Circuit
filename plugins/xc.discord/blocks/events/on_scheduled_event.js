@@ -10,7 +10,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events",
+    category: "events_server",
+    aliases: ["Event started", "Geplantes Event"],
     tags: ["scheduled event", "calendar", "stage", "meetup"],
   },
   look: {

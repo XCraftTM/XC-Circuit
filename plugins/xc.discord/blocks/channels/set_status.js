@@ -11,7 +11,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "channels",
+    category: "bot",
+    aliases: ["Activity", "Presence", "Playing", "Bot-Status setzen"],
     tags: ["presence", "activity", "playing"],
   },
   look: {

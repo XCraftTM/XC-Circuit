@@ -11,7 +11,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "data",
+    category: "time",
+    aliases: ["Rate limit", "Abklingzeit", "Spam-Schutz"],
     tags: ["rate limit", "spam", "daily", "timeout", "throttle"],
   },
   look: {

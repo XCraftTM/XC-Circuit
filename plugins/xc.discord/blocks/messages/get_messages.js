@@ -8,7 +8,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "messages",
+    category: "manage_messages",
+    aliases: ["Message history", "Fetch messages", "Nachrichten abrufen"],
     tags: ["history", "fetch", "transcript", "read"],
   },
   look: {

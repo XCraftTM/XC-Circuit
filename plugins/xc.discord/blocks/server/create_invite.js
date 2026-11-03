@@ -9,6 +9,7 @@ module.exports = {
   },
   search: {
     category: "server",
+    aliases: ["Invite link", "Einladung erstellen"],
     tags: ["invite link", "join link"],
   },
   look: {

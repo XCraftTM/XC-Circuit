@@ -8,7 +8,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "flow",
+    category: "calls",
+    aliases: ["Return value", "Zurückgeben"],
     tags: ["function", "result", "give back"],
   },
   look: {

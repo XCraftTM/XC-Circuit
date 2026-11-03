@@ -10,7 +10,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events",
+    category: "events_members",
+    aliases: ["Banned", "Mitglied gebannt"],
     tags: ["log", "unban", "moderation"],
   },
   look: {

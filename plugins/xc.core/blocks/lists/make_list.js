@@ -9,6 +9,7 @@ module.exports = {
   },
   search: {
     category: "lists",
+    aliases: ["Array", "New list", "Liste erstellen"],
     tags: ["array", "create"],
   },
   look: {

@@ -27,7 +27,8 @@ module.exports = {
     version: "2.1.0",
   },
   search: {
-    category: "events",
+    category: "events_commands",
+    aliases: ["Command", "/command", "Befehl", "Slash-Befehl"],
   },
   look: {
     icon: "slash",

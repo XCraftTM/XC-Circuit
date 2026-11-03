@@ -22,7 +22,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "interactions",
+    category: "components",
+    aliases: ["Dropdown", "Auswahlmenü"],
     tags: ["dropdown", "component", "choose", "roles menu"],
   },
   look: {

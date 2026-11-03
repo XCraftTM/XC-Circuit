@@ -10,7 +10,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events",
+    category: "events_server",
+    aliases: ["Invite tracking", "Einladung erstellt"],
     tags: ["invite tracking", "log"],
   },
   look: {

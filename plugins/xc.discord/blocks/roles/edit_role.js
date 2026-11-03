@@ -61,6 +61,7 @@ module.exports = {
   },
   search: {
     category: "roles",
+    aliases: ["Role color", "Rename role", "Rolle bearbeiten"],
     tags: ["rename", "color", "permissions"],
   },
   look: {

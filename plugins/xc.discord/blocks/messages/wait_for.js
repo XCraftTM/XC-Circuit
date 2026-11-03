@@ -10,7 +10,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "messages",
+    category: "send",
+    aliases: ["Await message", "Ask", "Collector", "Auf Antwort warten"],
     tags: ["collector", "await", "answer", "confirm", "question"],
   },
   look: {

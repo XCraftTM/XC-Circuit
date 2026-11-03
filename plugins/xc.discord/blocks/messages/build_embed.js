@@ -8,7 +8,8 @@ module.exports = {
     version: "2.0.0",
   },
   search: {
-    category: "messages",
+    category: "design",
+    aliases: ["Embed", "Rich message", "Embed erstellen"],
   },
   look: {
     icon: "embed",

@@ -9,6 +9,7 @@ module.exports = {
   },
   search: {
     category: "flow",
+    aliases: ["Loop list", "Iterate", "Für jedes", "Schleife"],
   },
   look: {
     icon: "repeat",

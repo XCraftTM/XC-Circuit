@@ -8,7 +8,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "messages",
+    category: "reactions",
+    aliases: ["Who reacted", "Reaktionen abrufen"],
     tags: ["giveaway", "starboard", "votes", "count"],
   },
   look: {

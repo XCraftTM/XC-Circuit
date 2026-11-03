@@ -30,6 +30,7 @@ module.exports = {
   },
   search: {
     category: "server",
+    aliases: ["Guild info", "Member count", "Serverinfo"],
     tags: ["guild", "serverinfo", "members count"],
   },
   look: {

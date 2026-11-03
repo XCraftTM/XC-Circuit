@@ -9,6 +9,7 @@ module.exports = {
   },
   search: {
     category: "server",
+    aliases: ["Leave guild", "Server verlassen"],
     tags: ["leave guild", "quit"],
   },
   look: {

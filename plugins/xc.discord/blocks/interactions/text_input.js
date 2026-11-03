@@ -10,7 +10,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "interactions",
+    category: "components",
+    aliases: ["Form field", "Textfeld", "Eingabefeld"],
     tags: ["form", "modal", "field", "question"],
   },
   look: {

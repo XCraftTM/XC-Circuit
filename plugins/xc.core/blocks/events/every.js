@@ -23,7 +23,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events",
+    category: "events_bot",
+    aliases: ["Timer", "Interval", "Schedule", "Zeitplan", "Wiederkehrend"],
     tags: ["timer", "schedule", "interval", "cron", "daily", "repeat"],
   },
   look: {

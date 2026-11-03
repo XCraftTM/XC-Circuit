@@ -9,6 +9,7 @@ module.exports = {
   },
   search: {
     category: "channels",
+    aliases: ["Get channel", "Kanal finden"],
     tags: ["fetch", "get", "lookup"],
   },
   look: {

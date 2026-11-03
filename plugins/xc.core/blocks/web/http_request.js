@@ -11,6 +11,7 @@ module.exports = {
   },
   search: {
     category: "web",
+    aliases: ["Fetch", "API call", "HTTP", "Webanfrage"],
     tags: ["http", "api", "fetch", "url", "json"],
   },
   look: {

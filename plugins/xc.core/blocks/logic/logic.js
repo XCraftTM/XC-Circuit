@@ -10,7 +10,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "logic",
+    category: "numbers",
+    aliases: ["And", "Or", "Not", "Und / Oder / Nicht"],
     tags: ["boolean", "and", "or", "not"],
   },
   look: {

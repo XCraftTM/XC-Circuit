@@ -9,6 +9,7 @@ module.exports = {
   },
   search: {
     category: "channels",
+    aliases: ["Remove channel", "Kanal löschen"],
     tags: ["remove channel", "close ticket"],
   },
   look: {

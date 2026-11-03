@@ -8,7 +8,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events",
+    category: "events_server",
+    aliases: ["New thread", "Thread erstellt"],
     tags: ["forum post", "thread"],
   },
   look: {

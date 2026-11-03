@@ -10,7 +10,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "messages",
+    category: "manage_messages",
+    aliases: ["Pin", "Unpin", "Anheften"],
     tags: ["unpin", "pinned"],
   },
   look: {

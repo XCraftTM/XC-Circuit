@@ -8,7 +8,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events",
+    category: "events_messages",
+    aliases: ["Message updated", "Nachricht bearbeitet"],
     tags: ["log", "changed", "update"],
   },
   look: {

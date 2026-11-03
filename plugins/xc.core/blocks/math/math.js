@@ -10,7 +10,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "math",
+    category: "numbers",
+    aliases: ["Calculate", "Add", "Multiply", "Rechnen", "Mathe"],
   },
   look: {
     icon: "hash",

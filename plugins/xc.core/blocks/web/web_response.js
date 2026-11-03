@@ -9,6 +9,7 @@ module.exports = {
   },
   search: {
     category: "web",
+    aliases: ["Reply to web request", "HTTP response", "Webantwort"],
     tags: ["http", "reply", "api", "json"],
   },
   look: {

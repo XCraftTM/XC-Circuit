@@ -10,7 +10,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events",
+    category: "events_messages",
+    aliases: ["Emoji removed", "Reaktion entfernt"],
   },
   look: {
     icon: "message",

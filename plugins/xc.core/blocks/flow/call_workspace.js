@@ -8,7 +8,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "flow",
+    category: "calls",
+    aliases: ["Call workspace", "Run function", "Aufrufen", "Funktion aufrufen"],
     tags: ["function", "subroutine", "reuse", "workspace"],
   },
   look: {

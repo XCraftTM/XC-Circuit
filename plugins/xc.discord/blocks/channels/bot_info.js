@@ -27,7 +27,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "channels",
+    category: "bot",
+    aliases: ["Ping", "Uptime", "Latency", "Bot-Info"],
     tags: ["ping", "latency", "uptime", "stats", "invite"],
   },
   look: {

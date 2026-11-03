@@ -11,6 +11,7 @@ module.exports = {
   },
   search: {
     category: "data",
+    aliases: ["Remove data", "Wert löschen"],
     tags: ["remove", "reset", "clear"],
   },
   look: {

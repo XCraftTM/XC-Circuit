@@ -9,6 +9,7 @@ module.exports = {
   },
   search: {
     category: "lists",
+    aliases: ["Change field", "Eigenschaft setzen"],
     tags: ["object", "assign", "update", "json"],
   },
   look: {

@@ -11,6 +11,7 @@ module.exports = {
   },
   search: {
     category: "format",
+    aliases: ["Relative time", "Countdown", "Zeitstempel"],
     tags: ["time", "date", "countdown", "relative"],
   },
   look: {

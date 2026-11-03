@@ -27,6 +27,7 @@ module.exports = {
   },
   search: {
     category: "format",
+    aliases: ["Markdown", "Bold", "Code block", "Discord-Text"],
     tags: ["markdown", "bold", "code", "spoiler", "format"],
   },
   look: {

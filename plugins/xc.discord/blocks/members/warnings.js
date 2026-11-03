@@ -10,7 +10,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "members",
+    category: "moderation",
+    aliases: ["Warn", "Strikes", "Verwarnen", "Verwarnungen"],
     tags: ["warn", "strike", "moderation", "infractions"],
   },
   look: {

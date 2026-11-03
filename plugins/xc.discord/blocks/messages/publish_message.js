@@ -8,7 +8,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "messages",
+    category: "send",
+    aliases: ["Crosspost", "Announcement", "Nachricht veröffentlichen"],
     tags: ["crosspost", "announcement", "follow"],
   },
   look: {

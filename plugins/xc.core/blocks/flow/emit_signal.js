@@ -8,7 +8,8 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "flow",
+    category: "calls",
+    aliases: ["Send signal", "Broadcast", "Signal senden"],
   },
   look: {
     icon: "send",

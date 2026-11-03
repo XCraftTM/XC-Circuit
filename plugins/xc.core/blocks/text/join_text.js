@@ -9,6 +9,7 @@ module.exports = {
   },
   search: {
     category: "text",
+    aliases: ["Concatenate", "Combine text", "Text verbinden"],
   },
   look: {
     icon: "text",

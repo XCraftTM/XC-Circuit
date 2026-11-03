@@ -11,6 +11,7 @@ module.exports = {
   },
   search: {
     category: "lists",
+    aliases: ["Dictionary", "Map", "Objekt erstellen"],
     tags: ["json", "dictionary", "map", "record", "body"],
   },
   look: {
