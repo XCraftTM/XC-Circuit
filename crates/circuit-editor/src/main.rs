@@ -18,6 +18,7 @@ mod history;
 mod inputs;
 mod json_view;
 mod layout;
+mod markdown;
 mod locales;
 mod native;
 mod new_project;

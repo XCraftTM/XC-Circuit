@@ -1,15 +1,15 @@
 //! The `embed` field type: a Discord-style preview (drawn inside blocks and in the
 //! builder) and the Embed Builder dialog.
 
-use std::sync::Arc;
 
-use eframe::egui::{self, Color32, FontId, Galley, Painter, Pos2, Rect, RichText, ScrollArea, Stroke, Ui, pos2, vec2};
+use eframe::egui::{self, Color32, FontId, Painter, Pos2, Rect, RichText, ScrollArea, Stroke, Ui, pos2, vec2};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 use crate::dialog::{self, Part};
 use crate::editor::Editor;
 use crate::json_view::{self, JsonText};
+use crate::markdown::{Kind, Marked};
 use crate::theme::{Theme, hex_color};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -165,7 +165,7 @@ const LINK: Color32 = Color32::from_rgb(0x00, 0xA8, 0xFC);
 pub struct EmbedLayout {
     pub height: f32,
     pub bar: Color32,
-    pieces: Vec<(Pos2, Arc<Galley>)>,
+    pieces: Vec<(Pos2, Marked)>,
     image_slot: Option<Rect>,
     thumb_slot: Option<Rect>,
 }
@@ -177,20 +177,26 @@ pub fn layout(painter: &Painter, e: &EmbedData, width: f32, max_desc_lines: Opti
     let inner = (width - pad * 2.0 - 4.0 - if thumb > 0.0 { thumb + 12.0 * scale } else { 0.0 }).max(40.0);
     let mut y = pad;
     let mut pieces = Vec::new();
-    let text = |pieces: &mut Vec<(Pos2, Arc<Galley>)>, s: &str, size: f32, color: Color32, wrap: f32, y: &mut f32, x: f32, gap: f32| {
+    // Discord's markdown where Discord reads it (None: plain, as in the author and footer).
+    let marked = |s: &str, md: Option<Kind>, size: f32, color: Color32, wrap: f32| match md {
+        Some(kind) => crate::markdown::layout(painter, s, kind, size * scale, color, wrap),
+        None => Marked::plain(painter.layout_job(crate::chips::job(s, FontId::proportional(size * scale), color, wrap))),
+    };
+    #[allow(clippy::too_many_arguments)]
+    let text = |pieces: &mut Vec<(Pos2, Marked)>, s: &str, md: Option<Kind>, size: f32, color: Color32, wrap: f32, y: &mut f32, x: f32, gap: f32| {
         if s.trim().is_empty() {
             return;
         }
-        let g = painter.layout_job(crate::chips::job(s, FontId::proportional(size * scale), color, wrap));
-        pieces.push((pos2(x, *y), g.clone()));
-        *y += g.size().y + gap * scale;
+        let m = marked(s, md, size, color, wrap);
+        *y += m.size().y + gap * scale;
+        pieces.push((pos2(x, *y - m.size().y - gap * scale), m));
     };
     let x0 = pad + 4.0;
     if let Some(a) = &e.author {
-        text(&mut pieces, &a.name, 12.0, STRONG, inner, &mut y, x0, 6.0);
+        text(&mut pieces, &a.name, None, 12.0, STRONG, inner, &mut y, x0, 6.0);
     }
     let title_color = if e.url.trim().is_empty() { STRONG } else { LINK };
-    text(&mut pieces, &e.title, 14.5, title_color, inner, &mut y, x0, 6.0);
+    text(&mut pieces, &e.title, Some(Kind::Inline), 14.5, title_color, inner, &mut y, x0, 6.0);
     let mut desc = e.description.clone();
     if let Some(max) = max_desc_lines {
         let lines: Vec<&str> = desc.lines().collect();
@@ -201,11 +207,11 @@ pub fn layout(painter: &Painter, e: &EmbedData, width: f32, max_desc_lines: Opti
             desc = desc.chars().take(max * 60).collect::<String>() + "…";
         }
     }
-    text(&mut pieces, &desc, 12.5, TEXT, inner, &mut y, x0, 8.0);
+    text(&mut pieces, &desc, Some(Kind::Full), 12.5, TEXT, inner, &mut y, x0, 8.0);
 
     // Fields: inline ones share a row, up to three.
     let mut row: Vec<&EmbedField> = Vec::new();
-    let flush = |row: &mut Vec<&EmbedField>, y: &mut f32, pieces: &mut Vec<(Pos2, Arc<Galley>)>| {
+    let flush = |row: &mut Vec<&EmbedField>, y: &mut f32, pieces: &mut Vec<(Pos2, Marked)>| {
         if row.is_empty() {
             return;
         }
@@ -213,11 +219,12 @@ pub fn layout(painter: &Painter, e: &EmbedData, width: f32, max_desc_lines: Opti
         let mut tallest: f32 = 0.0;
         for (i, f) in row.iter().enumerate() {
             let x = x0 + col_w * i as f32;
-            let n = painter.layout_job(crate::chips::job(&f.name, FontId::proportional(12.0 * scale), STRONG, col_w - 8.0));
-            let v = painter.layout_job(crate::chips::job(&f.value, FontId::proportional(12.0 * scale), TEXT, col_w - 8.0));
+            let n = marked(&f.name, Some(Kind::Inline), 12.0, STRONG, col_w - 8.0);
+            let v = marked(&f.value, Some(Kind::Full), 12.0, TEXT, col_w - 8.0);
             let h = n.size().y + 2.0 + v.size().y;
-            pieces.push((pos2(x, *y), n.clone()));
-            pieces.push((pos2(x, *y + n.size().y + 2.0), v));
+            let name_h = n.size().y;
+            pieces.push((pos2(x, *y), n));
+            pieces.push((pos2(x, *y + name_h + 2.0), v));
             tallest = tallest.max(h);
         }
         *y += tallest + 8.0 * scale;
@@ -245,7 +252,7 @@ pub fn layout(painter: &Painter, e: &EmbedData, width: f32, max_desc_lines: Opti
         (None, true) => "Today at 12:00".into(),
         (None, false) => String::new(),
     };
-    text(&mut pieces, &footer, 11.0, MUTED, inner, &mut y, x0, 0.0);
+    text(&mut pieces, &footer, None, 11.0, MUTED, inner, &mut y, x0, 0.0);
     let thumb_slot = (thumb > 0.0).then(|| Rect::from_min_size(pos2(width - pad - thumb, pad), vec2(thumb, thumb)));
     let height = (y + pad).max(pad * 2.0 + thumb).max(36.0 * scale);
     let bar = hex_color(&e.color).unwrap_or(Color32::from_rgb(0x1E, 0x1F, 0x22));
@@ -261,8 +268,8 @@ pub fn paint(painter: &Painter, at: Pos2, width: f32, l: &EmbedLayout) {
         painter.rect(r, 4.0, Color32::from_rgb(0x1E, 0x1F, 0x22), Stroke::new(1.0, Color32::from_rgb(0x3F, 0x41, 0x47)), egui::StrokeKind::Inside);
         painter.text(r.center(), egui::Align2::CENTER_CENTER, "image", FontId::proportional(11.0), MUTED);
     }
-    for (p, g) in &l.pieces {
-        painter.galley(at + p.to_vec2(), g.clone(), TEXT);
+    for (p, m) in &l.pieces {
+        m.paint(painter, at + p.to_vec2());
     }
 }
 

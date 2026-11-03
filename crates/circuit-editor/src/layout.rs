@@ -1046,33 +1046,11 @@ fn preview_one(ui: &mut Ui, c: &Value, width: f32) {
     }
 }
 
-/// Discord's markdown, roughly: headings, small text, quotes, lists and bold.
+/// A text component's markdown, as Discord shows it (see `markdown`).
 fn markdown(ui: &mut Ui, text: &str, width: f32) {
-    ui.allocate_ui_with_layout(vec2(width, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
-        ui.spacing_mut().item_spacing.y = 2.0;
-        for raw in text.lines() {
-            let (body, size, strong, color) = if let Some(t) = raw.strip_prefix("### ") {
-                (t.to_string(), 15.5, true, discord::STRONG)
-            } else if let Some(t) = raw.strip_prefix("## ") {
-                (t.to_string(), 18.0, true, discord::STRONG)
-            } else if let Some(t) = raw.strip_prefix("# ") {
-                (t.to_string(), 22.0, true, discord::STRONG)
-            } else if let Some(t) = raw.strip_prefix("-# ") {
-                (t.to_string(), 11.5, false, discord::MUTED)
-            } else if let Some(t) = raw.strip_prefix("- ").or_else(|| raw.strip_prefix("* ")) {
-                (format!("•  {t}"), 14.0, false, discord::TEXT)
-            } else if let Some(t) = raw.strip_prefix("> ") {
-                (format!("|  {t}"), 14.0, false, discord::MUTED)
-            } else {
-                (raw.to_string(), 14.0, false, discord::TEXT)
-            };
-            let plain = body.replace("**", "").replace("__", "").replace('`', "");
-            let plain = if plain.is_empty() { " ".to_string() } else { plain };
-            // Headings in the brightest text; ${…} as chips.
-            let color = if strong { discord::STRONG } else { color };
-            ui.add(egui::Label::new(crate::chips::job(&plain, egui::FontId::proportional(size), color, width)).wrap());
-        }
-    });
+    let m = crate::markdown::layout(ui.painter(), text, crate::markdown::Kind::Full, 14.0, discord::TEXT, width);
+    let (rect, _) = ui.allocate_exact_size(vec2(width, m.size().y), egui::Sense::hover());
+    m.paint(ui.painter(), rect.min);
 }
 
 fn file_name(url: &str) -> String {
