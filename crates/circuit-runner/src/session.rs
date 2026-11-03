@@ -67,7 +67,8 @@ impl Session {
                 let _ = tx.send(m);
                 wake();
             };
-            match prepare_and_spawn(&cfg, &send) {
+            let stopping = || *s.lock().unwrap_or_else(|e| e.into_inner());
+            match prepare_and_spawn(&cfg, &send, &stopping) {
                 Ok(mut proc) => {
                     if *s.lock().unwrap() {
                         let _ = proc.kill();
@@ -100,7 +101,8 @@ impl Session {
                     send(Msg::Exited(code));
                 }
                 Err(e) => {
-                    send(Msg::Error(format!("{e:#}")));
+                    // Stopped while preparing: not an error.
+                    send(if stopping() { Msg::Info(format!("{e:#}")) } else { Msg::Error(format!("{e:#}")) });
                     send(Msg::Exited(None));
                 }
             }
@@ -150,10 +152,11 @@ impl Drop for Session {
     }
 }
 
-fn prepare_and_spawn(cfg: &SessionConfig, send: &dyn Fn(Msg)) -> Result<Child> {
+fn prepare_and_spawn(cfg: &SessionConfig, send: &dyn Fn(Msg), stopping: &dyn Fn() -> bool) -> Result<Child> {
     let version = check_node()?;
     send(Msg::Info(format!("Using Node.js {version}")));
-    ensure_packages(&cfg.packages_dir, "xc-circuit-bot-packages", &cfg.dependencies, &mut |line| send(Msg::Info(line)))?;
+    // Stopping while packages install ends npm instead of waiting for it.
+    ensure_packages(&cfg.packages_dir, "xc-circuit-bot-packages", &cfg.dependencies, &mut |line| send(Msg::Info(line)), stopping)?;
 
     fs::create_dir_all(&cfg.run_dir)?;
     fs::create_dir_all(&cfg.data_dir)?;

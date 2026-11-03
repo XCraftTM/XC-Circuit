@@ -102,6 +102,20 @@ pub fn check_node() -> Result<String> {
     Ok(version)
 }
 
+/// Ends a process and the ones it started (npm runs node under a shell on Windows).
+fn end_tree(child: &mut std::process::Child) {
+    #[cfg(windows)]
+    {
+        let ended = quiet(Command::new("taskkill").args(["/T", "/F", "/PID", &child.id().to_string()])).stdout(Stdio::null()).stderr(Stdio::null()).status();
+        if ended.is_ok_and(|s| s.success()) {
+            let _ = child.wait();
+            return;
+        }
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
 fn npm() -> Command {
     // npm sits next to node. On Windows it is a .cmd script, which Command can
     // only start by its full name.
@@ -113,8 +127,9 @@ fn npm() -> Command {
 }
 
 /// Makes sure `dir/node_modules` has the packages, running `npm install` when the
-/// list changed or a package is missing. Output lines go to `log`.
-pub fn ensure_packages(dir: &Path, name: &str, deps: &IndexMap<String, String>, log: &mut dyn FnMut(String)) -> Result<()> {
+/// list changed or a package is missing. Output lines go to `log`. When
+/// `cancel` turns true, npm is ended and this returns an error.
+pub fn ensure_packages(dir: &Path, name: &str, deps: &IndexMap<String, String>, log: &mut dyn FnMut(String), cancel: &dyn Fn() -> bool) -> Result<()> {
     fs::create_dir_all(dir)?;
     let manifest = json!({ "name": name, "private": true, "dependencies": deps });
     let text = serde_json::to_string_pretty(&manifest)? + "\n";
@@ -135,20 +150,64 @@ pub fn ensure_packages(dir: &Path, name: &str, deps: &IndexMap<String, String>, 
         .stderr(Stdio::piped())
         .spawn()
         .context("npm was not found. It comes with Node.js: reinstall Node.js from https://nodejs.org.")?;
-    let stderr = child.stderr.take();
-    if let Some(out) = child.stdout.take() {
-        for line in BufReader::new(out).lines().map_while(|l| l.ok()).filter(|l| !l.trim().is_empty()) {
-            log(line);
-        }
+    // Output is read on its own threads, so npm can be ended while it runs.
+    let (tx, rx) = std::sync::mpsc::channel::<(bool, String)>();
+    let out = child.stdout.take().map(|o| Box::new(o) as Box<dyn std::io::Read + Send>);
+    let err = child.stderr.take().map(|e| Box::new(e) as Box<dyn std::io::Read + Send>);
+    for (is_err, stream) in [(false, out), (true, err)] {
+        let Some(stream) = stream else { continue };
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            for line in BufReader::new(stream).lines().map_while(|l| l.ok()).filter(|l| !l.trim().is_empty()) {
+                let _ = tx.send((is_err, line));
+            }
+        });
     }
-    let errors: Vec<String> = stderr
-        .map(|e| BufReader::new(e).lines().map_while(|l| l.ok()).filter(|l| !l.trim().is_empty()).collect())
-        .unwrap_or_default();
-    let status = child.wait()?;
+    drop(tx);
+    let mut errors = Vec::new();
+    let status = loop {
+        match rx.recv_timeout(Duration::from_millis(100)) {
+            Ok((false, line)) => log(line),
+            Ok((true, line)) => errors.push(line),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+            // Both streams closed: npm is done.
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break child.wait()?,
+        }
+        if cancel() {
+            end_tree(&mut child);
+            let _ = fs::remove_file(&manifest_path);
+            bail!("Installing packages was stopped");
+        }
+    };
     if !status.success() {
         let _ = fs::remove_file(&manifest_path);
         bail!("npm install failed:\n{}", errors.join("\n"));
     }
     log("Packages installed".into());
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Stopping while npm installs ends it right away.
+    #[test]
+    fn an_install_can_be_stopped() {
+        if check_node().is_err() {
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("xc-npm-stop-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let local = dir.join("local-package");
+        fs::create_dir_all(&local).unwrap();
+        fs::write(local.join("package.json"), r#"{ "name": "local-package", "version": "1.0.0" }"#).unwrap();
+        let deps: IndexMap<String, String> = [("local-package".to_string(), format!("file:{}", local.display()))].into();
+        let started = Instant::now();
+        let result = ensure_packages(&dir.join("install"), "stop-test", &deps, &mut |_| {}, &|| true);
+        assert!(result.unwrap_err().to_string().contains("stopped"));
+        assert!(started.elapsed() < Duration::from_secs(5), "it didn't wait for npm");
+        assert!(!dir.join("install/package.json").exists(), "the next start installs again");
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

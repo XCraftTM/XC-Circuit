@@ -97,7 +97,7 @@ pub fn export(dir: &Path, bundle: &Bundle, opts: &ExportOptions, log: &mut dyn F
 
     if opts.install {
         let name = package["name"].as_str().unwrap_or("bot");
-        ensure_packages(dir, name, &bundle.dependencies, log)?;
+        ensure_packages(dir, name, &bundle.dependencies, log, &|| false)?;
         // ensure_packages wrote a minimal package.json; put the full one back.
         fs::write(dir.join("package.json"), serde_json::to_string_pretty(&package)? + "\n")?;
     }
