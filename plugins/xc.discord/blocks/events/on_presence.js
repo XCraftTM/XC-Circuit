@@ -8,7 +8,7 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events_members",
+    category: "members",
     aliases: ["Status changed", "Online"],
     tags: ["status", "online", "playing", "streaming"],
   },

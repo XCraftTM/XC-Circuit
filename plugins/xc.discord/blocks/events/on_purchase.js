@@ -18,7 +18,7 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events_bot",
+    category: "premium",
     aliases: ["Entitlement created", "Subscription started", "Item bought", "Premium purchased"],
     tags: ["premium", "monetization", "sku", "entitlement", "subscription", "purchase", "paid"],
   },

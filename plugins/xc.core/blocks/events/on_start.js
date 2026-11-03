@@ -8,7 +8,7 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events_bot",
+    category: "bot",
     aliases: ["On Start", "Bot ready"],
   },
   look: {

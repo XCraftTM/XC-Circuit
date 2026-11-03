@@ -10,7 +10,7 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events_server",
+    category: "server",
     aliases: ["Guild join", "Bot invited"],
     tags: ["guild create", "invite", "kicked", "joined"],
   },

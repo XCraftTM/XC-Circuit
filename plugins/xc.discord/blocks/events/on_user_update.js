@@ -8,7 +8,7 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events_members",
+    category: "members",
     aliases: ["Username changed", "Avatar changed", "Profile changed"],
     tags: ["user", "username", "avatar", "rename", "log"],
   },

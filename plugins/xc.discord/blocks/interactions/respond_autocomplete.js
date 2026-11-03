@@ -8,7 +8,7 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "components",
+    category: "commands",
     aliases: ["Send suggestions"],
     tags: ["suggest", "search"],
   },

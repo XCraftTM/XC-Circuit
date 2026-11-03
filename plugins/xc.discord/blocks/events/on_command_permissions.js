@@ -8,7 +8,7 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events_commands",
+    category: "commands",
     aliases: ["Command access changed", "Integration permissions"],
     tags: ["permissions", "command", "slash", "integration"],
   },

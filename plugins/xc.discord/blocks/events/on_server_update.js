@@ -13,7 +13,7 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events_server",
+    category: "server",
     aliases: ["Server updated", "Guild update", "Webhooks changed", "Integrations changed"],
     tags: ["server", "guild", "settings", "webhook", "integration", "log"],
   },

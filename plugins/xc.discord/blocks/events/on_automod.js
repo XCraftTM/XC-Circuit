@@ -8,7 +8,7 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events_server",
+    category: "moderation",
     aliases: ["AutoMod triggered", "Filter"],
     tags: ["filter", "bad words", "spam", "moderation"],
   },

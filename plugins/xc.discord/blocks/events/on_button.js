@@ -24,7 +24,7 @@ module.exports = {
     version: "1.1.0",
   },
   search: {
-    category: "events_commands",
+    category: "components",
     aliases: ["Button clicked", "Click"],
   },
   look: {

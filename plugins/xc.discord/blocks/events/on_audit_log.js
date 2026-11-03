@@ -8,7 +8,7 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events_server",
+    category: "moderation",
     aliases: ["Mod log", "Audit log created", "Who did it"],
     tags: ["audit", "log", "moderation", "kick", "ban", "executor"],
   },

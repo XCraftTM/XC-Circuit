@@ -8,7 +8,7 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events_members",
+    category: "members",
     aliases: ["Welcome", "User joined"],
   },
   look: {

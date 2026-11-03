@@ -27,7 +27,7 @@ module.exports = {
     version: "2.1.0",
   },
   search: {
-    category: "events_commands",
+    category: "commands",
     aliases: ["Command", "/command"],
   },
   look: {

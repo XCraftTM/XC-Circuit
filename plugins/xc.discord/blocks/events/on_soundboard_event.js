@@ -15,7 +15,7 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events_members",
+    category: "voice",
     aliases: ["Sound played", "Voice effect", "Soundboard sound added"],
     tags: ["soundboard", "sound", "voice", "effect"],
   },

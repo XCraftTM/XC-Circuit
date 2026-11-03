@@ -8,41 +8,17 @@ runtime     = "node"
 runtimeLibs = ["xc.discord/runtime/discord.js"]
 exporter    = "xc.discord/node-bundle"
 
-# Block picker categories, in this order. A block names one with `search.category`.
+# Block picker categories, in this order. A block names one with `search.category`;
+# events sit with the blocks they work with (On Signal with Emit Signal).
 [[categories]]
-id = "events_bot"
-name = "Events: Bot & Timing"
-icon = "bolt"
+id = "bot"
+name = "Bot"
+icon = "settings"
 
 [[categories]]
-id = "events_commands"
-name = "Events: Commands & Menus"
+id = "commands"
+name = "Commands"
 icon = "slash"
-
-[[categories]]
-id = "events_messages"
-name = "Events: Messages"
-icon = "message"
-
-[[categories]]
-id = "events_members"
-name = "Events: Members"
-icon = "user"
-
-[[categories]]
-id = "events_server"
-name = "Events: Server"
-icon = "layers"
-
-[[categories]]
-id = "send"
-name = "Send Messages"
-icon = "send"
-
-[[categories]]
-id = "design"
-name = "Embeds & Layouts"
-icon = "embed"
 
 [[categories]]
 id = "components"
@@ -50,14 +26,24 @@ name = "Buttons, Menus & Forms"
 icon = "pointer"
 
 [[categories]]
+id = "send"
+name = "Send Messages"
+icon = "send"
+
+[[categories]]
+id = "messages"
+name = "Messages"
+icon = "message"
+
+[[categories]]
+id = "design"
+name = "Embeds & Layouts"
+icon = "embed"
+
+[[categories]]
 id = "reactions"
 name = "Reactions & Polls"
 icon = "check"
-
-[[categories]]
-id = "manage_messages"
-name = "Manage Messages"
-icon = "copy"
 
 [[categories]]
 id = "members"
@@ -85,19 +71,14 @@ name = "Server"
 icon = "layers"
 
 [[categories]]
-id = "bot"
-name = "Bot"
-icon = "settings"
+id = "voice"
+name = "Voice & Music"
+icon = "bolt"
 
 [[categories]]
 id = "premium"
 name = "Premium & Monetization"
 icon = "key"
-
-[[categories]]
-id = "voice"
-name = "Voice & Music"
-icon = "bolt"
 
 [[categories]]
 id = "format"

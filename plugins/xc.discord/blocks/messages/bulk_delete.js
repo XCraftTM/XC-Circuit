@@ -8,7 +8,7 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "manage_messages",
+    category: "messages",
     aliases: ["Purge", "Clear", "Clean"],
     tags: ["purge", "clear", "clean", "prune"],
   },

@@ -10,7 +10,7 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events_commands",
+    category: "commands",
     aliases: ["Suggestions"],
     tags: ["suggest", "search", "options"],
   },

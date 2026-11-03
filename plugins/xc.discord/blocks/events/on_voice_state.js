@@ -10,7 +10,7 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events_members",
+    category: "voice",
     aliases: ["Joined voice", "Left voice"],
     tags: ["voice", "join", "leave", "temp channel", "vc"],
   },

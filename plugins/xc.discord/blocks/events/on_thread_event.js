@@ -10,7 +10,7 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events_server",
+    category: "channels",
     aliases: ["Thread updated", "Thread deleted", "Thread archived", "Forum post changed"],
     tags: ["thread", "forum", "archive", "log"],
   },

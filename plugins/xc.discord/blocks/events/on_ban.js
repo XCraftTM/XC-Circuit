@@ -10,7 +10,7 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events_members",
+    category: "moderation",
     aliases: ["Banned"],
     tags: ["log", "unban", "moderation"],
   },

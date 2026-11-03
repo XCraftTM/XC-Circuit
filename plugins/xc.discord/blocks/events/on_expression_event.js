@@ -17,7 +17,7 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events_server",
+    category: "server",
     aliases: ["Emoji added", "Emoji deleted", "Sticker added", "Sticker deleted"],
     tags: ["emoji", "sticker", "expression", "log"],
   },

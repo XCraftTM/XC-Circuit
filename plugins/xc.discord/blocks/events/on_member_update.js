@@ -10,7 +10,7 @@ module.exports = {
     version: "1.0.0",
   },
   search: {
-    category: "events_members",
+    category: "members",
     aliases: ["Role changed", "Nickname changed"],
     tags: ["log", "role added", "nickname", "boost", "timeout"],
   },
