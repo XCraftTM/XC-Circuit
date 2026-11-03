@@ -767,6 +767,20 @@ function askUser(rt, id, question, choices) {
   return Promise.resolve(choices[0].value);
 }
 
+/**
+ * The key of a stored-data bucket: `user:123`, `member:<server>:<user>`.
+ * With two ids (members), a `:` inside one is written as %3A, so
+ * ("1:2", "3") and ("1", "2:3") don't share a bucket. A single id is kept
+ * as it is, as it always was.
+ */
+function storeKey([scope, ...ids]) {
+  return [scope, ...ids.map((id) => (ids.length > 1 ? keyPart(id) : String(id?.id ?? id)))].join(":");
+}
+
+function keyPart(id) {
+  return String(id?.id ?? id).replace(/[%:]/g, encodeURIComponent);
+}
+
 /** Saved data (ctx.store): one JSON file, written safely and in batches. */
 class Store {
   constructor(dir, rt) {
@@ -830,7 +844,7 @@ class Store {
   }
 
   scope(...parts) {
-    const key = parts.map((p) => String(p?.id ?? p)).join(":");
+    const key = storeKey(parts);
     const bucket = () => getOrObj(this.data, key);
     return {
       get: async (k, fallback) => (k in bucket() ? bucket()[k] : fallback),
@@ -861,10 +875,14 @@ class Store {
 
   /** Every saved bucket of a scope, as { id, values }: all users, or one server's members. */
   each(scope, serverId) {
-    const prefix = scope === "member" ? `member:${String(serverId?.id ?? serverId)}:` : `${scope}:`;
+    const member = scope === "member";
+    const prefix = member ? `member:${keyPart(serverId)}:` : `${scope}:`;
     return Object.entries(this.data)
       .filter(([k]) => k.startsWith(prefix))
-      .map(([k, values]) => ({ id: k.slice(prefix.length), values }));
+      .map(([k, values]) => {
+        const id = k.slice(prefix.length);
+        return { id: member ? decodeURIComponent(id) : id, values };
+      });
   }
 
   api() {

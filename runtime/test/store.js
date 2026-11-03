@@ -24,6 +24,17 @@ assert.ok(!fs.existsSync(file), "not written yet: saves are batched");
 store.flushPending();
 assert.deepStrictEqual(JSON.parse(fs.readFileSync(file, "utf8")), { global: { level: 3 } });
 
+// Member buckets with a ":" in an id don't run into each other; single ids
+// keep the keys they always had.
+(async () => {
+  await store.scope("member", "1:2", "3").set("xp", 1);
+  await store.scope("member", "1", "2:3").set("xp", 2);
+  assert.strictEqual(await store.scope("member", "1:2", "3").get("xp"), 1);
+  assert.deepStrictEqual(store.each("member", "1").map((b) => b.id), ["2:3"]);
+  await store.scope("ns", "rate:limits").set("n", 1);
+  assert.ok("ns:rate:limits" in store.data);
+})();
+
 // A file that is valid JSON but not an object is treated the same way.
 fs.writeFileSync(file, "[1, 2]");
 const again = new Store(dir, rt);
