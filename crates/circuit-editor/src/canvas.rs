@@ -37,6 +37,8 @@ const NODE_WIDTH_RANGE: (f32, f32) = (200.0, 1400.0);
 const LAYOUT_LINES: usize = 6;
 const LAYOUT_LINE_H: f32 = 17.0;
 const GRID: f32 = 22.0;
+/// How far outside the view a block still counts as in view.
+const OFF_SCREEN_MARGIN: f32 = 48.0;
 const ZOOM_RANGE: (f32, f32) = (0.25, 2.0);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -560,6 +562,13 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     let mut drag_zones: Option<Vec<(String, Rect)>> = None;
     view.text_fields.clear();
     for layout in &layouts[..node_count] {
+        // A block out of view builds none of its controls: its wires and pins
+        // were placed from its layout, and dragging one of several selected
+        // blocks moves the others from the dragged one. The margin covers its
+        // shadow, glow and error note.
+        if !layout.rect.expand(OFF_SCREEN_MARGIN).intersects(visible) {
+            continue;
+        }
         let id = &layout.id;
         let is_selected = selected.as_ref().is_some_and(|(w, n)| w == ws_key && (n == id || multi.contains(id)));
         let (block_ref, def) = {
@@ -1453,6 +1462,35 @@ mod tests {
         let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1400.0, 900.0))), events, ..Default::default() };
         let mut out = ctx.run_ui(raw, |ui| show(ui, ed, ws));
         out.textures_delta.clear();
+    }
+
+    /// How long a frame takes with many blocks, most of them out of view:
+    /// cargo test --release -p circuit-editor frame_time -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn frame_time_with_many_blocks() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&root.join("examples/DemoBot"));
+        // 400 Send Message blocks in a 20×20 grid; the view shows a corner.
+        let ws = ed.project.as_mut().unwrap().workspaces.get_mut("rank-command").unwrap();
+        for i in 0..400 {
+            let id = format!("m{i}");
+            let mut values = serde_json::Map::new();
+            values.insert("text".into(), Value::String(format!("Hello ${{user}} number {i}")));
+            ws.nodes.insert(id, circuit_core::Node { block: "discord.send_message@3".into(), at: [(i % 20) as f32 * 420.0, 800.0 + (i / 20) as f32 * 420.0], values, ..Default::default() });
+        }
+        let ctx = egui::Context::default();
+        for _ in 0..5 {
+            frame(&ctx, &mut ed, "rank-command", vec![]);
+        }
+        let start = std::time::Instant::now();
+        let n = 30;
+        for i in 0..n {
+            // The pointer moving: what a frame costs while using the canvas.
+            frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerMoved(pos2(300.0 + i as f32, 300.0))]);
+        }
+        println!("frame: {:.2} ms", start.elapsed().as_secs_f64() * 1000.0 / n as f64);
     }
 
     #[test]
