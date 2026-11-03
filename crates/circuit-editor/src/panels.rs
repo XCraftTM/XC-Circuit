@@ -238,15 +238,31 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
         });
     });
     let mut jump: Option<(String, String)> = None;
-    ScrollArea::vertical().auto_shrink([false, false]).stick_to_bottom(true).show(ui, |ui| {
-        Frame::new().inner_margin(Margin::symmetric(12, 6)).show(ui, |ui| {
-            for line in ed.log.iter().filter(|l| level.is_none_or(|want| l.level == want)) {
+    // One screen row per line of text (stack traces span several), all as tall
+    // as the Show block button, so only the rows in view are laid out.
+    let rows: Vec<(usize, usize, &str)> = ed
+        .log
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| level.is_none_or(|want| l.level == want))
+        .flat_map(|(i, l)| l.text.split('\n').enumerate().map(move |(n, part)| (i, n, part.trim_end_matches('\r'))))
+        .collect();
+    let row_h = crate::inputs::input_height(ui);
+    ui.spacing_mut().item_spacing.y = 0.0;
+    ScrollArea::vertical().auto_shrink([false, false]).stick_to_bottom(true).show_rows(ui, row_h, rows.len(), |ui, range| {
+        Frame::new().inner_margin(Margin::symmetric(12, 0)).show(ui, |ui| {
+            for &(i, n, part) in &rows[range] {
+                let line = &ed.log[i];
                 let (tag, color) = level_look(line.level, &theme);
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(&line.time).monospace().color(theme.text_muted));
+                    ui.set_height(row_h);
+                    // The time and level only on a line's first row.
+                    let (time, tag) = if n == 0 { (line.time.as_str(), tag) } else { ("        ", "     ") };
+                    ui.label(RichText::new(time).monospace().color(theme.text_muted));
                     ui.label(RichText::new(tag).monospace().color(color));
-                    ui.label(RichText::new(&line.text).monospace());
-                    if let Some(t) = &line.target
+                    ui.label(RichText::new(part).monospace());
+                    if n == 0
+                        && let Some(t) = &line.target
                         && crate::dialog::button(ui, &theme, t!("Show block")).on_hover_text(t!("Show the block that wrote this")).clicked()
                     {
                         jump = Some(t.clone());

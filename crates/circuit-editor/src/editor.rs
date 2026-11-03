@@ -143,7 +143,12 @@ impl Editor {
     }
 
     pub fn log(&mut self, level: Level, text: impl Into<String>) {
-        self.log.push(LogLine::new(level, text));
+        self.push_log(LogLine::new(level, text));
+    }
+
+    /// Adds a console line, keeping the newest 2000 (the oldest 500 go at once).
+    pub fn push_log(&mut self, line: LogLine) {
+        self.log.push(line);
         if self.log.len() > 2000 {
             self.log.drain(..500);
         }

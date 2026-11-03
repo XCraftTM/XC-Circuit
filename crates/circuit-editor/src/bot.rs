@@ -463,7 +463,7 @@ impl BotUi {
                     }
                 }
                 for e in errors {
-                    ed.log.push(crate::editor::LogLine::new(Level::Error, e));
+                    ed.log(Level::Error, e);
                 }
             }
             ed.log(Level::Success, t!("Settings saved"));
@@ -625,7 +625,7 @@ fn handle_event(ed: &mut Editor, ev: BotEvent) {
             };
             let mut line = crate::editor::LogLine::new(level, text);
             line.target = ws.zip(node);
-            ed.log.push(line);
+            ed.push_log(line);
         }
         BotEvent::Node { ws, node, phase, error, .. } => {
             let key = (ws, node);
