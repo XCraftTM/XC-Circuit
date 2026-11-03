@@ -42,6 +42,9 @@ pub struct Registry {
     pub locales: Vec<crate::LocaleDef>,
     /// Named icons: file stem → file path.
     pub icons: HashMap<String, PathBuf>,
+    /// Blocks whose icon is a file next to them: block id → that file, when
+    /// it exists (checked once, when loading).
+    block_icons: HashMap<String, PathBuf>,
     pub problems: Vec<Problem>,
     /// Engine key for each block id, used for `define()` calls.
     pub engine_keys: HashMap<String, String>,
@@ -195,6 +198,13 @@ impl Registry {
             return;
         }
         self.engine_keys.insert(def.id.clone(), key);
+        self.block_icons.remove(&def.id);
+        if let Some(icon) = def.icon.as_deref().filter(|i| i.ends_with(".svg") || i.ends_with(".png")) {
+            let file = path.parent().unwrap_or(Path::new(".")).join(icon);
+            if file.is_file() {
+                self.block_icons.insert(def.id.clone(), file);
+            }
+        }
         self.blocks.insert(def.id.clone(), def);
     }
 
@@ -214,9 +224,8 @@ impl Registry {
     pub fn block_icon(&self, def: &BlockDef, mode: Option<&BuildMode>) -> Option<PathBuf> {
         if let Some(icon) = &def.icon {
             if icon.ends_with(".svg") || icon.ends_with(".png") {
-                let path = def.source.parent().unwrap_or(Path::new(".")).join(icon);
-                if path.is_file() {
-                    return Some(path);
+                if let Some(path) = self.block_icons.get(&def.id) {
+                    return Some(path.clone());
                 }
             } else if let Some(p) = self.icons.get(icon) {
                 return Some(p.clone());
