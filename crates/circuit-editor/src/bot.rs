@@ -5,7 +5,7 @@ use std::sync::mpsc::{Receiver, channel};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use circuit_runner::{BotEvent, ExportOptions, Msg, Session, SessionConfig, build_bundle, secrets};
+use circuit_runner::{BotEvent, ExportOptions, ExportSecret, Msg, Session, SessionConfig, build_bundle, secrets};
 use eframe::egui::{self, RichText};
 use serde_json::Value;
 
@@ -514,12 +514,12 @@ impl BotUi {
 
                     dialog::section(ui, &theme, t!("Options"));
                     let token_text = if draft.token_saved {
-                        t!("Writes DISCORD_TOKEN to the folder's .env file. Never share or upload that file.")
+                        t!("Writes DISCORD_TOKEN and the other saved secrets to the folder's .env file. Never share or upload that file.")
                     } else {
                         t!("No token saved yet (Bot › Settings). An empty .env is created for you to fill in.")
                     };
                     ui.add_enabled_ui(draft.token_saved, |ui| {
-                        dialog::toggle_row(ui, &theme, &mut draft.include_token, t!("Include the bot token"), token_text);
+                        dialog::toggle_row(ui, &theme, &mut draft.include_token, t!("Include the bot token and secrets"), token_text);
                     });
                     dialog::toggle_row(ui, &theme, &mut draft.install, t!("Install npm packages now"), t!("Runs npm install in the folder so it's ready to start. Needs internet."));
 
@@ -560,7 +560,22 @@ impl BotUi {
             Err(e) => return ed.log(Level::Error, format!("Export failed: {e:#}")),
         };
         let token = if draft.include_token { secrets::get(&project.root, "token") } else { None };
-        let opts = ExportOptions { name: project.meta.name.clone(), token, install: draft.install };
+        // The mode's other secrets, as lines in .env: with their values when the token goes too.
+        let secrets_out = ed
+            .mode()
+            .map(|m| {
+                m.settings
+                    .iter()
+                    .filter(|(key, spec)| *key != "token" && spec.get("type").and_then(Value::as_str) == Some("secret"))
+                    .map(|(key, spec)| ExportSecret {
+                        env: format!("XC_SECRET_{}", key.to_uppercase()),
+                        label: spec.get("label").and_then(Value::as_str).unwrap_or(key).to_string(),
+                        value: if draft.include_token { secrets::get(&project.root, key) } else { None },
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let opts = ExportOptions { name: project.meta.name.clone(), token, secrets: secrets_out, install: draft.install };
         let dir = draft.dir.clone();
         let (tx, rx) = channel();
         self.jobs.push(rx);

@@ -11,7 +11,7 @@ pub mod secrets;
 pub mod session;
 
 pub use bundle::{Bundle, build_bundle};
-pub use export::{ExportOptions, export};
+pub use export::{ExportOptions, ExportSecret, export};
 pub use protocol::{BotEvent, parse_line};
 pub use session::{Msg, Session, SessionConfig};
 

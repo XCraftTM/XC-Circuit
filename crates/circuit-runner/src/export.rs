@@ -14,8 +14,20 @@ pub struct ExportOptions {
     pub name: String,
     /// Written to `.env` as `DISCORD_TOKEN` when given.
     pub token: Option<String>,
+    /// The build mode's other secrets (music logins …), each a line in `.env`.
+    pub secrets: Vec<ExportSecret>,
     /// Run `npm install` in the export folder.
     pub install: bool,
+}
+
+/// A secret setting in the exported `.env`.
+pub struct ExportSecret {
+    /// The variable the bot reads it from, such as `XC_SECRET_YOUTUBECOOKIE`.
+    pub env: String,
+    /// What it is, as a comment above it.
+    pub label: String,
+    /// Its value, when it is exported.
+    pub value: Option<String>,
 }
 
 /// In the first lines of an exported `index.js`, so an earlier export is
@@ -79,12 +91,8 @@ pub fn export(dir: &Path, bundle: &Bundle, opts: &ExportOptions, log: &mut dyn F
     fs::write(dir.join("package.json"), serde_json::to_string_pretty(&package)? + "\n")?;
 
     let env = dir.join(".env");
-    if let Some(token) = &opts.token {
-        let token = token.trim().replace(['\r', '\n'], "");
-        fs::write(&env, format!("# Keep this file private: it holds your bot token.\nDISCORD_TOKEN={token}\n"))?;
-    } else if !env.exists() {
-        fs::write(&env, "# Put your bot token here.\nDISCORD_TOKEN=\n")?;
-    }
+    let existing = fs::read_to_string(&env).ok();
+    fs::write(&env, env_file(existing.as_deref(), opts.token.as_deref(), &opts.secrets))?;
     private_file(&env)?;
     keep_ignored(&dir.join(".gitignore"), &[".env", "node_modules/", "data/"])?;
     fs::write(
@@ -102,6 +110,30 @@ pub fn export(dir: &Path, bundle: &Bundle, opts: &ExportOptions, log: &mut dyn F
         fs::write(dir.join("package.json"), serde_json::to_string_pretty(&package)? + "\n")?;
     }
     Ok(())
+}
+
+/// The `.env` file: the token and every secret. A file from an earlier export
+/// is kept as it is (with what the user filled in) when no token is written,
+/// and only gets the secrets it doesn't list yet.
+fn env_file(existing: Option<&str>, token: Option<&str>, secrets: &[ExportSecret]) -> String {
+    let clean = |v: &str| v.trim().replace(['\r', '\n'], "");
+    let mut text = match (token, existing) {
+        (Some(token), _) => format!("# Keep this file private: it holds your bot token.\nDISCORD_TOKEN={}\n", clean(token)),
+        (None, Some(old)) => old.to_string(),
+        (None, None) => "# Put your bot token here.\nDISCORD_TOKEN=\n".to_string(),
+    };
+    let keep_values = token.is_none() && existing.is_some();
+    for s in secrets {
+        let listed = text.lines().any(|l| l.trim_start().strip_prefix(&s.env).is_some_and(|rest| rest.trim_start().starts_with('=')));
+        if keep_values && listed {
+            continue;
+        }
+        if !text.ends_with('\n') {
+            text.push('\n');
+        }
+        text.push_str(&format!("# {}\n{}={}\n", s.label, s.env, s.value.as_deref().map(clean).unwrap_or_default()));
+    }
+    text
 }
 
 /// Makes sure `.gitignore` lists `lines`, keeping what the user added to it.
@@ -143,6 +175,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn env_lists_every_secret() {
+        let secrets = |v: Option<&str>| vec![ExportSecret { env: "XC_SECRET_YOUTUBECOOKIE".into(), label: "YouTube cookie".into(), value: v.map(String::from) }];
+        assert_eq!(env_file(None, None, &secrets(None)), "# Put your bot token here.\nDISCORD_TOKEN=\n# YouTube cookie\nXC_SECRET_YOUTUBECOOKIE=\n");
+        assert_eq!(
+            env_file(None, Some("t"), &secrets(Some("c\n"))),
+            "# Keep this file private: it holds your bot token.\nDISCORD_TOKEN=t\n# YouTube cookie\nXC_SECRET_YOUTUBECOOKIE=c\n"
+        );
+        // An earlier .env keeps what was filled in, and gets the missing lines.
+        assert_eq!(env_file(Some("DISCORD_TOKEN=x\nXC_SECRET_YOUTUBECOOKIE = mine\n"), None, &secrets(None)), "DISCORD_TOKEN=x\nXC_SECRET_YOUTUBECOOKIE = mine\n");
+        assert_eq!(env_file(Some("DISCORD_TOKEN=x"), None, &secrets(None)), "DISCORD_TOKEN=x\n# YouTube cookie\nXC_SECRET_YOUTUBECOOKIE=\n");
+    }
+
+    #[test]
     fn gitignore_keeps_added_lines() {
         let dir = std::env::temp_dir().join(format!("xc-ignore-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
@@ -168,7 +213,7 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("package.json"), "{\"name\": \"something-else\"}").unwrap();
         let bundle = Bundle { value: serde_json::json!({}), dependencies: IndexMap::new() };
-        let opts = ExportOptions { name: "Name\nrequire('x')".into(), token: None, install: false };
+        let opts = ExportOptions { name: "Name\nrequire('x')".into(), token: None, secrets: Vec::new(), install: false };
         assert!(export(&dir, &bundle, &opts, &mut |_| {}).is_err(), "a folder with other files is refused");
         assert_eq!(fs::read_to_string(dir.join("package.json")).unwrap(), "{\"name\": \"something-else\"}");
 
@@ -201,7 +246,7 @@ mod tests {
         let bundle = Bundle { value, dependencies: IndexMap::new() };
         let dir = std::env::temp_dir().join(format!("xc-export-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
-        let opts = ExportOptions { name: "Export Test".into(), token: Some("abc".into()), install: false };
+        let opts = ExportOptions { name: "Export Test".into(), token: Some("abc".into()), secrets: Vec::new(), install: false };
         export(&dir, &bundle, &opts, &mut |_| {}).unwrap();
 
         assert!(fs::read_to_string(dir.join(".env")).unwrap().contains("DISCORD_TOKEN=abc"));
