@@ -112,11 +112,17 @@ impl Backups {
     /// newest snapshot already has exactly this content.
     pub fn snapshot(&self, project: &Project, reason: &str) -> Result<Option<Snapshot>> {
         let hash = content_hash(&project.meta, &project.workspaces);
-        if self.list(&project.root).first().is_some_and(|s| s.info.hash == hash) {
+        if self.entries(&project.root).first().is_some_and(|(_, info)| info.hash == hash) {
             return Ok(None);
         }
         let mut at = now_ms();
         let folder = self.folder(&project.root);
+        // Left over when a snapshot was cut short (a crash while saving).
+        for e in fs::read_dir(&folder).into_iter().flatten().flatten() {
+            if e.file_name().to_string_lossy().ends_with(".partial") {
+                let _ = fs::remove_dir_all(e.path());
+            }
+        }
         while folder.join(format!("{at:013}")).exists() {
             at += 1;
         }
@@ -142,9 +148,16 @@ impl Backups {
         Ok(Some(Snapshot { dir, info, size }))
     }
 
-    /// Snapshots of a project, newest first. Unfinished or unreadable ones are left out.
+    /// Snapshots of a project, newest first, with their size on disk.
+    /// Unfinished or unreadable ones are left out.
     pub fn list(&self, root: &Path) -> Vec<Snapshot> {
-        let mut out: Vec<Snapshot> = fs::read_dir(self.folder(root))
+        self.entries(root).into_iter().map(|(dir, info)| Snapshot { size: dir_size(&dir), dir, info }).collect()
+    }
+
+    /// Snapshot folders and what they hold, newest first, without adding up
+    /// their sizes.
+    fn entries(&self, root: &Path) -> Vec<(PathBuf, SnapshotInfo)> {
+        let mut out: Vec<(PathBuf, SnapshotInfo)> = fs::read_dir(self.folder(root))
             .into_iter()
             .flatten()
             .flatten()
@@ -152,25 +165,23 @@ impl Backups {
             .filter_map(|e| {
                 let dir = e.path();
                 let info: SnapshotInfo = serde_json::from_str(&fs::read_to_string(dir.join(INFO)).ok()?).ok()?;
-                let size = dir_size(&dir);
-                Some(Snapshot { dir, info, size })
+                Some((dir, info))
             })
             .collect();
-        out.sort_by_key(|s| std::cmp::Reverse(s.info.saved_at));
+        out.sort_by_key(|(_, info)| std::cmp::Reverse(info.saved_at));
         out
     }
 
     /// Keeps the newest `keep_last`, plus the newest of each of the last
     /// `keep_days` days; deletes the rest. Returns how many were deleted.
     pub fn prune(&self, root: &Path, keep_last: usize, keep_days: u32, now: u64) -> usize {
-        let list = self.list(root);
         let mut days_kept = std::collections::HashSet::new();
         let mut deleted = 0;
-        for (i, snap) in list.iter().enumerate() {
-            let day = snap.info.saved_at / DAY_MS;
-            let recent_day = now.saturating_sub(snap.info.saved_at) < keep_days as u64 * DAY_MS;
+        for (i, (dir, info)) in self.entries(root).iter().enumerate() {
+            let day = info.saved_at / DAY_MS;
+            let recent_day = now.saturating_sub(info.saved_at) < keep_days as u64 * DAY_MS;
             let keep = i < keep_last || (recent_day && days_kept.insert(day));
-            if !keep && fs::remove_dir_all(&snap.dir).is_ok() {
+            if !keep && fs::remove_dir_all(dir).is_ok() {
                 deleted += 1;
             }
         }
@@ -259,8 +270,12 @@ mod tests {
         let mut p = Project::create(&root, "Bot", "none").unwrap();
         let first = backups.snapshot(&p, "Saved").unwrap().expect("first snapshot");
         assert!(backups.snapshot(&p, "Saved").unwrap().is_none(), "nothing changed, no new snapshot");
+        // A snapshot cut short earlier is cleared away by the next one.
+        let partial = backups.folder(&root).join("0000000000001.partial");
+        fs::create_dir_all(&partial).unwrap();
         p.workspaces.get_mut("main").unwrap().name = "Renamed".into();
         backups.snapshot(&p, "Saved").unwrap().expect("a change makes a new one");
+        assert!(!partial.exists());
         let list = backups.list(&root);
         assert_eq!(list.len(), 2);
         assert_eq!(list[0].info.workspaces[0].1, "Renamed", "newest first");

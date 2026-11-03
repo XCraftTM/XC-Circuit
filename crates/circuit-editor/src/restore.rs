@@ -18,6 +18,36 @@ pub struct RestoreView {
     open: Option<(PathBuf, Result<Comparison, String>)>,
     /// A restore waiting for "Yes".
     confirm: Option<Confirm>,
+    /// The backups shown, read from disk again after a save or restore, and
+    /// every few seconds (the bot makes its own when it starts).
+    lists: Option<Lists>,
+}
+
+struct Lists {
+    root: PathBuf,
+    saves: u64,
+    at: std::time::Instant,
+    project: Vec<Snapshot>,
+    bot: Vec<BotBackup>,
+}
+
+/// How long the lists are shown before they are read again.
+const LISTS_FOR: std::time::Duration = std::time::Duration::from_secs(3);
+
+impl RestoreView {
+    fn lists(&mut self, ed: &Editor, root: &Path) -> &Lists {
+        let fresh = self.lists.as_ref().is_some_and(|l| l.root == root && l.saves == ed.saves && l.at.elapsed() < LISTS_FOR);
+        if !fresh {
+            self.lists = Some(Lists {
+                root: root.to_path_buf(),
+                saves: ed.saves,
+                at: std::time::Instant::now(),
+                project: ed.backups.list(root),
+                bot: bot_backups(&bot_data(root).1),
+            });
+        }
+        self.lists.as_ref().expect("just read")
+    }
 }
 
 #[derive(Clone, PartialEq)]
@@ -32,6 +62,7 @@ fn bot_data(root: &Path) -> (PathBuf, PathBuf) {
     (data.join("store.json"), data.join("backups"))
 }
 
+#[derive(Clone)]
 struct BotBackup {
     path: PathBuf,
     name: String,
@@ -117,7 +148,7 @@ fn heading(ui: &mut Ui, theme: &Theme, text: &str) {
 
 fn project_backups(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, theme: &Theme, root: &Path) {
     heading(ui, theme, "Project");
-    let list = ed.backups.list(root);
+    let list = view.lists(ed, root).project.clone();
     if list.is_empty() {
         ui.label(RichText::new(t!("No backups yet. One is made the next time you save.")).color(theme.text_muted));
         return;
@@ -209,6 +240,9 @@ fn project_backups(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, theme: 
         }
         ui.add_space(6.0);
     }
+    if restore_project.is_some() || restore_ws.is_some() {
+        view.lists = None;
+    }
     if let Some(snap) = restore_project {
         view.confirm = None;
         view.open = None;
@@ -233,7 +267,7 @@ fn bot_data_backups(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, theme:
     );
     ui.add_space(8.0);
     let (store, dir) = bot_data(root);
-    let list = bot_backups(&dir);
+    let list = view.lists(ed, root).bot.clone();
     if list.is_empty() {
         ui.label(RichText::new(t!("No backups yet. One is made the next time the bot starts with saved data.")).color(theme.text_muted));
         return;
@@ -270,6 +304,7 @@ fn bot_data_backups(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, theme:
     }
     if let Some(from) = restore {
         view.confirm = None;
+        view.lists = None;
         match restore_bot_data(&store, &dir, &from) {
             Ok(()) => ed.log(Level::Success, t!("The bot's saved data was restored. It's used the next time the bot starts.")),
             Err(e) => ed.log(Level::Error, format!("Couldn't restore the bot's saved data: {e:#}")),
