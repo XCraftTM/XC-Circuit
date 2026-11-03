@@ -1176,7 +1176,7 @@ impl eframe::App for CircuitApp {
             self.palette = if self.palette.is_some() { None } else { Some(Default::default()) };
             self.ed.picker = None;
         }
-        self.bot.poll(&mut self.ed);
+        self.bot.poll(&mut self.ed, &ctx);
         if let Some(Err(e)) = self.ed.bot_profile.poll() {
             self.ed.log(crate::editor::Level::Warn, tf!("Couldn't load the bot's name and picture: {error}", error = e));
         }

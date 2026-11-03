@@ -90,6 +90,12 @@ pub struct ExportDraft {
 pub struct BotUi {
     pub state: BotState,
     session: Option<Session>,
+    /// The bot before a restart, still stopping. The new one starts once it
+    /// has exited, so two never run at once (both answering commands, both
+    /// writing the saved data).
+    old: Option<Session>,
+    /// Starts the bot when `old` has exited.
+    restart: Option<SessionConfig>,
     pub settings: Option<SettingsDraft>,
     pub export: Option<ExportDraft>,
     jobs: Vec<Receiver<(Level, String)>>,
@@ -101,11 +107,12 @@ pub struct BotUi {
 
 impl BotUi {
     pub fn new() -> Self {
-        BotUi { state: BotState::Stopped, session: None, settings: None, export: None, jobs: Vec::new(), events: Vec::new(), question: None }
+        BotUi { state: BotState::Stopped, session: None, old: None, restart: None, settings: None, export: None, jobs: Vec::new(), events: Vec::new(), question: None }
     }
 
+    /// Starts the bot, or restarts it: a running bot is stopped first, and the
+    /// new one starts once it has exited.
     pub fn start(&mut self, ed: &mut Editor, ctx: &egui::Context) {
-        self.stop(ed);
         let Some(project) = &ed.project else { return };
         let mode = ed.mode();
         let bundle = match build_bundle(project, &ed.reg, mode) {
@@ -128,18 +135,41 @@ impl BotUi {
             data_dir: project.root.join(".circuit").join("data"),
             env,
         };
+        let name = project.meta.name.clone();
+        self.state = BotState::Starting;
+        self.question = None;
+        ed.activity.clear();
+        if let Some(s) = self.session.take() {
+            s.stop();
+            // A bot still stopping from an earlier restart is waited for instead.
+            if self.old.is_none() {
+                self.old = Some(s);
+            }
+        }
+        if self.old.is_some() {
+            ed.log(Level::Info, format!("Restarting {name} …"));
+            self.restart = Some(cfg);
+        } else {
+            ed.log(Level::Info, format!("Starting {name} …"));
+            self.launch(cfg, ctx);
+        }
+    }
+
+    fn launch(&mut self, cfg: SessionConfig, ctx: &egui::Context) {
         let repaint = ctx.clone();
         self.session = Some(Session::start(cfg, move || repaint.request_repaint()));
-        self.state = BotState::Starting;
-        ed.activity.clear();
-        ed.log(Level::Info, format!("Starting {} …", project.meta.name));
     }
 
     pub fn stop(&mut self, ed: &mut Editor) {
-        if let Some(s) = self.session.take() {
+        self.restart = None;
+        let stopped = self.session.take().or_else(|| self.old.take());
+        if let Some(s) = stopped {
             s.stop();
             ed.log(Level::Info, t!("Bot stopped"));
         }
+        // Dropping a stopping bot doesn't wait for it; it still ends.
+        self.old = None;
+        self.question = None;
         self.state = BotState::Stopped;
     }
 
@@ -152,7 +182,22 @@ impl BotUi {
     }
 
     /// Moves bot output into the console and the canvas highlights.
-    pub fn poll(&mut self, ed: &mut Editor) {
+    pub fn poll(&mut self, ed: &mut Editor, ctx: &egui::Context) {
+        // The bot before a restart: its last lines, then the new one starts.
+        let old = self.old.as_ref().map(|s| s.poll()).unwrap_or_default();
+        for m in old {
+            match m {
+                Msg::Exited(_) => {
+                    self.old = None;
+                    if let Some(cfg) = self.restart.take() {
+                        self.launch(cfg, ctx);
+                    }
+                }
+                Msg::Error(t) => ed.log(Level::Error, t),
+                Msg::Bot(ev) => handle_event(ed, ev),
+                _ => {}
+            }
+        }
         let msgs = self.session.as_ref().map(|s| s.poll()).unwrap_or_default();
         for m in msgs {
             match m {
