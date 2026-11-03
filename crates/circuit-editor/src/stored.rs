@@ -57,16 +57,14 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, view: &mut StoredView, bot_running: b
     let mut changed = false;
     Frame::new().inner_margin(Margin::symmetric(12, 8)).show(ui, |ui| {
         ui.horizontal(|ui| {
-            ui.add(crate::inputs::TextLine::new(&mut view.filter).hint(t!("Filter keys")).width(200.0).compact());
+            let w = (ui.available_width() - 90.0).max(80.0);
+            ui.add(crate::inputs::TextLine::new(&mut view.filter).hint(t!("Filter keys")).width(w).compact());
             if crate::dialog::button(ui, &theme, t!("Refresh")).clicked() {
                 view.reload(ed);
             }
-            if bot_running {
-                ui.label(RichText::new(t!("Bot running: read-only, refreshes every 2 s")).size(11.5).color(theme.text_muted));
-            } else {
-                ui.label(RichText::new(t!("Double-click a value to edit it. Changes apply on the next run.")).size(11.5).color(theme.text_muted));
-            }
         });
+        let hint = if bot_running { t!("Bot running: read-only, refreshes every 2 s") } else { t!("Double-click a value to edit it. Changes apply on the next run.") };
+        ui.add(egui::Label::new(RichText::new(hint).size(11.5).color(theme.text_muted)).wrap());
     });
     ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         Frame::new().inner_margin(Margin::symmetric(12, 4)).show(ui, |ui| {

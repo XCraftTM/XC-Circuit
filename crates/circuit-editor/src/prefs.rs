@@ -33,11 +33,42 @@ pub struct Prefs {
     pub touch: bool,
     /// The interface language's code (`en`, `de`).
     pub language: String,
+    /// The view the side bar shows; `None` folds the side bar away.
+    pub side_view: Option<SideView>,
+}
+
+/// The views of the side bar, one shown at a time (picked in the activity bar).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SideView {
+    Workspaces,
+    StoredData,
+    Plugins,
+}
+
+impl SideView {
+    pub const ALL: [SideView; 3] = [SideView::Workspaces, SideView::StoredData, SideView::Plugins];
+
+    /// The name, in the activity bar's tooltips and the side bar's heading.
+    pub fn name(self) -> &'static str {
+        match self {
+            SideView::Workspaces => t!("Workspaces"),
+            SideView::StoredData => t!("Stored Data"),
+            SideView::Plugins => t!("Plugins"),
+        }
+    }
+
+    pub fn icon(self) -> &'static str {
+        match self {
+            SideView::Workspaces => "layers",
+            SideView::StoredData => "database",
+            SideView::Plugins => "plug",
+        }
+    }
 }
 
 impl Default for Prefs {
     fn default() -> Self {
-        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into() }
+        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), side_view: Some(SideView::Workspaces) }
     }
 }
 

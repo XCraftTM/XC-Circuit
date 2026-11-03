@@ -102,3 +102,52 @@ pub fn tab(ui: &mut egui::Ui, theme: &Theme, ed: &Editor, native: &NativeHost, d
     );
     ask
 }
+
+/// What the Plugins view of the side bar asks the app for.
+pub enum SideAsk {
+    /// Open the Plugins tab, to allow native plugins.
+    Manage,
+    Reload,
+    OpenFolder,
+}
+
+/// The Plugins view of the side bar: every loaded plugin, with how it runs.
+pub fn side(ui: &mut egui::Ui, theme: &Theme, ed: &Editor, native: &NativeHost) -> Option<SideAsk> {
+    let mut ask = None;
+    egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+        Frame::new().inner_margin(Margin::symmetric(12, 4)).show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                if dialog::button(ui, theme, t!("Manage…")).on_hover_text(t!("Allow native plugins")).clicked() {
+                    ask = Some(SideAsk::Manage);
+                }
+                if dialog::button(ui, theme, t!("Reload")).on_hover_text(t!("Load plugin files again")).clicked() {
+                    ask = Some(SideAsk::Reload);
+                }
+                if dialog::button(ui, theme, t!("Open folder")).on_hover_text(t!("Your own plugins go here")).clicked() {
+                    ask = Some(SideAsk::OpenFolder);
+                }
+            });
+            ui.add_space(8.0);
+            for lp in &ed.reg.plugins {
+                let m = &lp.manifest;
+                let (status, color) = match native.plugins.iter().find(|p| p.id == m.id).map(|p| &p.status) {
+                    None => (t!("Blocks & config"), theme.text_muted),
+                    Some(Status::Loaded) => (t!("Native · running"), theme.action),
+                    Some(Status::NeedsApproval) => (t!("Native · needs your OK"), theme.warning),
+                    Some(Status::Off) => (t!("Native · off"), theme.text_muted),
+                    Some(_) => (t!("Native · not running"), theme.error),
+                };
+                ui.label(RichText::new(&m.name).size(13.0).strong().color(theme.text));
+                ui.label(RichText::new(format!("v{} · {}", m.version, m.author)).size(11.0).color(theme.text_muted));
+                ui.label(RichText::new(status).size(11.0).color(color));
+                if !m.description.is_empty() {
+                    ui.label(RichText::new(&m.description).size(11.5).color(theme.text_muted));
+                }
+                ui.add_space(4.0);
+                ui.separator();
+                ui.add_space(2.0);
+            }
+        });
+    });
+    ask
+}

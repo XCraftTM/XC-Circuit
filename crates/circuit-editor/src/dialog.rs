@@ -241,7 +241,7 @@ pub fn danger_button(ui: &mut Ui, theme: &Theme, text: &str) -> Response {
 
 fn framed(ui: &mut Ui, theme: &Theme, text: RichText) -> Response {
     let h = crate::inputs::input_height(ui).max(ui.spacing().interact_size.y);
-    let button = egui::Button::new(text.size(13.0)).corner_radius(7).min_size(vec2(h, h));
+    let button = egui::Button::new(text.size(13.0)).wrap_mode(egui::TextWrapMode::Extend).corner_radius(7).min_size(vec2(h, h));
     styled_button(ui, theme, button, theme.panel, Stroke::new(1.0, theme.node_border))
 }
 

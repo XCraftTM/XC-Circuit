@@ -1,5 +1,6 @@
 //! The window: menu bar, dockable panels, status bar.
 
+use crate::prefs::SideView;
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -17,12 +18,10 @@ use crate::{canvas, dialog, palette, panels, picker};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Tab {
-    Workspaces,
     Canvas(String),
     Inspector,
     Console,
     Problems,
-    StoredData,
     /// The Settings page.
     Settings,
     /// Backups and restoring.
@@ -41,7 +40,6 @@ pub enum Tab {
 /// Where a tab belongs in the window.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Side {
-    Left,
     Right,
     Bottom,
     Center,
@@ -50,9 +48,8 @@ enum Side {
 impl Tab {
     fn side(&self) -> Side {
         match self {
-            Tab::Workspaces => Side::Left,
             Tab::Inspector | Tab::Plugin(..) => Side::Right,
-            Tab::Console | Tab::Problems | Tab::StoredData => Side::Bottom,
+            Tab::Console | Tab::Problems => Side::Bottom,
             _ => Side::Center,
         }
     }
@@ -62,13 +59,7 @@ impl Tab {
         matches!(self, Tab::EmbedBuilder | Tab::LayoutBuilder | Tab::SlashCommands | Tab::BotSettings | Tab::Export | Tab::Plugins)
     }
 
-    const PANELS: [(Tab, &'static str); 5] = [
-        (Tab::Workspaces, n("Workspaces")),
-        (Tab::Inspector, n("Inspector")),
-        (Tab::Console, n("Console")),
-        (Tab::Problems, n("Problems")),
-        (Tab::StoredData, n("Stored Data")),
-    ];
+    const PANELS: [(Tab, &'static str); 3] = [(Tab::Inspector, n("Inspector")), (Tab::Console, n("Console")), (Tab::Problems, n("Problems"))];
 }
 
 const KEY_DOCK: &str = "dock";
@@ -460,6 +451,16 @@ impl CircuitApp {
                 }
             });
             ui.menu_button(t!("View"), |ui| {
+                ui.label(RichText::new(t!("SIDE BAR")).size(10.5).color(theme.text_muted));
+                for view in SideView::ALL {
+                    if ui.radio(self.ed.prefs.side_view == Some(view), view.name()).clicked() {
+                        self.ed.prefs.side_view = Some(view);
+                    }
+                }
+                if ui.radio(self.ed.prefs.side_view.is_none(), t!("Hidden")).clicked() {
+                    self.ed.prefs.side_view = None;
+                }
+                ui.separator();
                 ui.label(RichText::new(t!("PANELS")).size(10.5).color(theme.text_muted));
                 for (tab, name) in Tab::PANELS {
                     let name = crate::i18n::t(name);
@@ -616,30 +617,61 @@ impl CircuitApp {
         }
     }
 
-    /// The activity bar: icons that open and close the side panels.
+    /// The activity bar: an icon per side bar view. Clicking one shows that view
+    /// in the side bar; clicking the one shown folds the side bar away.
     fn activity(&mut self, ui: &mut egui::Ui) {
         let t = self.ed.theme.clone();
         let line = ui.max_rect();
         ui.painter().vline(line.right() - 0.5, line.y_range(), egui::Stroke::new(1.0, t.line));
         ui.spacing_mut().item_spacing.y = 2.0;
-        let open = |dock: &DockState<Tab>, tab: &Tab| dock.find_tab(tab).is_some();
-        if self.activity_item(ui, "layers", t!("Workspaces"), open(&self.dock, &Tab::Workspaces)) {
-            self.toggle_panel(Tab::Workspaces);
-        }
-        if self.activity_item(ui, "database", t!("Stored Data"), open(&self.dock, &Tab::StoredData)) {
-            self.toggle_panel(Tab::StoredData);
-        }
-        if self.activity_item(ui, "plug", t!("Plugins"), self.plugins.is_some()) {
-            match self.plugins {
-                Some(_) => self.plugins = None,
-                None => self.open_plugins(),
+        for view in SideView::ALL {
+            let shown = self.ed.prefs.side_view == Some(view);
+            if self.activity_item(ui, view.icon(), view.name(), shown) {
+                self.ed.prefs.side_view = if shown { None } else { Some(view) };
             }
         }
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
-            if self.activity_item(ui, "settings", t!("Settings (Ctrl+,)"), open(&self.dock, &Tab::Settings)) {
+            if self.activity_item(ui, "settings", t!("Settings (Ctrl+,)"), self.dock.find_tab(&Tab::Settings).is_some()) {
                 self.toggle_settings();
             }
         });
+    }
+
+    /// The side bar: the view picked in the activity bar, under its name.
+    fn side_bar(&mut self, ui: &mut egui::Ui, view: SideView) {
+        let t = self.ed.theme.clone();
+        let line = ui.max_rect();
+        ui.painter().vline(line.right() - 0.5, line.y_range(), egui::Stroke::new(1.0, t.line));
+        ui.horizontal(|ui| {
+            ui.set_min_height(34.0);
+            ui.add_space(14.0);
+            ui.label(RichText::new(view.name().to_uppercase()).size(11.0).strong().color(t.text_muted));
+        });
+        self.ed.ui_rects.insert("side-bar".into(), ui.max_rect());
+        // The view draws in a box of the side bar's size: whatever it holds, the
+        // side bar keeps the width it was given (or dragged to).
+        let area = ui.available_rect_before_wrap();
+        let mut view_ui = ui.new_child(egui::UiBuilder::new().max_rect(area).layout(egui::Layout::top_down(egui::Align::Min)));
+        view_ui.set_clip_rect(area.intersect(ui.clip_rect()));
+        ui.allocate_rect(area, egui::Sense::hover());
+        let ui = &mut view_ui;
+        match view {
+            SideView::Workspaces => crate::sidebar::panel(ui, &mut self.ed),
+            SideView::StoredData => {
+                let running = self.bot.state != BotState::Stopped;
+                crate::stored::panel(ui, &mut self.ed, &mut self.stored, running);
+            }
+            SideView::Plugins => match crate::plugin_manager::side(ui, &t, &self.ed, &self.native) {
+                Some(crate::plugin_manager::SideAsk::Manage) => self.open_plugins(),
+                Some(crate::plugin_manager::SideAsk::Reload) => self.reload_plugins(ui.ctx()),
+                Some(crate::plugin_manager::SideAsk::OpenFolder) => {
+                    let dir = crate::bot::app_data_dir().join("plugins");
+                    let _ = std::fs::create_dir_all(&dir);
+                    let _ = open::that(dir);
+                }
+                None => {}
+            },
+        }
     }
 
     /// One activity bar icon. Returns true when clicked.
@@ -838,6 +870,14 @@ impl CircuitApp {
         if has_project {
             items.push(Item::new(t!("Edit"), t!("Select all"), Cmd::SelectAll).shortcut("Ctrl+A"));
         }
+        for view in SideView::ALL {
+            if self.ed.prefs.side_view != Some(view) {
+                items.push(Item::new(t!("View"), tf!("Show {name} in the side bar", name = view.name()), Cmd::SideView(Some(view))));
+            }
+        }
+        if self.ed.prefs.side_view.is_some() {
+            items.push(Item::new(t!("View"), t!("Hide the side bar"), Cmd::SideView(None)));
+        }
         for (tab, name) in Tab::PANELS {
             let label = if self.dock.find_tab(&tab).is_some() { tf!("Close {name} panel", name = crate::i18n::t(name)) } else { tf!("Show {name} panel", name = crate::i18n::t(name)) };
             items.push(Item::new(t!("View"), label, Cmd::TogglePanel(tab)));
@@ -900,6 +940,7 @@ impl CircuitApp {
             Cmd::Delete => self.ed.delete_selection(),
             Cmd::SelectAll => self.ed.select_all(),
             Cmd::TogglePanel(tab) => self.toggle_panel(tab),
+            Cmd::SideView(view) => self.ed.prefs.side_view = view,
             Cmd::Theme(id) => {
                 self.ed.set_theme(&id);
                 self.ed.theme.apply(ctx);
@@ -1185,6 +1226,17 @@ impl eframe::App for CircuitApp {
                 .frame(Frame::new().fill(theme.frame).inner_margin(Margin::symmetric(0, 6)))
                 .show(ui, |ui| self.activity(ui));
         }
+        if self.setup.is_none()
+            && self.tour.is_none()
+            && let Some(view) = self.ed.prefs.side_view
+        {
+            egui::Panel::left("side-bar")
+                .resizable(true)
+                .default_size(270.0)
+                .size_range(200.0..=560.0)
+                .frame(Frame::new().fill(theme.panel))
+                .show(ui, |ui| self.side_bar(ui, view));
+        }
         let mut problems = panels::collect_problems(&self.ed);
         problems.extend(self.native.problems());
         self.problem_count = problems.len();
@@ -1216,7 +1268,6 @@ impl eframe::App for CircuitApp {
                 ed: &mut self.ed,
                 problem_count: self.problem_count,
                 problems,
-                stored: &mut self.stored,
                 running,
                 native: &mut self.native,
                 settings: &mut self.settings,
@@ -1325,7 +1376,6 @@ struct Viewer<'a> {
     bot: &'a mut BotUi,
     bundled_plugins: Option<&'a Path>,
     plugins: &'a mut Option<crate::plugin_manager::Draft>,
-    stored: &'a mut crate::stored::StoredView,
     running: bool,
     problem_count: usize,
     problems: Vec<panels::ProblemItem>,
@@ -1344,11 +1394,9 @@ impl TabViewer for Viewer<'_> {
 
     fn title(&mut self, tab: &mut Tab) -> WidgetText {
         match tab {
-            Tab::Workspaces => t!("Workspaces").into(),
             Tab::Inspector => t!("Inspector").into(),
             Tab::Console => t!("Console").into(),
             Tab::Problems => tf!("Problems  {count}", count = self.problem_count).into(),
-            Tab::StoredData => t!("Stored Data").into(),
             Tab::Settings => t!("Settings").into(),
             Tab::Backups => t!("Backups").into(),
             Tab::Plugin(plugin, panel) => self.native.panel_title(plugin, panel).unwrap_or_else(|| panel.clone()).into(),
@@ -1395,11 +1443,9 @@ impl TabViewer for Viewer<'_> {
             self.ed.ui_rects.insert(name.into(), ui.max_rect());
         }
         match tab {
-            Tab::Workspaces => crate::sidebar::panel(ui, self.ed),
             Tab::Inspector => panels::inspector(ui, self.ed),
             Tab::Console => panels::console(ui, self.ed),
             Tab::Problems => panels::problems(ui, self.ed, std::mem::take(&mut self.problems)),
-            Tab::StoredData => crate::stored::panel(ui, self.ed, self.stored, self.running),
             Tab::Settings => crate::settings::ui(ui, self.ed, self.native, self.settings, &mut self.asks),
             Tab::Backups => crate::restore::ui(ui, self.ed, self.restore, self.running),
             Tab::Plugin(plugin, panel) => {
@@ -1453,12 +1499,12 @@ fn tour_layout() -> DockState<Tab> {
 }
 
 fn default_layout() -> DockState<Tab> {
-    let mut dock = DockState::new(vec![Tab::Console, Tab::Problems, Tab::StoredData]);
+    let mut dock = DockState::new(vec![Tab::Console, Tab::Problems]);
     let surface = dock.main_surface_mut();
-    // Root starts as the bottom panel; the top area holds Workspaces | (canvases) | Inspector.
-    // A split's fraction is the share of its left/top child.
-    let [_bottom, top] = surface.split_above(NodeIndex::root(), 0.76, vec![Tab::Inspector]);
-    surface.split_left(top, 0.17, vec![Tab::Workspaces]);
+    // Root starts as the bottom panel; the top area holds (canvases) | Inspector.
+    // The side bar, outside the dock, has Workspaces. A split's fraction is
+    // the share of its left/top child.
+    surface.split_above(NodeIndex::root(), 0.76, vec![Tab::Inspector]);
     dock
 }
 
@@ -1492,9 +1538,6 @@ fn place_panel(dock: &mut DockState<Tab>, tab: Tab) {
         _ => {
             let surface = dock.main_surface_mut();
             match side {
-                Side::Left => {
-                    surface.split_left(NodeIndex::root(), 0.17, vec![tab.clone()]);
-                }
                 Side::Right => {
                     surface.split_right(NodeIndex::root(), 0.78, vec![tab.clone()]);
                 }
@@ -1656,17 +1699,17 @@ mod tests {
     #[test]
     fn panels_open_next_to_their_kind() {
         let mut dock = default_layout();
-        close_tabs(&mut dock, |t| *t == Tab::StoredData);
-        place_panel(&mut dock, Tab::StoredData);
+        close_tabs(&mut dock, |t| *t == Tab::Problems);
+        place_panel(&mut dock, Tab::Problems);
         let bottom = leaves(&dock).into_iter().find(|l| l.contains(&Tab::Console)).unwrap();
-        assert!(bottom.contains(&Tab::StoredData), "it joins Console and Problems: {bottom:?}");
-        assert_eq!(leaves(&dock).len(), 3, "no new area");
+        assert!(bottom.contains(&Tab::Problems), "it joins Console: {bottom:?}");
+        assert_eq!(leaves(&dock).len(), 2, "no new area");
 
         // With the whole bottom group closed, it gets a new area below.
         close_tabs(&mut dock, |t| t.side() == Side::Bottom);
-        assert_eq!(leaves(&dock).len(), 2);
+        assert_eq!(leaves(&dock).len(), 1);
         place_panel(&mut dock, Tab::Problems);
-        assert_eq!(leaves(&dock).len(), 3);
+        assert_eq!(leaves(&dock).len(), 2);
         assert!(tree_ok(dock.main_surface()));
     }
 
@@ -1683,7 +1726,7 @@ mod tests {
             assert!(repair_layout(&mut broken), "a broken layout is rebuilt");
             assert!(tree_ok(broken.main_surface()));
             let open: Vec<Tab> = broken.iter_all_tabs().map(|(_, t)| t.clone()).collect();
-            assert!(open.contains(&Tab::Workspaces) && open.contains(&Tab::Inspector));
+            assert!(open.contains(&Tab::Inspector));
             assert!(!open.contains(&Tab::Console), "with the same tabs open");
         }
         assert!(!repair_layout(&mut dock), "a whole layout is left alone");
