@@ -108,6 +108,16 @@ fn text_format(font: FontId, color: Color32) -> TextFormat {
     TextFormat { line_height: Some(line), valign: eframe::egui::Align::Center, ..TextFormat::simple(font, color) }
 }
 
+/// A marker and the style it switches; longer markers first (** before *).
+type Toggle = (&'static str, fn(&mut Style) -> &mut bool);
+const TOGGLES: [Toggle; 5] = [
+    ("||", |s| &mut s.spoiler),
+    ("**", |s| &mut s.bold),
+    ("__", |s| &mut s.underline),
+    ("~~", |s| &mut s.strike),
+    ("*", |s| &mut s.italic),
+];
+
 #[derive(Clone, Copy, Default)]
 struct Style {
     bold: bool,
@@ -377,15 +387,8 @@ fn inline(out: &mut Out, chars: &[char], from: usize, end: usize, expressions: &
             continue;
         }
         // Toggles: on only when they close later, off when on.
-        let toggles: [(&str, fn(&mut Style) -> &mut bool); 5] = [
-            ("||", |s| &mut s.spoiler),
-            ("**", |s| &mut s.bold),
-            ("__", |s| &mut s.underline),
-            ("~~", |s| &mut s.strike),
-            ("*", |s| &mut s.italic),
-        ];
         let mut toggled = false;
-        for (marker, flag) in toggles {
+        for (marker, flag) in TOGGLES {
             if at(i, marker) {
                 let on = *flag(style);
                 if on || closes(chars, i + marker.len(), rest_end, marker) {
