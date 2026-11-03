@@ -1,0 +1,42 @@
+{
+  "name": "Ping",
+  "folder": "Commands",
+  "nodes": {
+    "1": {
+      "block": "fluxer.on_text_command@1",
+      "at": [
+        40,
+        60
+      ],
+      "values": {
+        "command": "ping"
+      }
+    },
+    "2": {
+      "block": "fluxer.bot_info@1",
+      "at": [
+        40,
+        420
+      ]
+    },
+    "3": {
+      "block": "fluxer.send_message@1",
+      "at": [
+        420,
+        60
+      ],
+      "values": {
+        "mode": "reply",
+        "text": "Pong! ${ping} ms"
+      },
+      "pins": [
+        "ping"
+      ]
+    }
+  },
+  "links": [
+    "1.next > 3.in",
+    "1.message > 3.message",
+    "2.ping > 3.ping"
+  ]
+}

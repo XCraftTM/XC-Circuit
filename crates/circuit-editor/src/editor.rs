@@ -958,7 +958,11 @@ mod tests {
         let ed = Editor::new(vec![root.join("plugins")], None).unwrap();
         let mut dirs: Vec<PathBuf> = std::fs::read_dir(root.join("examples/templates")).unwrap().flatten().map(|e| e.path()).collect();
         dirs.push(root.join("examples/DemoBot"));
-        assert!(dirs.len() >= 6, "five templates and the example");
+        // Plugins' own starters (Fluxer's).
+        for plugin in std::fs::read_dir(root.join("plugins")).unwrap().flatten() {
+            dirs.extend(std::fs::read_dir(plugin.path().join("templates")).into_iter().flatten().flatten().map(|e| e.path()));
+        }
+        assert!(dirs.len() >= 8, "the templates, Fluxer's and the example");
         let mut wrong = Vec::new();
         for dir in dirs {
             let project = Project::load(&dir).unwrap();

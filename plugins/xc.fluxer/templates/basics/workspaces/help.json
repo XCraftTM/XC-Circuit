@@ -1,0 +1,54 @@
+{
+  "name": "Help",
+  "folder": "Commands",
+  "nodes": {
+    "1": {
+      "block": "fluxer.on_text_command@1",
+      "at": [
+        40,
+        60
+      ],
+      "values": {
+        "command": "help, commands"
+      }
+    },
+    "2": {
+      "block": "fluxer.build_embed@1",
+      "at": [
+        420,
+        60
+      ],
+      "values": {
+        "embed": {
+          "color": "#6C7BFF",
+          "title": "Commands",
+          "description": "**!ping**: how fast the bot answers\n**!help**: this list",
+          "fields": [],
+          "footer": {
+            "text": "Made with XC Circuit"
+          }
+        }
+      }
+    },
+    "3": {
+      "block": "fluxer.send_message@1",
+      "at": [
+        820,
+        60
+      ],
+      "values": {
+        "mode": "reply",
+        "text": ""
+      },
+      "pins": [
+        "embeds"
+      ]
+    }
+  },
+  "links": [
+    "1.next > 2.in",
+    "2.next > 3.in",
+    "2.embed > 3.embeds",
+    "1.message > 3.message"
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "name": "Moderation",
+  "description": "!kick @someone reason and !purge 20 for moderators: only members with the permission may use them, and the bot says why when it can't.",
+  "mode": "fluxer-bot"
+}

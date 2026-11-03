@@ -1,6 +1,6 @@
 # XC™ Circuit
 
-Build bots by connecting blocks on a canvas. Native Rust editor (egui), plugin-driven: blocks are plain JavaScript or TypeScript files, and the Discord mode, its blocks, pin types and themes all come from plugins in `plugins/`.
+Build bots by connecting blocks on a canvas. Native Rust editor (egui), plugin-driven: blocks are plain JavaScript or TypeScript files, and the Discord and Fluxer modes, their blocks, pin types and themes all come from plugins in `plugins/`.
 
 ## Run
 
@@ -59,7 +59,7 @@ The first start opens `examples/DemoBot`. Windows and Linux are supported.
 | Run / Stop | F5 / Shift+F5, or Run in the title bar. Running blocks glow; failures show on the block |
 | Export | Bot › Export… writes a folder that runs with `node index.js` |
 
-Running needs Node.js 22 or newer; the first start page (or Settings › Bot › Node.js) finds or installs it. The first run installs the mode's npm packages (discord.js) once, into `%APPDATA%\XC Circuit\packages` or `~/.local/share/xc-circuit/packages`.
+Running needs Node.js 22 or newer; the first start page (or Settings › Bot › Node.js) finds or installs it. The first run installs the mode's npm packages (discord.js, or @fluxerjs/core for Fluxer bots) once, into `%APPDATA%\XC Circuit\packages` or `~/.local/share/xc-circuit/packages`.
 
 ## Tests
 
@@ -73,6 +73,8 @@ node runtime/test/discord_blocks.js
 node runtime/test/discord_events.js
 node runtime/test/discord_actions.js
 node runtime/test/discord_music.js
+node runtime/test/fluxer_blocks.js
+node runtime/test/fluxer_run.js
 node runtime/test/store.js
 node runtime/test/backups.js
 ```
@@ -92,6 +94,7 @@ crates/xc-circuit-plugin the crate native Rust plugins are written with
 runtime/                 the Node.js runtime that executes block graphs (also inside exports)
 plugins/xc.core          flow/text/math/logic/data/debug blocks, icons, themes
 plugins/xc.discord       Discord build mode, pin types and blocks
+plugins/xc.fluxer        Fluxer build mode (fluxer.js), pin types, blocks and starters
 plugins/xc.stats         example native Rust plugin (Project Stats panel)
 examples/DemoBot         example project (with a TypeScript block in its own plugins/ folder)
 sdk/                     @xc-circuit/sdk: types for writing blocks

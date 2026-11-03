@@ -1,0 +1,29 @@
+# Der Fluxer-Modus auf Deutsch: seine Kategorien und die Bot-Einstellungen. Die Oberfläche selbst übersetzt xc.core.
+
+[meta]
+code = "de"
+name = "Deutsch"
+english_name = "German"
+
+[strings]
+"Fluxer Bot" = "Fluxer-Bot"
+"A bot for Fluxer, built with fluxer.js. Commands are text commands such as !help." = "Ein Bot für Fluxer, gebaut mit fluxer.js. Befehle sind Textbefehle wie !help."
+"Bot" = "Bot"
+"Text Commands" = "Textbefehle"
+"Send Messages" = "Nachrichten senden"
+"Messages" = "Nachrichten"
+"Embeds" = "Embeds"
+"Reactions" = "Reaktionen"
+"Members" = "Mitglieder"
+"Moderation" = "Moderation"
+"Roles & Permissions" = "Rollen & Rechte"
+"Channels" = "Kanäle"
+"Server" = "Server"
+"Formatting" = "Formatierung"
+"Connection" = "Verbindung"
+"Bot token" = "Bot-Token"
+"Create a bot in the Fluxer developer portal and copy its token." = "Erstelle im Fluxer-Entwicklerportal einen Bot und kopiere seinen Token."
+"Paste the token from the Fluxer developer portal" = "Token aus dem Fluxer-Entwicklerportal einfügen"
+"Text command prefix" = "Präfix für Textbefehle"
+"What text commands start with, such as !help." = "Womit Textbefehle beginnen, etwa !help."
+"1 to 5 characters, without spaces." = "1 bis 5 Zeichen, ohne Leerzeichen."

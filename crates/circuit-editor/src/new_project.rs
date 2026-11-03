@@ -255,8 +255,9 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let reg = crate::editor::Editor::new(vec![root.join("plugins")], None).unwrap().reg;
         let list = templates(Some(&root.join("examples")), &reg);
-        assert!(list.len() >= 5, "{}", list.len());
-        assert!(list.iter().all(|t| t.mode == "discord-bot" && !t.name.is_empty()));
+        assert!(list.iter().all(|t| reg.mode(&t.mode).is_some() && !t.name.is_empty()), "every starter is for an installed kind");
+        let count = |mode: &str| list.iter().filter(|t| t.mode == mode).count();
+        assert!(count("discord-bot") >= 5 && count("fluxer-bot") >= 2, "{} Discord, {} Fluxer", count("discord-bot"), count("fluxer-bot"));
     }
 
     #[test]

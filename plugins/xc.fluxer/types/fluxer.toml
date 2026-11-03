@@ -1,0 +1,68 @@
+# fluxer.js classes as pin types. Some classes keep a leading _ in their
+# name in the built package (_Message), so the checks accept both.
+
+[[type]]
+id = "fluxer.user"
+name = "User"
+extends = "object"
+color = "#6C7BFF"
+icon = "user"
+check = "v => /^_?User$/.test(v?.constructor?.name)"
+description = "A Fluxer account, the same in every server."
+
+[[type]]
+id = "fluxer.member"
+name = "Member"
+extends = "object"
+color = "#6C7BFF"
+icon = "user"
+check = "v => /^_?(Partial)?GuildMember$/.test(v?.constructor?.name)"
+description = "A person inside one server, with roles and a nickname."
+
+[[type.converts]]
+to = "fluxer.user"
+via = "v => v.user"
+
+[[type]]
+id = "fluxer.message"
+name = "Message"
+extends = "object"
+color = "#6C7BFF"
+icon = "message"
+check = "v => /^_?Message$/.test(v?.constructor?.name)"
+description = "A message in a channel."
+
+[[type]]
+id = "fluxer.channel"
+name = "Channel"
+extends = "object"
+color = "#6C7BFF"
+icon = "hash"
+check = "v => typeof v?.isTextBased === 'function'"
+description = "A text, voice or category channel, or a direct message."
+
+[[type]]
+id = "fluxer.server"
+name = "Server"
+extends = "object"
+color = "#6C7BFF"
+icon = "layers"
+check = "v => /^_?Guild$/.test(v?.constructor?.name)"
+description = "A Fluxer server (a guild in fluxer.js)."
+
+[[type]]
+id = "fluxer.role"
+name = "Role"
+extends = "object"
+color = "#6C7BFF"
+icon = "key"
+check = "v => /^_?Role$/.test(v?.constructor?.name)"
+description = "A role in a server."
+
+[[type]]
+id = "fluxer.embed"
+name = "Embed"
+extends = "object"
+color = "#3DD9C1"
+icon = "embed"
+description = "A rich message box with a title, text, fields and pictures. Made by Build Embed."

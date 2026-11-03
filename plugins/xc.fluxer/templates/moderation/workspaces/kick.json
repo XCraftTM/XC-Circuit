@@ -1,0 +1,126 @@
+{
+  "name": "Kick",
+  "folder": "Moderation",
+  "nodes": {
+    "1": {
+      "block": "fluxer.on_text_command@1",
+      "at": [
+        40,
+        60
+      ],
+      "values": {
+        "command": "kick"
+      }
+    },
+    "2": {
+      "block": "fluxer.check_member@1",
+      "at": [
+        40,
+        520
+      ],
+      "values": {
+        "check": "permission",
+        "permission": "KickMembers"
+      }
+    },
+    "3": {
+      "block": "core.check@1",
+      "at": [
+        420,
+        60
+      ],
+      "values": {
+        "op": "true"
+      },
+      "pins": [
+        "a"
+      ]
+    },
+    "6": {
+      "block": "fluxer.send_message@1",
+      "at": [
+        420,
+        520
+      ],
+      "values": {
+        "mode": "reply",
+        "text": "You need the Kick members permission for that."
+      }
+    },
+    "7": {
+      "block": "fluxer.send_message@1",
+      "at": [
+        1200,
+        520
+      ],
+      "values": {
+        "mode": "reply",
+        "text": "Couldn't kick ${first}: ${why}"
+      },
+      "pins": [
+        "first",
+        "why"
+      ]
+    },
+    "4": {
+      "block": "fluxer.moderate@1",
+      "at": [
+        800,
+        60
+      ],
+      "values": {
+        "action": "kick"
+      },
+      "pins": [
+        "who",
+        "reason"
+      ],
+      "zone": "z1"
+    },
+    "5": {
+      "block": "fluxer.send_message@1",
+      "at": [
+        1180,
+        60
+      ],
+      "values": {
+        "mode": "reply",
+        "text": "Kicked ${first}."
+      },
+      "pins": [
+        "first"
+      ],
+      "zone": "z1"
+    }
+  },
+  "links": [
+    "1.next > 3.in",
+    "1.member > 2.member",
+    "2.result > 3.a",
+    "3.true > 4.in",
+    "3.false > 6.in",
+    "1.message > 6.message",
+    "4.next > 5.in",
+    "1.message > 5.message",
+    "z1.error > 7.in",
+    "1.message > 7.message",
+    "1.first > 7.first",
+    "z1.message > 7.why",
+    "1.first > 4.who",
+    "1.server > 4.server",
+    "1.more > 4.reason",
+    "1.first > 5.first"
+  ],
+  "zones": {
+    "z1": {
+      "title": "Kick",
+      "rect": [
+        770,
+        36,
+        760,
+        420
+      ],
+      "retry": 0
+    }
+  }
+}

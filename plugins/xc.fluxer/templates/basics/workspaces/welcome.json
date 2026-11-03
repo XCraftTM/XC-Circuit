@@ -1,0 +1,57 @@
+{
+  "name": "Welcome",
+  "folder": "Events",
+  "nodes": {
+    "1": {
+      "block": "fluxer.on_member@1",
+      "at": [
+        40,
+        60
+      ],
+      "values": {
+        "when": "join"
+      }
+    },
+    "2": {
+      "block": "fluxer.server_info@1",
+      "at": [
+        40,
+        320
+      ]
+    },
+    "3": {
+      "block": "fluxer.find_channel@1",
+      "at": [
+        400,
+        60
+      ],
+      "pins": [
+        "channel"
+      ]
+    },
+    "4": {
+      "block": "fluxer.send_message@1",
+      "at": [
+        780,
+        60
+      ],
+      "values": {
+        "mode": "send",
+        "text": "Welcome to **${server}**, ${user}! 👋"
+      },
+      "pins": [
+        "server",
+        "user"
+      ]
+    }
+  },
+  "links": [
+    "1.next > 3.in",
+    "1.server > 2.server",
+    "2.systemChannelId > 3.channel",
+    "3.next > 4.in",
+    "3.channel > 4.channel",
+    "2.name > 4.server",
+    "1.user > 4.user"
+  ]
+}

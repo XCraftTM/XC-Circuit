@@ -1,0 +1,130 @@
+id          = "fluxer-bot"
+name        = "Fluxer Bot"
+icon        = "message"
+description = "A bot for Fluxer, built with fluxer.js. Commands are text commands such as !help."
+
+blocks      = ["xc.core/*", "xc.fluxer/*"]
+runtime     = "node"
+runtimeLibs = ["xc.fluxer/runtime/fluxer.js"]
+exporter    = "xc.fluxer/node-bundle"
+tokenEnv    = "FLUXER_BOT_TOKEN"
+
+# Block picker categories, in this order. Fluxer has no slash commands or
+# buttons yet: commands are text commands.
+[[categories]]
+id = "bot"
+name = "Bot"
+icon = "settings"
+
+[[categories]]
+id = "commands"
+name = "Text Commands"
+icon = "slash"
+
+[[categories]]
+id = "send"
+name = "Send Messages"
+icon = "send"
+
+[[categories]]
+id = "messages"
+name = "Messages"
+icon = "message"
+
+[[categories]]
+id = "design"
+name = "Embeds"
+icon = "embed"
+
+[[categories]]
+id = "reactions"
+name = "Reactions"
+icon = "check"
+
+[[categories]]
+id = "members"
+name = "Members"
+icon = "user"
+
+[[categories]]
+id = "moderation"
+name = "Moderation"
+icon = "shield"
+
+[[categories]]
+id = "roles"
+name = "Roles & Permissions"
+icon = "key"
+
+[[categories]]
+id = "channels"
+name = "Channels"
+icon = "hash"
+
+[[categories]]
+id = "server"
+name = "Server"
+icon = "layers"
+
+[[categories]]
+id = "format"
+name = "Formatting"
+icon = "text"
+
+[[categories]]
+id = "flow"
+name = "Flow"
+icon = "branch"
+
+[[categories]]
+id = "calls"
+name = "Calls & Signals"
+icon = "workspace"
+
+[[categories]]
+id = "time"
+name = "Time & Cooldowns"
+icon = "clock"
+
+[[categories]]
+id = "variables"
+name = "Variables"
+icon = "function"
+
+[[categories]]
+id = "data"
+name = "Stored Data"
+icon = "database"
+
+[[categories]]
+id = "text"
+name = "Text"
+icon = "text"
+
+[[categories]]
+id = "numbers"
+name = "Numbers & Logic"
+icon = "scale"
+
+[[categories]]
+id = "lists"
+name = "Lists & Objects"
+icon = "repeat"
+
+[[categories]]
+id = "web"
+name = "Web"
+icon = "plug"
+
+[[categories]]
+id = "code"
+name = "Code & Debug"
+icon = "terminal"
+
+[settings]
+token = { type = "secret", group = "Connection", label = "Bot token", required = true, placeholder = "Paste the token from the Fluxer developer portal", description = "Create a bot in the Fluxer developer portal and copy its token." }
+prefix = { type = "text", group = "Messages", label = "Text command prefix", default = "!", placeholder = "!", description = "What text commands start with, such as !help.", pattern = '\S{1,5}', patternHint = "1 to 5 characters, without spaces." }
+
+# npm packages the runtime library needs, installed before Run and listed in exports.
+[dependencies]
+"@fluxerjs/core" = "^3.3.0"
