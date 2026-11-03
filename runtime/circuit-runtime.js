@@ -962,7 +962,120 @@ const UTIL = {
     return out;
   },
   typeOf: (v) => (v === null ? "null" : Array.isArray(v) ? "list" : typeof v),
+  compare,
 };
+
+/** A number, or a text that is one ("5", " 2.5 "); otherwise null. */
+function asNumber(v) {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) return Number(v);
+  return null;
+}
+
+/** What a value is compared as: a date's time, a Discord object's id. */
+function comparable(v) {
+  if (v instanceof Date) return v.getTime();
+  if (v && typeof v === "object" && !Array.isArray(v) && typeof v.id === "string") return v.id;
+  return v;
+}
+
+function textOf(v, ignoreCase) {
+  const s = v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
+  return ignoreCase ? s.toLowerCase() : s;
+}
+
+function same(a, b, ignoreCase) {
+  a = comparable(a);
+  b = comparable(b);
+  if (a == null || b == null) return (a ?? "") === (b ?? "");
+  const [x, y] = [asNumber(a), asNumber(b)];
+  if (x !== null && y !== null) return x === y;
+  return textOf(a, ignoreCase) === textOf(b, ignoreCase);
+}
+
+/** Negative, zero or positive: numbers by value, dates by time, texts alphabetically. */
+function order(a, b, ignoreCase) {
+  a = comparable(a);
+  b = comparable(b);
+  const [x, y] = [asNumber(a), asNumber(b)];
+  if (x !== null && y !== null) return x - y;
+  return textOf(a, ignoreCase).localeCompare(textOf(b, ignoreCase));
+}
+
+function isEmpty(v) {
+  if (v == null) return true;
+  if (typeof v === "string") return v.trim() === "";
+  if (Array.isArray(v)) return v.length === 0;
+  if (typeof v.size === "number") return v.size === 0;
+  if (typeof v === "object" && !(v instanceof Date)) return Object.keys(v).length === 0;
+  return false;
+}
+
+/** `/pattern/flags` or a plain pattern. */
+function pattern(p, ignoreCase) {
+  const m = /^\/(.*)\/([a-z]*)$/s.exec(String(p ?? ""));
+  const [source, flags] = m ? [m[1], m[2]] : [String(p ?? ""), ""];
+  return new RegExp(source, ignoreCase && !flags.includes("i") ? flags + "i" : flags);
+}
+
+function contains(a, b, ignoreCase) {
+  if (Array.isArray(a)) return a.some((x) => same(x, b, ignoreCase));
+  if (a instanceof Map || (a && typeof a.has === "function" && typeof a.values === "function")) {
+    return a.has(comparable(b)) || [...a.values()].some((x) => same(x, b, ignoreCase));
+  }
+  if (a && typeof a === "object") return Object.prototype.hasOwnProperty.call(a, String(b));
+  return textOf(a, ignoreCase).includes(textOf(b, ignoreCase));
+}
+
+/**
+ * The Compare and Check blocks: whether `a` passes `check` against `b` (and
+ * `c`, the upper end for between). Numbers and numeric texts compare as
+ * numbers, dates by time, Discord objects by id.
+ */
+function compare(a, check, b, { c, ignoreCase = false } = {}) {
+  switch (check) {
+    case "eq":
+      return same(a, b, ignoreCase);
+    case "ne":
+      return !same(a, b, ignoreCase);
+    case "gt":
+      return order(a, b, ignoreCase) > 0;
+    case "lt":
+      return order(a, b, ignoreCase) < 0;
+    case "gte":
+      return order(a, b, ignoreCase) >= 0;
+    case "lte":
+      return order(a, b, ignoreCase) <= 0;
+    case "between":
+      return order(a, b, ignoreCase) >= 0 && order(a, c, ignoreCase) <= 0;
+    case "contains":
+      return contains(a, b, ignoreCase);
+    case "not_contains":
+      return !contains(a, b, ignoreCase);
+    case "starts":
+      return textOf(a, ignoreCase).startsWith(textOf(b, ignoreCase));
+    case "ends":
+      return textOf(a, ignoreCase).endsWith(textOf(b, ignoreCase));
+    case "matches":
+      return pattern(b, ignoreCase).test(textOf(a, false));
+    case "one_of": {
+      const options = Array.isArray(b) ? b : String(b ?? "").split(",").map((s) => s.trim());
+      return options.some((o) => same(a, o, ignoreCase));
+    }
+    case "empty":
+      return isEmpty(a);
+    case "not_empty":
+      return !isEmpty(a);
+    case "number":
+      return asNumber(a) !== null;
+    case "true":
+      return typeof a === "string" ? !["", "false", "0", "no", "off"].includes(a.trim().toLowerCase()) : Boolean(a);
+    case "false":
+      return !compare(a, "true", b);
+    default:
+      throw new Error(`Unknown check "${check}"`);
+  }
+}
 
 function makeLogger(rt, node) {
   const write = (level) => (...parts) => {
@@ -1104,4 +1217,4 @@ if (typeof __XC_BUNDLE__ !== "undefined") {
   cli();
 }
 
-module.exports = { start, ungroupBlock, fillTemplate, expressionEnd, coerce, Store, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };
+module.exports = { start, ungroupBlock, fillTemplate, expressionEnd, coerce, compare, Store, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };

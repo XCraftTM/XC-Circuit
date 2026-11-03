@@ -20,6 +20,7 @@ const bundle = {
     "core.on_error": block("events/on_error.js"),
     "core.emit_signal": block("flow/emit_signal.js"),
     "core.if": block("flow/if.js"),
+    "core.check": block("flow/check.js"),
     "core.math": block("math/math.js"),
     "core.compare": block("logic/compare.js"),
     "core.log": block("debug/log.js"),
@@ -74,6 +75,18 @@ const bundle = {
       },
       links: ["s.next > inc.in", "inc.next > log.in", "e.next > elog.in", "elog.next > eboom.in"],
     },
+    // Check continues on True or False by itself.
+    checks: {
+      name: "Checks",
+      nodes: {
+        go: { block: "core.on_start@1", at: [0, 0] },
+        range: { block: "core.check@1", at: [0, 0], values: { a: "12", op: "between", b: "10", c: 20 } },
+        exact: { block: "core.check@1", at: [0, 0], values: { a: "Hello", op: "eq", b: "hello" } },
+        ok: { block: "core.log@1", at: [0, 0], values: { message: "checks went true then false", level: "info" } },
+        bad: { block: "core.log@1", at: [0, 0], values: { message: "check took the wrong way", level: "error" } },
+      },
+      links: ["go.next > range.in", "range.true > exact.in", "range.false > bad.in", "exact.true > bad.in", "exact.false > ok.in"],
+    },
     // A Try Zone that times out stops at its next block, while a path next to
     // it (an old project's split path) keeps running outside the zone.
     timeouts: {
@@ -115,6 +128,8 @@ setTimeout(() => {
   has("info: signal hello");
   has("info: zone gave up");
   has("info: side path ran");
+  has("info: checks went true then false");
+  assert.ok(!logs.some((l) => l.includes("wrong way")), "Check takes the right way");
   assert.ok(!logs.some((l) => l.includes("zone kept going")), "a zone that timed out stops");
   has("warn: Main › Try Risky: boom · retry 1/1");
   has("warn: boom");
