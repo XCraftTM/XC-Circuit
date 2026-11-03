@@ -1372,10 +1372,12 @@ impl eframe::App for CircuitApp {
         }
 
         // Record an undo step once an edit has settled.
-        // Only looked for after an edit or input, or now and then for changes
-        // made some other way, since comparing a big project takes a moment.
+        // Only looked for after an edit or input (not the pointer just moving),
+        // or now and then for changes made some other way, since comparing a
+        // big project takes a moment.
         let settled = !ctx.input(|i| i.pointer.any_down()) && !ctx.text_edit_focused();
-        let due = self.ed.edited || ctx.input(|i| !i.events.is_empty()) || self.last_check.elapsed() >= CHECK_EVERY;
+        let input = ctx.input(|i| i.events.iter().any(|e| !matches!(e, egui::Event::PointerMoved(_) | egui::Event::MouseMoved(_))));
+        let due = self.ed.edited || input || self.last_check.elapsed() >= CHECK_EVERY;
         if settled && due {
             self.ed.check_changes();
             self.last_check = std::time::Instant::now();
