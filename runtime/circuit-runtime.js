@@ -250,7 +250,7 @@ class Runtime {
  * counts, never the words inside a string or a comment.
  */
 function esmToCommonJs(source) {
-  return source.replace(/^([ 	]*)export\s+default(?=[\s{(])/m, "$1module.exports =");
+  return source.replace(/^([ \t]*)export\s+default(?=[\s{(])/m, "$1module.exports =");
 }
 
 /** Where a block runs outside every Try Zone. */
@@ -479,8 +479,7 @@ class Run {
   }
 }
 
-/** Fills {name} and {name.path} from the event, run variables and this block's other fields. */
-/** Whether {name} placeholders in a field are filled in: plain text fields, unless `template: false`. */
+/** Whether ${…} in a field is filled in: plain text fields, unless `template: false`. */
 function templated(f) {
   if (typeof f.template === "boolean") return f.template;
   return ["text", "textarea", "string"].includes(String(f.type || "").replace(/\?$/, "")) && !f.choices;
