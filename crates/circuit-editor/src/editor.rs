@@ -990,6 +990,16 @@ mod tests {
                     if !from_ok || !to_ok {
                         wrong.push(format!("{place}: {}.{} > {}.{}", link.from.node, link.from.pin, link.to.node, link.to.pin));
                     }
+                    // A wire for a ${name} in the block's text must reach that
+                    // name's input, not an option of the block with the same
+                    // name (which the text would then read instead).
+                    let used_in_text = ws.nodes.get(&link.to.node).is_some_and(|n| {
+                        n.values.values().filter_map(Value::as_str).any(|t| circuit_core::block::placeholders(t).contains(&link.to.pin))
+                    });
+                    let placeholder = format!("${{{}}}", link.to.pin);
+                    if used_in_text && shapes.get(&link.to.node).and_then(|s| s.field(&link.to.pin)).is_some_and(|f| f.label.as_deref() != Some(placeholder.as_str())) {
+                        wrong.push(format!("{place}: {}.{} > {}.{} reaches the block's own {} option, not {placeholder}", link.from.node, link.from.pin, link.to.node, link.to.pin, link.to.pin));
+                    }
                 }
             }
         }

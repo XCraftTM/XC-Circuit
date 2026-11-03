@@ -211,7 +211,7 @@ const message = (content, extra = {}) => ({
   assert.strictEqual(embed.title, "T 1");
   assert.throws(() => run("fluxer.build_embed", { embed: { color: "#fff" } }), /empty/);
 
-  const replied = await run("fluxer.send_message", { mode: "reply", text: "Hi", message: message("!hi"), embeds: [embed], ping: false });
+  const replied = await run("fluxer.send_message", { mode: "reply", text: "Hi", message: message("!hi"), embeds: [embed], pingAuthor: false });
   assert.deepStrictEqual(replied.message, { replied: { content: "Hi", embeds: [embed] }, options: { ping: false } });
   const sent = await run("fluxer.send_message", { mode: "send", text: "Yo", channel: "<#900>" });
   assert.strictEqual(sent.message.channelId, "900", "a channel by its mention");

@@ -20,7 +20,8 @@ module.exports = {
     mode: { type: "select", pin: false, default: "reply", choices: MODES, description: "What kind of message to send." },
     text: { type: "textarea", template: true, default: "", description: "The message text. ${…} holds JavaScript, such as ${author.username}." },
     embeds: { type: "list<fluxer.embed>", pin: true, multi: true, description: "Embeds to attach, from Build Embed." },
-    ping: { type: "boolean", default: true, advanced: true, label: "Ping the author", show: { mode: ["reply"] }, description: "Notify the person being replied to." },
+    // Not "ping": a ${ping} in the text (Bot Info's ping) would read this switch.
+    pingAuthor: { type: "boolean", default: true, advanced: true, label: "Ping the author", show: { mode: ["reply"] }, description: "Notify the person being replied to." },
     deleteAfter: { type: "number", default: 0, min: 0, advanced: true, label: "Delete after (s)", description: "Delete the sent message after this many seconds. 0 keeps it." },
   },
   outputs: {
@@ -53,7 +54,7 @@ module.exports = {
         break;
       default:
         if (!fields.message) throw new Error("Connect the message to reply to");
-        sent = await fields.message.reply(payload, { ping: fields.ping !== false });
+        sent = await fields.message.reply(payload, { ping: fields.pingAuthor !== false });
     }
     const seconds = Number(fields.deleteAfter) || 0;
     if (seconds > 0 && sent) {

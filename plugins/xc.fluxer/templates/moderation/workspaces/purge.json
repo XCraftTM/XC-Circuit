@@ -16,7 +16,7 @@
       "block": "fluxer.check_member@1",
       "at": [
         40,
-        520
+        560
       ],
       "values": {
         "check": "permission",
