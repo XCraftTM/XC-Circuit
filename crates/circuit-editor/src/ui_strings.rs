@@ -408,7 +408,6 @@ pub const UI_STRINGS: &[&str] = &[
     "Enter: place",
     "Up/Down: move",
     "Esc: close",
-    "Also: {names}",
     "What's loaded, and which native plugins may run",
     "Allow native plugins",
     "Native plugins are compiled Rust code. They run with the same access to your computer as XC Circuit, and a broken one can crash the app. Only turn this on for plugins you trust.",

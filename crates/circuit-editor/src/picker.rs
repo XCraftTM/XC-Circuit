@@ -84,8 +84,9 @@ fn matching_pin(def: &BlockDef, pending: &PendingWire, reg: &Registry) -> Option
 enum Found {
     /// Every word is in its name.
     Name,
-    /// Every word is in one of its other names (that one).
-    Alias(String),
+    /// Every word is in one of its other names. They only help finding it
+    /// and aren't shown.
+    Alias,
     /// The words are somewhere in its id, description, tags or category.
     Elsewhere,
 }
@@ -99,8 +100,8 @@ fn search(def: &BlockDef, query: &str) -> Option<Found> {
     if all_in(&def.name) {
         return Some(Found::Name);
     }
-    if let Some(alias) = def.aliases.iter().find(|a| all_in(a)) {
-        return Some(Found::Alias(alias.clone()));
+    if def.aliases.iter().any(|a| all_in(a)) {
+        return Some(Found::Alias);
     }
     let hay = format!("{} {} {} {} {} {}", def.name, def.aliases.join(" "), def.id, def.description, def.tags.join(" "), def.category.as_deref().unwrap_or(""));
     all_in(&hay).then_some(Found::Elsewhere)
@@ -227,7 +228,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                             ui.set_width(LIST_W);
                             let category_name = |cat: &str| mode.as_ref().and_then(|m| m.category(cat)).map(|c| crate::i18n::tr(&c.name).into_owned()).unwrap_or(cat.to_string());
                             let mut last_cat: Option<String> = None;
-                            for (i, (def, pin, found)) in list.iter().enumerate() {
+                            for (i, (def, pin, _)) in list.iter().enumerate() {
                                 let cat = category_of(def);
                                 if !searching && last_cat.as_deref() != Some(cat.as_str()) {
                                     let closed = collapsed.contains(&cat);
@@ -254,13 +255,9 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                                     egui::Image::from_uri(crate::editor::file_uri(&path)).tint(tint).paint_at(ui, icon);
                                 }
                                 let name_rect = ui.painter().text(rect.left_center() + vec2(36.0, 0.0), Align2::LEFT_CENTER, &def.name, egui::FontId::proportional(14.0), theme.text);
-                                // Found by another name: which one. While searching, the category.
-                                let note = match found {
-                                    Found::Alias(alias) => Some(alias.clone()),
-                                    _ if searching => Some(category_name(&cat)),
-                                    _ => None,
-                                };
-                                if let Some(note) = note {
+                                // While searching, the category it is in.
+                                if searching {
+                                    let note = category_name(&cat);
                                     let font = egui::FontId::proportional(11.5);
                                     let room = rect.right() - 8.0 - (name_rect.right() + 8.0);
                                     let galley = ui.painter().layout(note, font, theme.text_muted, f32::INFINITY);
@@ -391,9 +388,6 @@ fn fold_button(ui: &mut egui::Ui, theme: &Theme, icon: &str, tip: &str, reg: &Re
 fn details(ui: &mut egui::Ui, def: &BlockDef, reg: &Registry, theme: &Theme) {
     ui.label(RichText::new(&def.name).strong().size(16.0));
     ui.label(RichText::new(format!("by {} · v{} · {}", def.author, def.version, def.plugin)).size(12.0).color(theme.text_muted));
-    if !def.aliases.is_empty() {
-        ui.label(RichText::new(tf!("Also: {names}", names = def.aliases.join(", "))).size(12.5).color(theme.text_muted));
-    }
     ui.label(&def.description);
     let fields: Vec<String> = def.fields.iter().filter(|(_, f)| !f.advanced).map(|(k, f)| f.label(k)).collect();
     let outputs: Vec<String> = def.outputs.iter().map(|(k, o)| format!("{} ({})", o.label(k), o.ty.display(reg))).collect();
@@ -432,11 +426,11 @@ mod tests {
 
     #[test]
     fn other_names_count_like_the_name() {
-        let def = BlockDef { name: "Send Message".into(), aliases: vec!["Reply".into(), "Nachricht senden".into()], tags: vec!["dm".into()], ..Default::default() };
+        let def = BlockDef { name: "Send Message".into(), aliases: vec!["Reply".into(), "Send DM".into()], tags: vec!["private".into()], ..Default::default() };
         assert_eq!(search(&def, "send msg"), None);
         assert_eq!(search(&def, "send"), Some(Found::Name));
-        assert_eq!(search(&def, "nachricht"), Some(Found::Alias("Nachricht senden".into())));
-        assert_eq!(search(&def, "dm"), Some(Found::Elsewhere));
+        assert_eq!(search(&def, "reply"), Some(Found::Alias));
+        assert_eq!(search(&def, "private"), Some(Found::Elsewhere));
         assert_eq!(search(&def, ""), Some(Found::Name));
     }
 }
