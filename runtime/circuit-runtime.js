@@ -958,10 +958,20 @@ function loadDotEnv(file) {
     return;
   }
   for (const line of text.split(/\r?\n/)) {
-    const m = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/.exec(line);
+    const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
     if (!m || m[1] in process.env) continue;
-    process.env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, "$2");
+    process.env[m[1]] = dotEnvValue(m[2]);
   }
+}
+
+/**
+ * A .env value: inside quotes as written; otherwise trimmed, with a comment
+ * after ` #` left out (`TOKEN=abc # mine` is `abc`).
+ */
+function dotEnvValue(raw) {
+  const quoted = /^\s*(['"])(.*?)\1/.exec(raw);
+  if (quoted) return quoted[2];
+  return raw.replace(/(^|\s)#.*$/, "").trim();
 }
 
 function cli() {
