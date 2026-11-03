@@ -311,6 +311,15 @@ pub fn collect_problems(ed: &Editor) -> Vec<ProblemItem> {
                     Some((key.clone(), from.node.clone())),
                 ));
             }
+            for link in ws.loops(|id| crate::canvas::is_value_block(ws, &ed.reg, id)) {
+                let name = ws.nodes.get(&link.from.node).and_then(|n| ed.reg.block(&n.block)).map(|d| d.name.clone()).or_else(|| ws.zones.get(&link.from.node).map(|z| format!("Try {}", z.title))).unwrap_or_default();
+                let why = if link.to.pin == ACTION_IN {
+                    tf!("its {pin} wire leads back to a block before it, so this path never ends. To repeat blocks, use Repeat, Loop While or For Each", pin = link.from.pin)
+                } else {
+                    tf!("its {pin} wire goes to a block it reads from, so they would wait for each other forever", pin = link.from.pin)
+                };
+                items.push((format!("{} › {name}", ws.name), why, Some((key.clone(), link.from.node.clone()))));
+            }
             for link in &ws.links {
                 let from_ok = ws.nodes.contains_key(&link.from.node) || ws.zones.contains_key(&link.from.node);
                 if !from_ok || !ws.nodes.contains_key(&link.to.node) {

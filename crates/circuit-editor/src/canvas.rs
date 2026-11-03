@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use circuit_core::graph::ACTION_IN;
-use circuit_core::{BlockDef, BlockKind, BlockShape, Compat, Link, PinMode, PinRef, PinType, Workspace};
+use circuit_core::{BlockDef, BlockKind, BlockShape, Compat, Flow, Link, PinMode, PinRef, PinType, Workspace};
 use circuit_plugins::Registry;
 use eframe::egui::{
     self, Align2, Color32, CornerRadius, CursorIcon, FontId, Key, LayerId, PointerButton, Pos2, Rect, Response, RichText, Sense,
@@ -461,6 +461,8 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     let mut action_bar: Option<BarFor> = None;
     let mut start_drag: Option<PinEnd> = None;
     let drag = view.drag.clone();
+    // While a wire is dragged: what follows what, so pins that would close a loop refuse it.
+    let flow = drag.as_ref().map(|_| ws.flow(|id| is_value_block(ws, reg, id)));
     for layout in &layouts[node_count..] {
         let zid = layout.id.clone();
         let r = layout.rect;
@@ -506,7 +508,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         band.on_hover_text(t!("A Try Zone catches errors from the blocks inside it. The gear button sets its title, retries and timeout."));
         for spot in &layout.pins {
             let connected = ws.links.iter().any(|l| l.from.node == zid && l.from.pin == spot.pin);
-            let candidate = drag.as_ref().map(|d| drag_compat(d, &zid, spot, reg));
+            let candidate = drag.as_ref().map(|d| drag_compat(d, &zid, spot, reg, flow.as_ref()));
             draw_pin(&painter, spot, connected, candidate, theme, reg);
             let resp = cui.interact(Rect::from_center_size(spot.pos, Vec2::splat(pin_hit)), cui.id().with(("zpin", &zid, &spot.pin)), Sense::click_and_drag());
             if resp.drag_started() {
@@ -876,7 +878,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         // Pins.
         for spot in &layout.pins {
             let connected = if spot.dir == Dir::In { ws.links_into(id, &spot.pin).next().is_some() } else { ws.links.iter().any(|l| l.from.node == *id && l.from.pin == spot.pin) };
-            let candidate = drag.as_ref().map(|d| drag_compat(d, id, spot, reg));
+            let candidate = drag.as_ref().map(|d| drag_compat(d, id, spot, reg, flow.as_ref()));
             draw_pin(&painter, spot, connected, candidate, theme, reg);
 
             let resp = cui.interact(Rect::from_center_size(spot.pos, Vec2::splat(pin_hit)), cui.id().with(("pin", id, &spot.pin, spot.dir)), Sense::click_and_drag());
@@ -925,6 +927,21 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             let (from, to) = if d.dir == Dir::Out { (a, p) } else { (p, a) };
             draw_wire(&painter, from, to, &d.ty, theme, reg, 0.0);
         }
+        // Over a pin that would close a loop: say why it doesn't connect.
+        if let (Some(p), Some(flow)) = (pointer_scene, flow.as_ref())
+            && layouts.iter().flat_map(|l| l.pins.iter().map(move |s| (l, s))).any(|(l, s)| s.pos.distance(p) < pin_hit * 0.9 && drag_loops(&d, &l.id, s, reg, flow))
+        {
+            let text = if d.ty.is_action() {
+                t!("This would make a loop that never ends. To repeat blocks, use Repeat, Loop While or For Each.")
+            } else {
+                t!("These blocks would wait for each other's values forever.")
+            };
+            let galley = painter.layout(text.to_string(), egui::FontId::proportional(12.0 / view.zoom.max(0.01)), theme.text, 280.0 / view.zoom.max(0.01));
+            let at = p + vec2(16.0, 16.0) / view.zoom.max(0.01);
+            let pad = vec2(8.0, 5.0) / view.zoom.max(0.01);
+            painter.rect(Rect::from_min_size(at, galley.size() + pad * 2.0), 6.0 / view.zoom.max(0.01), theme.panel, Stroke::new(1.0, theme.error), StrokeKind::Inside);
+            painter.galley(at + pad, galley, theme.text);
+        }
         if ctx.input(|i| i.key_pressed(Key::Escape)) {
             view.drag = None;
             if let Some(link) = d.picked_up.clone() {
@@ -936,10 +953,12 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                 layouts
                     .iter()
                     .flat_map(|l| l.pins.iter().map(move |s| (l, s)))
-                    .filter(|(l, s)| s.pos.distance(p) < pin_hit * 0.9 && drag_compat(&d, &l.id, s, reg) != Compat::No)
+                    .filter(|(l, s)| s.pos.distance(p) < pin_hit * 0.9 && drag_compat(&d, &l.id, s, reg, flow.as_ref()) != Compat::No)
                     .min_by(|a, b| a.1.pos.distance(p).total_cmp(&b.1.pos.distance(p)))
                     .map(|(l, s)| (l.id.clone(), s.clone()))
             });
+            // Dropped on a pin that refuses it (another type, or a loop): nothing happens.
+            let on_pin = pointer_scene.is_some_and(|p| layouts.iter().flat_map(|l| l.pins.iter()).any(|s| s.pos.distance(p) < pin_hit * 0.9));
             match target {
                 Some((node, spot)) => {
                     connect(ws, &d, &node, &spot);
@@ -947,6 +966,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                 }
                 // A picked-up wire dropped on nothing is deleted.
                 None if d.picked_up.is_some() => {}
+                None if on_pin => {}
                 None if over_canvas => {
                     let p = pointer.unwrap();
                     *picker = Some(Picker::new(ws_key, p, to_global.inverse() * p, Some(PendingWire::from(&d))));
@@ -1325,13 +1345,36 @@ fn draw_pin(painter: &egui::Painter, spot: &PinSpot, connected: bool, candidate:
     painter.circle(spot.pos, r, fill, Stroke::new(2.0, with_alpha(color, alpha)));
 }
 
-/// How well the pin under the pointer fits the wire being dragged.
-fn drag_compat(d: &PinEnd, node: &str, spot: &PinSpot, reg: &Registry) -> Compat {
+/// How well the pin under the pointer fits the wire being dragged. A wire
+/// that would close a loop doesn't fit.
+fn drag_compat(d: &PinEnd, node: &str, spot: &PinSpot, reg: &Registry, flow: Option<&Flow>) -> Compat {
     if node == d.node || spot.dir == d.dir {
         return Compat::No;
     }
     let (from, to) = if d.dir == Dir::Out { (&d.ty, &spot.ty) } else { (&spot.ty, &d.ty) };
-    from.compat(to, reg)
+    let fits = from.compat(to, reg);
+    if fits != Compat::No && flow.is_some_and(|f| f.would_loop(&drag_link(d, node, spot))) {
+        return Compat::No;
+    }
+    fits
+}
+
+/// Whether the dragged wire would fit `spot` but close a loop there.
+fn drag_loops(d: &PinEnd, node: &str, spot: &PinSpot, reg: &Registry, flow: &Flow) -> bool {
+    drag_compat(d, node, spot, reg, None) != Compat::No && flow.would_loop(&drag_link(d, node, spot))
+}
+
+/// The wire the dragged one becomes when dropped on `spot` of `node`.
+fn drag_link(d: &PinEnd, node: &str, spot: &PinSpot) -> Link {
+    match d.dir {
+        Dir::Out => Link { from: PinRef::new(&d.node, &d.pin), to: PinRef::new(node, &spot.pin) },
+        Dir::In => Link { from: PinRef::new(node, &spot.pin), to: PinRef::new(&d.node, &d.pin) },
+    }
+}
+
+/// Blocks that work out their outputs when read (rather than when they run).
+pub fn is_value_block(ws: &Workspace, reg: &Registry, id: &str) -> bool {
+    ws.nodes.get(id).and_then(|n| reg.block(&n.block)).is_some_and(|d| d.kind == BlockKind::Value)
 }
 
 /// Adds the link for a drop of `d` onto `spot` of `node`.

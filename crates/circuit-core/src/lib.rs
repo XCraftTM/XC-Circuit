@@ -9,6 +9,6 @@ pub mod template;
 pub mod types;
 
 pub use block::{BlockDef, BlockKind, BlockShape, DefineResult, FieldDef, OutputDef, PinMode};
-pub use graph::{CLIP_FORMAT, Clip, Link, Node, PinRef, Workspace, Zone};
+pub use graph::{CLIP_FORMAT, Clip, Flow, Link, Node, PinRef, Workspace, Zone};
 pub use project::{Project, ProjectMeta};
 pub use types::{Compat, PinType, TypeInfo};

@@ -1,7 +1,7 @@
 //! A workspace graph: placed blocks, the links between their pins, Try Zones
 //! and comment boxes.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::str::FromStr;
 
@@ -178,6 +178,40 @@ impl Workspace {
     }
 }
 
+/// The wires a workspace's paths follow: Action wires, and wires between
+/// value blocks (which read each other when asked for a value).
+pub struct Flow {
+    value: HashSet<String>,
+    next: HashMap<String, Vec<String>>,
+}
+
+impl Flow {
+    fn follows(value: &HashSet<String>, l: &Link) -> bool {
+        l.to.pin == ACTION_IN || (value.contains(&l.from.node) && value.contains(&l.to.node))
+    }
+
+    /// Whether `link` closes a loop: an Action wire back to a block earlier
+    /// on the same path (it would run forever), or value blocks that read
+    /// each other (they would wait for each other forever).
+    pub fn would_loop(&self, link: &Link) -> bool {
+        Flow::follows(&self.value, link) && self.reaches(&link.to.node, &link.from.node)
+    }
+
+    fn reaches(&self, from: &str, to: &str) -> bool {
+        let mut seen = HashSet::new();
+        let mut todo = vec![from];
+        while let Some(at) = todo.pop() {
+            if at == to {
+                return true;
+            }
+            if seen.insert(at) {
+                todo.extend(self.next.get(at).into_iter().flatten().map(String::as_str));
+            }
+        }
+        false
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Comment {
@@ -230,6 +264,36 @@ impl Workspace {
         self.links.push(link);
     }
 
+    /// What runs or is read after what, to find loops. `value_block` tells
+    /// which blocks work out their outputs when read.
+    pub fn flow(&self, value_block: impl Fn(&str) -> bool) -> Flow {
+        let value: HashSet<String> = self.nodes.keys().filter(|id| value_block(id)).cloned().collect();
+        let mut next: HashMap<String, Vec<String>> = HashMap::new();
+        for l in &self.links {
+            if Flow::follows(&value, l) {
+                next.entry(l.from.node.clone()).or_default().push(l.to.node.clone());
+            }
+        }
+        // A block in a Try Zone goes on through the zone's Done and Error outputs.
+        for (id, n) in &self.nodes {
+            if let Some(zone) = &n.zone {
+                next.entry(id.clone()).or_default().push(zone.clone());
+            }
+        }
+        Flow { value, next }
+    }
+
+    /// Whether `link` would close a loop (see `Flow::would_loop`).
+    pub fn would_loop(&self, link: &Link, value_block: impl Fn(&str) -> bool) -> bool {
+        self.flow(value_block).would_loop(link)
+    }
+
+    /// The wires that are part of a loop.
+    pub fn loops(&self, value_block: impl Fn(&str) -> bool) -> Vec<&Link> {
+        let flow = self.flow(value_block);
+        self.links.iter().filter(|l| flow.would_loop(l)).collect()
+    }
+
     /// Action outputs that lead to more than one block (made before paths
     /// couldn't split), with how many.
     pub fn split_paths(&self) -> Vec<(PinRef, usize)> {
@@ -260,6 +324,35 @@ fn round_rect<S: Serializer>(r: &[f32; 4], s: S) -> Result<S::Ok, S::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn finds_loops() {
+        let mut ws = Workspace::new("t");
+        for id in ["start", "a", "b", "math1", "math2", "send"] {
+            ws.nodes.insert(id.into(), Node { block: format!("{id}@1"), ..Default::default() });
+        }
+        ws.nodes["b"].zone = Some("z".into());
+        let value = |id: &str| id.starts_with("math");
+        let link = |s: &str| s.parse::<Link>().unwrap();
+        for l in ["start.next > a.in", "a.next > b.in", "math1.result > math2.a", "math2.result > send.text"] {
+            ws.links.push(link(l));
+        }
+        assert!(ws.loops(value).is_empty());
+        // Back to a block earlier on the path, or to itself.
+        assert!(ws.would_loop(&link("b.next > a.in"), value));
+        assert!(ws.would_loop(&link("a.next > a.in"), value));
+        assert!(!ws.would_loop(&link("a.next > send.in"), value));
+        // Out of the Try Zone around b and back into it.
+        assert!(ws.would_loop(&link("z.error > b.in"), value));
+        assert!(ws.would_loop(&link("z.error > a.in"), value));
+        // Value blocks reading each other wait forever; reading an action block's
+        // output (worked out when it ran) is fine.
+        assert!(ws.would_loop(&link("math2.result > math1.b"), value));
+        assert!(!ws.would_loop(&link("send.message > math1.b"), value));
+
+        ws.links.push(link("b.next > a.in"));
+        assert_eq!(ws.loops(value).iter().map(|l| l.to_string()).collect::<Vec<_>>(), ["a.next > b.in", "b.next > a.in"]);
+    }
 
     #[test]
     fn link_round_trip() {
