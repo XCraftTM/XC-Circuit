@@ -80,6 +80,8 @@ pub struct CanvasView {
     /// How tall each field's control was last drawn, so its row fits it:
     /// (block, field) → height.
     pub field_heights: HashMap<(String, String), f32>,
+    /// Where the canvas' top-left corner was, and in which frame.
+    pub last_origin: Option<(Pos2, u64)>,
 }
 
 impl CanvasView {
@@ -369,6 +371,17 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
 
     let (outer, _) = ui.allocate_exact_size(ui.available_size(), Sense::hover());
     ui.painter().rect_filled(outer, 0.0, theme.canvas);
+
+    // When the canvas' edge moves (the side bar opens or closes, a panel next
+    // to it is resized), its blocks stay where they are on screen.
+    let frame = ui.ctx().cumulative_pass_nr();
+    if let Some((before, drawn)) = view.last_origin
+        && drawn + 1 == frame
+        && view.initialized
+    {
+        view.offset -= outer.min - before;
+    }
+    view.last_origin = Some((outer.min, frame));
 
     if !view.initialized {
         fit_view(view, outer, &layouts[..node_count]);

@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use circuit_core::Project;
 use eframe::egui::{self, Frame, Id, Margin, RichText, ViewportCommand, WidgetText};
 use egui_dock::tab_viewer::OnCloseResponse;
-use egui_dock::{DockArea, DockState, NodeIndex, TabViewer, Tree};
+use egui_dock::{DockArea, DockState, Node, NodeIndex, TabViewer, Tree};
 use serde::{Deserialize, Serialize};
 
 use crate::bot::{BotState, BotUi};
@@ -88,6 +88,8 @@ pub struct CircuitApp {
     /// The project's problems and what they were found for (project revision,
     /// plugin reloads, language): found again only when one changes.
     problems_found: Option<((u64, u64, String), Vec<panels::ProblemItem>)>,
+    /// The dock's size last frame, so side panels keep theirs when it changes.
+    dock_size: Option<egui::Vec2>,
     bot: BotUi,
     stored: crate::stored::StoredView,
     watcher: crate::watch::PluginWatcher,
@@ -196,6 +198,7 @@ impl CircuitApp {
             allow_close: false,
             problem_count: 0,
             problems_found: None,
+            dock_size: None,
             bot: BotUi::new(),
             stored: Default::default(),
             watcher,
@@ -1350,6 +1353,15 @@ impl eframe::App for CircuitApp {
                 restore: &mut self.restore,
                 asks: Vec::new(),
             };
+            let size = ui.available_size();
+            if let Some(before) = self.dock_size
+                && before != size
+                && before.min_elem() > 100.0
+                && size.min_elem() > 100.0
+            {
+                keep_panel_sizes(self.dock.main_surface_mut(), NodeIndex::root(), size - before);
+            }
+            self.dock_size = Some(size);
             DockArea::new(&mut self.dock)
                 .style(style)
                 .show_add_buttons(false)
@@ -1576,6 +1588,53 @@ impl TabViewer for Viewer<'_> {
 
     fn scroll_bars(&self, _tab: &Tab) -> [bool; 2] {
         [false, false]
+    }
+}
+
+/// Gives a change in the dock's size (`grow`) to the canvases, so the panels
+/// beside and below them (Inspector, Console …) keep their size. Splits are
+/// fractions, so on their own every part would grow and shrink with the dock.
+fn keep_panel_sizes(tree: &mut Tree<Tab>, index: NodeIndex, grow: egui::Vec2) {
+    if index.0 >= tree.len() {
+        return;
+    }
+    let (horizontal, rect, fraction) = match &tree[index] {
+        Node::Horizontal(s) => (true, s.rect, s.fraction),
+        Node::Vertical(s) => (false, s.rect, s.fraction),
+        _ => return,
+    };
+    let (size, along) = if horizontal { (rect.width(), grow.x) } else { (rect.height(), grow.y) };
+    let (left, right) = (index.left(), index.right());
+    // The side with the canvases takes it all; otherwise both share it.
+    let to_left = match (has_center(tree, left), has_center(tree, right)) {
+        (true, false) => along,
+        (false, true) => 0.0,
+        _ => along * fraction,
+    };
+    if along != 0.0 && size.is_finite() && size > 1.0 {
+        let f = ((fraction * size + to_left) / (size + along)).clamp(0.05, 0.95);
+        if let Node::Horizontal(s) | Node::Vertical(s) = &mut tree[index] {
+            s.fraction = f;
+        }
+    }
+    let (grow_left, grow_right) = if horizontal {
+        (egui::vec2(to_left, grow.y), egui::vec2(along - to_left, grow.y))
+    } else {
+        (egui::vec2(grow.x, to_left), egui::vec2(grow.x, along - to_left))
+    };
+    keep_panel_sizes(tree, left, grow_left);
+    keep_panel_sizes(tree, right, grow_right);
+}
+
+/// Whether a part of the layout holds canvases (or other middle tabs).
+fn has_center(tree: &Tree<Tab>, index: NodeIndex) -> bool {
+    if index.0 >= tree.len() {
+        return false;
+    }
+    match &tree[index] {
+        Node::Leaf(leaf) => leaf.tabs().iter().any(|t| t.side() == Side::Center),
+        Node::Horizontal(_) | Node::Vertical(_) => has_center(tree, index.left()) || has_center(tree, index.right()),
+        Node::Empty => false,
     }
 }
 
