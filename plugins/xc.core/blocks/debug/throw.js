@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "code",
-    aliases: ["Fail", "Raise error", "Fehler auslösen"],
+    aliases: ["Fail", "Raise error"],
   },
   look: {
     icon: "info",

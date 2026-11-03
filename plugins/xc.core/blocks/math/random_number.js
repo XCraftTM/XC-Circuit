@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "numbers",
-    aliases: ["Dice", "Random", "Zufallszahl", "Würfeln"],
+    aliases: ["Dice", "Random"],
     tags: ["dice", "roll", "chance"],
   },
   look: {

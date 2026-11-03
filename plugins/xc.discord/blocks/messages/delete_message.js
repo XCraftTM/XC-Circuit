@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "manage_messages",
-    aliases: ["Remove message", "Nachricht löschen"],
+    aliases: ["Remove message"],
     tags: ["remove"],
   },
   look: {

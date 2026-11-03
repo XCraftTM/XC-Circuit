@@ -12,7 +12,7 @@ module.exports = {
   },
   search: {
     category: "server",
-    aliases: ["Event", "Calendar", "Geplantes Event"],
+    aliases: ["Event", "Calendar"],
     tags: ["event", "calendar", "meetup", "stage"],
   },
   look: {

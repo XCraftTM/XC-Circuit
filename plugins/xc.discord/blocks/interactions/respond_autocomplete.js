@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "components",
-    aliases: ["Send suggestions", "Vorschläge senden"],
+    aliases: ["Send suggestions"],
     tags: ["suggest", "search"],
   },
   look: {

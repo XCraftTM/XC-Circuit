@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "reactions",
-    aliases: ["Unreact", "Reaktion entfernen"],
+    aliases: ["Unreact"],
     tags: ["unreact", "clear reactions"],
   },
   look: {

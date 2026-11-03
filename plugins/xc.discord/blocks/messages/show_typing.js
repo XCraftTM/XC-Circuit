@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "send",
-    aliases: ["Typing indicator", "Tippen anzeigen"],
+    aliases: ["Typing indicator"],
     tags: ["typing indicator", "busy"],
   },
   look: {

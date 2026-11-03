@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "design",
-    aliases: ["Embed", "Rich message", "Embed erstellen"],
+    aliases: ["Embed", "Rich message"],
   },
   look: {
     icon: "embed",

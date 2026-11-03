@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "events_messages",
-    aliases: ["Message updated", "Nachricht bearbeitet"],
+    aliases: ["Message updated"],
     tags: ["log", "changed", "update"],
   },
   look: {

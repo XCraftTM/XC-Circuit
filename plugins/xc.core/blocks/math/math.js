@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "numbers",
-    aliases: ["Calculate", "Add", "Multiply", "Rechnen", "Mathe"],
+    aliases: ["Calculate", "Add", "Multiply"],
   },
   look: {
     icon: "hash",

@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "manage_messages",
-    aliases: ["Pin", "Unpin", "Anheften"],
+    aliases: ["Pin", "Unpin"],
     tags: ["unpin", "pinned"],
   },
   look: {

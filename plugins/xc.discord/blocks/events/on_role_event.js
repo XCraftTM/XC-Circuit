@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "events_server",
-    aliases: ["Role created", "Role deleted", "Rolle erstellt"],
+    aliases: ["Role created", "Role deleted"],
     tags: ["log", "role update", "server log"],
   },
   look: {

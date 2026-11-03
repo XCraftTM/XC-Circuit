@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "reactions",
-    aliases: ["Who reacted", "Reaktionen abrufen"],
+    aliases: ["Who reacted"],
     tags: ["giveaway", "starboard", "votes", "count"],
   },
   look: {

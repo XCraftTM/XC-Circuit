@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "events_members",
-    aliases: ["Welcome", "User joined", "Mitglied tritt bei", "Willkommen"],
+    aliases: ["Welcome", "User joined"],
   },
   look: {
     icon: "user-plus",

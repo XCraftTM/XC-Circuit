@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "data",
-    aliases: ["Keys", "Schlüssel auflisten"],
+    aliases: ["Keys"],
   },
   look: {
     icon: "database",

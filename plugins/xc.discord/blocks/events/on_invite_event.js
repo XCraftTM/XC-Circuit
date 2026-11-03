@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "events_server",
-    aliases: ["Invite tracking", "Einladung erstellt"],
+    aliases: ["Invite tracking"],
     tags: ["invite tracking", "log"],
   },
   look: {

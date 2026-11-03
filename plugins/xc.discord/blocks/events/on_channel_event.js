@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "events_server",
-    aliases: ["Channel created", "Channel deleted", "Kanal erstellt"],
+    aliases: ["Channel created", "Channel deleted"],
     tags: ["log", "channel update", "server log"],
   },
   look: {

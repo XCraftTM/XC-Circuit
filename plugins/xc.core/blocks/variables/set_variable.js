@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "variables",
-    aliases: ["Save variable", "Variable setzen"],
+    aliases: ["Save variable"],
     tags: ["var", "remember", "temp"],
   },
   look: {

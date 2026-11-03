@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "moderation",
-    aliases: ["Word filter", "Spam filter", "AutoMod-Regel"],
+    aliases: ["Word filter", "Spam filter"],
     tags: ["filter", "bad words", "blocklist", "moderation"],
   },
   look: {

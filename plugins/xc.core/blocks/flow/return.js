@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "calls",
-    aliases: ["Return value", "Zurückgeben"],
+    aliases: ["Return value"],
     tags: ["function", "result", "give back"],
   },
   look: {

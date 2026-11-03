@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "send",
-    aliases: ["Await message", "Ask", "Collector", "Auf Antwort warten"],
+    aliases: ["Await message", "Ask", "Collector"],
     tags: ["collector", "await", "answer", "confirm", "question"],
   },
   look: {

@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "code",
-    aliases: ["Print", "Console", "Debug", "Ausgeben", "Konsole"],
+    aliases: ["Print", "Console", "Debug"],
   },
   look: {
     icon: "terminal",

@@ -12,7 +12,7 @@ module.exports = {
   },
   search: {
     category: "bot",
-    aliases: ["Activity", "Presence", "Playing", "Bot-Status setzen"],
+    aliases: ["Activity", "Presence", "Playing"],
     tags: ["presence", "activity", "playing"],
   },
   look: {

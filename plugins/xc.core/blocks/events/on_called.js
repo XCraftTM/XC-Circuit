@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "events_bot",
-    aliases: ["Function", "Subroutine", "Wenn aufgerufen", "Funktion"],
+    aliases: ["Function", "Subroutine"],
     tags: ["function", "subroutine", "reuse"],
   },
   look: {

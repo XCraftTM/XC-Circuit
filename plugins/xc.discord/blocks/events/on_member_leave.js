@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "events_members",
-    aliases: ["Goodbye", "User left", "Mitglied verlässt", "Abschied"],
+    aliases: ["Goodbye", "User left"],
   },
   look: {
     icon: "user",

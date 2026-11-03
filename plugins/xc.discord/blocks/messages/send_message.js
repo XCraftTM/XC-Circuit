@@ -18,7 +18,7 @@ module.exports = {
   },
   search: {
     category: "send",
-    aliases: ["Reply", "Respond", "Send DM", "Nachricht senden", "Antworten"],
+    aliases: ["Reply", "Respond", "Send DM"],
   },
   look: {
     icon: "send",

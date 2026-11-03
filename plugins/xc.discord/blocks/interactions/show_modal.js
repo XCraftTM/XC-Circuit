@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "components",
-    aliases: ["Form", "Popup", "Formular anzeigen"],
+    aliases: ["Form", "Popup"],
     tags: ["form", "popup", "dialog", "ask"],
   },
   look: {

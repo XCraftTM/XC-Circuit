@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "events_members",
-    aliases: ["Banned", "Mitglied gebannt"],
+    aliases: ["Banned"],
     tags: ["log", "unban", "moderation"],
   },
   look: {

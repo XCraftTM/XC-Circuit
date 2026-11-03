@@ -12,7 +12,7 @@ module.exports = {
   },
   search: {
     category: "data",
-    aliases: ["Ranking", "Top list", "Rangliste", "Bestenliste"],
+    aliases: ["Ranking", "Top list"],
     tags: ["top", "rank", "xp", "levels", "economy", "scores"],
   },
   look: {

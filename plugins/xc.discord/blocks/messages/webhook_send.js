@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "send",
-    aliases: ["Webhook", "Per Webhook senden"],
+    aliases: ["Webhook"],
     tags: ["impersonate", "custom name", "avatar", "announce"],
   },
   look: {

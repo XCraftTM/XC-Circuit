@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "events_members",
-    aliases: ["Status changed", "Online", "Status geändert"],
+    aliases: ["Status changed", "Online"],
     tags: ["status", "online", "playing", "streaming"],
   },
   look: {

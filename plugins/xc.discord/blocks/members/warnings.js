@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "moderation",
-    aliases: ["Warn", "Strikes", "Verwarnen", "Verwarnungen"],
+    aliases: ["Warn", "Strikes"],
     tags: ["warn", "strike", "moderation", "infractions"],
   },
   look: {

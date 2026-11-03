@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "events_server",
-    aliases: ["Event started", "Geplantes Event"],
+    aliases: ["Event started"],
     tags: ["scheduled event", "calendar", "stage", "meetup"],
   },
   look: {

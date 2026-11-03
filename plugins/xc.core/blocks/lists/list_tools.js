@@ -28,7 +28,7 @@ module.exports = {
   },
   search: {
     category: "lists",
-    aliases: ["Array tools", "Shuffle", "Sort", "Listenwerkzeuge"],
+    aliases: ["Array tools", "Shuffle", "Sort"],
     tags: ["array", "length", "join", "sort", "random", "contains"],
   },
   look: {

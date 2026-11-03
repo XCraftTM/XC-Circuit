@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "server",
-    aliases: ["Invites", "Einladungen auflisten"],
+    aliases: ["Invites"],
     tags: ["invite tracking", "uses"],
   },
   look: {

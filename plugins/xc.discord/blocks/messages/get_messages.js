@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "manage_messages",
-    aliases: ["Message history", "Fetch messages", "Nachrichten abrufen"],
+    aliases: ["Message history", "Fetch messages"],
     tags: ["history", "fetch", "transcript", "read"],
   },
   look: {

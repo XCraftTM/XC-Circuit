@@ -36,7 +36,7 @@ module.exports = {
   },
   search: {
     category: "web",
-    aliases: ["Webhook received", "HTTP server", "Webanfrage empfangen"],
+    aliases: ["Webhook received", "HTTP server"],
     tags: ["http", "server", "api", "webhook", "endpoint", "dashboard"],
   },
   look: {

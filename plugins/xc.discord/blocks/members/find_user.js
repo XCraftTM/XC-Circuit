@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "members",
-    aliases: ["Fetch user", "Get user", "Benutzer finden"],
+    aliases: ["Fetch user", "Get user"],
     tags: ["fetch user", "lookup", "id"],
   },
   look: {

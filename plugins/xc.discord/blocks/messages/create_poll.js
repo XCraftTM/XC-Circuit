@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "reactions",
-    aliases: ["Vote", "Survey", "Umfrage erstellen"],
+    aliases: ["Vote", "Survey"],
     tags: ["vote", "survey"],
   },
   look: {

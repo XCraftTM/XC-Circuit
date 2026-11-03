@@ -28,7 +28,7 @@ module.exports = {
   },
   search: {
     category: "events_commands",
-    aliases: ["Command", "/command", "Befehl", "Slash-Befehl"],
+    aliases: ["Command", "/command"],
   },
   look: {
     icon: "slash",

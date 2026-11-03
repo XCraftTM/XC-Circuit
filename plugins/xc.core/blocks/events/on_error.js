@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "events_bot",
-    aliases: ["Catch errors", "Bei Fehler", "Fehler abfangen"],
+    aliases: ["Catch errors"],
   },
   look: {
     icon: "info",

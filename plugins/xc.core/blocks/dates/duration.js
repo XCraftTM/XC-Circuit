@@ -39,7 +39,7 @@ module.exports = {
   },
   search: {
     category: "time",
-    aliases: ["Time span", "Parse time", "Dauer", "Zeitspanne"],
+    aliases: ["Time span", "Parse time"],
     tags: ["time", "minutes", "seconds", "ms", "timeout length"],
   },
   look: {

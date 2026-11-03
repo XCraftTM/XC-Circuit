@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "voice",
-    aliases: ["Move member", "Disconnect", "Voice mute", "Sprachkanal"],
+    aliases: ["Move member", "Disconnect", "Voice mute"],
     tags: ["move", "disconnect", "kick from voice", "mute", "deafen", "vc"],
   },
   look: {

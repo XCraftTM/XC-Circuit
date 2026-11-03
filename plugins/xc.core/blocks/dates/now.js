@@ -18,7 +18,7 @@ module.exports = {
   },
   search: {
     category: "time",
-    aliases: ["Now", "Time", "Datum", "Uhrzeit"],
+    aliases: ["Now", "Time"],
     tags: ["now", "time", "timestamp", "format"],
   },
   look: {

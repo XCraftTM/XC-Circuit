@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "events_members",
-    aliases: ["Role changed", "Nickname changed", "Mitglied geändert"],
+    aliases: ["Role changed", "Nickname changed"],
     tags: ["log", "role added", "nickname", "boost", "timeout"],
   },
   look: {

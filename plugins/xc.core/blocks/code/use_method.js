@@ -21,7 +21,7 @@ module.exports = {
   },
   search: {
     category: "code",
-    aliases: ["discord.js", "Call method", "Methode aufrufen"],
+    aliases: ["discord.js", "Call method"],
     tags: ["call", "method", "property", "discord.js", "advanced", "api"],
   },
   look: {

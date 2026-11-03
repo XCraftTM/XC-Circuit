@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "text",
-    aliases: ["Regular expression", "Pattern", "Regulärer Ausdruck", "Muster"],
+    aliases: ["Regular expression", "Pattern"],
     tags: ["pattern", "match", "regular expression", "extract", "find"],
   },
   look: {

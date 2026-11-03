@@ -34,7 +34,7 @@ module.exports = {
   },
   search: {
     category: "manage_messages",
-    aliases: ["Message details", "Nachrichteninfo"],
+    aliases: ["Message details"],
   },
   look: {
     icon: "message",

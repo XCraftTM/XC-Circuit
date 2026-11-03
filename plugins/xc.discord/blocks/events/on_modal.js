@@ -27,7 +27,7 @@ module.exports = {
   },
   search: {
     category: "events_commands",
-    aliases: ["Form submitted", "Formular abgeschickt"],
+    aliases: ["Form submitted"],
     tags: ["form", "popup", "input", "dialog"],
   },
   look: {

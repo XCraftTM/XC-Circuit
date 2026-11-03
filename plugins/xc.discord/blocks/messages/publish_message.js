@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "send",
-    aliases: ["Crosspost", "Announcement", "Nachricht veröffentlichen"],
+    aliases: ["Crosspost", "Announcement"],
     tags: ["crosspost", "announcement", "follow"],
   },
   look: {

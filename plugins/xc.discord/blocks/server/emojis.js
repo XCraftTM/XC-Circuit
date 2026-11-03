@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "server",
-    aliases: ["Stickers", "Custom emoji", "Emojis verwalten"],
+    aliases: ["Stickers", "Custom emoji"],
     tags: ["emoji", "emote", "sticker", "upload"],
   },
   look: {

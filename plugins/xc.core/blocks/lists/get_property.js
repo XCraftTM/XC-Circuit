@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "lists",
-    aliases: ["Read field", "Eigenschaft lesen"],
+    aliases: ["Read field"],
     tags: ["object", "field", "key", "json"],
   },
   look: {

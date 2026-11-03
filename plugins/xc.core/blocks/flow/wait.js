@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "time",
-    aliases: ["Delay", "Sleep", "Pause", "Warten"],
+    aliases: ["Delay", "Sleep", "Pause"],
   },
   look: {
     icon: "clock",

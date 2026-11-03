@@ -13,7 +13,7 @@ module.exports = {
   },
   search: {
     category: "code",
-    aliases: ["JavaScript", "Script", "Eval", "Code ausführen"],
+    aliases: ["JavaScript", "Script", "Eval"],
     tags: ["javascript", "script", "custom", "advanced", "eval"],
   },
   look: {

@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "server",
-    aliases: ["Guild settings", "Server bearbeiten"],
+    aliases: ["Guild settings"],
     tags: ["guild settings", "rename server", "icon"],
   },
   look: {

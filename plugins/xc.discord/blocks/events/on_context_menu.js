@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "events_commands",
-    aliases: ["Right-click", "App command", "Rechtsklick-Menü", "Kontextmenü"],
+    aliases: ["Right-click", "App command"],
     tags: ["right-click", "apps", "user command", "message command"],
   },
   look: {

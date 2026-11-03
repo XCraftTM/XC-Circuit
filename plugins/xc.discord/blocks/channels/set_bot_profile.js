@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "bot",
-    aliases: ["Bot avatar", "Bot name", "Bot-Profil setzen"],
+    aliases: ["Bot avatar", "Bot name"],
     tags: ["avatar", "rename bot", "username"],
   },
   look: {

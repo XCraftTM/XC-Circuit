@@ -12,7 +12,7 @@ module.exports = {
   },
   search: {
     category: "channels",
-    aliases: ["Rename channel", "Slowmode", "Topic", "Kanal bearbeiten"],
+    aliases: ["Rename channel", "Slowmode", "Topic"],
     tags: ["rename", "topic", "slowmode", "move"],
   },
   look: {

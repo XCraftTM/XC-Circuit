@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "events_commands",
-    aliases: ["Suggestions", "Vorschläge"],
+    aliases: ["Suggestions"],
     tags: ["suggest", "search", "options"],
   },
   look: {

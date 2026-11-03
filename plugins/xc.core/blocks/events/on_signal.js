@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "events_bot",
-    aliases: ["Listen for signal", "Signal empfangen"],
+    aliases: ["Listen for signal"],
   },
   look: {
     icon: "bolt",

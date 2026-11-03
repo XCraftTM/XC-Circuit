@@ -59,7 +59,7 @@ module.exports = {
   },
   search: {
     category: "roles",
-    aliases: ["New role", "Rolle erstellen"],
+    aliases: ["New role"],
     tags: ["new role", "rank"],
   },
   look: {

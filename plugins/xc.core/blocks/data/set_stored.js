@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "data",
-    aliases: ["Save", "Database set", "Speichern", "Wert speichern"],
+    aliases: ["Save", "Database set"],
   },
   look: {
     icon: "database",

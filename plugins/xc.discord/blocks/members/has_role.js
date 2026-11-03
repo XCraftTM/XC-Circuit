@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "roles",
-    aliases: ["Check role", "Hat Rolle"],
+    aliases: ["Check role"],
     tags: ["role", "check", "permission"],
   },
   look: {

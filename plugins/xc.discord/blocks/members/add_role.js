@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "roles",
-    aliases: ["Give role", "Assign role", "Rolle vergeben", "Rolle hinzufügen"],
+    aliases: ["Give role", "Assign role"],
     tags: ["rank", "permissions"],
   },
   look: {

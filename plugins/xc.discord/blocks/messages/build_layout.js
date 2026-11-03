@@ -33,7 +33,7 @@ module.exports = {
   },
   search: {
     category: "design",
-    aliases: ["Components V2", "Container", "Layout erstellen"],
+    aliases: ["Components V2", "Container"],
     tags: ["components v2", "container", "section", "gallery", "embed"],
   },
   look: {

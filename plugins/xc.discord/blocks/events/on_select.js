@@ -25,7 +25,7 @@ module.exports = {
   },
   search: {
     category: "events_commands",
-    aliases: ["Dropdown chosen", "Auswahlmenü benutzt"],
+    aliases: ["Dropdown chosen"],
     tags: ["dropdown", "menu", "choose", "component"],
   },
   look: {

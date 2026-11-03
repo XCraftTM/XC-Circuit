@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "moderation",
-    aliases: ["Mod log", "Who did it", "Audit-Log"],
+    aliases: ["Mod log", "Who did it"],
     tags: ["who did it", "moderation log", "history"],
   },
   look: {

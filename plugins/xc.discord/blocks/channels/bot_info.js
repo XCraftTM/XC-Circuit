@@ -28,7 +28,7 @@ module.exports = {
   },
   search: {
     category: "bot",
-    aliases: ["Ping", "Uptime", "Latency", "Bot-Info"],
+    aliases: ["Ping", "Uptime", "Latency"],
     tags: ["ping", "latency", "uptime", "stats", "invite"],
   },
   look: {

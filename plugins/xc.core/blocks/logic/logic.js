@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "numbers",
-    aliases: ["And", "Or", "Not", "Und / Oder / Nicht"],
+    aliases: ["And", "Or", "Not"],
     tags: ["boolean", "and", "or", "not"],
   },
   look: {

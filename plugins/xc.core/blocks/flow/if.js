@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "flow",
-    aliases: ["Condition", "Branch", "Wenn", "Bedingung"],
+    aliases: ["Condition", "Branch"],
   },
   look: {
     icon: "branch",

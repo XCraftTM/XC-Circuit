@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "events_messages",
-    aliases: ["New message", "Message received", "On message", "Nachricht gesendet", "Neue Nachricht"],
+    aliases: ["New message", "Message received", "On message"],
   },
   look: {
     icon: "message",

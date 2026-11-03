@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "events_server",
-    aliases: ["AutoMod triggered", "Filter", "AutoMod-Aktion"],
+    aliases: ["AutoMod triggered", "Filter"],
     tags: ["filter", "bad words", "spam", "moderation"],
   },
   look: {

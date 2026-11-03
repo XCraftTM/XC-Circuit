@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "data",
-    aliases: ["Add XP", "Increment", "Counter", "Erhöhen", "Zähler"],
+    aliases: ["Add XP", "Increment", "Counter"],
   },
   look: {
     icon: "plus-circle",

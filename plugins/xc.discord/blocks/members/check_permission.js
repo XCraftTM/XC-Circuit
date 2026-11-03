@@ -61,7 +61,7 @@ module.exports = {
   },
   search: {
     category: "roles",
-    aliases: ["Is admin", "Has permission", "Berechtigung prüfen"],
+    aliases: ["Is admin", "Has permission"],
     tags: ["can", "allowed", "admin", "mod only"],
   },
   look: {

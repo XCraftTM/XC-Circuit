@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "variables",
-    aliases: ["Read variable", "Variable lesen"],
+    aliases: ["Read variable"],
     tags: ["var", "read"],
   },
   look: {

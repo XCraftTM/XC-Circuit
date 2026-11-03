@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "calls",
-    aliases: ["Send signal", "Broadcast", "Signal senden"],
+    aliases: ["Send signal", "Broadcast"],
   },
   look: {
     icon: "send",

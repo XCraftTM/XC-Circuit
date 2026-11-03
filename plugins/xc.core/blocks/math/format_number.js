@@ -17,7 +17,7 @@ module.exports = {
   },
   search: {
     category: "numbers",
-    aliases: ["Number format", "Ordinal", "Zahl formatieren"],
+    aliases: ["Number format", "Ordinal"],
     tags: ["thousands", "currency", "money", "percent", "ordinal", "round"],
   },
   look: {

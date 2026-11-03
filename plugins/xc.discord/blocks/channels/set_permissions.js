@@ -62,7 +62,7 @@ module.exports = {
   },
   search: {
     category: "roles",
-    aliases: ["Permission overwrite", "Channel access", "Kanalrechte setzen"],
+    aliases: ["Permission overwrite", "Channel access"],
     tags: ["overwrite", "access", "private", "ticket"],
   },
   look: {

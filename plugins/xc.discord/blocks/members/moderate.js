@@ -20,7 +20,7 @@ module.exports = {
   },
   search: {
     category: "moderation",
-    aliases: ["Ban", "Kick", "Timeout", "Mute", "Unban", "Bannen", "Kicken", "Stummschalten"],
+    aliases: ["Ban", "Kick", "Timeout", "Mute", "Unban"],
     tags: ["kick", "ban", "mute", "timeout", "role", "nickname"],
   },
   look: {

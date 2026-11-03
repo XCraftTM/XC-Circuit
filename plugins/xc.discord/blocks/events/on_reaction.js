@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "events_messages",
-    aliases: ["Reaction role", "Emoji added", "Reaktion hinzugefügt"],
+    aliases: ["Reaction role", "Emoji added"],
   },
   look: {
     icon: "message",

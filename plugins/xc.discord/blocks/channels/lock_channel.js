@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "moderation",
-    aliases: ["Lockdown", "Unlock", "Kanal sperren"],
+    aliases: ["Lockdown", "Unlock"],
     tags: ["lockdown", "unlock", "mute channel"],
   },
   look: {

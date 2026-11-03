@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "events_messages",
-    aliases: ["Vote", "Abstimmung"],
+    aliases: ["Vote"],
     tags: ["poll", "vote"],
   },
   look: {

@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "flow",
-    aliases: ["Case", "Match", "Fallunterscheidung"],
+    aliases: ["Case", "Match"],
     tags: ["case", "match", "choose"],
   },
   look: {

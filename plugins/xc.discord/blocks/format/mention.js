@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "format",
-    aliases: ["Ping user", "@user", "Erwähnen", "Erwähnung"],
+    aliases: ["Ping user", "@user"],
     tags: ["ping", "tag", "@", "link channel"],
   },
   look: {

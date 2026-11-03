@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "channels",
-    aliases: ["Archive thread", "Lock thread", "Thread verwalten"],
+    aliases: ["Archive thread", "Lock thread"],
     tags: ["archive", "lock", "close", "add member", "ticket"],
   },
   look: {

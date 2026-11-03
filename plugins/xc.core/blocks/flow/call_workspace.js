@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "calls",
-    aliases: ["Call workspace", "Run function", "Aufrufen", "Funktion aufrufen"],
+    aliases: ["Call workspace", "Run function"],
     tags: ["function", "subroutine", "reuse", "workspace"],
   },
   look: {

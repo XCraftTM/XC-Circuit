@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "events_members",
-    aliases: ["Joined voice", "Left voice", "Sprachkanal betreten", "Sprachstatus"],
+    aliases: ["Joined voice", "Left voice"],
     tags: ["voice", "join", "leave", "temp channel", "vc"],
   },
   look: {

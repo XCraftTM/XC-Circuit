@@ -23,7 +23,7 @@ module.exports = {
   },
   search: {
     category: "components",
-    aliases: ["Dropdown", "Auswahlmenü"],
+    aliases: ["Dropdown"],
     tags: ["dropdown", "component", "choose", "roles menu"],
   },
   look: {

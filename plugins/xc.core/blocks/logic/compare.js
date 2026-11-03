@@ -20,7 +20,7 @@ module.exports = {
   },
   search: {
     category: "numbers",
-    aliases: ["Equals", "Greater than", "Vergleichen"],
+    aliases: ["Equals", "Greater than"],
   },
   look: {
     icon: "scale",

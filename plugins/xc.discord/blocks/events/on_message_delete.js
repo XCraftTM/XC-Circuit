@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "events_messages",
-    aliases: ["Message removed", "Nachricht gelöscht"],
+    aliases: ["Message removed"],
     tags: ["log", "removed"],
   },
   look: {

@@ -12,7 +12,7 @@ module.exports = {
   },
   search: {
     category: "time",
-    aliases: ["Rate limit", "Abklingzeit", "Spam-Schutz"],
+    aliases: ["Rate limit"],
     tags: ["rate limit", "spam", "daily", "timeout", "throttle"],
   },
   look: {

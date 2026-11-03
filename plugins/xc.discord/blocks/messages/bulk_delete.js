@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "manage_messages",
-    aliases: ["Purge", "Clear", "Clean", "Nachrichten löschen", "Aufräumen"],
+    aliases: ["Purge", "Clear", "Clean"],
     tags: ["purge", "clear", "clean", "prune"],
   },
   look: {

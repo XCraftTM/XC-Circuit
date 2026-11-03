@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "events_server",
-    aliases: ["Guild join", "Bot invited", "Bot zum Server hinzugefügt"],
+    aliases: ["Guild join", "Bot invited"],
     tags: ["guild create", "invite", "kicked", "joined"],
   },
   look: {

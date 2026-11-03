@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "reactions",
-    aliases: ["React", "Emoji reaction", "Reaktion hinzufügen"],
+    aliases: ["React", "Emoji reaction"],
     tags: ["emoji", "react"],
   },
   look: {

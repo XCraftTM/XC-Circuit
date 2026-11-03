@@ -9,7 +9,7 @@ module.exports = {
   },
   search: {
     category: "events_server",
-    aliases: ["New thread", "Thread erstellt"],
+    aliases: ["New thread"],
     tags: ["forum post", "thread"],
   },
   look: {

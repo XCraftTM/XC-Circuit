@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "components",
-    aliases: ["Link button", "Knopf"],
+    aliases: ["Link button"],
     tags: ["component", "click"],
   },
   look: {

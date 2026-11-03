@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "components",
-    aliases: ["Form field", "Textfeld", "Eingabefeld"],
+    aliases: ["Form field"],
     tags: ["form", "modal", "field", "question"],
   },
   look: {

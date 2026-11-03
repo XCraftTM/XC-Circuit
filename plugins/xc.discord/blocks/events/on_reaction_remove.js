@@ -11,7 +11,7 @@ module.exports = {
   },
   search: {
     category: "events_messages",
-    aliases: ["Emoji removed", "Reaktion entfernt"],
+    aliases: ["Emoji removed"],
   },
   look: {
     icon: "message",
