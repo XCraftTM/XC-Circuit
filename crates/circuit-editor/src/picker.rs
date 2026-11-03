@@ -76,9 +76,31 @@ fn matching_pin(def: &BlockDef, pending: &PendingWire, reg: &Registry) -> Option
     }
 }
 
-fn matches_query(def: &BlockDef, query: &str) -> bool {
-    let hay = format!("{} {} {} {} {}", def.name, def.id, def.description, def.tags.join(" "), def.category.as_deref().unwrap_or("")).to_lowercase();
-    query.split_whitespace().all(|w| hay.contains(&w.to_lowercase()))
+/// How a block matches the search.
+#[derive(Clone, Debug, PartialEq)]
+enum Found {
+    /// Every word is in its name.
+    Name,
+    /// Every word is in one of its other names (that one).
+    Alias(String),
+    /// The words are somewhere in its id, description, tags or category.
+    Elsewhere,
+}
+
+fn search(def: &BlockDef, query: &str) -> Option<Found> {
+    let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
+    let all_in = |text: &str| {
+        let text = text.to_lowercase();
+        words.iter().all(|w| text.contains(w.as_str()))
+    };
+    if all_in(&def.name) {
+        return Some(Found::Name);
+    }
+    if let Some(alias) = def.aliases.iter().find(|a| all_in(a)) {
+        return Some(Found::Alias(alias.clone()));
+    }
+    let hay = format!("{} {} {} {} {} {}", def.name, def.aliases.join(" "), def.id, def.description, def.tags.join(" "), def.category.as_deref().unwrap_or(""));
+    all_in(&hay).then_some(Found::Elsewhere)
 }
 
 /// Draws the picker if open. Places the chosen block and connects a pending wire.
@@ -93,7 +115,8 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
     let picker = ed.picker.as_mut().unwrap();
     picker.opened_frames += 1;
 
-    let mut list: Vec<(&BlockDef, Option<String>)> = ed
+    let searching = !picker.query.trim().is_empty();
+    let mut list: Vec<(&BlockDef, Option<String>, Found)> = ed
         .reg
         .blocks
         .values()
@@ -102,14 +125,20 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                 || project_root.as_ref().is_some_and(|r| d.source.starts_with(r))
         })
         .filter(|d| d.deprecated.is_none())
-        .filter(|d| matches_query(d, &picker.query))
-        .filter_map(|d| match &picker.pending {
-            Some(p) => matching_pin(d, p, &ed.reg).map(|pin| (d, Some(pin))),
-            None => Some((d, None)),
+        .filter_map(|d| search(d, &picker.query).map(|found| (d, found)))
+        .filter_map(|(d, found)| match &picker.pending {
+            Some(p) => matching_pin(d, p, &ed.reg).map(|pin| (d, Some(pin), found)),
+            None => Some((d, None, found)),
         })
         .collect();
     let rank = |d: &BlockDef| mode.as_ref().map(|m| m.category_rank(d.category.as_deref().unwrap_or(""))).unwrap_or(usize::MAX);
-    list.sort_by(|a, b| rank(a.0).cmp(&rank(b.0)).then_with(|| a.0.name.cmp(&b.0.name)));
+    if searching {
+        // Best matches first: by name or another name, then the rest.
+        let strength = |f: &Found| if *f == Found::Elsewhere { 1 } else { 0 };
+        list.sort_by(|a, b| strength(&a.2).cmp(&strength(&b.2)).then_with(|| a.0.name.cmp(&b.0.name)));
+    } else {
+        list.sort_by(|a, b| rank(a.0).cmp(&rank(b.0)).then_with(|| a.0.name.cmp(&b.0.name)));
+    }
     if !list.is_empty() {
         picker.highlighted = picker.highlighted.min(list.len() - 1);
     }
@@ -122,7 +151,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
         picker.highlighted += 1;
     }
 
-    let mut chosen: Option<(String, Option<String>)> = if enter { list.get(picker.highlighted).map(|(d, pin)| (d.id.clone(), pin.clone())) } else { None };
+    let mut chosen: Option<(String, Option<String>)> = if enter { list.get(picker.highlighted).map(|(d, pin, _)| (d.id.clone(), pin.clone())) } else { None };
     let mut close = escape;
 
     let screen = ctx.content_rect();
@@ -170,22 +199,23 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
 
                 let column = egui::Layout::top_down(egui::Align::Min);
                 ui.horizontal_top(|ui| {
-                    // Result list grouped by category.
+                    // Result list grouped by category; while searching, best matches first.
                     ui.allocate_ui_with_layout(vec2(LIST_W, body_h), column, |ui| {
                         ScrollArea::vertical().id_salt("picker-list").max_height(body_h).auto_shrink([false, false]).show(ui, |ui| {
                             ui.set_width(LIST_W);
+                            let category_name = |cat: &str| mode.as_ref().and_then(|m| m.category(cat)).map(|c| crate::i18n::tr(&c.name).into_owned()).unwrap_or(cat.to_string());
                             let mut last_cat: Option<String> = None;
-                            for (i, (def, pin)) in list.iter().enumerate() {
+                            for (i, (def, pin, found)) in list.iter().enumerate() {
                                 let cat = def.category.clone().unwrap_or_default();
-                                if last_cat.as_deref() != Some(cat.as_str()) {
-                                    let name = mode.as_ref().and_then(|m| m.category(&cat)).map(|c| crate::i18n::tr(&c.name).into_owned()).unwrap_or(cat.clone());
+                                if !searching && last_cat.as_deref() != Some(cat.as_str()) {
+                                    let name = category_name(&cat);
                                     ui.add_space(6.0);
                                     ui.horizontal(|ui| {
                                         ui.add_space(12.0);
                                         ui.label(RichText::new(name.to_uppercase()).size(10.0).color(theme.text_muted));
                                     });
                                     ui.add_space(2.0);
-                                    last_cat = Some(cat);
+                                    last_cat = Some(cat.clone());
                                 }
                                 let selected = i == picker.highlighted;
                                 let (rect, resp) = ui.allocate_exact_size(vec2(LIST_W - 8.0, ROW_H), egui::Sense::click());
@@ -200,7 +230,21 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                                     let tint = if selected { theme.accent } else { theme.text_muted };
                                     egui::Image::from_uri(crate::editor::file_uri(&path)).tint(tint).paint_at(ui, icon);
                                 }
-                                ui.painter().text(rect.left_center() + vec2(36.0, 0.0), Align2::LEFT_CENTER, &def.name, egui::FontId::proportional(14.0), theme.text);
+                                let name_rect = ui.painter().text(rect.left_center() + vec2(36.0, 0.0), Align2::LEFT_CENTER, &def.name, egui::FontId::proportional(14.0), theme.text);
+                                // Found by another name: which one. While searching, the category.
+                                let note = match found {
+                                    Found::Alias(alias) => Some(alias.clone()),
+                                    _ if searching => Some(category_name(&cat)),
+                                    _ => None,
+                                };
+                                if let Some(note) = note {
+                                    let font = egui::FontId::proportional(11.5);
+                                    let room = rect.right() - 8.0 - (name_rect.right() + 8.0);
+                                    let galley = ui.painter().layout(note, font, theme.text_muted, f32::INFINITY);
+                                    if galley.size().x <= room {
+                                        ui.painter().galley(egui::pos2(rect.right() - 8.0 - galley.size().x, rect.center().y - galley.size().y / 2.0), galley, theme.text_muted);
+                                    }
+                                }
                                 if resp.hovered() {
                                     picker.highlighted = i;
                                 }
@@ -225,7 +269,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                         Frame::new().inner_margin(Margin::same(16)).show(ui, |ui| {
                             ui.set_max_width(size.x - LIST_W - 1.0 - 32.0);
                             ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
-                            if let Some((def, _)) = list.get(picker.highlighted) {
+                            if let Some((def, _, _)) = list.get(picker.highlighted) {
                                 details(ui, def, &ed.reg, &theme);
                             }
                         });
@@ -262,6 +306,9 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
 fn details(ui: &mut egui::Ui, def: &BlockDef, reg: &Registry, theme: &Theme) {
     ui.label(RichText::new(&def.name).strong().size(16.0));
     ui.label(RichText::new(format!("by {} · v{} · {}", def.author, def.version, def.plugin)).size(12.0).color(theme.text_muted));
+    if !def.aliases.is_empty() {
+        ui.label(RichText::new(tf!("Also: {names}", names = def.aliases.join(", "))).size(12.5).color(theme.text_muted));
+    }
     ui.label(&def.description);
     let fields: Vec<String> = def.fields.iter().filter(|(_, f)| !f.advanced).map(|(k, f)| f.label(k)).collect();
     let outputs: Vec<String> = def.outputs.iter().map(|(k, o)| format!("{} ({})", o.label(k), o.ty.display(reg))).collect();
@@ -291,5 +338,20 @@ fn place(ed: &mut Editor, picker: &Picker, block_id: &str, pin: Option<String>) 
         && !n.pins.contains(&pin_name)
     {
         n.pins.push(pin_name);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn other_names_count_like_the_name() {
+        let def = BlockDef { name: "Send Message".into(), aliases: vec!["Reply".into(), "Nachricht senden".into()], tags: vec!["dm".into()], ..Default::default() };
+        assert_eq!(search(&def, "send msg"), None);
+        assert_eq!(search(&def, "send"), Some(Found::Name));
+        assert_eq!(search(&def, "nachricht"), Some(Found::Alias("Nachricht senden".into())));
+        assert_eq!(search(&def, "dm"), Some(Found::Elsewhere));
+        assert_eq!(search(&def, ""), Some(Found::Name));
     }
 }

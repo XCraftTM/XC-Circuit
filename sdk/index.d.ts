@@ -102,6 +102,8 @@ export interface BlockInfo {
 export interface BlockSearch {
   /** A category id of the build mode, such as "send" or "moderation". */
   category?: string;
+  /** Other names it is found by, such as "Reply" or "Nachricht senden". They rank like the name. */
+  aliases?: string[];
   tags?: string[];
 }
 

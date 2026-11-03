@@ -205,6 +205,8 @@ pub struct BlockDef {
     pub category: Option<String>,
     pub icon: Option<String>,
     pub kind: BlockKind,
+    /// Other names it is found by in the block picker, such as "Reply".
+    pub aliases: Vec<String>,
     pub tags: Vec<String>,
     pub docs: Option<String>,
     pub fields: IndexMap<String, FieldDef>,
