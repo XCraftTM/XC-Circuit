@@ -86,7 +86,7 @@ pub fn export(dir: &Path, bundle: &Bundle, opts: &ExportOptions, log: &mut dyn F
         fs::write(&env, "# Put your bot token here.\nDISCORD_TOKEN=\n")?;
     }
     private_file(&env)?;
-    fs::write(dir.join(".gitignore"), ".env\nnode_modules/\ndata/\n")?;
+    keep_ignored(&dir.join(".gitignore"), &[".env", "node_modules/", "data/"])?;
     fs::write(
         dir.join("README.txt"),
         format!(
@@ -101,6 +101,24 @@ pub fn export(dir: &Path, bundle: &Bundle, opts: &ExportOptions, log: &mut dyn F
         // ensure_packages wrote a minimal package.json; put the full one back.
         fs::write(dir.join("package.json"), serde_json::to_string_pretty(&package)? + "\n")?;
     }
+    Ok(())
+}
+
+/// Makes sure `.gitignore` lists `lines`, keeping what the user added to it.
+fn keep_ignored(path: &Path, lines: &[&str]) -> Result<()> {
+    let mut text = fs::read_to_string(path).unwrap_or_default();
+    let missing: Vec<&str> = lines.iter().copied().filter(|l| !text.lines().any(|t| t.trim() == *l)).collect();
+    if missing.is_empty() {
+        return Ok(());
+    }
+    if !text.is_empty() && !text.ends_with('\n') {
+        text.push('\n');
+    }
+    for l in missing {
+        text.push_str(l);
+        text.push('\n');
+    }
+    fs::write(path, text)?;
     Ok(())
 }
 
@@ -123,6 +141,20 @@ mod tests {
     use indexmap::IndexMap;
 
     use super::*;
+
+    #[test]
+    fn gitignore_keeps_added_lines() {
+        let dir = std::env::temp_dir().join(format!("xc-ignore-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join(".gitignore");
+        let _ = fs::remove_file(&file);
+        keep_ignored(&file, &[".env", "data/"]).unwrap();
+        assert_eq!(fs::read_to_string(&file).unwrap(), ".env\ndata/\n");
+        fs::write(&file, "secrets.txt\n.env").unwrap();
+        keep_ignored(&file, &[".env", "data/"]).unwrap();
+        assert_eq!(fs::read_to_string(&file).unwrap(), "secrets.txt\n.env\ndata/\n");
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn export_folders_are_safe() {
