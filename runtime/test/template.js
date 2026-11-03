@@ -3,7 +3,7 @@
 "use strict";
 
 const assert = require("assert");
-const { fillTemplate } = require("../circuit-runtime.js");
+const { fillTemplate, coerce } = require("../circuit-runtime.js");
 
 const run = { event: { user: "from the event", guild: { name: "XC" } }, vars: new Map([["count", 3]]), outputs: new Map([["n1", { result: 42 }]]) };
 
@@ -42,5 +42,14 @@ assert.strictEqual(fillTemplate("an open ${count", run, {}), "an open ${count");
 // Mistakes name the expression.
 assert.throws(() => fillTemplate("${nobody}", run, {}), /\$\{nobody\}: nobody is not defined/);
 assert.throws(() => fillTemplate("${count +}", run, {}), /\$\{count \+\}/);
+
+// One value into a list field is a list of one; lists and collections stay as they are.
+const embed = { title: "Hi" };
+assert.deepStrictEqual(coerce(embed, "list<discord.embed>"), [embed]);
+assert.deepStrictEqual(coerce("a", "list<text>?"), ["a"]);
+assert.deepStrictEqual(coerce([embed], "list<discord.embed>"), [embed]);
+const roles = new Map([["1", { name: "Mod" }]]);
+assert.strictEqual(coerce(roles, "list<discord.role>"), roles);
+assert.strictEqual(coerce(undefined, "list<any>"), undefined);
 
 console.log("template ok");

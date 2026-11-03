@@ -157,6 +157,8 @@ impl PinType {
             (Named(_), Text) => Compat::Convert,
             (Number | Boolean | Date | Object, Text) => Compat::Convert,
             (Date, Number) => Compat::Convert,
+            // One value where a list goes becomes a list of one: an embed into Embeds.
+            (_, List(item)) if !matches!(self, List(_)) => self.compat(item, info).min(Compat::Convert),
             _ => Compat::No,
         }
     }
@@ -216,6 +218,11 @@ mod tests {
         assert_eq!(PinType::Any.compat(&PinType::Number, &i), Compat::Warn);
         assert_eq!(PinType::Text.compat(&PinType::Number, &i), Compat::No);
         assert_eq!(PinType::Action.compat(&PinType::Action, &i), Compat::Yes);
+        let embeds = PinType::parse("list<discord.embed>");
+        assert_eq!(PinType::parse("discord.embed").compat(&embeds, &i), Compat::Convert, "one embed is a list of one");
+        assert_eq!(PinType::Number.compat(&embeds, &i), Compat::No);
+        assert_eq!(PinType::parse("list<discord.embed>").compat(&embeds, &i), Compat::Yes);
+        assert_eq!(PinType::Action.compat(&embeds, &i), Compat::No);
         assert_eq!(PinType::Action.compat(&PinType::Any, &i), Compat::No);
         assert_eq!(PinType::Named("x.y".into()).compat(&PinType::Object, &i), Compat::Yes);
     }

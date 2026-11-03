@@ -624,6 +624,9 @@ function lastOutput(run, name) {
 function coerce(value, type) {
   if (value == null) return value;
   const t = String(type || "any").replace(/\?$/, "");
+  // One value where a list goes is a list of one (an embed into Embeds).
+  // Collections, Maps and Sets stay as they are: blocks walk those themselves.
+  if (t.startsWith("list<") && !Array.isArray(value) && (typeof value !== "object" || typeof value[Symbol.iterator] !== "function")) return [value];
   if ((t === "text" || t === "textarea") && typeof value !== "string" && typeof value !== "object") return String(value);
   if ((t === "text" || t === "textarea") && typeof value === "object" && !Array.isArray(value) && value.toString !== Object.prototype.toString) {
     return String(value);
