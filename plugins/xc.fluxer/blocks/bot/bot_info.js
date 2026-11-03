@@ -1,11 +1,11 @@
 module.exports = {
   id: "fluxer.bot_info",
-  kind: "value",
+  kind: "action",
   info: {
     name: "Bot Info",
     description: "The bot's own account, how many servers it is in, its ping and how long it has been online.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "2.0.0",
   },
   search: {
     category: "bot",

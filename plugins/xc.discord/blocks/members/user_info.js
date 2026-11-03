@@ -17,12 +17,12 @@ const INFO = {
 
 module.exports = {
   id: "discord.user_info",
-  kind: "value",
+  kind: "action",
   info: {
     name: "User Info",
     description: "Reads one piece of information about a user (works for members too).",
     author: "XC Team",
-    version: "1.0.0",
+    version: "2.0.0",
   },
   search: {
     category: "members",

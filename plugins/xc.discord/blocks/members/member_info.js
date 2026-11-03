@@ -29,12 +29,12 @@ const CHOICES = Object.fromEntries(Object.entries(INFO).map(([k, [label]]) => [k
 
 module.exports = {
   id: "discord.member_info",
-  kind: "value",
+  kind: "action",
   info: {
     name: "Member Info",
     description: "Reads one piece of information about a server member.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "2.0.0",
   },
   search: {
     category: "members",

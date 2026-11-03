@@ -13,16 +13,16 @@
       }
     },
     "2": {
-      "block": "fluxer.bot_info@1",
+      "block": "fluxer.bot_info@2",
       "at": [
-        40,
-        540
+        420,
+        60
       ]
     },
     "3": {
       "block": "fluxer.send_message@1",
       "at": [
-        420,
+        760,
         60
       ],
       "values": {
@@ -35,7 +35,8 @@
     }
   },
   "links": [
-    "1.next > 3.in",
+    "1.next > 2.in",
+    "2.next > 3.in",
     "1.message > 3.message",
     "2.ping > 3.ping"
   ]

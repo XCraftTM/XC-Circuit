@@ -1,11 +1,11 @@
 module.exports = {
   id: "fluxer.server_info",
-  kind: "value",
+  kind: "action",
   info: {
     name: "Server Info",
     description: "A server's name, id, member count, owner and icon.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "2.0.0",
   },
   search: {
     category: "server",

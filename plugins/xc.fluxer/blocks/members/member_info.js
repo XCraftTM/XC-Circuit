@@ -1,11 +1,11 @@
 module.exports = {
   id: "fluxer.member_info",
-  kind: "value",
+  kind: "action",
   info: {
     name: "Member Info",
     description: "A member's name in the server, roles, join date and picture.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "2.0.0",
   },
   search: {
     category: "members",

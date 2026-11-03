@@ -10,7 +10,7 @@
       ]
     },
     "2": {
-      "block": "discord.server_info@1",
+      "block": "discord.server_info@2",
       "at": [
         360,
         446
@@ -49,12 +49,13 @@
     }
   },
   "links": [
-    "1.next > 4.in",
+    "1.next > 2.in",
     "1.server > 2.server",
     "2.result > 4.channel",
     "1.member > 3.target",
     "3.text > 4.who",
     "4.next > 5.in",
-    "1.member > 5.member"
+    "1.member > 5.member",
+    "2.next > 4.in"
   ]
 }

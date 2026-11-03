@@ -1,11 +1,11 @@
 module.exports = {
   id: "fluxer.message_info",
-  kind: "value",
+  kind: "action",
   info: {
     name: "Message Info",
     description: "What a message says, who wrote it and where.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "2.0.0",
   },
   search: {
     category: "messages",

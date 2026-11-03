@@ -19,12 +19,12 @@ const CHOICES = Object.fromEntries(Object.entries(INFO).map(([k, [label]]) => [k
 
 module.exports = {
   id: "discord.bot_info",
-  kind: "value",
+  kind: "action",
   info: {
     name: "Bot Info",
     description: "Reads something about the bot itself: ping, uptime, servers, its user, an invite link.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "2.0.0",
   },
   search: {
     category: "bot",

@@ -464,8 +464,11 @@ impl Editor {
     fn upgrade_blocks(&mut self) {
         let Some(project) = self.project.as_mut() else { return };
         let mut upgraded = 0;
+        let mut placed = 0;
         for ws in project.workspaces.values_mut() {
-            for node in ws.nodes.values_mut() {
+            // Blocks that became action blocks (Info blocks were value blocks).
+            let mut now_actions = Vec::new();
+            for (id, node) in ws.nodes.iter_mut() {
                 let Some(def) = self.reg.block(&node.block) else { continue };
                 let saved: u64 = node.block.split('@').nth(1).and_then(|v| v.parse().ok()).unwrap_or(def.major_version());
                 if saved >= def.major_version() {
@@ -484,11 +487,24 @@ impl Editor {
                 }
                 node.block = def.reference();
                 upgraded += 1;
+                if def.kind == circuit_core::BlockKind::Action {
+                    now_actions.push(id.clone());
+                }
+            }
+            // They run in the path that reads their values now: right before
+            // the first block there that does.
+            let values: HashSet<String> =
+                ws.nodes.iter().filter(|(_, n)| self.reg.block(&n.block).is_some_and(|d| d.kind == circuit_core::BlockKind::Value)).map(|(k, _)| k.clone()).collect();
+            for id in now_actions {
+                placed += ws.put_in_path(&id, |n| values.contains(n));
             }
         }
         if upgraded > 0 {
             self.edited = true;
             self.log(Level::Info, format!("Upgraded {upgraded} blocks to newer versions (save to keep)"));
+        }
+        if placed > 0 {
+            self.log(Level::Info, tf!("Put {count} Info blocks into the paths that use them: they run as steps now (save to keep)", count = placed));
         }
     }
 
@@ -950,6 +966,28 @@ mod tests {
         assert!(failures.is_empty(), "define() failed:\n{}", failures.join("\n"));
     }
 
+    /// Upgrades the bundled example, starters and plugin starters to the
+    /// blocks' current versions (as opening them in the editor does) and
+    /// saves them: `cargo test -p circuit-editor upgrade_bundled_projects -- --ignored`
+    #[test]
+    #[ignore]
+    fn upgrade_bundled_projects() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut dirs: Vec<PathBuf> = std::fs::read_dir(root.join("examples/templates")).unwrap().flatten().map(|e| e.path()).collect();
+        dirs.push(root.join("examples/DemoBot"));
+        for plugin in std::fs::read_dir(root.join("plugins")).unwrap().flatten() {
+            dirs.extend(std::fs::read_dir(plugin.path().join("templates")).into_iter().flatten().flatten().map(|e| e.path()));
+        }
+        for dir in dirs {
+            let mut ed = Editor::new(vec![root.join("plugins"), dir.join("plugins")], None).unwrap();
+            ed.open_project(&dir);
+            if ed.edited {
+                ed.project.as_mut().unwrap().save().unwrap();
+                println!("upgraded {}", dir.display());
+            }
+        }
+    }
+
     /// The starter templates and the example load, use blocks that exist, and
     /// every wire connects an output (or flow) to an input that the block has.
     #[test]
@@ -978,6 +1016,15 @@ mod tests {
                             shapes.insert(id.clone(), s);
                         }
                         None => wrong.push(format!("{place}: #{id} uses a missing block {}", ws.nodes[id].block)),
+                    }
+                    // Saved with the block's current version, and in a path when it is an action block.
+                    if let Some(def) = ed.reg.block(&ws.nodes[id].block) {
+                        if ws.nodes[id].block != def.reference() {
+                            wrong.push(format!("{place}: #{id} is {} (now {})", ws.nodes[id].block, def.reference()));
+                        }
+                        if def.kind == circuit_core::BlockKind::Action && ws.links_into(id, circuit_core::graph::ACTION_IN).next().is_none() {
+                            wrong.push(format!("{place}: nothing runs #{id} {}", def.name));
+                        }
                     }
                 }
                 for link in &ws.links {

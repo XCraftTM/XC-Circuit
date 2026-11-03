@@ -25,12 +25,12 @@ const INFO = {
 
 module.exports = {
   id: "discord.message_info",
-  kind: "value",
+  kind: "action",
   info: {
     name: "Message Info",
     description: "Reads one piece of information about a message.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "2.0.0",
   },
   search: {
     category: "messages",

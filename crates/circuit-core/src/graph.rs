@@ -197,7 +197,8 @@ impl Flow {
         Flow::follows(&self.value, link) && self.reaches(&link.to.node, &link.from.node)
     }
 
-    fn reaches(&self, from: &str, to: &str) -> bool {
+    /// Whether the wires it follows go from `from` to `to`.
+    pub fn reaches(&self, from: &str, to: &str) -> bool {
         let mut seen = HashSet::new();
         let mut todo = vec![from];
         while let Some(at) = todo.pop() {
@@ -294,6 +295,78 @@ impl Workspace {
         self.links.iter().filter(|l| flow.would_loop(l)).collect()
     }
 
+    /// Puts block `id` into the action paths that use its outputs: right
+    /// before the first block of each path that reads them (also through value
+    /// blocks such as Compare in between). For blocks that were value blocks
+    /// and run as action blocks now. A second path gets a copy of the block.
+    /// Returns how many paths it went into; 0 when it is in one already or
+    /// nothing in a path reads it.
+    pub fn put_in_path(&mut self, id: &str, value_block: impl Fn(&str) -> bool) -> usize {
+        if !self.nodes.contains_key(id) || self.links_into(id, ACTION_IN).next().is_some() {
+            return 0;
+        }
+        // The action blocks a wire from `id` ends up in, through value blocks.
+        let readers_of = |start: &str| -> Vec<String> {
+            let mut out = Vec::new();
+            let mut seen = HashSet::new();
+            // In wiring order, so the first path stays the original's.
+            let mut todo = std::collections::VecDeque::from([start.to_string()]);
+            while let Some(at) = todo.pop_front() {
+                if !seen.insert(at.clone()) {
+                    continue;
+                }
+                if at != id && !value_block(&at) {
+                    out.push(at);
+                    continue;
+                }
+                todo.extend(self.links.iter().filter(|l| l.from.node == at && l.to.pin != ACTION_IN).map(|l| l.to.node.clone()));
+            }
+            out
+        };
+        // Only action wires (and Try Zones) count for what runs after what.
+        let flow = self.flow(|_| false);
+        let mut readers: Vec<String> = Vec::new();
+        for r in readers_of(id) {
+            if !readers.contains(&r) && self.links_into(&r, ACTION_IN).next().is_some() {
+                readers.push(r);
+            }
+        }
+        // The first reader of each path: one no other reader runs before.
+        let firsts: Vec<String> = readers.iter().filter(|c| !readers.iter().any(|o| o != *c && flow.reaches(o, c))).cloned().collect();
+        if firsts.is_empty() {
+            return 0;
+        }
+        // Which path each of its wires serves, for the copies.
+        let owner_of = |link: &Link| -> usize {
+            let rs = if value_block(&link.to.node) { readers_of(&link.to.node) } else { vec![link.to.node.clone()] };
+            firsts.iter().position(|f| rs.iter().any(|r| r == f || flow.reaches(f, r))).unwrap_or(0)
+        };
+        let owners: Vec<(usize, usize)> = self.links.iter().enumerate().filter(|(_, l)| l.from.node == id && l.to.pin != ACTION_IN).map(|(i, l)| (i, owner_of(l))).collect();
+        for (n, first) in firsts.iter().enumerate() {
+            let at = if n == 0 {
+                id.to_string()
+            } else {
+                let copy_id = self.next_node_id();
+                let mut copy = self.nodes[id].clone();
+                copy.at = [copy.at[0] + 40.0 * n as f32, copy.at[1] + 40.0 * n as f32];
+                self.nodes.insert(copy_id.clone(), copy);
+                for &(i, _) in owners.iter().filter(|(_, o)| *o == n) {
+                    self.links[i].from.node = copy_id.clone();
+                }
+                copy_id
+            };
+            for l in self.links.iter_mut().filter(|l| l.to.node == *first && l.to.pin == ACTION_IN) {
+                l.to.node = at.clone();
+            }
+            self.links.push(Link { from: PinRef::new(&at, "next"), to: PinRef::new(first, ACTION_IN) });
+            let zone = self.nodes.get(first).and_then(|f| f.zone.clone());
+            if let Some(node) = self.nodes.get_mut(&at) {
+                node.zone = zone;
+            }
+        }
+        firsts.len()
+    }
+
     /// Action outputs that lead to more than one block (made before paths
     /// couldn't split), with how many.
     pub fn split_paths(&self) -> Vec<(PinRef, usize)> {
@@ -324,6 +397,51 @@ fn round_rect<S: Serializer>(r: &[f32; 4], s: S) -> Result<S::Ok, S::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn info_blocks_go_into_the_paths_that_read_them() {
+        let link = |s: &str| s.parse::<Link>().unwrap();
+        let ws_with = |nodes: &[&str], links: &[&str]| {
+            let mut ws = Workspace::new("t");
+            for id in nodes {
+                ws.nodes.insert(id.to_string(), Node { block: format!("{id}@1"), at: [10.0, 20.0], ..Default::default() });
+            }
+            ws.links = links.iter().map(|l| link(l)).collect();
+            ws
+        };
+        let has = |ws: &Workspace, l: &str| ws.links.contains(&link(l));
+        let value = |id: &str| id.starts_with("cmp");
+
+        // Before the block that reads it.
+        let mut ws = ws_with(&["ev", "send", "info"], &["ev.next > send.in", "info.ping > send.ping"]);
+        assert_eq!(ws.put_in_path("info", value), 1);
+        assert!(has(&ws, "ev.next > info.in") && has(&ws, "info.next > send.in") && !has(&ws, "ev.next > send.in"));
+        assert_eq!(ws.put_in_path("info", value), 0, "in the path already");
+
+        // Through a value block, and only before the first reader of a path.
+        let mut ws = ws_with(
+            &["ev", "check", "send", "info", "cmp"],
+            &["ev.next > check.in", "check.true > send.in", "info.servers > cmp.a", "cmp.result > check.a", "info.ping > send.ping"],
+        );
+        assert_eq!(ws.put_in_path("info", value), 1);
+        assert!(has(&ws, "ev.next > info.in") && has(&ws, "info.next > check.in") && has(&ws, "check.true > send.in"));
+
+        // Two paths: a copy for the second, reading its own wires.
+        let mut ws = ws_with(&["a", "sendA", "b", "sendB", "info"], &["a.next > sendA.in", "b.next > sendB.in", "info.ping > sendA.x", "info.ping > sendB.y"]);
+        assert_eq!(ws.put_in_path("info", value), 2);
+        let copy = ws.nodes.keys().find(|k| k.parse::<u64>().is_ok()).cloned().unwrap();
+        assert!(has(&ws, "a.next > info.in") && has(&ws, "info.next > sendA.in") && has(&ws, "info.ping > sendA.x"));
+        assert!(has(&ws, &format!("b.next > {copy}.in")) && has(&ws, &format!("{copy}.next > sendB.in")) && has(&ws, &format!("{copy}.ping > sendB.y")));
+        assert_eq!(ws.nodes[&copy].at, [50.0, 60.0]);
+
+        // Into the reader's Try Zone; nothing to do without a reader in a path.
+        let mut ws = ws_with(&["ev", "send", "info", "lonely"], &["ev.next > send.in", "info.ping > send.ping", "info.ping > lonely.x"]);
+        ws.nodes["send"].zone = Some("z".into());
+        assert_eq!(ws.put_in_path("info", value), 1);
+        assert_eq!(ws.nodes["info"].zone.as_deref(), Some("z"));
+        let mut ws = ws_with(&["info", "lonely"], &["info.ping > lonely.x"]);
+        assert_eq!(ws.put_in_path("info", value), 0);
+    }
 
     #[test]
     fn finds_loops() {

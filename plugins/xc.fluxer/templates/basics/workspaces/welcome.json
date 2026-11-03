@@ -13,16 +13,16 @@
       }
     },
     "2": {
-      "block": "fluxer.server_info@1",
+      "block": "fluxer.server_info@2",
       "at": [
-        40,
-        320
+        380,
+        60
       ]
     },
     "3": {
       "block": "fluxer.find_channel@1",
       "at": [
-        400,
+        720,
         60
       ],
       "pins": [
@@ -32,7 +32,7 @@
     "4": {
       "block": "fluxer.send_message@1",
       "at": [
-        780,
+        1080,
         60
       ],
       "values": {
@@ -46,7 +46,8 @@
     }
   },
   "links": [
-    "1.next > 3.in",
+    "1.next > 2.in",
+    "2.next > 3.in",
     "1.server > 2.server",
     "2.systemChannelId > 3.channel",
     "3.next > 4.in",

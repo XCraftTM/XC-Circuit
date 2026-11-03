@@ -1,11 +1,11 @@
 module.exports = {
   id: "fluxer.user_info",
-  kind: "value",
+  kind: "action",
   info: {
     name: "User Info",
     description: "An account's name, id, picture and age. For a member, connect it: it turns into its user.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "2.0.0",
   },
   search: {
     category: "members",

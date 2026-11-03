@@ -186,6 +186,7 @@ pub const UI_STRINGS: &[&str] = &[
     "Pick a color",
     "Close (Esc)",
     "Changed {count} texts from {name} to ${name}, which holds JavaScript now (save to keep)",
+    "Put {count} Info blocks into the paths that use them: they run as steps now (save to keep)",
     "the message has no embeds",
     "paste an embed object { … }",
     "${…} in any text holds JavaScript: type ${ for values from earlier blocks",
