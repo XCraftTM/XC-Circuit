@@ -25,15 +25,15 @@ store.flushPending();
 assert.deepStrictEqual(JSON.parse(fs.readFileSync(file, "utf8")), { global: { level: 3 } });
 
 // Member buckets with a ":" in an id don't run into each other; single ids
-// keep the keys they always had.
-(async () => {
-  await store.scope("member", "1:2", "3").set("xp", 1);
-  await store.scope("member", "1", "2:3").set("xp", 2);
-  assert.strictEqual(await store.scope("member", "1:2", "3").get("xp"), 1);
-  assert.deepStrictEqual(store.each("member", "1").map((b) => b.id), ["2:3"]);
-  await store.scope("ns", "rate:limits").set("n", 1);
-  assert.ok("ns:rate:limits" in store.data);
-})();
+// keep the keys they always had. (Writes take effect at once; the runtime
+// catches rejected promises, so this checks without awaiting.)
+store.scope("member", "1:2", "3").set("xp", 1);
+store.scope("member", "1", "2:3").set("xp", 2);
+assert.strictEqual(store.data["member:1%3A2:3"].xp, 1);
+assert.strictEqual(store.data["member:1:2%3A3"].xp, 2);
+assert.deepStrictEqual(store.each("member", "1").map((b) => b.id), ["2:3"]);
+store.scope("ns", "rate:limits").set("n", 1);
+assert.ok("ns:rate:limits" in store.data);
 
 // A file that is valid JSON but not an object is treated the same way.
 fs.writeFileSync(file, "[1, 2]");
