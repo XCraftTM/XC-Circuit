@@ -83,6 +83,9 @@ pub struct CircuitApp {
     confirm_close: bool,
     allow_close: bool,
     problem_count: usize,
+    /// The project's problems and what they were found for (project revision,
+    /// plugin reloads, language): found again only when one changes.
+    problems_found: Option<((u64, u64, String), Vec<panels::ProblemItem>)>,
     bot: BotUi,
     stored: crate::stored::StoredView,
     watcher: crate::watch::PluginWatcher,
@@ -190,6 +193,7 @@ impl CircuitApp {
             confirm_close: false,
             allow_close: false,
             problem_count: 0,
+            problems_found: None,
             bot: BotUi::new(),
             stored: Default::default(),
             watcher,
@@ -1289,7 +1293,11 @@ impl eframe::App for CircuitApp {
                 .frame(Frame::new().fill(theme.panel))
                 .show(ui, |ui| self.side_bar(ui, view));
         }
-        let mut problems = panels::collect_problems(&self.ed);
+        let key = (self.ed.history.revision(), self.ed.reloads, self.ed.prefs.language.clone());
+        if self.problems_found.as_ref().is_none_or(|(k, _)| *k != key) {
+            self.problems_found = Some((key, panels::collect_problems(&self.ed)));
+        }
+        let mut problems = self.problems_found.as_ref().map(|(_, p)| p.clone()).unwrap_or_default();
         problems.extend(self.native.problems());
         self.problem_count = problems.len();
         // Filled, so the dock's rounded panel corners show the frame color and not

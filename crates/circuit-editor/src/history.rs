@@ -72,12 +72,21 @@ pub struct Histories {
     /// Versions when last saved: per workspace, and the project's. `None`
     /// when not known (after taking over unsaved changes), which counts as unsaved.
     saved: Option<(HashMap<String, u64>, u64)>,
+    /// Counts recorded changes, undos and redos, so others can tell the
+    /// project changed without comparing it.
+    revision: u64,
 }
 
 impl Histories {
     /// Forgets every step; what is open now counts as unsaved.
     pub fn clear(&mut self) {
-        *self = Histories { next: self.next, ..Default::default() };
+        *self = Histories { next: self.next, revision: self.revision + 1, ..Default::default() };
+    }
+
+    /// Changes whenever the recorded project does (a change, undo, redo, or
+    /// another project).
+    pub fn revision(&self) -> u64 {
+        self.revision
     }
 
     /// Forgets every step and takes `project` as saved, as it is now.
@@ -89,23 +98,31 @@ impl Histories {
 
     /// Records changes made since the last settled state.
     pub fn track(&mut self, project: &Project, settled: bool) {
+        let before = self.workspaces.len();
         self.workspaces.retain(|k, _| project.workspaces.contains_key(k));
+        let mut changed = self.workspaces.len() != before;
         let next = &mut self.next;
         for (key, ws) in &project.workspaces {
             match self.workspaces.get_mut(key) {
                 Some(h) if settled => {
-                    h.record(ws, next);
+                    changed |= h.record(ws, next);
                 }
                 Some(_) => {}
                 None => {
                     *next += 1;
                     self.workspaces.insert(key.clone(), History::new(ws, *next));
+                    changed = true;
                 }
             }
         }
+        if changed {
+            self.revision += 1;
+        }
         match &mut self.project {
             Some(h) if settled => {
-                h.record(&project.meta, next);
+                if h.record(&project.meta, next) {
+                    self.revision += 1;
+                }
             }
             Some(_) => {}
             None => {
@@ -131,22 +148,26 @@ impl Histories {
 
     pub fn undo(&mut self, key: &str, ws: &mut Workspace) -> bool {
         let Some(h) = self.workspaces.get_mut(key) else { return false };
+        self.revision += 1;
         h.undo(ws, &mut self.next)
     }
 
     pub fn redo(&mut self, key: &str, ws: &mut Workspace) -> bool {
         let Some(h) = self.workspaces.get_mut(key) else { return false };
+        self.revision += 1;
         h.redo(ws)
     }
 
     /// Undo for the project's settings and data.
     pub fn undo_project(&mut self, meta: &mut ProjectMeta) -> bool {
         let Some(h) = self.project.as_mut() else { return false };
+        self.revision += 1;
         h.undo(meta, &mut self.next)
     }
 
     pub fn redo_project(&mut self, meta: &mut ProjectMeta) -> bool {
         let Some(h) = self.project.as_mut() else { return false };
+        self.revision += 1;
         h.redo(meta)
     }
 
@@ -182,9 +203,14 @@ mod tests {
         ws.nodes.insert("a".into(), Node { block: "x@1".into(), ..Default::default() });
         h.track(&p, false); // still dragging: nothing recorded
         assert!(!h.can_undo("main"));
+        let before = h.revision();
         h.track(&p, true);
         assert!(h.can_undo("main"));
         assert!(h.unsaved());
+        assert!(h.revision() > before, "a change moves the revision on");
+        let after = h.revision();
+        h.track(&p, true);
+        assert_eq!(h.revision(), after, "nothing changed, same revision");
 
         let ws = p.workspaces.get_mut("main").unwrap();
         assert!(h.undo("main", ws));

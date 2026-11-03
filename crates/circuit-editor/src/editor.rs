@@ -65,6 +65,8 @@ pub struct Editor {
     /// Undo and Redo act on the project's settings and data (slash commands,
     /// bot settings) instead of a workspace: while their tab has focus.
     pub undo_project: bool,
+    /// Counts plugin reloads, so others can tell the blocks changed.
+    pub reloads: u64,
     /// Selected node as (workspace key, node id).
     pub selected: Option<(String, String)>,
     pub log: Vec<LogLine>,
@@ -112,6 +114,7 @@ impl Editor {
             project: None,
             edited: false,
             undo_project: false,
+            reloads: 0,
             selected: None,
             log: Vec::new(),
             shapes: ShapeCache::default(),
@@ -193,6 +196,7 @@ impl Editor {
     }
 
     pub fn reload_plugins(&mut self) {
+        self.reloads += 1;
         let mut dirs = self.plugin_dirs.clone();
         if let Some(p) = &self.project {
             dirs.push(p.root.join("plugins"));
