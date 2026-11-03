@@ -65,7 +65,22 @@ assert.strictEqual(fmt("escape", "*not bold*"), "\\*not bold\\*");
 }
 
 // Slash commands: names with spaces are subcommands and groups.
-const { toDiscordCommands } = require("../../plugins/xc.discord/runtime/discord.js");
+const { toDiscordCommands, registrationPlan } = require("../../plugins/xc.discord/runtime/discord.js");
+
+// Registering slash commands: only when something changed, and old ones are cleared.
+{
+  const ping = [{ name: "ping", description: "Pong" }];
+  const first = registrationPlan(ping, "global", null);
+  assert.deepStrictEqual(first.steps, [{ scope: "global", list: ping }]);
+  assert.deepStrictEqual(registrationPlan(ping, "global", first.record).steps, [], "unchanged commands aren't sent again");
+  assert.deepStrictEqual(registrationPlan([], "global", first.record).steps, [{ scope: "global", list: [] }], "deleting the last command clears it");
+  assert.deepStrictEqual(registrationPlan([], "global", null).steps, [], "nothing registered, nothing to clear");
+  assert.deepStrictEqual(
+    registrationPlan(ping, "123", first.record).steps,
+    [{ scope: "global", list: [] }, { scope: "123", list: ping }],
+    "moving to the dev server clears the global ones",
+  );
+}
 const cmds = toDiscordCommands(
   [
     { name: "ping", description: "Pong", options: [], dm: true },

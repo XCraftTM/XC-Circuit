@@ -141,6 +141,23 @@ function toDiscordCommand(c) {
 
 module.exports.toDiscordCommands = toDiscordCommands;
 module.exports.toDiscordCommand = toDiscordCommand;
+module.exports.registrationPlan = registrationPlan;
+
+/**
+ * What to send Discord, given the commands, where they go ("global" or a
+ * server id) and what was registered last time ({ scope, hash }, or null).
+ * Unchanged commands aren't sent again, a list that became empty is still
+ * sent (so deleted commands go away), and moving between the dev server and
+ * global clears the old place, so commands don't show up twice.
+ */
+function registrationPlan(list, scope, last) {
+  const hash = require("crypto").createHash("sha256").update(JSON.stringify(list)).digest("hex");
+  const steps = [];
+  if (last && last.scope !== scope && last.count) steps.push({ scope: last.scope, list: [] });
+  const changed = !last || last.scope !== scope || last.hash !== hash;
+  if (changed && (list.length || (last && last.scope === scope && last.count))) steps.push({ scope, list });
+  return { steps, record: { scope, hash, count: list.length } };
+}
 
 /** Registers every Slash Command block's command, on the dev server or globally. */
 async function registerCommands(rt, client) {
@@ -163,14 +180,27 @@ async function registerCommands(rt, client) {
     const type = v.target === "message" ? 3 : 2;
     if (name) commands.set(`menu:${type}:${name}`, { name, type });
   }
-  if (!commands.size) return;
   const list = [...commands.values()];
   const devServer = String(rt.setting("devServer") || "").trim();
-  if (devServer) {
-    await client.application.commands.set(list, devServer);
-    rt.log.info(`Registered ${list.length} slash commands on the dev server`);
-  } else {
-    await client.application.commands.set(list);
-    rt.log.info(`Registered ${list.length} slash commands globally`);
+  // What was registered last time, kept with the bot's saved data.
+  const fs = require("fs");
+  const file = require("path").join(rt.opts.dataDir, "registered-commands.json");
+  let last = null;
+  try {
+    last = JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {}
+  const plan = registrationPlan(list, devServer || "global", last);
+  for (const step of plan.steps) {
+    const where = step.scope === "global" ? "globally" : "on the dev server";
+    if (step.scope === "global") await client.application.commands.set(step.list);
+    else await client.application.commands.set(step.list, step.scope);
+    rt.log.info(step.list.length ? `Registered ${step.list.length} slash commands ${where}` : `Removed the slash commands ${where}`);
+  }
+  if (!plan.steps.length && list.length) rt.log.info(`Slash commands unchanged (${list.length})`);
+  try {
+    fs.mkdirSync(rt.opts.dataDir, { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(plan.record) + "\n");
+  } catch (e) {
+    rt.log.warn(`Couldn't remember the registered slash commands: ${e.message}`);
   }
 }
