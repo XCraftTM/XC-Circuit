@@ -72,8 +72,8 @@ impl Marked {
         for block in &self.code {
             let rects: Vec<Rect> = rows.iter().filter(|(r, _)| covered(std::slice::from_ref(block), r)).map(|(_, rect)| *rect).collect();
             if let (Some(first), Some(last)) = (rects.first(), rects.last()) {
-                // The rows are tall enough to leave room inside the box.
-                boxes.push(Rect::from_min_max(pos2(at.x, first.top() + 1.0), pos2(at.x + self.width.max(first.width()), last.bottom() - 1.0)));
+                // Its first and last rows are thin empty ones: the room inside the box.
+                boxes.push(Rect::from_min_max(pos2(at.x, first.top()), pos2(at.x + self.width.max(first.width()), last.bottom())));
             }
         }
         for b in boxes {
@@ -178,7 +178,12 @@ pub fn build(text: &str, kind: Kind, size: f32, color: Color32, wrap: f32) -> Bu
         if kind == Kind::Full && raw.trim_start().starts_with("```") {
             let (body, next) = code_block(&chars, i);
             let start = out.chars;
-            let mono = TextFormat { line_height: Some(size * 1.8), ..text_format(FontId::monospace(size * 0.92), TEXT) };
+            let mono = text_format(FontId::monospace(size * 0.92), TEXT);
+            // A thin empty row above and below the code, inside its box, so the
+            // code sits in the middle of it.
+            let pad = TextFormat { line_height: Some(size * 0.5), ..text_format(FontId::monospace(size * 0.3), TEXT) };
+            out.push(" ", 0.0, pad.clone());
+            out.push("\n", 0.0, pad.clone());
             let body = if body.is_empty() { " ".to_string() } else { body };
             for (n, l) in body.split('\n').enumerate() {
                 if n > 0 {
@@ -186,6 +191,8 @@ pub fn build(text: &str, kind: Kind, size: f32, color: Color32, wrap: f32) -> Bu
                 }
                 out.push(if l.is_empty() { " " } else { l }, 6.0, mono.clone());
             }
+            out.push("\n", 0.0, pad.clone());
+            out.push(" ", 0.0, pad);
             out.code.push(start..out.chars);
             style = Style::default();
             i = next;
@@ -617,9 +624,10 @@ mod tests {
         assert_eq!(quoted, "quoted");
 
         let b = build("before\n```rust\nlet x = 1;\nlet y = 2;\n```\nafter", Kind::Full, 14.0, TEXT, 400.0);
-        assert_eq!(b.job.text, "before\nlet x = 1;\nlet y = 2;\nafter");
+        // The code, between a thin empty row above and below it (room inside its box).
+        assert_eq!(b.job.text, "before\n \nlet x = 1;\nlet y = 2;\n \nafter");
         let code: String = b.job.text.chars().skip(b.code[0].start).take(b.code[0].len()).collect();
-        assert_eq!(code, "let x = 1;\nlet y = 2;");
+        assert_eq!(code, " \nlet x = 1;\nlet y = 2;\n ");
 
         // Titles: only what fits in a line.
         let b = build("# not a heading **but bold**", Kind::Inline, 14.0, TEXT, 400.0);
