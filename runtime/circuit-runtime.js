@@ -763,10 +763,19 @@ function askUser(rt, id, question, choices) {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     const list = choices.map((c, i) => `  ${i + 1}) ${c.label}`).join("\n");
     return new Promise((resolve) => {
+      let answered = false;
+      // Input closed (Ctrl+D, or a pipe ending) before an answer: take the first.
+      rl.on("close", () => {
+        if (!answered) {
+          rt.log.warn(`${question} No answer, so: ${choices[0].label}.`);
+          resolve(choices[0].value);
+        }
+      });
       const ask = () =>
         rl.question(`\n${question}\n${list}\nChoose 1-${choices.length}: `, (reply) => {
           const n = Number.parseInt(String(reply).trim(), 10);
           if (n >= 1 && n <= choices.length) {
+            answered = true;
             rl.close();
             resolve(choices[n - 1].value);
           } else {
