@@ -119,6 +119,22 @@ const log = (name) => (...args) => {
   o = await run("server/integrations.js", { action: "remove", server: ig, which: "twitch" });
   assert.deepStrictEqual([o.count, calls.some((c) => c[0] === "integration.delete")], [1, true]);
 
+  // Premium.
+  let asked;
+  const ent = { id: "e", skuId: "s", userId: "u", isActive: () => true, isTest: () => false };
+  const papp = {
+    fetchSKUs: async () => coll([{ id: "s", name: "Gold", type: 5, slug: "gold" }]),
+    entitlements: { fetch: async (opts) => ((asked = opts), coll([ent])), consume: log("consume"), createTest: async (o) => ({ id: "t", ...o }), deleteTest: log("deleteTest") },
+    subscriptions: { fetch: async () => coll([{ id: "sub", status: 0, skuIds: ["s"], currentPeriodEndTimestamp: 0 }]) },
+  };
+  o = await run("premium/premium.js", { action: "check", user: { id: "u" }, sku: "s" }, { application: papp });
+  assert.deepStrictEqual([o.owns, asked.skus, asked.excludeEnded], [true, ["s"], true]);
+  o = await run("premium/premium.js", { action: "skus" }, { application: papp });
+  assert.deepStrictEqual(o.list, [{ id: "s", name: "Gold", type: "subscription", slug: "gold" }]);
+  o = await run("premium/premium.js", { action: "subscriptions", user: { id: "u" }, sku: "s" }, { application: papp });
+  assert.deepStrictEqual([o.owns, o.list[0].status], [true, "active"]);
+  await assert.rejects(run("premium/premium.js", { action: "check", for: "server", sku: "s" }, { application: papp }), /Connect a server/);
+
   console.log("discord actions test passed");
 })().catch((e) => {
   console.error(e);

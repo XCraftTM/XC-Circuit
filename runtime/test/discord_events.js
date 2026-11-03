@@ -74,6 +74,12 @@ const named = (name, extra = {}) => ({ name, guild, ...extra });
   [o] = await fire("on_scheduled_event.js", { kind: "deleted" }, "guildScheduledEventDelete", named("Party"));
   assert.strictEqual(o.name, "Party");
 
+  [o] = await fire("on_purchase.js", { kind: "entitlementCreate", sku: "" }, "entitlementCreate", { id: "e", skuId: "s", userId: "u", guildId: null, isTest: () => true });
+  assert.deepStrictEqual([o.skuId, o.entitlementId, o.user.id, o.test], ["s", "e", "u", true]);
+  assert.deepStrictEqual(await fire("on_purchase.js", { kind: "entitlementCreate", sku: "other" }, "entitlementCreate", { id: "e", skuId: "s" }), [], "other items are skipped");
+  [o] = await fire("on_purchase.js", { kind: "subscriptionUpdate", sku: "" }, "subscriptionUpdate", {}, { userId: "u", skuIds: ["s"], entitlementIds: ["e"], status: 1 });
+  assert.strictEqual(o.status, "ending");
+
   console.log("discord events test passed");
 })().catch((e) => {
   console.error(e);

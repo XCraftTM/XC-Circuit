@@ -90,6 +90,11 @@ name = "Bot"
 icon = "settings"
 
 [[categories]]
+id = "premium"
+name = "Premium & Monetization"
+icon = "key"
+
+[[categories]]
 id = "voice"
 name = "Voice"
 icon = "bolt"

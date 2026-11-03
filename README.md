@@ -118,7 +118,7 @@ export default defineBlock({
 
 What describes a block goes in groups: `info` (name, description, author, version, docs, deprecated), `search` (category, aliases, tags), `look` (icon, width, preview) and `requires` (Discord `intents`, npm `dependencies`). Fields, outputs, flows and the functions stay at the top. Blocks are written in English.
 
-- **category** is one of the build mode's categories, listed in order under `[[categories]]` in `plugins/xc.discord/modes/discord.toml`: events (`events_bot`, `events_commands`, `events_messages`, `events_members`, `events_server`), Discord (`send`, `design`, `components`, `reactions`, `manage_messages`, `members`, `moderation`, `roles`, `channels`, `server`, `bot`, `voice`, `format`) and logic and data (`flow`, `calls`, `time`, `variables`, `data`, `text`, `numbers`, `lists`, `web`, `code`). A test keeps every bundled block in one of them.
+- **category** is one of the build mode's categories, listed in order under `[[categories]]` in `plugins/xc.discord/modes/discord.toml`: events (`events_bot`, `events_commands`, `events_messages`, `events_members`, `events_server`), Discord (`send`, `design`, `components`, `reactions`, `manage_messages`, `members`, `moderation`, `roles`, `channels`, `server`, `bot`, `premium`, `voice`, `format`) and logic and data (`flow`, `calls`, `time`, `variables`, `data`, `text`, `numbers`, `lists`, `web`, `code`). A test keeps every bundled block in one of them.
 - **aliases** are other English names the block picker finds it by ("Reply" for Send Message). A match there ranks like one in the name; aliases aren't shown.
 - **tags** are further search words, ranked after name and aliases.
 
