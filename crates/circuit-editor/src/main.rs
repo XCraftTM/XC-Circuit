@@ -20,6 +20,7 @@ mod json_view;
 mod layout;
 mod locales;
 mod native;
+mod new_project;
 mod palette;
 mod panels;
 mod picker;

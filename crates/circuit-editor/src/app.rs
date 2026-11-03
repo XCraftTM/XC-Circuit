@@ -81,7 +81,7 @@ pub struct CircuitApp {
     title: String,
     show_about: bool,
     /// File › New Project: the starter to begin from (0 = empty), while choosing.
-    new_project: Option<usize>,
+    new_project: Option<crate::new_project::NewProject>,
     confirm_close: bool,
     allow_close: bool,
     problem_count: usize,
@@ -284,92 +284,46 @@ impl CircuitApp {
         }
     }
 
-    /// File › New Project: first a starter (empty or a template), then a folder.
+    /// File › New Project: the kind of project, its name and place, and what
+    /// it starts from.
     fn new_project_dialog(&mut self) {
-        self.new_project = Some(0);
-    }
-
-    /// The starter templates next to the examples: (folder, name, description).
-    fn templates(&self) -> Vec<(PathBuf, String, String)> {
-        let Some(dir) = self.examples_dir.as_ref().map(|e| e.join("templates")) else { return Vec::new() };
-        let mut list: Vec<(PathBuf, String, String)> = std::fs::read_dir(dir)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .filter_map(|e| {
-                let info: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(e.path().join("template.json")).ok()?).ok()?;
-                let text = |k: &str| info.get(k).and_then(|v| v.as_str()).unwrap_or_default().to_string();
-                Some((e.path(), text("name"), text("description")))
-            })
-            .collect();
-        list.sort_by(|a, b| a.1.cmp(&b.1));
-        list
-    }
-
-    /// Asks for an empty folder and creates the project there, from `template` or empty.
-    fn create_project(&mut self, template: Option<PathBuf>) {
-        let Some(dir) = rfd::FileDialog::new().set_title(t!("Choose an empty folder for the new project")).pick_folder() else { return };
-        let name = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "New Bot".into());
-        let made = match template {
-            Some(from) => create_from_template(&from, &dir, &name),
-            None => {
-                let mode = self.ed.reg.modes.first().map(|m| m.id.clone()).unwrap_or_else(|| "discord-bot".into());
-                Project::create(&dir, &name, &mode).map(|_| ())
-            }
-        };
-        match made {
-            Ok(()) => self.switch_project(&dir),
-            Err(e) => self.ed.log(Level::Error, format!("Could not create the project: {e:#}")),
-        }
+        let location = self
+            .ed
+            .prefs
+            .new_project_location
+            .as_ref()
+            .map(PathBuf::from)
+            .filter(|p| p.is_dir())
+            .unwrap_or_else(|| {
+                // Next to the open project, unless that is one of the app's examples.
+                let open = self.ed.project.as_ref().map(|p| p.root.as_path()).filter(|r| self.examples_dir.as_ref().is_none_or(|e| !r.starts_with(e)));
+                crate::new_project::default_location(open)
+            });
+        self.new_project = Some(crate::new_project::NewProject::new(&self.ed.reg, location));
     }
 
     fn new_project_chooser(&mut self, ctx: &egui::Context, theme: &crate::theme::Theme) {
-        let Some(mut picked) = self.new_project else { return };
-        let templates = self.templates();
-        let (mut create, mut cancel) = (false, false);
-        let close = dialog::show(
-            ctx,
-            theme,
-            dialog::Spec { id: "new-project", title: t!("New project"), subtitle: Some(t!("Start empty, or from a working bot to change")), icon: None, width: 560.0 },
-            |ui, part| match part {
-                dialog::Part::Body => {
-                    let empty = (t!("Empty project").to_string(), t!("One empty workspace.").to_string());
-                    let rows = std::iter::once(empty).chain(templates.iter().map(|(_, n, d)| (crate::i18n::tr(n).into_owned(), crate::i18n::tr(d).into_owned())));
-                    for (i, (name, description)) in rows.enumerate() {
-                        let selected = picked == i;
-                        let frame = egui::Frame::new()
-                            .fill(if selected { crate::theme::with_alpha(theme.accent, 30) } else { theme.panel_header })
-                            .stroke(egui::Stroke::new(1.0, if selected { theme.accent } else { theme.line }))
-                            .corner_radius(8)
-                            .inner_margin(egui::Margin::symmetric(14, 10));
-                        let r = frame.show(ui, |ui| {
-                            ui.set_width(ui.available_width());
-                            ui.label(RichText::new(&name).size(14.0).strong().color(theme.text));
-                            ui.label(RichText::new(&description).size(12.0).color(theme.text_muted));
-                        });
-                        let click = ui.interact(r.response.rect, egui::Id::new(("new-project-row", i)), egui::Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
-                        if click.clicked() {
-                            picked = i;
-                        }
-                        if click.double_clicked() {
-                            create = true;
-                        }
-                        ui.add_space(4.0);
+        use crate::new_project::Outcome;
+        let Some(mut state) = self.new_project.take() else { return };
+        let templates = crate::new_project::templates(self.examples_dir.as_deref(), &self.ed.reg);
+        match crate::new_project::show(ctx, theme, &mut state, &self.ed.reg, &templates) {
+            None => self.new_project = Some(state),
+            Some(Outcome::Cancel) => {}
+            Some(Outcome::MorePlugins) => self.open_plugins(),
+            Some(Outcome::Create { dir, name, mode, template }) => {
+                self.ed.prefs.new_project_location = Some(state.location.trim().to_string());
+                let made = match template {
+                    Some(from) => create_from_template(&from, &dir, &name),
+                    None => Project::create(&dir, &name, &mode).map(|_| ()),
+                };
+                match made {
+                    Ok(()) => self.switch_project(&dir),
+                    Err(e) => {
+                        self.ed.log(Level::Error, format!("Could not create the project: {e:#}"));
+                        self.new_project = Some(state);
                     }
                 }
-                dialog::Part::Footer => {
-                    create |= dialog::primary_button(ui, theme, t!("Choose folder…")).clicked();
-                    cancel = dialog::secondary_button(ui, theme, t!("Cancel")).clicked();
-                }
-            },
-        );
-        self.new_project = Some(picked);
-        if create {
-            self.new_project = None;
-            let template = picked.checked_sub(1).and_then(|i| templates.get(i)).map(|t| t.0.clone());
-            self.create_project(template);
-        } else if cancel || close {
-            self.new_project = None;
+            }
         }
     }
 
