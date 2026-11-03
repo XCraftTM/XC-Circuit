@@ -513,13 +513,14 @@ impl BotUi {
                     });
 
                     dialog::section(ui, &theme, t!("Options"));
+                    let token_env = ed.mode().map(|m| m.token_env().to_string()).unwrap_or_else(|| "DISCORD_TOKEN".into());
                     let token_text = if draft.token_saved {
-                        t!("Writes DISCORD_TOKEN and the other saved secrets to the folder's .env file. Never share or upload that file.")
+                        tf!("Writes {variable} and the other saved secrets to the folder's .env file. Never share or upload that file.", variable = token_env)
                     } else {
-                        t!("No token saved yet (Bot › Settings). An empty .env is created for you to fill in.")
+                        t!("No token saved yet (Bot › Settings). An empty .env is created for you to fill in.").to_string()
                     };
                     ui.add_enabled_ui(draft.token_saved, |ui| {
-                        dialog::toggle_row(ui, &theme, &mut draft.include_token, t!("Include the bot token and secrets"), token_text);
+                        dialog::toggle_row(ui, &theme, &mut draft.include_token, t!("Include the bot token and secrets"), &token_text);
                     });
                     dialog::toggle_row(ui, &theme, &mut draft.install, t!("Install npm packages now"), t!("Runs npm install in the folder so it's ready to start. Needs internet."));
 
@@ -575,7 +576,8 @@ impl BotUi {
                     .collect()
             })
             .unwrap_or_default();
-        let opts = ExportOptions { name: project.meta.name.clone(), token, secrets: secrets_out, install: draft.install };
+        let token_env = ed.mode().map(|m| m.token_env().to_string()).unwrap_or_else(|| "DISCORD_TOKEN".into());
+        let opts = ExportOptions { name: project.meta.name.clone(), token, token_env, secrets: secrets_out, install: draft.install };
         let dir = draft.dir.clone();
         let (tx, rx) = channel();
         self.jobs.push(rx);

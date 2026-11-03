@@ -7,6 +7,8 @@ blocks      = ["xc.core/*", "xc.discord/*"]
 runtime     = "node"
 runtimeLibs = ["xc.discord/runtime/discord.js"]
 exporter    = "xc.discord/node-bundle"
+tokenEnv    = "DISCORD_TOKEN"
+features    = ["slashCommands"]
 
 # Block picker categories, in this order. A block names one with `search.category`;
 # events sit with the blocks they work with (On Signal with Emit Signal).

@@ -491,7 +491,7 @@ impl CircuitApp {
                     self.bot.stop(&mut self.ed);
                 }
                 ui.separator();
-                if ui.add_enabled(has_project, egui::Button::new(t!("Slash Commands…"))).clicked() {
+                if self.ed.has_slash_commands() && ui.add_enabled(has_project, egui::Button::new(t!("Slash Commands…"))).clicked() {
                     crate::slash::open(&mut self.ed);
                 }
                 if ui.add_enabled(has_project, egui::Button::new(t!("Settings…"))).clicked() {
@@ -837,7 +837,9 @@ impl CircuitApp {
             items.push(Item::new(t!("Bot"), t!("Stop bot"), Cmd::Stop).shortcut("Shift+F5"));
         }
         if has_project {
-            items.push(Item::new(t!("Bot"), t!("Slash Commands…"), Cmd::SlashCommands));
+            if self.ed.has_slash_commands() {
+                items.push(Item::new(t!("Bot"), t!("Slash Commands…"), Cmd::SlashCommands));
+            }
             items.push(Item::new(t!("Bot"), t!("Bot Settings…"), Cmd::Settings));
             items.push(Item::new(t!("Bot"), "Export…", Cmd::Export));
             items.push(Item::new(t!("File"), "Save", Cmd::Save).shortcut("Ctrl+S"));

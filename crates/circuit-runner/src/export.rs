@@ -12,8 +12,10 @@ use crate::node::ensure_packages;
 
 pub struct ExportOptions {
     pub name: String,
-    /// Written to `.env` as `DISCORD_TOKEN` when given.
+    /// Written to `.env` (as `token_env`) when given.
     pub token: Option<String>,
+    /// The variable the bot reads its token from: the mode's, such as `DISCORD_TOKEN`.
+    pub token_env: String,
     /// The build mode's other secrets (music logins …), each a line in `.env`.
     pub secrets: Vec<ExportSecret>,
     /// Run `npm install` in the export folder.
@@ -92,14 +94,15 @@ pub fn export(dir: &Path, bundle: &Bundle, opts: &ExportOptions, log: &mut dyn F
 
     let env = dir.join(".env");
     let existing = fs::read_to_string(&env).ok();
-    fs::write(&env, env_file(existing.as_deref(), opts.token.as_deref(), &opts.secrets))?;
+    fs::write(&env, env_file(existing.as_deref(), &opts.token_env, opts.token.as_deref(), &opts.secrets))?;
     private_file(&env)?;
     keep_ignored(&dir.join(".gitignore"), &[".env", "node_modules/", "data/"])?;
     fs::write(
         dir.join("README.txt"),
         format!(
-            "{name}\n\nMade with XC Circuit.\n\n1. Install Node.js 22 or newer: https://nodejs.org\n2. In this folder, run: npm install   (once)\n3. Start the bot:      node index.js\n\nThe bot token is read from .env (DISCORD_TOKEN=...). Never share that file.\nSaved data is kept in the data/ folder.\n",
-            name = one_line
+            "{name}\n\nMade with XC Circuit.\n\n1. Install Node.js 22 or newer: https://nodejs.org\n2. In this folder, run: npm install   (once)\n3. Start the bot:      node index.js\n\nThe bot token is read from .env ({env}=...). Never share that file.\nSaved data is kept in the data/ folder.\n",
+            name = one_line,
+            env = opts.token_env
         ),
     )?;
 
@@ -115,12 +118,12 @@ pub fn export(dir: &Path, bundle: &Bundle, opts: &ExportOptions, log: &mut dyn F
 /// The `.env` file: the token and every secret. A file from an earlier export
 /// is kept as it is (with what the user filled in) when no token is written,
 /// and only gets the secrets it doesn't list yet.
-fn env_file(existing: Option<&str>, token: Option<&str>, secrets: &[ExportSecret]) -> String {
+fn env_file(existing: Option<&str>, token_env: &str, token: Option<&str>, secrets: &[ExportSecret]) -> String {
     let clean = |v: &str| v.trim().replace(['\r', '\n'], "");
     let mut text = match (token, existing) {
-        (Some(token), _) => format!("# Keep this file private: it holds your bot token.\nDISCORD_TOKEN={}\n", clean(token)),
+        (Some(token), _) => format!("# Keep this file private: it holds your bot token.\n{token_env}={}\n", clean(token)),
         (None, Some(old)) => old.to_string(),
-        (None, None) => "# Put your bot token here.\nDISCORD_TOKEN=\n".to_string(),
+        (None, None) => format!("# Put your bot token here.\n{token_env}=\n"),
     };
     let keep_values = token.is_none() && existing.is_some();
     for s in secrets {
@@ -177,14 +180,14 @@ mod tests {
     #[test]
     fn env_lists_every_secret() {
         let secrets = |v: Option<&str>| vec![ExportSecret { env: "XC_SECRET_YOUTUBECOOKIE".into(), label: "YouTube cookie".into(), value: v.map(String::from) }];
-        assert_eq!(env_file(None, None, &secrets(None)), "# Put your bot token here.\nDISCORD_TOKEN=\n# YouTube cookie\nXC_SECRET_YOUTUBECOOKIE=\n");
+        assert_eq!(env_file(None, "DISCORD_TOKEN", None, &secrets(None)), "# Put your bot token here.\nDISCORD_TOKEN=\n# YouTube cookie\nXC_SECRET_YOUTUBECOOKIE=\n");
         assert_eq!(
-            env_file(None, Some("t"), &secrets(Some("c\n"))),
+            env_file(None, "DISCORD_TOKEN", Some("t"), &secrets(Some("c\n"))),
             "# Keep this file private: it holds your bot token.\nDISCORD_TOKEN=t\n# YouTube cookie\nXC_SECRET_YOUTUBECOOKIE=c\n"
         );
         // An earlier .env keeps what was filled in, and gets the missing lines.
-        assert_eq!(env_file(Some("DISCORD_TOKEN=x\nXC_SECRET_YOUTUBECOOKIE = mine\n"), None, &secrets(None)), "DISCORD_TOKEN=x\nXC_SECRET_YOUTUBECOOKIE = mine\n");
-        assert_eq!(env_file(Some("DISCORD_TOKEN=x"), None, &secrets(None)), "DISCORD_TOKEN=x\n# YouTube cookie\nXC_SECRET_YOUTUBECOOKIE=\n");
+        assert_eq!(env_file(Some("DISCORD_TOKEN=x\nXC_SECRET_YOUTUBECOOKIE = mine\n"), "DISCORD_TOKEN", None, &secrets(None)), "DISCORD_TOKEN=x\nXC_SECRET_YOUTUBECOOKIE = mine\n");
+        assert_eq!(env_file(Some("DISCORD_TOKEN=x"), "DISCORD_TOKEN", None, &secrets(None)), "DISCORD_TOKEN=x\n# YouTube cookie\nXC_SECRET_YOUTUBECOOKIE=\n");
     }
 
     #[test]
@@ -213,7 +216,7 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("package.json"), "{\"name\": \"something-else\"}").unwrap();
         let bundle = Bundle { value: serde_json::json!({}), dependencies: IndexMap::new() };
-        let opts = ExportOptions { name: "Name\nrequire('x')".into(), token: None, secrets: Vec::new(), install: false };
+        let opts = ExportOptions { name: "Name\nrequire('x')".into(), token: None, token_env: "DISCORD_TOKEN".into(), secrets: Vec::new(), install: false };
         assert!(export(&dir, &bundle, &opts, &mut |_| {}).is_err(), "a folder with other files is refused");
         assert_eq!(fs::read_to_string(dir.join("package.json")).unwrap(), "{\"name\": \"something-else\"}");
 
@@ -246,7 +249,7 @@ mod tests {
         let bundle = Bundle { value, dependencies: IndexMap::new() };
         let dir = std::env::temp_dir().join(format!("xc-export-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
-        let opts = ExportOptions { name: "Export Test".into(), token: Some("abc".into()), secrets: Vec::new(), install: false };
+        let opts = ExportOptions { name: "Export Test".into(), token: Some("abc".into()), token_env: "DISCORD_TOKEN".into(), secrets: Vec::new(), install: false };
         export(&dir, &bundle, &opts, &mut |_| {}).unwrap();
 
         assert!(fs::read_to_string(dir.join(".env")).unwrap().contains("DISCORD_TOKEN=abc"));

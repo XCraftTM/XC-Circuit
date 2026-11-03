@@ -17,6 +17,12 @@ pub struct BuildMode {
     pub runtime_libs: Vec<String>,
     pub exporter: Option<String>,
     pub template: Option<String>,
+    /// The environment variable an exported bot reads its token from
+    /// (`FLUXER_BOT_TOKEN`). Unset: `DISCORD_TOKEN`.
+    pub token_env: Option<String>,
+    /// What the mode's projects have: `slashCommands` shows the Slash Command
+    /// Builder.
+    pub features: Vec<String>,
     pub categories: Vec<Category>,
     /// Settings page fields, keyed by setting id.
     pub settings: IndexMap<String, Value>,
@@ -35,6 +41,14 @@ pub struct Category {
 }
 
 impl BuildMode {
+    pub fn token_env(&self) -> &str {
+        self.token_env.as_deref().unwrap_or("DISCORD_TOKEN")
+    }
+
+    pub fn has(&self, feature: &str) -> bool {
+        self.features.iter().any(|f| f == feature)
+    }
+
     /// Whether a block from `plugin` with `block_id` belongs to this mode.
     pub fn includes(&self, plugin: &str, block_id: &str) -> bool {
         self.blocks.iter().any(|pattern| match pattern.split_once('/') {

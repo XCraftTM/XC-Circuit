@@ -369,6 +369,11 @@ impl Editor {
         self.history.mark_saved();
     }
 
+    /// Whether the open project's mode has slash commands (Discord's does).
+    pub fn has_slash_commands(&self) -> bool {
+        self.mode().is_some_and(|m| m.has("slashCommands"))
+    }
+
     pub fn mode(&self) -> Option<&BuildMode> {
         let id = self.project.as_ref().map(|p| p.meta.mode.as_str()).unwrap_or("discord-bot");
         if id == NO_MODE {

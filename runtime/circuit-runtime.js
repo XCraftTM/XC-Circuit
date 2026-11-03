@@ -53,7 +53,9 @@ class Runtime {
   secret(name) {
     const env = process.env[`XC_SECRET_${String(name).toUpperCase()}`];
     if (env) return env;
-    if (name === "token") return process.env.DISCORD_TOKEN || process.env.DBB_TOKEN;
+    // An exported bot's token, in the variable its mode names (FLUXER_BOT_TOKEN).
+    const own = this.bundle.project.tokenEnv;
+    if (name === "token") return own && own !== "DISCORD_TOKEN" ? process.env[own] : process.env.DISCORD_TOKEN || process.env.DBB_TOKEN;
     return undefined;
   }
 

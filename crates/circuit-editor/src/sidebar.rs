@@ -334,7 +334,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
             .and_then(Value::as_array)
             .map(|list| list.iter().filter_map(|c| c.get("name").and_then(Value::as_str).map(str::to_string)).collect())
             .unwrap_or_default();
-        if !commands.is_empty() || project.meta.mode.contains("discord") {
+        if !commands.is_empty() || ed.has_slash_commands() {
             ui.add_space(10.0);
             let line = ui.available_rect_before_wrap();
             ui.painter().hline(line.x_range(), line.top(), Stroke::new(1.0, theme.line));
