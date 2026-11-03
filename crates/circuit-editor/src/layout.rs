@@ -427,10 +427,15 @@ fn form(ui: &mut Ui, theme: &Theme, edit: &mut LayoutEdit) {
         ui.label(RichText::new(format!("• {p}")).size(12.0).color(theme.warning));
     }
     ui.add_space(6.0);
-    ScrollArea::vertical().id_salt("layout-form").max_height(dialog::remaining_height(ui, 300.0)).auto_shrink([false, false]).show(ui, |ui| {
-        ui.set_width(ui.available_width() - 12.0);
-        let next = count(components(&edit.draft)) + 1;
-        list_editor(ui, theme, list_mut(&mut edit.draft, "components"), true, next);
+    // A fixed id, so the boxes in the form keep theirs (and the one being
+    // typed in keeps focus) when a problem line above appears or goes.
+    let form_id = ui.id().with("layout-form-scope");
+    ui.scope_builder(egui::UiBuilder::new().id(form_id), |ui| {
+        ScrollArea::vertical().id_salt("layout-form").max_height(dialog::remaining_height(ui, 300.0)).auto_shrink([false, false]).show(ui, |ui| {
+            ui.set_width(ui.available_width() - 12.0);
+            let next = count(components(&edit.draft)) + 1;
+            list_editor(ui, theme, list_mut(&mut edit.draft, "components"), true, next);
+        });
     });
 }
 
