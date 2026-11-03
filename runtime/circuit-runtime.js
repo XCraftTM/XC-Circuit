@@ -191,7 +191,7 @@ class Runtime {
         restart: () => process.exit(75),
       },
       runtime: {
-        onError: (h) => rt.errorHandlers.push(h),
+        onError: (h) => rt.errorHandlers.push({ h, node }),
         onSignal: (name, h) => getOr(rt.signalHandlers, name, () => []).push(h),
         /** `h(data)` starts a run and resolves to what it returns. */
         onCall: (name, h) => getOr(rt.callHandlers, name, () => []).push(h),
@@ -221,13 +221,26 @@ class Runtime {
   }
 
   /** An error nobody caught: On Error blocks, otherwise the log. */
-  uncaught(err, node) {
+  /**
+   * An error no Try Zone caught, from a run started by `event`: goes to the
+   * On Error blocks, or the log. An error in a run that On Error started is
+   * only logged, so a failing On Error path can't set itself off again.
+   */
+  uncaught(err, node, event) {
     const details = describeError(err, node);
     this.emit("node", { ws: node.graph.key, node: node.id, phase: "error", error: details.message });
-    if (this.errorHandlers.length) {
-      for (const h of this.errorHandlers) h({ message: details.message, details, block: details.block });
-    } else {
-      this.log.error(`${node.graph.name} › ${node.def.name || node.blockId} (#${node.id}): ${details.message}`);
+    const where = `${node.graph.name} › ${node.def.name || node.blockId} (#${node.id})`;
+    const fromOnError = this.errorHandlers.some((e) => e.node === event);
+    if (!this.errorHandlers.length || fromOnError) {
+      this.log.error(`${where}: ${details.message}${fromOnError ? " (in an On Error path)" : ""}`);
+      return;
+    }
+    for (const { h } of this.errorHandlers) {
+      try {
+        Promise.resolve(h({ message: details.message, details, block: details.block })).catch((e) => this.log.error(`On Error failed: ${e.message}`));
+      } catch (e) {
+        this.log.error(`On Error failed: ${e.message}`);
+      }
     }
   }
 }
@@ -292,7 +305,7 @@ class Graph {
     return this.follow(run, node.id, "next").then(
       () => run.returned,
       (e) => {
-        this.rt.uncaught(e, e.__xcNode || node);
+        this.rt.uncaught(e, e.__xcNode || node, node);
         return undefined;
       },
     );

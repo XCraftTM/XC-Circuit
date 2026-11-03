@@ -69,8 +69,10 @@ const bundle = {
         log: { block: "core.log@1", at: [0, 0], values: { message: "signal ${data}", level: "info" } },
         e: { block: "core.on_error@1", at: [0, 0] },
         elog: { block: "core.log@1", at: [0, 0], values: { message: "on error: ${message} in ${block}", level: "info" } },
+        // On Error failing itself is logged once, not handled again and again.
+        eboom: { block: "core.throw@1", at: [0, 0], values: { message: "handler broke" } },
       },
-      links: ["s.next > inc.in", "inc.next > log.in", "e.next > elog.in"],
+      links: ["s.next > inc.in", "inc.next > log.in", "e.next > elog.in", "elog.next > eboom.in"],
     },
     // A Try Zone that times out stops at its next block, while a path next to
     // it (an old project's split path) keeps running outside the zone.
@@ -117,6 +119,8 @@ setTimeout(() => {
   has("warn: Main › Try Risky: boom · retry 1/1");
   has("warn: boom");
   has("info: on error: uncaught one in Throw Error");
+  has("handler broke (in an On Error path)");
+  assert.strictEqual(logs.filter((l) => l.includes("on error:")).length, 1, "On Error ran once");
   assert.ok(!logs.some((l) => l.includes("wrong")), "the false branch must not run");
   assert.ok(events.some((e) => e.t === "node" && e.node === "yes" && e.phase === "exit"), "node events are emitted");
   assert.ok(events.some((e) => e.t === "zone" && e.phase === "error"), "zone error event");
