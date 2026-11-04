@@ -49,6 +49,9 @@ The first start opens `examples/DemoBot`. Windows and Linux are supported.
 | Panels | The Inspector, Console and Problems are tabs: drag them to dock anywhere; reopen closed ones from View › Panels |
 | Workspaces | The Workspaces panel lists them in folders: + and the folder button on the project row add them, drag a workspace onto a folder to move it, double-click a name to rename, the ⋯ button (or right-click) for more |
 | Side bar | Like VS Code: the icons on the far left (the activity bar) each show one view in the side bar next to them: Workspaces, Stored Data or Plugins. Clicking the icon of the view shown folds the side bar away; drag its edge to make it wider. View › Side bar does the same, and View › Show activity bar hides the icons. The gear at the bottom opens Settings |
+| Snap and arrange | The magnet in the canvas toolbar (or Settings › Canvas) snaps dropped blocks and notes to the grid. With several blocks selected, Arrange above them aligns their edges or centres, or spreads them out evenly |
+| Run times and values | While the bot runs from the editor, each block shows how long it took above its corner for 30 seconds, and hovering a wire shows the last value that went through it |
+| Favourite blocks | Star a block in the picker (on its row or in its details): favourites and the blocks you placed lately are listed at the top |
 | Notes | Add note in the canvas toolbar, or select blocks › Note to frame them: a title, a description and a colour (pencil button or double-click the title). Drag the title to move the note with the blocks inside (Alt: only the note); drag its edges or corners to resize it. Notes don't run |
 | Try Zone | Select a block › Try Zone; drop blocks in or out; the gear on the zone's title sets retries and timeout |
 | Embeds | Select a Build Embed block › Open Embed Builder; the block shows a live preview. Every part of an embed is there: author with link and icon, title link, fields, images, footer, and a timestamp (when it's sent, or a set time) |
@@ -113,7 +116,7 @@ examples/DemoBot         example project (with a TypeScript block in its own plu
 sdk/                     @xc-circuit/sdk: types for writing blocks
 ```
 
-Extra plugin folders can be listed in `XC_CIRCUIT_PLUGINS`. Installed plugins live in `%APPDATA%\XC Circuit\plugins` (Windows) or `~/.local/share/xc-circuit/plugins` (Linux); a project's own `plugins/` folder is loaded too.
+Plugins › Install from Zip… (or dropping a `.zip` on the window) installs a shared plugin. Extra plugin folders can be listed in `XC_CIRCUIT_PLUGINS`. A project folder given on the command line (`xc-circuit "My Bot"`) opens at start. `examples/plugins/desk-pet` is an editor plugin with a pet that floats over the editor. Installed plugins live in `%APPDATA%\XC Circuit\plugins` (Windows) or `~/.local/share/xc-circuit/plugins` (Linux); a project's own `plugins/` folder is loaded too.
 
 ## Writing blocks
 

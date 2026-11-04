@@ -1,5 +1,9 @@
 # Translations
 
+::: info In short
+A TOML file per language: the app's English texts and their translations.
+:::
+
 A translation is a TOML file per language in a plugin, listed in `contributes.locales`. It translates the interface by its English texts. Blocks are not translated. See the [tutorial](/tutorials/translate) for how to start one from the app.
 
 ```toml

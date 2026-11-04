@@ -1,5 +1,9 @@
 # Pin types
 
+::: info In short
+Types of values on wires (`discord.member`, `fluxer.message`…): their name, colour, how to check a value, and what they convert to.
+:::
+
 Pin types are the types of values that go through wires besides the basic ones (`text`, `number`, `boolean`, `date`, `object`, `list<…>`, `any`). They're TOML files listed in a plugin's `contributes.pinTypes`, each with one `[[type]]` table per type.
 
 ```toml

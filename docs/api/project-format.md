@@ -1,5 +1,9 @@
 # Project format
 
+::: info In short
+A project is a folder: `circuit.json` (name, mode, settings, slash commands) and `workspaces/*.json` (one per canvas: blocks, wires, Try Zones, notes).
+:::
+
 A project is a folder. All files are JSON, written with stable key order and indentation so they diff well in Git.
 
 ```

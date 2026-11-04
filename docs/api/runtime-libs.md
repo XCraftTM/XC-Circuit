@@ -1,5 +1,9 @@
 # Runtime libraries
 
+::: info In short
+Code a build mode runs when the bot starts: it creates the client, logs in, and gives the blocks a shared API (`ctx.discord`, `ctx.fluxer`).
+:::
+
 A runtime library is code a build mode runs when the bot starts: it creates the client (discord.js, fluxer.js), logs in, and gives the mode's blocks a shared API. A mode names its libraries in [`runtimeLibs`](./build-modes#keys).
 
 ```js

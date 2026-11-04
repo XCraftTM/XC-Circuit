@@ -1,5 +1,9 @@
 # Panels (ui)
 
+::: info In short
+`render(ui)` of a [panel](./editor#xc-panel) or [overlay](./editor#xc-overlay) lists what to show, top to bottom: `ui.heading("…")`, `ui.button("…", onClick)`… XC Circuit draws it in the app's own style and calls `render` again when something changes.
+:::
+
 A panel's `render(ui)` describes what it shows by calling `ui` methods in order. XC Circuit draws the result with the app's own look and theme.
 
 ```js
@@ -57,6 +61,7 @@ Every method returns `ui`, so calls can be chained.
 | `ui.checkbox(label, checked, onChange)` | A check box. `onChange(checked)`. |
 | `ui.input(value, onChange, options?)` | A text box. `onChange(text)` on every change. Options: `placeholder`, `multiline` (a box of several lines), `key` (keeps the text box's focus when the panel's layout around it changes). |
 | `ui.progress(fraction, label?)` | A progress bar, `fraction` from 0 to 1. |
+| `ui.image(file, options?)` | A picture from the plugin's folder (PNG, JPEG or SVG). Options: `width`, `height` (default 64), `tint` (a colour, as for text). |
 
 ### Layout
 

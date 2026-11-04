@@ -1,5 +1,9 @@
 # Native plugins (Rust)
 
+::: info In short
+A Rust library that draws with egui directly. More power, but it must be built with exactly the same compiler as the app, and people must allow it first. Most plugins are better as [editor scripts](./editor).
+:::
+
 A native plugin is a Rust library (`.dll` on Windows, `.so` on Linux) that XC™ Circuit loads into the editor. It can do the same as an [editor script](./editor) (panels, commands, checks, save and bot events) but draws its panels with [egui](https://github.com/emilk/egui) directly and runs with the editor's full access.
 
 ::: warning Prefer editor scripts
@@ -65,6 +69,8 @@ Every method has a default; implement what you need.
 | `check(host) -> Vec<Problem>` | about once a second while a project is open |
 | `on_bot_event(event, host)` | for `BotEvent::Started`, `Stopped`, `Log { level, text }`, `Block { workspace, node, phase, ms, error }` |
 | `on_save(host)` | after the project was saved |
+| `tick(host) -> Option<Duration>` | every frame; return when you need the next one at the latest (timers, animation) |
+| `overlay_ui(ctx, host)` | every frame: draw anything floating over the editor with `egui::Area` |
 
 ## The Host trait
 
@@ -83,6 +89,9 @@ What the editor lets the plugin see and do. Workspaces and data are passed as JS
 | `run_command(id)` | run a command after this call |
 | `bot_running()` | whether the bot runs |
 | `storage_get(key)` / `storage_set(key, value)` | the plugin's own store |
+| `add_block(workspace, block, at, values_json)` | place a block, returns its id |
+| `select(workspace, nodes)` | select blocks |
+| `play_sound(bytes, volume)` | play a WAV, MP3 or Ogg file's bytes |
 
 ## Building and loading
 

@@ -1,44 +1,48 @@
 # API reference
 
-Everything a plugin can contain, key by key. For a guided start, see the tutorials [Your first block](/tutorials/first-block) and [Your first editor plugin](/tutorials/first-editor-plugin); for the ideas behind it, [Plugins](/explanations/plugins).
+Every key and function plugins can use. New here? Start with the tutorials [Your first block](/tutorials/first-block) and [Your first editor plugin](/tutorials/first-editor-plugin).
 
-## A plugin at a glance
+## What do you want to do?
+
+| I want to… | Read |
+| --- | --- |
+| make a **new block** for the picker | [Blocks](./blocks) → [Fields and types](./fields) → [Run context (ctx)](./ctx) |
+| add a **panel, command or check** to the editor | [Editor plugins (xc)](./editor) → [Panels (ui)](./panels) |
+| make something **float over the editor** (a desk pet) | [Overlays](./editor#xc-overlay) |
+| support a **new kind of bot** (another chat app) | [Build modes](./build-modes) → [Runtime libraries](./runtime-libs) → [Pin types](./pin-types) |
+| make a **theme** | [Themes](./themes) |
+| **translate** the app | [Translations](./locales) |
+| offer a **starter bot** in New Project | [Templates](./templates) |
+| read or write **project files** with other tools | [Project format](./project-format) |
+| draw with **Rust and egui** directly | [Native plugins](./native) |
+
+## Every plugin is a folder
 
 ```
 my.plugin/
-├─ plugin.toml          the manifest: id, name, what it contributes
-├─ blocks/              block files (.js, .cjs, .mjs, .ts)
-├─ editor.js            editor script: panels, commands, checks
-├─ modes/               build modes (.toml)
-├─ runtime/             runtime libraries for a build mode (.js)
-├─ types/               pin types (.toml) and class catalogs (.classes.json)
-├─ themes/              themes (.toml)
-├─ locales/             translations (.toml)
-├─ icons/               icons (.svg, .png)
-└─ templates/           starters for File › New Project
+├─ plugin.toml   what it is, what it adds   → plugin.toml
+├─ blocks/       blocks (.js, .ts)          → Blocks
+├─ editor.js     panels, commands, checks   → Editor plugins
+├─ modes/        kinds of bots (.toml)      → Build modes
+├─ runtime/      code for a kind of bot     → Runtime libraries
+├─ types/        value types (.toml)        → Pin types
+├─ themes/       themes (.toml)             → Themes
+├─ locales/      translations (.toml)       → Translations
+├─ icons/        icons (.svg, .png)
+└─ templates/    starter bots               → Templates
 ```
 
-Only `plugin.toml` is required; everything else is there when the plugin needs it.
+Only [`plugin.toml`](./plugin-toml) is required. Share a plugin as a `.zip` of its folder: people install it with **Plugins › Install from Zip…**
 
-## Pages
+## Types for your code editor
 
-| Page | What it covers |
-| --- | --- |
-| [plugin.toml](./plugin-toml) | The manifest |
-| [Blocks](./blocks) | Block files: kinds, info, fields, outputs, flows, `run`, `listen`, `define`, `migrate` |
-| [Fields and types](./fields) | Field options, type strings, `define()` results |
-| [Run context (ctx)](./ctx) | What a block's code can use while the bot runs |
-| [Editor plugins (xc)](./editor) | The `xc` object of editor scripts |
-| [Panels (ui)](./panels) | Building panel contents |
-| [Native plugins (Rust)](./native) | Compiled plugins with egui |
-| [Build modes](./build-modes) | Kinds of bots: blocks, categories, settings, packages |
-| [Runtime libraries](./runtime-libs) | Shared code for a mode's blocks |
-| [Pin types](./pin-types) | Value types, their colours and conversions |
-| [Themes](./themes) | Colours and shapes of the editor |
-| [Translations](./locales) | Languages for the interface |
-| [Templates](./templates) | Starters for new projects |
-| [Project format](./project-format) | `circuit.json` and workspace files |
+The repository's [`sdk/`](https://github.com/XCraftTM/XC-Circuit/tree/main/sdk) folder is the `@xc-circuit/sdk` package:
+
+```ts
+import { defineBlock } from "@xc-circuit/sdk";        // blocks
+/// <reference types="@xc-circuit/sdk/editor" />      // editor plugins (xc, ui)
+```
 
 ## Versions
 
-The plugin API has a version, currently **1.0**. A plugin says which versions it works with in `engines.circuit` (`"^1.0"`); XC Circuit skips plugins written for another major version. Additions within 1.x keep old plugins working.
+The plugin API is version **1.0**. A plugin says which versions it works with in `plugin.toml` (`[engines] circuit = "^1.0"`); plugins for another major version aren't loaded. Additions in 1.x keep old plugins working.

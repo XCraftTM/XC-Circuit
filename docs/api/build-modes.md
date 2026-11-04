@@ -1,5 +1,9 @@
 # Build modes
 
+::: info In short
+A build mode is a kind of bot (Discord Bot, Fluxer Bot): which blocks it offers, the picker's categories, the settings in Bot › Settings and the npm packages it needs.
+:::
+
 A build mode is a kind of bot: *Discord Bot*, *Fluxer Bot*. It decides which blocks the picker offers and how they're sorted, which settings Bot › Settings asks for, which npm packages the bot needs, and which [runtime libraries](./runtime-libs) set the bot up. Modes are TOML files listed in a plugin's `contributes.buildModes`.
 
 ```toml

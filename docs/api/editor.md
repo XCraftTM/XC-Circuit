@@ -1,65 +1,76 @@
 # Editor plugins (xc)
 
-An editor script adds panels, commands and checks to XC™ Circuit, and reacts to what happens in the app. Name it in `plugin.toml`:
-
-```toml
-[editor]
-script = "editor.js"   # or editor.ts
-```
-
-The script runs once when the plugin loads, and again whenever one of its files is saved. Its job at that point is to **register** things with `xc.command`, `xc.panel`, `xc.check` and `xc.on`. Everything else (reading the project, logging…) happens inside the functions it registers.
+::: info In short
+An `editor.js` in your plugin, named in `plugin.toml` under `[editor] script = "editor.js"`. It uses the global `xc` to add commands, panels, checks and overlays to XC™ Circuit, and to read and change the project. It reloads when you save it.
+:::
 
 ```js
 xc.command({ id: "hello.greet", title: "Say hello", run() { xc.log("Hello from", xc.project()?.name) } });
 ```
 
-## The sandbox
+Types for your code editor: `/// <reference types="@xc-circuit/sdk/editor" />` (from the repository's `sdk/` folder).
 
-Editor scripts run in their own QuickJS sandbox, inside the editor:
+## Quick reference
 
-- They reach the app only through `xc`. There is no `fetch`, no file system, no `process`, no timers.
-- Each call (a command, a render, a check) may take **100 ms** (render, checks, bot events) or **1 s** (commands, clicks, saves). A script that takes longer is stopped and the error says so.
-- Each plugin may use up to **32 MB** of memory.
-- `xc` can't be used while the script loads (only in the functions it registers).
+### Add things to the app
 
-Errors name the file and line. A failing command or handler is logged to the Console; a failing check shows in the Problems panel; a failing panel shows its error in the panel. The plugin keeps running either way.
+| | |
+| --- | --- |
+| [`xc.command({ id, title, run })`](#xc-command) | a command in the Plugins menu and the command palette |
+| [`xc.panel({ id, title, render })`](#xc-panel) | a dockable panel |
+| [`xc.check(fn)`](#xc-check) | problems for the Problems panel |
+| [`xc.overlay({ id, width, height, render, onClick })`](#xc-overlay) | something floating over the editor |
+| [`xc.on(event, fn)`](#xc-on) | react to `"save"`, `"botEvent"`, `"selection"` |
+| [`xc.every(ms, fn)` · `xc.after(ms, fn)` · `xc.cancel(id)`](#timers) | timers |
+| [`xc.playSound(file, { volume })`](#sounds) | play a sound from the plugin |
 
-Modern JavaScript works (`?.`, `??`, classes, destructuring, `async` functions, though nothing waits for their promises). TypeScript files (`.ts`) have their types stripped.
+### Read the project
 
-### Modules
+| | |
+| --- | --- |
+| `xc.project()` | `{ name, root }` or `null` |
+| `xc.workspaces()` | `[{ key, name }]` |
+| `xc.workspace(key)` | a workspace as saved: `{ name, nodes, links, zones, notes }` |
+| `xc.blocks()` | every block: `[{ workspace, id, type, values, … }]` |
+| `xc.activeWorkspace()` · `xc.selection()` | what's open and selected |
+| `xc.blockName(type)` | `"core.log"` → `"Log"` |
+| `xc.data.get(key)` | project data (in `circuit.json`) |
+| `xc.storage.get(key)` | the plugin's own store (on this computer) |
+| `xc.botRunning()` · `xc.screen()` | is the bot running · window size |
 
-`require("./lib/util.js")` loads another file of the plugin (relative to the file asking; `.js` is added if missing; `.ts` and `.json` work too). Only files inside the plugin folder can be loaded. Each file is loaded once and shared, like in Node.js.
+### Change things
 
-`console.log`, `console.warn` and `console.error` write to the Console, like `xc.log`.
+| | |
+| --- | --- |
+| `xc.addBlock(workspace, type, { x, y, values })` | place a block, returns its id |
+| `xc.setWorkspace(key, workspace)` | replace a workspace |
+| `xc.select(workspace, ids)` · `xc.reveal(workspace, id)` | select · go to a block |
+| `xc.data.set(key, value)` · `xc.storage.set(key, value)` | save data |
+| `xc.log(…)` · `xc.success(…)` · `xc.warn(…)` · `xc.error(…)` | write to the Console |
+| `xc.run(id)` | run a command: a plugin's, or `"bot.run"`, `"bot.stop"`, `"file.save"` |
+| `xc.moveOverlay(id, x, y)` · `xc.overlayPosition(id)` | move an overlay |
 
-## Registering
+Every change can be undone with Ctrl+Z, like your own edits.
+
+## Adding things
 
 ### xc.command
 
 ```js
-xc.command({ id, title, description?, run() })
+xc.command({ id: "acme.tidy", title: "Tidy up", description: "Shown on hover", run() { … } });
 ```
 
-Adds a command to the **Plugins** menu and the **command palette** (Ctrl+P). `id` must be unique across plugins; start it with your plugin's id. `run()` is called when the command is used.
+The `id` must be unique: start it with your plugin's id.
 
 ### xc.panel
 
 ```js
-xc.panel({ id, title, render(ui) })
+xc.panel({ id: "stats", title: "Stats", render(ui) { ui.heading("Hello") } });
 ```
 
-Adds a dockable panel, opened from the Plugins menu or the command palette. `render(ui)` describes its contents with [`ui`](./panels); XC Circuit calls it whenever the panel is drawn (at most four times a second while nothing happens, right away after a click), so it always shows the current state. See [Panels (ui)](./panels).
+Opened from the Plugins menu. `render(ui)` describes the panel with [`ui`](./panels); it runs whenever the panel is drawn, so it always shows the current project.
 
 ### xc.check
-
-```js
-xc.check(() => problems)
-```
-
-Adds a check. XC Circuit runs checks about once a second while a project is open, and shows what they return in the **Problems** panel. Return an array (or a single item, or nothing) of:
-
-- a text: `"The bot has no welcome message"`, or
-- `{ message, workspace?, block? }`: with `workspace` and `block`, clicking the problem selects the block.
 
 ```js
 xc.check(() =>
@@ -69,89 +80,61 @@ xc.check(() =>
 );
 ```
 
-### xc.on
+Runs about once a second. Return problems: a text, or `{ message, workspace, block }` (then clicking the problem selects the block).
+
+### xc.overlay
 
 ```js
-xc.on("save", () => { … })
-xc.on("botEvent", (event) => { … })
-```
-
-| Event | When | Argument |
-| --- | --- | --- |
-| `save` | after the project was saved | — |
-| `botEvent` | when the bot started from the editor does something | the event, below |
-
-Bot events:
-
-| `type` | Other keys |
-| --- | --- |
-| `"started"` | — |
-| `"stopped"` | — |
-| `"log"` | `level` (`info`, `success`, `warn`, `error`), `text` |
-| `"block"` | `workspace`, `block` (its id), `phase` (`enter`, `exit`, `error`), `ms` (on exit), `error` (on error) |
-
-Block events come for every block that runs, so keep the handler quick.
-
-## The project
-
-| Function | Returns |
-| --- | --- |
-| `xc.project()` | `{ name, root }` of the open project, or `null` |
-| `xc.workspaces()` | `[{ key, name }]`, every workspace |
-| `xc.workspace(key)` | the workspace as saved: `{ name, folder?, nodes, links, zones? }`, or `null`. See [Project format](./project-format#workspaces). |
-| `xc.blocks()` | every block of every workspace: `[{ workspace, id, type, block, at, values, pins?, zone? }]`; `type` is the block id without its version (`core.log`) |
-| `xc.activeWorkspace()` | the key of the workspace open in the canvas, or `null` |
-| `xc.selection()` | the ids of the selected blocks in the active workspace |
-| `xc.blockName(type)` | the display name of a block type: `xc.blockName("core.log")` is `"Log"` |
-| `xc.botRunning()` | whether the bot is running |
-
-### Changing the project
-
-| Function | Does |
-| --- | --- |
-| `xc.setWorkspace(key, workspace)` | Replaces a workspace with a changed copy (from `xc.workspace(key)`). Can be undone with Ctrl+Z, and marks the project unsaved. |
-| `xc.data.get(key)` | A value of the project's `data` (saved in `circuit.json`), or `null`. |
-| `xc.data.set(key, value)` | Sets it (anything JSON can hold). Marks the project unsaved. |
-
-```js
-const ws = xc.workspace("welcome");
-ws.nodes["3"].values.message = "Welcome, ${user}!";
-xc.setWorkspace("welcome", ws);
-```
-
-Keys in `data` are shared by all plugins and the editor (`slashCommands` is the Slash Command Builder's), so use keys of your own, such as `"acme.notes"`.
-
-## The app
-
-| Function | Does |
-| --- | --- |
-| `xc.log(...parts)` | Writes to the Console. Objects are written as JSON. |
-| `xc.success(...)`, `xc.warn(...)`, `xc.error(...)` | The same, as a success, a warning or an error. |
-| `xc.reveal(workspace, block)` | Opens the workspace, selects the block and centres the canvas on it. |
-| `xc.run(id)` | Runs a command after the current handler: a plugin's command, or `bot.run`, `bot.stop`, `file.save`. |
-| `xc.storage.get(key)` | A value from this plugin's own store, or `null`. |
-| `xc.storage.set(key, value)` | Stores a value (anything JSON can hold). Kept between sessions on this computer, not in the project. |
-| `xc.plugin.name` | The plugin's name from `plugin.toml`. |
-
-## State
-
-Variables at the top of the script live as long as the plugin: use them for a panel's state. They start over when the script reloads (when you save it). Use `xc.storage` for what should outlast that, and `xc.data` for what belongs to the project.
-
-```js
-let filter = "";
-
-xc.panel({
-  id: "find",
-  title: "Find",
-  render(ui) {
-    ui.input(filter, (text) => (filter = text), { placeholder: "Block name" });
-    for (const b of xc.blocks().filter((b) => xc.blockName(b.type).toLowerCase().includes(filter.toLowerCase()))) {
-      ui.link(`${xc.blockName(b.type)} (#${b.id})`, () => xc.reveal(b.workspace, b.id));
-    }
-  },
+xc.overlay({
+  id: "pet",
+  width: 96, height: 96,
+  x: -28, y: -60,            // where it starts; negative: from the right or bottom edge
+  render(ui) { ui.image("art/pet.svg", { width: 96 }) },
+  onClick() { xc.playSound("sounds/boop.wav") },
 });
 ```
 
-## A complete example
+Floats over the whole editor. People can drag it (`draggable: false` stops that). `frame: true` puts it on a card. Drawn again after a click, a timer or an event, and at least once a second. Example: [Desk Pet](https://github.com/XCraftTM/XC-Circuit/tree/main/examples/plugins/desk-pet).
 
-DemoBot's `plugins/demo.custom/editor.js` has a panel with notes, TODOs, workspaces and what the bot did, a command and a check. Open DemoBot from Help › Open Example and see it under Plugins.
+### xc.on
+
+| Event | When | `fn` gets |
+| --- | --- | --- |
+| `"save"` | the project was saved | — |
+| `"selection"` | other blocks were selected | `{ workspace, blocks }` |
+| `"botEvent"` | the bot (run from the editor) did something | `{ type: "started" }`, `{ type: "stopped" }`, `{ type: "log", level, text }`, `{ type: "block", workspace, block, phase, ms, error }` |
+
+Block events come for every block that runs: keep that handler quick.
+
+### Timers
+
+```js
+const id = xc.every(500, () => { … });   // every half second (at least 50 ms)
+xc.after(2000, () => xc.cancel(id));      // once, two seconds later
+```
+
+They also work at the top of the script. A timer that throws is stopped and the error logged.
+
+### Sounds
+
+```js
+xc.playSound("sounds/ding.wav", { volume: 0.5 });
+```
+
+WAV, MP3 or Ogg Vorbis from the plugin's folder. Nothing plays (and nothing fails) without an audio device.
+
+## Good to know
+
+**Sandbox.** Scripts run in their own JavaScript engine (QuickJS) and only reach the app through `xc`: no files, no network, no programs. That's why they load without asking you first.
+
+**Time limits.** A render, check or event may take 100 ms; a command, click or save 1 s. Longer, and it's stopped with an error. Memory: 32 MB per plugin.
+
+**Errors** name the file and line: in the Console for commands and events, in the Problems panel for checks, in the panel itself for panels.
+
+**Modules.** `require("./lib/util.js")` loads another file of the plugin (`.js`, `.ts`, `.json`). Only the plugin's own files.
+
+**State.** Variables at the top of the script live until the script reloads. Use `xc.storage` for what should last, `xc.data` for what belongs to the project. Keys in `xc.data` are shared, so prefix yours: `"acme.notes"`.
+
+**Not while loading.** The top of the script registers things (and may start timers). The project is only reachable inside the functions you register.
+
+Bigger example: DemoBot's `plugins/demo.custom/editor.js` (panel, command, check).

@@ -1,5 +1,9 @@
 # plugin.toml
 
+::: info In short
+The file that makes a folder a plugin: its `id`, `name` and `version`, and what it adds (`[contributes]`, `[editor]`, `[native]`).
+:::
+
 Every plugin folder has a `plugin.toml` at its top. It says what the plugin is and what it contributes.
 
 ```toml

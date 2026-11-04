@@ -1,5 +1,9 @@
 # Templates
 
+::: info In short
+Finished bots in a plugin's `templates/` folder, offered under *Start from* in File › New Project.
+:::
+
 Templates are the starters File › New Project offers: working bots people begin from. A plugin adds them by putting project folders into its `templates/` folder; they don't need to be listed in `plugin.toml`.
 
 ```

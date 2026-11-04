@@ -1,5 +1,9 @@
 # Fields and types
 
+::: info In short
+A block's `fields` are what people fill in on it (or connect a wire to); each has a `type` that decides its editor and which wires fit.
+:::
+
 ## Field options
 
 ```js

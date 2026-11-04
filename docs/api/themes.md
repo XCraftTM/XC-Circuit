@@ -1,5 +1,9 @@
 # Themes
 
+::: info In short
+A TOML file with colours (and a few shapes) for the editor. Picked in Settings › Appearance.
+:::
+
 A theme sets the editor's colours and a few shapes. Themes are TOML files listed in a plugin's `contributes.themes`, and are picked in Settings › Appearance. The accent colour can also be changed there, on top of any theme.
 
 ```toml

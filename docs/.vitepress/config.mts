@@ -60,22 +60,27 @@ export default defineConfig({
         },
       ],
       "/api/": [
-        { text: "Reference", items: [{ text: "Overview", link: "/api/" }] },
+        { text: "Reference", items: [{ text: "What do you want to do?", link: "/api/" }] },
         {
-          text: "Plugins",
+          text: "Blocks",
           items: [
-            { text: "plugin.toml", link: "/api/plugin-toml" },
             { text: "Blocks", link: "/api/blocks" },
             { text: "Fields and types", link: "/api/fields" },
             { text: "Run context (ctx)", link: "/api/ctx" },
+          ],
+        },
+        {
+          text: "Editor plugins",
+          items: [
             { text: "Editor plugins (xc)", link: "/api/editor" },
             { text: "Panels (ui)", link: "/api/panels" },
             { text: "Native plugins (Rust)", link: "/api/native" },
           ],
         },
         {
-          text: "Contributions",
+          text: "Plugin files",
           items: [
+            { text: "plugin.toml", link: "/api/plugin-toml" },
             { text: "Build modes", link: "/api/build-modes" },
             { text: "Runtime libraries", link: "/api/runtime-libs" },
             { text: "Pin types", link: "/api/pin-types" },
@@ -84,7 +89,7 @@ export default defineConfig({
             { text: "Templates", link: "/api/templates" },
           ],
         },
-        { text: "Files", items: [{ text: "Project format", link: "/api/project-format" }] },
+        { text: "Projects", items: [{ text: "Project format", link: "/api/project-format" }] },
       ],
     },
     socialLinks: [{ icon: "github", link: repo }],

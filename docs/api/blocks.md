@@ -1,5 +1,9 @@
 # Blocks
 
+::: info In short
+A block is one JavaScript or TypeScript file that exports an object: an `id`, a `kind` (`"event"`, `"action"` or `"value"`), `info` (name, description…), `fields` (what you fill in), `outputs` (what it gives) and `run()` (what it does).
+:::
+
 A block is one `.js`, `.cjs`, `.mjs` or `.ts` file that exports an object. Files are found through the plugin's `contributes.blocks` patterns.
 
 ```js

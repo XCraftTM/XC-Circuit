@@ -1,5 +1,9 @@
 # Run context (ctx)
 
+::: info In short
+Inside a block's `run()`, `ctx` is the running bot: `ctx.next()` to continue a flow, `ctx.log`, variables (`ctx.vars`), saved data (`ctx.store`), the Discord client (`ctx.discord.client`) and more.
+:::
+
 Blocks get `ctx` in [`run({ fields, ctx, node })`](./blocks#run), [`listen(ctx, emit)`](./blocks#listen) and `setup(ctx)`. It's how a block reaches the running bot: logging, variables, stored data, signals, and the libraries of the build mode.
 
 This runs in the **bot** (Node.js), not in the editor.
