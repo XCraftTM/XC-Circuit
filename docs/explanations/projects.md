@@ -1,0 +1,41 @@
+# Projects and workspaces
+
+## A project is a folder
+
+```
+My Bot/
+├─ circuit.json            the project: name, build mode, settings, slash commands
+├─ workspaces/
+│  ├─ welcome.json         one file per workspace
+│  └─ rank-command.json
+└─ plugins/                optional: plugins that belong to this project
+   └─ my.blocks/
+```
+
+Everything is plain, formatted JSON, so a project works well in Git: changes show as readable diffs, and two people can work on different workspaces without conflicts. The exact format is in [Project format](/api/project-format).
+
+What's **not** in the folder: the bot token and other secrets (they're in the [credential store](./safety)), and the editor's own state such as zoom and selection (kept in a hidden `.circuit/` folder that you can leave out of Git).
+
+## Build modes
+
+Each project has a **build mode**, chosen in File › New Project: *Discord Bot* (discord.js) or *Fluxer Bot* (fluxer.js). The mode decides which blocks the picker offers, the categories they're sorted into, the settings in Bot › Settings, and which npm packages the bot needs. Build modes come from plugins; see [Build modes](/api/build-modes).
+
+## Workspaces
+
+A workspace is one canvas. A bot can have any number, sorted into folders in the Workspaces panel. They all run together: splitting a bot into workspaces is only for you.
+
+Good habits:
+
+- **One workspace per command or feature**: *Rank command*, *Welcome*, *Moderation*.
+- **Reuse with Call.** A *When Called* event in one workspace and *Call* blocks elsewhere make a flow you can use from many places, like a function. *Return* gives a value back.
+- **Signals** (Emit Signal and On Signal) let one part of the bot tell others that something happened, without waiting for them.
+
+## Starters and examples
+
+File › New Project can start from a working bot (welcome and auto role, moderation, levels, tickets, role menus; for Fluxer: basic commands, moderation). They are ordinary projects copied into your new folder; plugins can add their own (see [Templates](/api/templates)). Help › Open Example opens DemoBot.
+
+## Safety nets
+
+- **Undo/redo** per workspace (Ctrl+Z / Ctrl+Y).
+- **Backups**: every save keeps a snapshot outside the project (the newest 20, plus one a day for 14 days). File › Restore from backup… compares them with now and restores the whole project or one workspace.
+- **Crash recovery**: unsaved changes are copied every 30 seconds and offered back after a crash.

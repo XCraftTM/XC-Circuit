@@ -1,0 +1,99 @@
+import { defineConfig } from "vitepress";
+
+const repo = "https://github.com/XCraftTM/XC-Circuit";
+
+// The site and its docs: tutorials (learn by doing), explanations (how things
+// work and why) and the API reference (every key and function).
+export default defineConfig({
+  lang: "en",
+  title: "XC™ Circuit",
+  description: "Build Discord and Fluxer bots by connecting blocks. Extend the editor with JavaScript plugins.",
+  // GitHub Pages serves the site under /XC-Circuit/; DOCS_BASE changes that (for example "/" on a custom domain).
+  base: process.env.DOCS_BASE ?? "/XC-Circuit/",
+  cleanUrls: true,
+  // Dark like the app; the switch in the top bar still offers light.
+  appearance: "dark",
+  lastUpdated: true,
+  // Notes for the people building the app, not pages of the site.
+  srcExclude: ["discord-blocks-plan.md", "README.md"],
+  head: [
+    ["link", { rel: "icon", type: "image/svg+xml", href: `${process.env.DOCS_BASE ?? "/XC-Circuit/"}icon.svg` }],
+    ["meta", { name: "theme-color", content: "#00E5FF" }],
+  ],
+  themeConfig: {
+    logo: "/icon.svg",
+    siteTitle: "XC™ Circuit",
+    nav: [
+      { text: "Tutorials", link: "/tutorials/", activeMatch: "/tutorials/" },
+      { text: "Explanations", link: "/explanations/", activeMatch: "/explanations/" },
+      { text: "API", link: "/api/", activeMatch: "/api/" },
+      { text: "Download", link: "/download" },
+    ],
+    sidebar: {
+      "/tutorials/": [
+        {
+          text: "Tutorials",
+          items: [
+            { text: "Overview", link: "/tutorials/" },
+            { text: "Your first bot", link: "/tutorials/first-bot" },
+            { text: "Values and texts", link: "/tutorials/values-and-texts" },
+            { text: "Your first block", link: "/tutorials/first-block" },
+            { text: "Your first editor plugin", link: "/tutorials/first-editor-plugin" },
+            { text: "Translate the app", link: "/tutorials/translate" },
+          ],
+        },
+      ],
+      "/explanations/": [
+        {
+          text: "Explanations",
+          items: [
+            { text: "Overview", link: "/explanations/" },
+            { text: "Events, actions and values", link: "/explanations/blocks-and-wires" },
+            { text: "Texts and ${…}", link: "/explanations/expressions" },
+            { text: "Projects and workspaces", link: "/explanations/projects" },
+            { text: "Variables and stored data", link: "/explanations/data" },
+            { text: "Try Zones and errors", link: "/explanations/errors" },
+            { text: "Plugins", link: "/explanations/plugins" },
+            { text: "Running and exporting", link: "/explanations/running" },
+            { text: "Tokens and safety", link: "/explanations/safety" },
+          ],
+        },
+      ],
+      "/api/": [
+        { text: "Reference", items: [{ text: "Overview", link: "/api/" }] },
+        {
+          text: "Plugins",
+          items: [
+            { text: "plugin.toml", link: "/api/plugin-toml" },
+            { text: "Blocks", link: "/api/blocks" },
+            { text: "Fields and types", link: "/api/fields" },
+            { text: "Run context (ctx)", link: "/api/ctx" },
+            { text: "Editor plugins (xc)", link: "/api/editor" },
+            { text: "Panels (ui)", link: "/api/panels" },
+            { text: "Native plugins (Rust)", link: "/api/native" },
+          ],
+        },
+        {
+          text: "Contributions",
+          items: [
+            { text: "Build modes", link: "/api/build-modes" },
+            { text: "Runtime libraries", link: "/api/runtime-libs" },
+            { text: "Pin types", link: "/api/pin-types" },
+            { text: "Themes", link: "/api/themes" },
+            { text: "Translations", link: "/api/locales" },
+            { text: "Templates", link: "/api/templates" },
+          ],
+        },
+        { text: "Files", items: [{ text: "Project format", link: "/api/project-format" }] },
+      ],
+    },
+    socialLinks: [{ icon: "github", link: repo }],
+    search: { provider: "local" },
+    editLink: { pattern: `${repo}/edit/main/docs/:path`, text: "Suggest a change to this page" },
+    outline: { level: [2, 3] },
+    footer: {
+      message: 'Source-available under the <a href="https://github.com/XCraftTM/XC-Circuit/blob/main/LICENSE">XC™ Circuit Licence</a>.',
+      copyright: 'Copyright © 2026 <a href="https://github.com/XCraftTM">XCraftTM</a>',
+    },
+  },
+});

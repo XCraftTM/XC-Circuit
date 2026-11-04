@@ -1,0 +1,14 @@
+{
+  "name": "xc-circuit-docs",
+  "private": true,
+  "type": "module",
+  "description": "The XC Circuit website and docs, built with VitePress.",
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "vitepress": "1.6.4"
+  }
+}
