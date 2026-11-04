@@ -93,7 +93,8 @@ pub fn ui(ui: &mut Ui, ed: &mut Editor, native: &NativeHost, view: &mut Settings
     let mut content_ui = ui.new_child(egui::UiBuilder::new().max_rect(content).layout(Layout::top_down(Align::Min)));
     ScrollArea::vertical().id_salt(("settings", view.section as u8)).auto_shrink([false, false]).show(&mut content_ui, |ui| {
         egui::Frame::new().inner_margin(egui::Margin { left: 32, right: 32, top: 24, bottom: 32 }).show(ui, |ui| {
-            ui.set_max_width(CONTENT_MAX);
+            // At most this wide, and never wider than the page (set_max_width sets the width).
+            ui.set_max_width(ui.available_width().min(CONTENT_MAX));
             let title = Section::ALL.iter().find(|(s, ..)| *s == view.section).map(|(_, n, _)| crate::i18n::t(n)).unwrap_or("");
             ui.label(RichText::new(title).size(22.0).strong().color(theme.text));
             ui.add_space(14.0);
@@ -120,18 +121,46 @@ fn group(ui: &mut Ui, theme: &Theme, title: &str) {
 /// One setting: its name and description on the left, the control on the right.
 fn row(ui: &mut Ui, theme: &Theme, title: &str, description: &str, control: impl FnOnce(&mut Ui)) {
     egui::Frame::new().fill(theme.panel_header).stroke(Stroke::new(1.0, theme.line)).corner_radius(8).inner_margin(egui::Margin::symmetric(16, 12)).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.set_width((ui.available_width() - 250.0).max(200.0));
-                ui.spacing_mut().item_spacing.y = 3.0;
-                ui.label(RichText::new(title).size(13.5).color(theme.text));
-                if !description.is_empty() {
-                    ui.label(RichText::new(description).size(11.5).color(theme.text_muted));
-                }
-            });
-            ui.with_layout(Layout::right_to_left(Align::Center), control);
-        });
+        let inner = ui.available_width();
+        ui.set_width(inner);
+        // The control's width as drawn last time: the text takes the rest. When
+        // that leaves too little for the text, the control goes under it, so
+        // a row is never wider than the page.
+        let measured = ui.id().with(("settings-control", title));
+        let control_w: f32 = ui.data(|d| d.get_temp(measured)).unwrap_or(0.0);
+        let stacked = inner - control_w - 16.0 < 180.0;
+        let text = |ui: &mut Ui| {
+            ui.spacing_mut().item_spacing.y = 3.0;
+            ui.label(RichText::new(title).size(13.5).color(theme.text));
+            if !description.is_empty() {
+                ui.label(RichText::new(description).size(11.5).color(theme.text_muted));
+            }
+        };
+        let drawn = if stacked {
+            text(ui);
+            ui.add_space(6.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.set_max_width(inner);
+                control(ui);
+            })
+            .response
+            .rect
+        } else {
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.set_width(inner - control_w - 16.0);
+                    text(ui);
+                });
+                ui.with_layout(Layout::right_to_left(Align::Center), control).response.rect
+            })
+            .inner
+        };
+        // Stacked, the control's own width is what it took on its line.
+        let width = if stacked { drawn.width().min(inner) } else { drawn.width() };
+        if (width - control_w).abs() > 0.5 {
+            ui.data_mut(|d| d.insert_temp(measured, width));
+            ui.ctx().request_repaint();
+        }
     });
     ui.add_space(8.0);
 }
