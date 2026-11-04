@@ -138,6 +138,8 @@ setTimeout(() => {
   assert.strictEqual(logs.filter((l) => l.includes("on error:")).length, 1, "On Error ran once");
   assert.ok(!logs.some((l) => l.includes("wrong")), "the false branch must not run");
   assert.ok(events.some((e) => e.t === "node" && e.node === "yes" && e.phase === "exit"), "node events are emitted");
+  const math = events.find((e) => e.t === "node" && e.node === "m" && e.phase === "exit");
+  assert.ok(math && typeof math.ms === "number", "value blocks report their runs, with the time they took");
   assert.ok(events.some((e) => e.t === "zone" && e.phase === "error"), "zone error event");
 
   setTimeout(() => {

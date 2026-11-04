@@ -52,7 +52,7 @@ Your canvas now looks like this: **Slash Command** → (green wire) → **Send M
 
 Press **F5** (or **Run** in the title bar). The first run installs discord.js once, which takes a moment. The Console says *Logged in as Ping Bot* when the bot is online.
 
-In Discord, type `/ping` in your server. The bot answers, and in XC Circuit the two blocks glow as they run. For half a minute, each block also shows above its corner how long it took.
+In Discord, type `/ping` in your server. The bot answers, and in XC Circuit the two blocks glow as they run. For half a minute, each action and value block also shows above its corner how long it took.
 
 ::: tip When something goes wrong
 A block that fails turns red and the Console says why. Common causes: no token (Bot › Settings), the bot isn't in the server, or the command hasn't been registered yet (restart the bot with **Ctrl+S** or F5).

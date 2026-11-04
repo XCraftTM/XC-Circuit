@@ -353,13 +353,14 @@ class Graph {
   }
 
   async executeNode(run, node, path) {
-    const t0 = performance.now();
     this.rt.emit("node", { ws: this.key, node: node.id, phase: "enter", run: run.id });
     try {
       // A zone that timed out stops at its next block.
       if (path.signal && path.signal.aborted) throw new Error("timed out");
       const fields = await node.resolve(run, new Map(), path);
       const ctx = this.rt.ctxFor(run, node, path);
+      // Its own time, without the value blocks that worked out its inputs.
+      const t0 = performance.now();
       const result = await node.def.run({ fields, ctx, node: { id: node.id, workspace: this.key } });
       if (result && typeof result === "object") run.setOutputs(node.id, result);
       this.rt.emit("node", { ws: this.key, node: node.id, phase: "exit", run: run.id, ms: +(performance.now() - t0).toFixed(1) });
@@ -436,7 +437,12 @@ class Graph {
         nodeId,
         (async () => {
           const fields = await node.resolve(run, memo, path);
-          return (await node.def.run({ fields, ctx: this.rt.ctxFor(run, node, path), node: { id: node.id, workspace: this.key } })) || {};
+          // Value blocks report their runs too, so the editor shows them glow and how long they took.
+          this.rt.emit("node", { ws: this.key, node: node.id, phase: "enter", run: run.id });
+          const t0 = performance.now();
+          const out = (await node.def.run({ fields, ctx: this.rt.ctxFor(run, node, path), node: { id: node.id, workspace: this.key } })) || {};
+          this.rt.emit("node", { ws: this.key, node: node.id, phase: "exit", run: run.id, ms: +(performance.now() - t0).toFixed(1) });
+          return out;
         })(),
       );
     }
