@@ -24,6 +24,7 @@ mod markdown;
 mod locales;
 mod native;
 mod script;
+mod sound;
 mod new_project;
 mod palette;
 mod panels;

@@ -580,6 +580,7 @@ pub const UI_STRINGS: &[&str] = &[
     "Restore",
     "Stop the bot first",
     "The bot's saved data was restored. It's used the next time the bot starts.",
+    "timer (stopped)",
     "SETTINGS",
     "Language",
     "Interface language",

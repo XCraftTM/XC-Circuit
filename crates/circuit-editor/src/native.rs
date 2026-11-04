@@ -406,6 +406,19 @@ impl NativeHost {
         }
     }
 
+    /// Every frame: plugins' timers and what floats over the editor. Returns
+    /// when a plugin wants the next frame at the latest.
+    pub fn frame(&mut self, ctx: &egui::Context, ed: &mut Editor, bot_running: bool) -> Option<Duration> {
+        let mut wake: Option<Duration> = None;
+        for i in 0..self.plugins.len() {
+            if let Some(Some(d)) = self.call(i, ed, bot_running, |o, h| o.tick(h)) {
+                wake = Some(wake.map_or(d, |w| w.min(d)));
+            }
+            self.call(i, ed, bot_running, |o, h| o.overlay_ui(ctx, h));
+        }
+        wake
+    }
+
     pub fn bot_event(&mut self, ed: &mut Editor, event: &BotEvent, bot_running: bool) {
         for i in 0..self.plugins.len() {
             self.call(i, ed, bot_running, |o, h| o.on_bot_event(event, h));
@@ -565,6 +578,33 @@ impl api::Host for EditorHost<'_> {
 
     fn storage_set(&mut self, key: &str, value: &str) {
         self.storage.insert(key.to_string(), value.to_string());
+    }
+
+    fn add_block(&mut self, workspace: &str, block: &str, at: [f32; 2], values_json: &str) -> Result<String, String> {
+        let id = block.split('@').next().unwrap_or(block);
+        if self.ed.reg.block(id).is_none() {
+            return Err(format!("no block `{id}` is installed"));
+        }
+        if self.ed.workspace(workspace).is_none() {
+            return Err(format!("no workspace `{workspace}`"));
+        }
+        let values: Value = serde_json::from_str(values_json).map_err(|e| e.to_string())?;
+        let node = self.ed.add_node(workspace, id, egui::pos2(at[0], at[1])).ok_or("the block couldn't be placed")?;
+        if let (Some(Value::Object(values)), Some(n)) = (Some(values), self.ed.project.as_mut().and_then(|p| p.workspaces.get_mut(workspace)).and_then(|w| w.nodes.get_mut(&node))) {
+            n.values.extend(values);
+        }
+        Ok(node)
+    }
+
+    fn select(&mut self, workspace: &str, nodes: &[String]) {
+        let Some(ws) = self.ed.workspace(workspace) else { return };
+        let ids: Vec<String> = nodes.iter().filter(|n| ws.nodes.contains_key(*n)).cloned().collect();
+        self.ed.selected = ids.first().map(|n| (workspace.to_string(), n.clone()));
+        self.ed.multi = ids.into_iter().collect();
+    }
+
+    fn play_sound(&mut self, bytes: Vec<u8>, volume: f32) {
+        crate::sound::play(bytes, volume);
     }
 }
 

@@ -7,6 +7,12 @@
     if (r.error !== undefined) throw new Error(r.error);
     return r.ok;
   };
+  // The script's own part in the editor: timers, overlays, sounds.
+  const own = (method, ...args) => {
+    const r = JSON.parse(__self(method, JSON.stringify(args)));
+    if (r.error !== undefined) throw new Error(r.error);
+    return r.ok;
+  };
   const text = (v) => (v === undefined || v === null ? "" : typeof v === "string" ? v : typeof v === "object" ? JSON.stringify(v) : String(v));
   const need = (ok, message) => {
     if (!ok) throw new TypeError(message);
@@ -24,7 +30,10 @@
   const commands = new Map();
   const panels = new Map();
   const checks = [];
-  const listeners = { save: [], botEvent: [] };
+  const overlays = new Map();
+  const timers = new Map();
+  let nextTimer = 1;
+  const listeners = { save: [], botEvent: [], selection: [] };
   // Each panel's click and change handlers from its last render, by number.
   const handlers = new Map();
 
@@ -50,9 +59,55 @@
       need(typeof fn === "function", "xc.check(fn) needs a function");
       checks.push(fn);
     },
-    /** Runs fn on "save" (the project was saved) or "botEvent" (the running bot started, stopped, logged or ran a block). */
+    /** Floats something over the whole editor: render(ui) like a panel, dragged around, onClick when clicked. */
+    overlay(def) {
+      need(def && typeof def.id === "string" && def.id, "xc.overlay({ id, width, height, render }) needs an id");
+      need(typeof def.render === "function", `the overlay "${def.id}" needs a render(ui) function`);
+      need(!overlays.has(def.id), `the overlay "${def.id}" is added twice`);
+      overlays.set(def.id, {
+        id: def.id,
+        x: Number(def.x ?? -24),
+        y: Number(def.y ?? -60),
+        width: Number(def.width) || 120,
+        height: Number(def.height) || 120,
+        frame: !!def.frame,
+        draggable: def.draggable !== false,
+        render: def.render,
+        onClick: typeof def.onClick === "function" ? def.onClick : null,
+      });
+    },
+    /** Moves an overlay so its top-left corner is at x, y (in the window). */
+    moveOverlay: (id, x, y) => own("overlayMove", String(id), Number(x) || 0, Number(y) || 0),
+    /** Where an overlay is ({ x, y }), or null before it was shown or moved. */
+    overlayPosition: (id) => own("overlayPos", String(id)),
+    /** The editor window's size: { width, height }. */
+    screen: () => own("screen"),
+    /** Runs fn every `ms` milliseconds (at least 50). Returns an id for xc.cancel. */
+    every(ms, fn) {
+      need(typeof fn === "function", "xc.every(ms, fn) needs a function");
+      const id = nextTimer++;
+      timers.set(id, { fn, repeat: true });
+      own("timer", id, Number(ms) || 0, true);
+      return id;
+    },
+    /** Runs fn once, after `ms` milliseconds. Returns an id for xc.cancel. */
+    after(ms, fn) {
+      need(typeof fn === "function", "xc.after(ms, fn) needs a function");
+      const id = nextTimer++;
+      timers.set(id, { fn, repeat: false });
+      own("timer", id, Number(ms) || 0, false);
+      return id;
+    },
+    /** Stops a timer from xc.every or xc.after. */
+    cancel(id) {
+      timers.delete(id);
+      own("cancel", id);
+    },
+    /** Plays a sound file of the plugin (WAV, MP3 or Ogg), at `volume` from 0 to 1. */
+    playSound: (file, o = {}) => own("sound", String(file), typeof o.volume === "number" ? o.volume : 1),
+    /** Runs fn on "save" (the project was saved), "botEvent" (the running bot started, stopped, logged or ran a block) or "selection" (other blocks were selected). */
     on(event, fn) {
-      need(event in listeners, `xc.on("${event}"): use "save" or "botEvent"`);
+      need(event in listeners, `xc.on("${event}"): use "save", "botEvent" or "selection"`);
       need(typeof fn === "function", `xc.on("${event}", fn) needs a function`);
       listeners[event].push(fn);
     },
@@ -82,6 +137,10 @@
     selection: () => host("selection"),
     /** Opens a workspace, selects a block and centres the canvas on it. */
     reveal: (workspace, block) => host("reveal", workspace, block),
+    /** Selects blocks of a workspace. */
+    select: (workspace, blocks) => host("select", workspace, Array.isArray(blocks) ? blocks.map(String) : [String(blocks)]),
+    /** Places a block ("core.log") on a workspace's canvas: { x, y, values }. Returns its id. It can be undone. */
+    addBlock: (workspace, type, o = {}) => host("addBlock", workspace, String(type), Number(o.x) || 0, Number(o.y) || 0, o.values || {}),
     /** The display name of a block type such as "discord.send_message". */
     blockName: (type) => host("blockName", String(type).split("@")[0]),
     /** The project's `data` section, saved with the project. */
@@ -131,6 +190,7 @@
       checkbox: (label, checked, onChange) => add({ t: "checkbox", text: text(label), value: !!checked, on: handler(onChange) }),
       input: (value, onChange, o = {}) => add({ t: "input", value: text(value), on: handler(onChange), hint: text(o.placeholder), multiline: !!o.multiline, key: o.key ? text(o.key) : null }),
       progress: (fraction, label) => add({ t: "progress", value: Number(fraction) || 0, text: text(label) }),
+      image: (file, o = {}) => add({ t: "image", file: text(file), width: typeof o.width === "number" ? o.width : null, height: typeof o.height === "number" ? o.height : null, tint: o.tint ? String(o.tint) : null }),
       row: (fn) => add({ t: "row", items: nested(fn) }),
       section: (title, fn, o = {}) => add({ t: "section", text: text(title), items: nested(fn), open: o.open !== false }),
     };
@@ -174,6 +234,8 @@
         checks: checks.length,
         save: listeners.save.length,
         botEvent: listeners.botEvent.length,
+        selection: listeners.selection.length,
+        overlays: [...overlays.values()].map(({ id, x, y, width, height, frame, draggable, onClick }) => ({ id, x, y, width, height, frame, draggable, click: !!onClick })),
       };
     }),
     command: reply((id) => {
@@ -214,6 +276,28 @@
     }),
     botEvent: reply((event) => {
       for (const fn of listeners.botEvent) fn(event);
+    }),
+    selection: reply((event) => {
+      for (const fn of listeners.selection) fn(event);
+    }),
+    timer: reply((id) => {
+      const t = timers.get(id);
+      if (!t) return;
+      if (!t.repeat) timers.delete(id);
+      t.fn();
+    }),
+    renderOverlay: reply((id) => {
+      const o = overlays.get(id);
+      need(o, `no overlay "${id}"`);
+      const items = [];
+      const fns = [];
+      o.render(builder(items, fns));
+      handlers.set(`overlay:${id}`, fns);
+      return items;
+    }),
+    overlayClick: reply((id) => {
+      const o = overlays.get(id);
+      if (o && o.onClick) o.onClick();
     }),
   });
 })();

@@ -45,7 +45,7 @@ use std::sync::OnceLock;
 pub use egui;
 
 /// Bumped whenever the traits below change.
-pub const ABI_VERSION: u32 = 1;
+pub const ABI_VERSION: u32 = 2;
 
 /// Symbol names the editor looks up.
 pub const FINGERPRINT_SYMBOL: &[u8] = b"xc_circuit_plugin_fingerprint";
@@ -155,6 +155,15 @@ pub trait Host {
     /// This plugin's own small key-value store, kept between sessions.
     fn storage_get(&self, key: &str) -> Option<String>;
     fn storage_set(&mut self, key: &str, value: &str);
+    /// Places a block (`core.log`) at `at` on a workspace's canvas, with
+    /// `values_json` (an object) over its defaults. Returns its id.
+    fn add_block(&mut self, _workspace: &str, _block: &str, _at: [f32; 2], _values_json: &str) -> Result<String, String> {
+        Err("this editor can't place blocks for plugins".into())
+    }
+    /// Selects blocks of a workspace.
+    fn select(&mut self, _workspace: &str, _nodes: &[String]) {}
+    /// Plays a sound file's bytes (WAV, MP3 or Ogg Vorbis) at `volume` (0 to 1).
+    fn play_sound(&mut self, _bytes: Vec<u8>, _volume: f32) {}
 }
 
 /// Implement this for your plugin type, then call [`export_plugin!`].
@@ -174,6 +183,13 @@ pub trait Plugin: Send + 'static {
     }
     fn on_bot_event(&mut self, _event: &BotEvent, _host: &mut dyn Host) {}
     fn on_save(&mut self, _host: &mut dyn Host) {}
+    /// Called every frame the editor draws. Return when to be called again
+    /// at the latest (for timers and animations), or None.
+    fn tick(&mut self, _host: &mut dyn Host) -> Option<std::time::Duration> {
+        None
+    }
+    /// Draws anything floating over the whole editor (with `egui::Area`).
+    fn overlay_ui(&mut self, _ctx: &egui::Context, _host: &mut dyn Host) {}
 }
 
 /// What the editor calls. Each call catches the plugin's panics on the
@@ -187,6 +203,8 @@ pub trait PluginObject {
     fn check(&mut self, host: &mut dyn Host) -> Result<Vec<Problem>, String>;
     fn on_bot_event(&mut self, event: &BotEvent, host: &mut dyn Host) -> Result<(), String>;
     fn on_save(&mut self, host: &mut dyn Host) -> Result<(), String>;
+    fn tick(&mut self, host: &mut dyn Host) -> Result<Option<std::time::Duration>, String>;
+    fn overlay_ui(&mut self, ctx: &egui::Context, host: &mut dyn Host) -> Result<(), String>;
 }
 
 #[doc(hidden)]
@@ -221,6 +239,12 @@ impl<T: Plugin> PluginObject for Guarded<T> {
     }
     fn on_save(&mut self, host: &mut dyn Host) -> Result<(), String> {
         guard(|| self.0.on_save(host))
+    }
+    fn tick(&mut self, host: &mut dyn Host) -> Result<Option<std::time::Duration>, String> {
+        guard(|| self.0.tick(host))
+    }
+    fn overlay_ui(&mut self, ctx: &egui::Context, host: &mut dyn Host) -> Result<(), String> {
+        guard(|| self.0.overlay_ui(ctx, host))
     }
 }
 

@@ -780,6 +780,10 @@ impl CircuitApp {
         if self.native.plugins.iter().any(|p| p.status == crate::native::Status::Loaded) {
             ctx.request_repaint_after(std::time::Duration::from_secs(1));
         }
+        // Plugins' timers, and what they float over the editor (a desk pet …).
+        if let Some(wake) = self.native.frame(ctx, &mut self.ed, running) {
+            ctx.request_repaint_after(wake);
+        }
     }
 
     /// The activity bar: an icon per side bar view. Clicking one shows that view

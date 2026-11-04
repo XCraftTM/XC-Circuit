@@ -12,14 +12,14 @@
 //! unlike native plugins, scripts need no approval. They run in the editor
 //! only; bot code never runs here.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use eframe::egui::{self, RichText};
+use eframe::egui::{self, RichText, vec2};
 use rquickjs::{Context, Ctx, Function, Object, Runtime};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -32,6 +32,28 @@ const SLOW: Duration = Duration::from_millis(1000);
 const MEMORY_LIMIT: usize = 32 * 1024 * 1024;
 /// How often an open panel is drawn again, at most, without a click.
 const RENDER_EVERY: Duration = Duration::from_millis(250);
+/// How often an overlay is drawn again without a click, timer or event.
+const OVERLAY_EVERY: Duration = Duration::from_secs(1);
+/// The shortest wait for a timer, and between a repeating timer's runs.
+const TIMER_MIN: Duration = Duration::from_millis(16);
+const REPEAT_MIN: Duration = Duration::from_millis(50);
+
+/// What the script keeps in the editor between calls: its timers and where
+/// its overlays are.
+#[derive(Default)]
+struct State {
+    timers: Vec<Timer>,
+    /// Overlays the user or the script moved, by id: their top-left corner.
+    overlays: HashMap<String, egui::Pos2>,
+    /// The editor window's size, for `xc.screen()`.
+    screen: egui::Vec2,
+}
+
+struct Timer {
+    id: u32,
+    due: Instant,
+    every: Option<Duration>,
+}
 
 /// The `xc` object and the calls the editor makes into the script.
 const PRELUDE: &str = include_str!("script_prelude.js");
@@ -71,6 +93,27 @@ struct Registered {
     save: usize,
     #[serde(rename = "botEvent")]
     bot_event: usize,
+    selection: usize,
+    overlays: Vec<OverlayEntry>,
+}
+
+/// Something floating over the editor (`xc.overlay`).
+#[derive(Clone, Deserialize)]
+struct OverlayEntry {
+    id: String,
+    /// Where it starts; negative: from the right or bottom edge.
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    /// Drawn on a panel-coloured card (otherwise only its items).
+    #[serde(default)]
+    frame: bool,
+    #[serde(default = "yes")]
+    draggable: bool,
+    /// It has an onClick handler.
+    #[serde(default)]
+    click: bool,
 }
 
 #[derive(Deserialize)]
@@ -167,6 +210,12 @@ enum Item {
         #[serde(default)]
         text: String,
     },
+    Image {
+        file: String,
+        width: Option<f32>,
+        height: Option<f32>,
+        tint: Option<String>,
+    },
     Row {
         items: Vec<Item>,
     },
@@ -192,6 +241,11 @@ pub struct ScriptPlugin {
     commands: Vec<Command>,
     panels: Vec<PanelInfo>,
     views: HashMap<String, View>,
+    /// The plugin's folder: files for images, sounds and `require`.
+    root: PathBuf,
+    state: Rc<RefCell<State>>,
+    /// The selection last seen, for `xc.on("selection")`.
+    last_selection: Option<(Option<String>, Vec<String>)>,
 }
 
 /// Loads a plugin's script. Also returns every file it read, to reload it
@@ -212,8 +266,11 @@ impl ScriptPlugin {
         runtime.set_interrupt_handler(Some(Box::new(move || watch.lock().ok().and_then(|d| *d).is_some_and(|d| Instant::now() > d))));
         let context = Context::full(&runtime).map_err(|e| e.to_string())?;
         let host: HostPtr = Rc::new(Cell::new(None));
-        let root = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
+        let root = plain_path(dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf()));
+        let state: Rc<RefCell<State>> = Rc::default();
         let slot = host.clone();
+        let (own_state, own_root) = (state.clone(), root.clone());
+        let plugin_root = root.clone();
         context
             .with(|ctx| -> rquickjs::Result<()> {
                 let g = ctx.globals();
@@ -242,6 +299,12 @@ impl ScriptPlugin {
                     "__compile",
                     Function::new(ctx.clone(), compile)?,
                 )?;
+                // What the script asks of its own part in the editor (timers,
+                // overlays, sounds); also works while it loads.
+                g.set(
+                    "__self",
+                    Function::new(ctx.clone(), move |method: String, args: String| -> String { reply(self_call(&own_state, &own_root, &method, &args)) })?,
+                )?;
                 g.set("__pluginName", name)?;
                 ctx.eval::<(), _>(PRELUDE)
             })
@@ -257,6 +320,9 @@ impl ScriptPlugin {
             commands: Vec::new(),
             panels: Vec::new(),
             views: HashMap::new(),
+            root: plugin_root,
+            state,
+            last_selection: None,
         };
         let main = format!("./{}", script.trim_start_matches("./"));
         let registered: Registered = serde_json::from_value(plugin.run(None, SLOW, "load", vec![json!(main)])?).map_err(|e| e.to_string())?;
@@ -319,6 +385,54 @@ fn compile<'js>(ctx: Ctx<'js>, path: String, source: String) -> rquickjs::Result
     options.strict = false;
     options.filename = Some(path);
     ctx.eval_with_options(format!("(function (module, exports, require, __filename) {{{source}\n}})"), options)
+}
+
+/// What `__self` does: the script's timers, overlays and sounds.
+fn self_call(state: &RefCell<State>, root: &Path, method: &str, args: &str) -> Result<Value, String> {
+    let a: Vec<Value> = serde_json::from_str(args).map_err(|e| e.to_string())?;
+    let num = |i: usize| a.get(i).and_then(Value::as_f64).unwrap_or(0.0);
+    let text = |i: usize| a.get(i).and_then(Value::as_str).unwrap_or_default().to_string();
+    let mut st = state.borrow_mut();
+    Ok(match method {
+        "timer" => {
+            let wait = Duration::from_millis(num(1).max(0.0) as u64);
+            let every = a.get(2).and_then(Value::as_bool).unwrap_or(false).then(|| wait.max(REPEAT_MIN));
+            st.timers.push(Timer { id: num(0) as u32, due: Instant::now() + wait.max(TIMER_MIN), every });
+            Value::Null
+        }
+        "cancel" => {
+            let id = num(0) as u32;
+            st.timers.retain(|t| t.id != id);
+            Value::Null
+        }
+        "screen" => json!({ "width": st.screen.x, "height": st.screen.y }),
+        "overlayMove" => {
+            st.overlays.insert(text(0), egui::pos2(num(1) as f32, num(2) as f32));
+            Value::Null
+        }
+        "overlayPos" => st.overlays.get(&text(0)).map_or(Value::Null, |p| json!({ "x": p.x, "y": p.y })),
+        "sound" => {
+            let path = plugin_file(root, &text(0)).ok_or_else(|| format!("xc.playSound: no file `{}` in the plugin", text(0)))?;
+            let bytes = std::fs::read(&path).map_err(|e| format!("xc.playSound: {e}"))?;
+            crate::sound::play(bytes, num(1) as f32);
+            Value::Null
+        }
+        other => return Err(format!("xc has no `{other}`")),
+    })
+}
+
+/// A canonical path without Windows' `\\?\` prefix, which file URLs (for
+/// images) don't understand.
+fn plain_path(p: PathBuf) -> PathBuf {
+    match p.to_str().and_then(|s| s.strip_prefix(r"\\?\")) {
+        Some(rest) if !rest.starts_with("UNC") => PathBuf::from(rest),
+        _ => p,
+    }
+}
+
+/// A file inside the plugin's folder, if it is one.
+fn plugin_file(root: &Path, name: &str) -> Option<PathBuf> {
+    inside(root, Path::new(name)).filter(|p| p.is_file())
 }
 
 fn reply(result: Result<Value, String>) -> String {
@@ -386,6 +500,15 @@ fn host_call(h: &mut dyn Host, method: &str, args: &str) -> Result<Value, String
         "storageGet" => parsed(h.storage_get(&s(0))),
         "storageSet" => {
             h.storage_set(&s(0), &value(1).to_string());
+            Value::Null
+        }
+        "addBlock" => {
+            let at = [a.get(2).and_then(Value::as_f64).unwrap_or(0.0) as f32, a.get(3).and_then(Value::as_f64).unwrap_or(0.0) as f32];
+            json!(h.add_block(&s(0), &s(1), at, &value(4).to_string())?)
+        }
+        "select" => {
+            let ids: Vec<String> = value(1).as_array().map(|l| l.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default();
+            h.select(&s(0), &ids);
             Value::Null
         }
         other => return Err(format!("xc has no `{other}`")),
@@ -494,7 +617,7 @@ impl PluginObject for ScriptPlugin {
                     ui.label(RichText::new("Fix the script and save it: the plugin reloads by itself.").weak());
                     ui.add_space(10.0);
                 }
-                draw(ui, &mut view.items, &mut Vec::new(), &mut events);
+                draw(ui, &mut view.items, &self.root, &mut Vec::new(), &mut events);
             });
         });
         if !events.is_empty() {
@@ -545,6 +668,124 @@ impl PluginObject for ScriptPlugin {
         }
         Ok(())
     }
+
+    fn tick(&mut self, host: &mut dyn Host) -> Result<Option<Duration>, String> {
+        // Timers that are due; a repeating one is set for its next run.
+        let now = Instant::now();
+        let due: Vec<u32> = {
+            let mut st = self.state.borrow_mut();
+            let due = st.timers.iter().filter(|t| t.due <= now).map(|t| t.id).collect();
+            for t in st.timers.iter_mut().filter(|t| t.due <= now) {
+                if let Some(every) = t.every {
+                    t.due = now + every;
+                }
+            }
+            st.timers.retain(|t| t.due > now);
+            due
+        };
+        for id in &due {
+            if let Err(e) = self.run(Some(&mut *host), QUICK, "timer", vec![json!(id)]) {
+                // A failing timer would fail again and again: it stops.
+                self.state.borrow_mut().timers.retain(|t| t.id != *id);
+                self.fail(host, t!("timer (stopped)"), &e);
+            }
+        }
+        // xc.on("selection"): when other blocks are selected.
+        if self.registered.selection > 0 {
+            let now_selected = (host.active_workspace(), host.selection());
+            if self.last_selection.as_ref() != Some(&now_selected) {
+                let first = self.last_selection.is_none();
+                self.last_selection = Some(now_selected.clone());
+                if !first {
+                    let event = json!({ "workspace": now_selected.0, "blocks": now_selected.1 });
+                    if let Err(e) = self.run(Some(&mut *host), QUICK, "selection", vec![event]) {
+                        self.fail(host, "selection", &e);
+                    }
+                }
+                self.views.values_mut().for_each(|v| v.stale = true);
+            }
+        }
+        if !due.is_empty() {
+            self.views.values_mut().for_each(|v| v.stale = true);
+        }
+        let next = self.state.borrow().timers.iter().map(|t| t.due).min();
+        Ok(next.map(|d| d.saturating_duration_since(Instant::now())))
+    }
+
+    fn overlay_ui(&mut self, ctx: &egui::Context, host: &mut dyn Host) -> Result<(), String> {
+        let screen = ctx.content_rect();
+        self.state.borrow_mut().screen = screen.size();
+        for o in self.registered.overlays.clone() {
+            let key = format!("overlay:{}", o.id);
+            let since = self.views.get(&key).and_then(|v| v.drawn).map(|t| t.elapsed());
+            if self.views.get(&key).is_none_or(|v| v.stale) || since.is_none_or(|s| s >= OVERLAY_EVERY) {
+                let result = self.run(Some(&mut *host), QUICK, "renderOverlay", vec![json!(o.id)]).and_then(|v| serde_json::from_value::<Vec<Item>>(v).map_err(|e| e.to_string()));
+                let view = self.views.entry(key.clone()).or_default();
+                match result {
+                    Ok(items) => (view.items, view.error) = (items, None),
+                    Err(e) => view.error = Some(e),
+                }
+                (view.drawn, view.stale) = (Some(Instant::now()), false);
+            }
+            ctx.request_repaint_after(OVERLAY_EVERY);
+
+            let size = vec2(o.width.max(8.0), o.height.max(8.0));
+            let start = egui::pos2(
+                if o.x < 0.0 { screen.right() + o.x - size.x } else { screen.left() + o.x },
+                if o.y < 0.0 { screen.bottom() + o.y - size.y } else { screen.top() + o.y },
+            );
+            let at = self.state.borrow().overlays.get(&o.id).copied().unwrap_or(start);
+            // Always fully on screen, also after the window got smaller.
+            let at = egui::pos2(at.x.clamp(screen.left(), (screen.right() - size.x).max(screen.left())), at.y.clamp(screen.top(), (screen.bottom() - size.y).max(screen.top())));
+            let root = self.root.clone();
+            let name = self.name.clone();
+            let view = self.views.entry(key.clone()).or_default();
+            let mut events = Vec::new();
+            let mut moved: Option<egui::Pos2> = None;
+            let mut clicked = false;
+            egui::Area::new(egui::Id::new(("xc-overlay", &name, &o.id))).order(egui::Order::Foreground).fixed_pos(at).show(ctx, |ui| {
+                let (rect, bg) = ui.allocate_exact_size(size, egui::Sense::click_and_drag());
+                if o.frame {
+                    let v = ui.visuals();
+                    ui.painter().rect(rect, 10.0, v.window_fill, v.window_stroke, egui::StrokeKind::Inside);
+                }
+                let inner = if o.frame { rect.shrink(10.0) } else { rect };
+                let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)));
+                if let Some(e) = &view.error {
+                    child.add(egui::Label::new(RichText::new(format!("{name}: {e}")).small().color(child.visuals().error_fg_color)).wrap());
+                }
+                draw(&mut child, &mut view.items, &root, &mut Vec::new(), &mut events);
+                if o.draggable && bg.hovered() {
+                    ui.ctx().set_cursor_icon(if bg.dragged() { egui::CursorIcon::Grabbing } else { egui::CursorIcon::Grab });
+                }
+                if o.draggable && bg.dragged() {
+                    moved = Some(at + bg.drag_delta());
+                }
+                clicked = o.click && bg.clicked();
+            });
+            if let Some(p) = moved {
+                self.state.borrow_mut().overlays.insert(o.id.clone(), p);
+            }
+            if clicked {
+                events.push((usize::MAX, Value::Null));
+            }
+            for (handler, value) in events {
+                let result = if handler == usize::MAX {
+                    self.run(Some(&mut *host), SLOW, "overlayClick", vec![json!(o.id)])
+                } else {
+                    self.run(Some(&mut *host), SLOW, "event", vec![json!(key), json!(handler), value])
+                };
+                if let Err(e) = result {
+                    self.fail(host, &o.id, &e);
+                }
+                if let Some(v) = self.views.get_mut(&key) {
+                    v.stale = true;
+                }
+                ctx.request_repaint();
+            }
+        }
+        Ok(())
+    }
 }
 
 /// A colour by name (`accent`, `success`, `warning`, `error`, `muted`) or `#rrggbb`.
@@ -568,7 +809,7 @@ fn stat(ui: &mut egui::Ui, label: &str, value: &str) {
 }
 
 /// Draws a panel's items. Clicks and edits land in `events` as (handler, value).
-fn draw(ui: &mut egui::Ui, items: &mut [Item], path: &mut Vec<usize>, events: &mut Vec<(usize, Value)>) {
+fn draw(ui: &mut egui::Ui, items: &mut [Item], root: &Path, path: &mut Vec<usize>, events: &mut Vec<(usize, Value)>) {
     for (i, item) in items.iter_mut().enumerate() {
         path.push(i);
         let id = ui.id().with(("xc-script-item", path.as_slice()));
@@ -640,6 +881,21 @@ fn draw(ui: &mut egui::Ui, items: &mut [Item], path: &mut Vec<usize>, events: &m
                     events.push((*h, json!(value)));
                 }
             }
+            Item::Image { file, width, height, tint } => {
+                let size = vec2(width.unwrap_or(64.0), height.unwrap_or(width.unwrap_or(64.0)));
+                match plugin_file(root, file) {
+                    Some(p) => {
+                        let mut image = egui::Image::from_uri(crate::editor::file_uri(&p)).fit_to_exact_size(size);
+                        if let Some(c) = tint.as_deref().and_then(|c| color(ui, c)) {
+                            image = image.tint(c);
+                        }
+                        ui.add(image);
+                    }
+                    None => {
+                        ui.label(RichText::new(format!("No image {file}")).small().color(ui.visuals().error_fg_color));
+                    }
+                }
+            }
             Item::Progress { value, text } => {
                 let mut bar = egui::ProgressBar::new(value.clamp(0.0, 1.0));
                 if !text.is_empty() {
@@ -652,14 +908,14 @@ fn draw(ui: &mut egui::Ui, items: &mut [Item], path: &mut Vec<usize>, events: &m
                     if items.iter().all(|i| matches!(i, Item::Stat { .. })) {
                         ui.spacing_mut().item_spacing.x = 22.0;
                     }
-                    draw(ui, items, path, events);
+                    draw(ui, items, root, path, events);
                 });
             }
             Item::Section { text, items, open } => {
                 // Unindented: egui's indent guide reads as a broken line here.
                 egui::CollapsingHeader::new(RichText::new(text.as_str()).strong()).id_salt(id).default_open(*open).show_unindented(ui, |ui| {
                     ui.add_space(2.0);
-                    draw(ui, items, path, events);
+                    draw(ui, items, root, path, events);
                     ui.add_space(6.0);
                 });
             }
@@ -828,6 +1084,71 @@ mod tests {
         let ctx = egui::Context::default();
         ctx.run_ui(egui::RawInput::default(), |ui| p.panel_ui("p", ui, &mut h).unwrap()).textures_delta.clear();
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn timers_overlays_and_placing_blocks() {
+        let dir = plugin_dir(&[
+            ("editor.js", r#"
+                let ticks = 0, clicks = 0;
+                const every = xc.every(10, () => { ticks++; if (ticks === 3) xc.cancel(every); });
+                xc.after(0, () => xc.log("after"));
+                xc.overlay({ id: "o", width: 50, height: 40, x: -10, y: 10, render(ui) { ui.text(`ticks ${ticks}`); ui.image("pic.svg", { width: 20 }) }, onClick() { clicks++; xc.moveOverlay("o", 5, 6) } });
+                xc.on("selection", (e) => xc.log("selected", e.blocks));
+                xc.command({ id: "t.place", title: "Place", run() { xc.log(xc.addBlock("main", "core.log", { x: 10, y: 20, values: { message: "hi" } })) } });
+                xc.command({ id: "t.state", title: "State", run() { xc.log(ticks, clicks, JSON.stringify(xc.overlayPosition("o"))) } });
+            "#),
+            ("pic.svg", "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4'/>"),
+        ]);
+        let mut p = load("P", &dir, "editor.js").0.unwrap();
+        let mut h = host();
+        // Timers run from tick(), which says when to come back.
+        assert!(p.tick(&mut h).unwrap().is_some());
+        // Repeating timers run at most every 50 ms.
+        for _ in 0..25 {
+            std::thread::sleep(Duration::from_millis(15));
+            p.tick(&mut h).unwrap();
+        }
+        assert!(h.log.iter().any(|l| l.1 == "after"), "{:?}", h.log);
+        p.run_command("t.state", &mut h).unwrap();
+        assert_eq!(h.log.last().unwrap().1, "3 0 null", "the repeating timer stopped after 3");
+        assert_eq!(p.state.borrow().timers.len(), 0);
+
+        // The overlay draws over the whole window; a click runs onClick.
+        let ctx = egui::Context::default();
+        ctx.run_ui(egui::RawInput::default(), |ui| p.overlay_ui(ui.ctx(), &mut h).unwrap()).textures_delta.clear();
+        let view = &p.views["overlay:o"];
+        assert!(view.error.is_none() && format!("{:?}", view.items).contains("ticks 3"), "{:?}", view.items);
+        p.run(Some(&mut h), SLOW, "overlayClick", vec![json!("o")]).unwrap();
+        p.run_command("t.state", &mut h).unwrap();
+        assert_eq!(h.log.last().unwrap().1, r#"3 1 {"x":5,"y":6}"#);
+
+        // Selection changes reach xc.on("selection") (not the first one seen).
+        p.tick(&mut h).unwrap();
+        assert!(!h.log.iter().any(|l| l.1.starts_with("selected")));
+
+        // Placing blocks goes through the editor (the fake one refuses).
+        p.run_command("t.place", &mut h).unwrap();
+        assert!(h.log.last().unwrap().1.contains("can't place blocks"), "{:?}", h.log.last());
+    }
+
+    /// The desk pet example loads, draws and reacts to a click.
+    #[test]
+    fn desk_pet_example_works() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/plugins/desk-pet");
+        let mut p = load("Desk Pet", &dir, "editor.js").0.unwrap();
+        let mut h = host();
+        assert_eq!(p.registered.overlays[0].id, "pet");
+        let ctx = egui::Context::default();
+        ctx.run_ui(egui::RawInput::default(), |ui| p.overlay_ui(ui.ctx(), &mut h).unwrap()).textures_delta.clear();
+        let items = format!("{:?}", p.views["overlay:pet"].items);
+        assert!(items.contains("art/pet-idle.svg"), "{items}");
+        for face in ["idle", "blink", "happy", "sleep", "worried"] {
+            assert!(dir.join(format!("art/pet-{face}.svg")).is_file());
+        }
+        p.run_command("desk-pet.come-back", &mut h).unwrap();
+        assert!(p.state.borrow().overlays.contains_key("pet"));
+        assert!(h.log.iter().all(|l| l.0 != api::Level::Error), "{:?}", h.log);
     }
 
     /// The example in DemoBot: its panel draws, its check finds the TODO.
