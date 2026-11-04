@@ -1,0 +1,76 @@
+# Tests every pull request (Dependabot's too) and every push to main, so a
+# change that breaks something shows a red ✗ before it's merged.
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    name: Tests and Clippy
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Linux packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libdbus-1-dev libasound2-dev pkg-config
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Tests
+        run: cargo test --workspace
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Runtime tests
+        run: |
+          node runtime/test/smoke.js
+          node runtime/test/library.js
+          node runtime/test/template.js
+          node runtime/test/helpers.js
+          node runtime/test/discord_blocks.js
+          node runtime/test/discord_events.js
+          node runtime/test/discord_actions.js
+          node runtime/test/discord_music.js
+          node runtime/test/fluxer_blocks.js
+          node runtime/test/fluxer_run.js
+          node runtime/test/store.js
+          node runtime/test/backups.js < /dev/null
+
+  website:
+    name: Website builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+      - name: Install
+        working-directory: docs
+        run: npm ci
+      - name: Build
+        working-directory: docs
+        run: npm run build

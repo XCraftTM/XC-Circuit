@@ -11,6 +11,11 @@ updates:
       day: monday
     open-pull-requests-limit: 5
     groups:
+      # egui, eframe, egui_extras and egui_dock only work in matching
+      # versions, so they come together. Such an update can wait until
+      # egui_dock supports the new egui.
+      egui:
+        patterns: ["egui", "egui_*", "eframe", "epaint", "emath", "ecolor"]
       rust:
         update-types: [minor, patch]
 
