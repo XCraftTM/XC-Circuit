@@ -218,6 +218,9 @@ fn appearance(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsVi
     row(ui, theme, t!("Grid dots"), t!("The dotted background on canvases."), |ui| {
         toggle(ui, theme, &mut ed.prefs.show_grid);
     });
+    row(ui, theme, t!("Snap to grid"), t!("Blocks and notes you drop line up with the grid. The magnet in the canvas toolbar switches it too."), |ui| {
+        toggle(ui, theme, &mut ed.prefs.snap_to_grid);
+    });
     let theme_wire = ed.reg.theme(&current).map(|d| d.shape.wire_width).unwrap_or(2.0);
     row(ui, theme, t!("Wire thickness"), t!("How thick the wires between blocks are drawn."), |ui| {
         if ed.prefs.wire_width.is_some() && crate::dialog::button(ui, theme, t!("Reset")).clicked() {

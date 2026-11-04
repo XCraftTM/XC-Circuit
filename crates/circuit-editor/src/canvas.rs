@@ -256,6 +256,76 @@ enum NodeMenu {
     LeaveZone(String),
     RemoveZone(String),
     NoteAround(String),
+    Arrange(String, Arrange),
+}
+
+/// How the Arrange menu lines selected blocks up.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Arrange {
+    Left,
+    Center,
+    Right,
+    Top,
+    Middle,
+    Bottom,
+    SpreadAcross,
+    SpreadDown,
+}
+
+impl Arrange {
+    const ALL: [Arrange; 8] = [Arrange::Left, Arrange::Center, Arrange::Right, Arrange::Top, Arrange::Middle, Arrange::Bottom, Arrange::SpreadAcross, Arrange::SpreadDown];
+
+    fn name(self) -> &'static str {
+        match self {
+            Arrange::Left => t!("Align left edges"),
+            Arrange::Center => t!("Align centers (across)"),
+            Arrange::Right => t!("Align right edges"),
+            Arrange::Top => t!("Align top edges"),
+            Arrange::Middle => t!("Align middles (down)"),
+            Arrange::Bottom => t!("Align bottom edges"),
+            Arrange::SpreadAcross => t!("Spread evenly across"),
+            Arrange::SpreadDown => t!("Spread evenly down"),
+        }
+    }
+}
+
+/// Where each block of `rects` goes (its new top-left corner), lined up as `how` says.
+pub fn arrange(rects: &[(String, Rect)], how: Arrange) -> Vec<(String, Pos2)> {
+    let Some(bounds) = rects.iter().map(|(_, r)| *r).reduce(|a, b| a.union(b)) else { return Vec::new() };
+    let place = |f: &dyn Fn(&Rect) -> Pos2| rects.iter().map(|(id, r)| (id.clone(), f(r))).collect();
+    let spread = |across: bool| {
+        let mut order: Vec<&(String, Rect)> = rects.iter().collect();
+        order.sort_by(|a, b| if across { a.1.left().total_cmp(&b.1.left()) } else { a.1.top().total_cmp(&b.1.top()) });
+        let size = |r: &Rect| if across { r.width() } else { r.height() };
+        let span = if across { bounds.width() } else { bounds.height() };
+        let total: f32 = order.iter().map(|(_, r)| size(r)).sum();
+        // Equal gaps; never closer than a little room between them.
+        let gap = if order.len() > 1 { ((span - total) / (order.len() - 1) as f32).max(GRID * 2.0) } else { 0.0 };
+        let mut at = if across { bounds.left() } else { bounds.top() };
+        order
+            .into_iter()
+            .map(|(id, r)| {
+                let p = if across { pos2(at, r.top()) } else { pos2(r.left(), at) };
+                at += size(r) + gap;
+                (id.clone(), p)
+            })
+            .collect()
+    };
+    match how {
+        Arrange::Left => place(&|r| pos2(bounds.left(), r.top())),
+        Arrange::Center => place(&|r| pos2(bounds.center().x - r.width() / 2.0, r.top())),
+        Arrange::Right => place(&|r| pos2(bounds.right() - r.width(), r.top())),
+        Arrange::Top => place(&|r| pos2(r.left(), bounds.top())),
+        Arrange::Middle => place(&|r| pos2(r.left(), bounds.center().y - r.height() / 2.0)),
+        Arrange::Bottom => place(&|r| pos2(r.left(), bounds.bottom() - r.height())),
+        Arrange::SpreadAcross => spread(true),
+        Arrange::SpreadDown => spread(false),
+    }
+}
+
+/// `v` to the nearest grid line.
+fn snap(v: f32) -> f32 {
+    (v / GRID).round() * GRID
 }
 
 const ZONE_PANEL_W: f32 = 150.0;
@@ -480,7 +550,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     let drag = view.drag.clone();
     // While a wire is dragged: what follows what, so pins that would close a loop refuse it.
     let flow = drag.as_ref().map(|_| ws.flow(|id| is_value_block(ws, reg, id)));
-    draw_notes(&cui, &painter, ws, ws_key, &layouts[..node_count], theme, reg, view, edited, NoteSelection { blocks: selected, multi, notes: selected_notes });
+    draw_notes(&cui, &painter, ws, ws_key, &layouts[..node_count], theme, reg, view, edited, NoteSelection { blocks: selected, multi, notes: selected_notes }, prefs.snap_to_grid);
 
     for layout in &layouts[node_count..] {
         let zid = layout.id.clone();
@@ -1111,6 +1181,21 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             view.edit_note = Some(id);
             *edited = true;
         }
+        let snap_tip = if prefs.snap_to_grid { t!("Snap to grid is on: dropped blocks and notes line up with the grid") } else { t!("Snap to grid is off") };
+        if crate::dialog::styled_button(
+            ui,
+            theme,
+            egui::Button::image(egui::Image::from_uri(icon("magnet").map(|p| crate::editor::file_uri(&p)).unwrap_or_default()).tint(if prefs.snap_to_grid { theme.accent } else { theme.text_muted }).fit_to_exact_size(vec2(15.0, 15.0)))
+                .corner_radius(7)
+                .min_size(Vec2::splat(ui.spacing().interact_size.y.max(32.0))),
+            if prefs.snap_to_grid { mix(theme.panel, theme.accent, 0.18) } else { theme.panel },
+            Stroke::new(1.0, if prefs.snap_to_grid { with_alpha(theme.accent, 150) } else { theme.node_border }),
+        )
+        .on_hover_text(snap_tip)
+        .clicked()
+        {
+            prefs.snap_to_grid = !prefs.snap_to_grid;
+        }
         ui.add_space(6.0);
         if crate::dialog::icon_button(ui, theme, icon("zoom-out").as_deref(), "−", t!("Zoom out")).clicked() {
             view.zoom_at(outer.min, center, 1.0 / 1.25);
@@ -1149,6 +1234,19 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                 }
                 if tool_button(ui, theme, icon("note").as_deref(), t!("Note")).on_hover_text(t!("Put a note around the selected blocks")).clicked() {
                     menu = Some(NodeMenu::NoteAround(b.node.clone()));
+                }
+                if count > 1 {
+                    let arrange_button = tool_button(ui, theme, icon("align").as_deref(), t!("Arrange")).on_hover_text(t!("Line up or spread out the selected blocks"));
+                    egui::Popup::menu(&arrange_button).show(|ui| {
+                        for (i, how) in Arrange::ALL.into_iter().enumerate() {
+                            if i == 3 || i == 6 {
+                                ui.separator();
+                            }
+                            if ui.button(how.name()).clicked() {
+                                menu = Some(NodeMenu::Arrange(b.node.clone(), how));
+                            }
+                        }
+                    });
                 }
                 if let Some(src) = b.source.as_ref().filter(|_| count == 1)
                     && tool_button(ui, theme, icon("function").as_deref(), t!("Source")).on_hover_text(t!("Open the block's source file")).clicked()
@@ -1198,6 +1296,16 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         Some(NodeMenu::OpenSource(path)) => {
             let _ = open::that(path);
         }
+        Some(NodeMenu::Arrange(n, how)) => {
+            let ids: Vec<String> = if multi.contains(&n) { multi.iter().cloned().collect() } else { vec![n] };
+            let rects: Vec<(String, Rect)> = layouts[..node_count].iter().filter(|l| ids.contains(&l.id)).map(|l| (l.id.clone(), l.rect)).collect();
+            for (id, p) in arrange(&rects, how) {
+                if let Some(node) = ws.nodes.get_mut(&id) {
+                    node.at = [p.x, p.y];
+                }
+            }
+            *edited = true;
+        }
         Some(NodeMenu::NoteAround(n)) => {
             let ids: Vec<String> = if multi.contains(&n) { multi.iter().cloned().collect() } else { vec![n] };
             let around = layouts[..node_count].iter().filter(|l| ids.contains(&l.id)).map(|l| l.rect).reduce(|a, b| a.union(b));
@@ -1239,6 +1347,18 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     // A dropped block stays in its zone while it is inside the zone's outline
     // from before the drag, joins another zone it was dropped into, or leaves.
     // A zone's only block always stays: the zone moves with it.
+    if prefs.snap_to_grid
+        && let Some(n) = dropped.as_ref()
+        && let Some(node) = ws.nodes.get(n)
+    {
+        let d = [snap(node.at[0]) - node.at[0], snap(node.at[1]) - node.at[1]];
+        let group = multi.contains(n) && multi.len() > 1;
+        for (nid, node) in ws.nodes.iter_mut() {
+            if nid == n || (group && multi.contains(nid)) {
+                node.at = [node.at[0] + d[0], node.at[1] + d[1]];
+            }
+        }
+    }
     if let Some(n) = dropped
         && let Some(layout) = layouts[..node_count].iter().find(|l| l.id == n)
     {
@@ -1317,7 +1437,7 @@ struct NoteSelection<'a> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, ws_key: &str, blocks: &[NodeLayout], theme: &Theme, reg: &Registry, view: &mut CanvasView, edited: &mut bool, sel: NoteSelection) {
+fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, ws_key: &str, blocks: &[NodeLayout], theme: &Theme, reg: &Registry, view: &mut CanvasView, edited: &mut bool, sel: NoteSelection, snap_to_grid: bool) {
     let ctx = cui.ctx().clone();
     let zoom = view.zoom;
     // As big on screen at every zoom, like the Try Zone's gear.
@@ -1375,6 +1495,24 @@ fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, ws_key: &st
                 n.rect[1] += d.y;
             }
             *edited = true;
+        }
+        // Dropped: onto the grid, with the blocks it carried.
+        if band.drag_stopped()
+            && snap_to_grid
+            && let Some(n) = ws.notes.get_mut(&nid)
+        {
+            let d = vec2(snap(n.rect[0]) - n.rect[0], snap(n.rect[1]) - n.rect[1]);
+            n.rect[0] += d.x;
+            n.rect[1] += d.y;
+            if !ctx.input(|i| i.modifiers.alt) {
+                let moved = r.translate(band.drag_delta());
+                for l in blocks.iter().filter(|l| moved.contains_rect(l.rect.translate(band.drag_delta()))) {
+                    if let Some(node) = ws.nodes.get_mut(&l.id) {
+                        node.at[0] += d.x;
+                        node.at[1] += d.y;
+                    }
+                }
+            }
         }
         // A click selects it (Shift or Ctrl: adds it, or takes it away).
         if band.clicked() {
@@ -1478,6 +1616,14 @@ fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, ws_key: &st
                 n.rect = [min.x, min.y, max.x - min.x, max.y - min.y];
                 *edited = true;
             }
+            if h.drag_stopped()
+                && snap_to_grid
+                && let Some(n) = ws.notes.get_mut(&nid)
+            {
+                let (x2, y2) = (snap(n.rect[0] + n.rect[2]), snap(n.rect[1] + n.rect[3]));
+                let (x, y) = (snap(n.rect[0]), snap(n.rect[1]));
+                n.rect = [x, y, (x2 - x).max(NOTE_MIN.x), (y2 - y).max(NOTE_MIN.y)];
+            }
         }
     }
     if let Some(id) = delete {
@@ -1501,8 +1647,7 @@ fn tool_button(ui: &mut Ui, theme: &Theme, icon: Option<&std::path::Path>, text:
     crate::dialog::styled_button(ui, theme, button.corner_radius(7).min_size(vec2(h, h)), theme.panel, Stroke::new(1.0, theme.node_border))
 }
 
-/// Centers the view on all blocks, at 100% when they fit.
-/// Shows every block and note.
+/// Centers the view on every block and note, at 100% when they fit.
 fn fit_view(view: &mut CanvasView, outer: Rect, layouts: &[NodeLayout], ws: &Workspace) {
     view.initialized = true;
     view.zoom = 1.0;
@@ -1969,6 +2114,27 @@ Hi ${#1.user}"), "values go in with the block's number: {text:?}");
             }
             ed.project.as_mut().unwrap().save().unwrap();
         }
+    }
+
+    #[test]
+    fn arranging_lines_blocks_up_and_spreads_them() {
+        let r = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_size(pos2(x, y), vec2(w, h));
+        let rects = vec![("a".to_string(), r(0.0, 0.0, 100.0, 50.0)), ("b".to_string(), r(300.0, 40.0, 200.0, 80.0)), ("c".to_string(), r(120.0, 400.0, 100.0, 60.0))];
+        let at = |how| arrange(&rects, how).into_iter().collect::<HashMap<String, Pos2>>();
+        let left = at(Arrange::Left);
+        assert!(left.values().all(|p| p.x == 0.0) && left["b"].y == 40.0);
+        let right = at(Arrange::Right);
+        assert_eq!((right["a"].x, right["b"].x), (400.0, 300.0), "right edges at 500");
+        let middle = at(Arrange::Middle);
+        assert_eq!(middle["a"].y, 230.0 - 25.0, "centred on the middle of everything (0..460)");
+        // Spread across: first stays, last ends where it ended, equal gaps.
+        let across = at(Arrange::SpreadAcross);
+        assert_eq!((across["a"].x, across["c"].x, across["b"].x), (0.0, 150.0, 300.0));
+        // Too tight for equal gaps: they keep some room instead of overlapping.
+        let tight = vec![("a".to_string(), r(0.0, 0.0, 100.0, 50.0)), ("b".to_string(), r(50.0, 0.0, 100.0, 50.0))];
+        let p = arrange(&tight, Arrange::SpreadAcross);
+        assert_eq!(p[1].1.x, 100.0 + GRID * 2.0);
+        assert_eq!((snap(10.0), snap(12.0), snap(-30.0)), (0.0, GRID, -GRID));
     }
 
     #[test]
