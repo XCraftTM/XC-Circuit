@@ -38,6 +38,7 @@ mod start_page;
 mod stored;
 mod theme;
 mod titlebar;
+mod updater;
 mod tour;
 mod values;
 mod ui_strings;

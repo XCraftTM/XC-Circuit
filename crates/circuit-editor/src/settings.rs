@@ -281,6 +281,9 @@ fn editor(ui: &mut Ui, ed: &mut Editor, theme: &Theme, asks: &mut Vec<Ask>) {
     row(ui, theme, t!("Reopen last project"), t!("Open the project you had open last time. When off, XC Circuit starts with the example."), |ui| {
         toggle(ui, theme, &mut ed.prefs.reopen_last_project);
     });
+    row(ui, theme, t!("Look for updates"), t!("At start, ask GitHub whether there is a newer XC Circuit, and say so in the status bar. Help › Check for Updates asks any time."), |ui| {
+        toggle(ui, theme, &mut ed.prefs.check_updates);
+    });
 }
 
 fn bot(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView, asks: &mut Vec<Ask>) {

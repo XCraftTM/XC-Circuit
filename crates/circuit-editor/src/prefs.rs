@@ -39,6 +39,10 @@ pub struct Prefs {
     pub new_project_location: Option<String>,
     /// Projects opened lately, the latest first (folders).
     pub recent_projects: Vec<String>,
+    /// Look for a newer version on GitHub at start.
+    pub check_updates: bool,
+    /// A newer version the user doesn't want to hear about at start.
+    pub skipped_update: Option<String>,
 }
 
 /// How many projects File › Open Recent and the start page remember.
@@ -96,7 +100,7 @@ impl SideView {
 
 impl Default for Prefs {
     fn default() -> Self {
-        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), side_view: Some(SideView::Workspaces), new_project_location: None, recent_projects: Vec::new() }
+        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), side_view: Some(SideView::Workspaces), new_project_location: None, recent_projects: Vec::new(), check_updates: true, skipped_update: None }
     }
 }
 

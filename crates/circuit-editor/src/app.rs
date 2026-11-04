@@ -94,6 +94,8 @@ pub struct CircuitApp {
     dock_size: Option<egui::Vec2>,
     /// The start page's list of recent projects, read from their folders.
     start: crate::start_page::StartPage,
+    /// A newer version on GitHub, when one was found.
+    updater: crate::updater::Updater,
     bot: BotUi,
     stored: crate::stored::StoredView,
     watcher: crate::watch::PluginWatcher,
@@ -205,6 +207,10 @@ impl CircuitApp {
         let mut watcher = crate::watch::PluginWatcher::new(move || repaint.request_repaint());
         watcher.watch(&ed.watch_dirs());
         let setup = (!ed.prefs.setup_done).then(crate::setup::Setup::new);
+        let mut updater = crate::updater::Updater::default();
+        if ed.prefs.check_updates {
+            updater.check(false);
+        }
         CircuitApp {
             ed,
             dock,
@@ -218,6 +224,7 @@ impl CircuitApp {
             problems_found: None,
             dock_size: None,
             start: Default::default(),
+            updater,
             bot: BotUi::new(),
             stored: Default::default(),
             watcher,
@@ -663,6 +670,9 @@ impl CircuitApp {
                     && ui.button(t!("Open Example: DemoBot")).clicked()
                 {
                     self.switch_project(&examples.join("DemoBot"));
+                }
+                if ui.add_enabled(!self.updater.busy(), egui::Button::new(t!("Check for Updates…"))).clicked() {
+                    self.updater.check(true);
                 }
                 if ui.button(t!("Welcome and setup…")).clicked() {
                     self.setup = Some(crate::setup::Setup::new());
@@ -1160,6 +1170,11 @@ impl CircuitApp {
                 self.ed.theme.apply(&ctx);
             }
         }
+        if let Some(r) = &self.updater.available
+            && status_item(&mut right, &t, Some(t.accent), &tf!("Update {version} available", version = r.version)).on_hover_text(t!("What's new, and the download")).clicked()
+        {
+            self.updater.show = true;
+        }
         let saved = if self.ed.unsaved() { t!("Unsaved changes") } else { t!("Saved") };
         if status_item(&mut right, &t, None, saved).on_hover_text(t!("Save (Ctrl+S)")).clicked() && has_project {
             self.ed.save();
@@ -1230,13 +1245,70 @@ impl CircuitApp {
         }
     }
 
+    /// A finished update check: an update shows in the status bar (and its
+    /// window, when asked for by hand); by hand, "the latest" goes to the console.
+    fn poll_updates(&mut self, ctx: &egui::Context) {
+        use crate::updater::Found;
+        if self.updater.busy() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(500));
+        }
+        match self.updater.poll(self.ed.prefs.skipped_update.as_deref()) {
+            Some(Found::UpToDate) => self.ed.log(Level::Info, tf!("XC Circuit {version} is the latest version (or GitHub couldn't be asked)", version = env!("CARGO_PKG_VERSION"))),
+            Some(Found::Newer) | None => {}
+        }
+    }
+
+    /// What's new in an available update, with its download.
+    fn update_window(&mut self, ctx: &egui::Context) {
+        let Some(r) = self.updater.available.clone().filter(|_| self.updater.show) else { return };
+        let theme = self.ed.theme.clone();
+        let (mut download, mut skip, mut later) = (false, false, false);
+        let close = dialog::show(
+            ctx,
+            &theme,
+            dialog::Spec {
+                id: "update",
+                title: &tf!("XC™ Circuit {version} is available", version = r.version),
+                subtitle: Some(&tf!("You have {version}.", version = env!("CARGO_PKG_VERSION"))),
+                icon: None,
+                width: 520.0,
+            },
+            |ui, part| match part {
+                dialog::Part::Body => {
+                    dialog::section(ui, &theme, t!("What's new"));
+                    egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
+                        let notes = if r.notes.trim().is_empty() { t!("The release has no notes.").to_string() } else { r.notes.clone() };
+                        ui.label(RichText::new(notes).size(12.5).color(theme.text));
+                    });
+                }
+                dialog::Part::Footer => {
+                    download = dialog::primary_button(ui, &theme, t!("Download")).on_hover_text(&r.url).clicked();
+                    later = dialog::secondary_button(ui, &theme, t!("Later")).clicked();
+                    skip = dialog::secondary_button(ui, &theme, t!("Skip this version")).on_hover_text(t!("Not mentioned at start any more; Help › Check for Updates still finds it")).clicked();
+                }
+            },
+        );
+        if download {
+            let _ = open::that(&r.url);
+        }
+        if skip {
+            self.ed.prefs.skipped_update = Some(r.version.clone());
+            self.updater.available = None;
+        }
+        if download || skip || later || close {
+            self.updater.show = false;
+        }
+    }
+
     fn dialogs(&mut self, ctx: &egui::Context) {
+        self.update_window(ctx);
         let theme = self.ed.theme.clone();
         if self.setup.is_none() && self.tour.is_none() {
             self.recovery_dialog(ctx, &theme);
         }
         self.new_project_chooser(ctx, &theme);
         if self.show_about {
+            let app_root = self.bundled_plugins.as_ref().and_then(|p| p.parent()).map(Path::to_path_buf);
             let info = tf!("{plugins} plugins · {blocks} blocks · {themes} themes loaded", plugins = self.ed.reg.plugins.len(), blocks = self.ed.reg.blocks.len(), themes = self.ed.reg.themes.len());
             let mut ok = false;
             let close = dialog::show(
@@ -1255,6 +1327,33 @@ impl CircuitApp {
                             ui.label(RichText::new(t!("Build bots by connecting blocks.")).size(13.5).color(theme.text));
                             ui.add_space(4.0);
                             ui.label(RichText::new(&info).size(11.5).color(theme.text_muted));
+                            ui.add_space(12.0);
+                            ui.label(RichText::new(tf!("Made by {name}", name = CREATOR)).size(13.0).color(theme.text));
+                            ui.add_space(4.0);
+                            ui.horizontal(|ui| {
+                                // Centred: the links' width, then them.
+                                let links = [(t!("GitHub profile"), CREATOR_URL.to_string()), (t!("XC Circuit on GitHub"), REPO_URL.to_string())];
+                                let width: f32 = links.iter().map(|(l, _)| ui.painter().layout_no_wrap(l.to_string(), egui::FontId::proportional(13.0), theme.accent).size().x).sum::<f32>() + 24.0;
+                                ui.add_space(((ui.available_width() - width) / 2.0).max(0.0));
+                                ui.spacing_mut().item_spacing.x = 24.0;
+                                for (label, url) in links {
+                                    ui.hyperlink_to(RichText::new(label).size(13.0).color(theme.accent), url);
+                                }
+                            });
+                            ui.add_space(10.0);
+                            ui.label(RichText::new(t!("Copyright © 2026 XCraftTM. All rights reserved.")).size(11.5).color(theme.text_muted));
+                            ui.horizontal(|ui| {
+                                let licence = t!("Licence");
+                                let notices = t!("Third-party licences");
+                                let width = ui.painter().layout_no_wrap(format!("{licence}{notices}"), egui::FontId::proportional(11.5), theme.accent).size().x + 18.0;
+                                ui.add_space(((ui.available_width() - width) / 2.0).max(0.0));
+                                ui.spacing_mut().item_spacing.x = 18.0;
+                                for (label, file) in [(licence, "LICENSE"), (notices, "THIRD-PARTY-NOTICES.txt")] {
+                                    if ui.link(RichText::new(label).size(11.5).color(theme.accent)).clicked() {
+                                        open_doc(app_root.as_deref(), file);
+                                    }
+                                }
+                            });
                             ui.add_space(6.0);
                         });
                     }
@@ -1309,6 +1408,7 @@ impl eframe::App for CircuitApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.reveal.frame(&ctx);
+        self.poll_updates(&ctx);
         // Before anything is drawn: no frame shows the panels without a project.
         self.swap_start_page();
         // XC_FRAME_STATS=1 prints how many frames a second are drawn, to find
@@ -1943,6 +2043,28 @@ fn find_plugin_dirs() -> (Vec<PathBuf>, Option<PathBuf>) {
     }
     dirs.dedup();
     (dirs, bundled_root)
+}
+
+/// Who makes XC Circuit, and where.
+const CREATOR: &str = "XCraftTM";
+const CREATOR_URL: &str = "https://github.com/XCraftTM";
+const REPO_URL: &str = "https://github.com/XCraftTM/XC-Circuit";
+
+/// Opens a document that releases have next to the program (LICENSE,
+/// THIRD-PARTY-NOTICES.txt); its page on GitHub when it isn't there.
+fn open_doc(app_root: Option<&Path>, file: &str) {
+    match app_root.map(|r| r.join(file)).filter(|p| p.is_file()) {
+        Some(path) => {
+            let _ = open::that(path);
+        }
+        None if file == "LICENSE" => {
+            let _ = open::that(format!("{REPO_URL}/blob/main/LICENSE"));
+        }
+        // The notices are made for each release.
+        None => {
+            let _ = open::that(format!("{REPO_URL}/releases/latest"));
+        }
+    }
 }
 
 /// A status bar entry: highlights on hover, can be clicked, and its text
