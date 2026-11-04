@@ -256,17 +256,36 @@ mod tests {
         let pkg: serde_json::Value = serde_json::from_str(&fs::read_to_string(dir.join("package.json")).unwrap()).unwrap();
         assert_eq!(pkg["name"], "export-test");
 
-        // Start it, give it a moment, and look for the log line.
+        // Start it and wait for the log line (slow machines take a while).
         let mut child = Command::new("node")
             .arg("index.js")
             .current_dir(&dir)
             .stdout(std::process::Stdio::piped())
             .spawn()
             .unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(1500));
+        let stdout = child.stdout.take().unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            use std::io::BufRead;
+            for line in std::io::BufReader::new(stdout).lines().map_while(Result::ok) {
+                if tx.send(line).is_err() {
+                    break;
+                }
+            }
+        });
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        let mut text = String::new();
+        while !text.contains("exported and running") {
+            match rx.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now())) {
+                Ok(line) => {
+                    text.push_str(&line);
+                    text.push('\n');
+                }
+                Err(_) => break,
+            }
+        }
         let _ = child.kill();
-        let out = child.wait_with_output().unwrap();
-        let text = String::from_utf8_lossy(&out.stdout);
+        let _ = child.wait();
         assert!(text.contains("exported and running"), "output was:\n{text}");
     }
 }
