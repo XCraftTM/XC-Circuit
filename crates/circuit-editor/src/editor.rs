@@ -80,6 +80,8 @@ pub struct Editor {
     pub activity: HashMap<(String, String), crate::bot::Activity>,
     /// Every selected block in the selected workspace (includes `selected`).
     pub multi: HashSet<String>,
+    /// Selected notes: (workspace, note).
+    pub selected_notes: HashSet<(String, String)>,
     /// A selected wire (workspace, link), deleted with Del.
     pub selected_wire: Option<(String, Link)>,
     pub history: Histories,
@@ -127,6 +129,7 @@ impl Editor {
             active_workspace: None,
             activity: HashMap::new(),
             multi: HashSet::new(),
+            selected_notes: HashSet::new(),
             selected_wire: None,
             history: Histories::default(),
             prefs: Default::default(),
@@ -629,20 +632,30 @@ impl Editor {
         self.shapes.forget_workspace(key);
         let alive: HashSet<String> = self.workspace(key).map(|w| w.nodes.keys().cloned().collect()).unwrap_or_default();
         self.multi.retain(|n| alive.contains(n));
+        let notes: HashSet<String> = self.workspace(key).map(|w| w.notes.keys().cloned().collect()).unwrap_or_default();
+        self.selected_notes.retain(|(w, n)| w != key || notes.contains(n));
         if self.selected.as_ref().is_some_and(|(w, n)| w == key && !alive.contains(n)) {
             self.clear_selection();
         }
     }
 
-    /// Copies the selected blocks to the clipboard as JSON.
+    /// The selected notes of a workspace.
+    pub fn note_selection(&self, ws_key: &str) -> Vec<String> {
+        let mut ids: Vec<String> = self.selected_notes.iter().filter(|(w, _)| w == ws_key).map(|(_, n)| n.clone()).collect();
+        ids.sort();
+        ids
+    }
+
+    /// Copies the selected blocks and notes to the clipboard as JSON.
     pub fn copy(&self, ctx: &eframe::egui::Context) -> bool {
         let Some(key) = self.edit_target() else { return false };
         let ids = self.selection(&key);
+        let notes = self.note_selection(&key);
         let Some(ws) = self.workspace(&key) else { return false };
-        if ids.is_empty() {
+        if ids.is_empty() && notes.is_empty() {
             return false;
         }
-        let clip = ws.extract(&ids);
+        let clip = ws.extract_with_notes(&ids, &notes);
         if let Ok(text) = serde_json::to_string_pretty(&clip) {
             ctx.copy_text(text);
         }
@@ -650,6 +663,17 @@ impl Editor {
     }
 
     pub fn delete_selection(&mut self) {
+        let notes: Vec<(String, String)> = self.selected_notes.drain().collect();
+        for (w, n) in &notes {
+            if let Some(ws) = self.project.as_mut().and_then(|p| p.workspaces.get_mut(w))
+                && ws.notes.shift_remove(n).is_some()
+            {
+                self.edited = true;
+            }
+        }
+        if !notes.is_empty() && self.selected.is_none() {
+            return;
+        }
         if self.selected.is_none()
             && let Some((key, link)) = self.selected_wire.take()
         {
@@ -676,27 +700,30 @@ impl Editor {
     pub fn paste(&mut self, text: &str, at: Option<Pos2>) -> bool {
         let Some(key) = self.edit_target() else { return false };
         let Ok(clip) = serde_json::from_str::<Clip>(text) else { return false };
-        if clip.format != CLIP_FORMAT || clip.nodes.is_empty() {
+        if clip.format != CLIP_FORMAT || (clip.nodes.is_empty() && clip.notes.is_empty()) {
             return false;
         }
-        let min = clip.nodes.values().fold([f32::MAX, f32::MAX], |m, n| [m[0].min(n.at[0]), m[1].min(n.at[1])]);
+        let corners = clip.nodes.values().map(|n| n.at).chain(clip.notes.values().map(|n| [n.rect[0], n.rect[1]]));
+        let min = corners.fold([f32::MAX, f32::MAX], |m, p| [m[0].min(p[0]), m[1].min(p[1])]);
         let offset = match at {
             Some(p) => [p.x - min[0], p.y - min[1]],
             None => [40.0, 40.0],
         };
         let Some(ws) = self.project.as_mut().and_then(|p| p.workspaces.get_mut(&key)) else { return false };
-        let ids = ws.paste(&clip, offset);
+        let (ids, notes) = ws.paste_all(&clip, offset);
         self.edited = true;
         self.selected = ids.first().map(|f| (key.clone(), f.clone()));
         self.multi = ids.into_iter().collect();
+        self.selected_notes = notes.into_iter().map(|n| (key.clone(), n)).collect();
         true
     }
 
     pub fn duplicate(&mut self) {
         let Some(key) = self.edit_target() else { return };
         let ids = self.selection(&key);
+        let notes = self.note_selection(&key);
         let Some(ws) = self.workspace(&key) else { return };
-        if let Ok(text) = serde_json::to_string(&ws.extract(&ids)) {
+        if let Ok(text) = serde_json::to_string(&ws.extract_with_notes(&ids, &notes)) {
             self.paste(&text, None);
         }
     }
@@ -704,6 +731,8 @@ impl Editor {
     pub fn select_all(&mut self) {
         let Some(key) = self.edit_target() else { return };
         let ids: Vec<String> = self.workspace(&key).map(|w| w.nodes.keys().cloned().collect()).unwrap_or_default();
+        let notes: Vec<String> = self.workspace(&key).map(|w| w.notes.keys().cloned().collect()).unwrap_or_default();
+        self.selected_notes = notes.into_iter().map(|n| (key.clone(), n)).collect();
         if let Some(first) = ids.first() {
             self.selected = Some((key, first.clone()));
             self.multi = ids.into_iter().collect();

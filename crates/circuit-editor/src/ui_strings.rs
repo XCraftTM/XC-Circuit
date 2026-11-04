@@ -205,7 +205,7 @@ pub const UI_STRINGS: &[&str] = &[
     "Delete (Del)",
     "Delete wire",
     "Delete wire (Del)",
-    "Drag to move the note with the blocks in it (hold Alt to move only the note). Double-click to edit it.",
+    "Click to select, drag to move the note with the blocks in it (hold Alt to move only the note). Double-click to edit it.",
     "Edit note",
     "Description",
     "Color",

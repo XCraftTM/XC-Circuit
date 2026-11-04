@@ -305,7 +305,7 @@ fn zone_layout(zid: &str, rect: Rect) -> NodeLayout {
 }
 
 pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
-    let Editor { reg, engine, theme, project, shapes, views, selected, edited, picker, active_workspace, activity, multi, define_ctx, embed_edit, layout_edit, selected_wire, prefs, ui_rects, .. } = ed;
+    let Editor { reg, engine, theme, project, shapes, views, selected, edited, picker, active_workspace, activity, multi, selected_notes, define_ctx, embed_edit, layout_edit, selected_wire, prefs, ui_rects, .. } = ed;
     let Some(project) = project.as_mut() else { return };
     let mode = reg.mode(&project.meta.mode).or_else(|| reg.modes.first());
     let Some(ws) = project.workspaces.get_mut(ws_key) else {
@@ -449,7 +449,10 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                 let keep = selected.as_ref().is_some_and(|(w, _)| w == ws_key);
                 if !keep {
                     multi.clear();
+                    selected_notes.retain(|(w, _)| w != ws_key);
                 }
+                // Notes the box holds whole.
+                selected_notes.extend(ws.notes.iter().filter(|(_, n)| b.contains_rect(note_rect(n))).map(|(id, _)| (ws_key.to_string(), id.clone())));
                 multi.extend(hits.iter().cloned());
                 *selected = multi.iter().next().map(|n| (ws_key.to_string(), n.clone()));
             }
@@ -477,7 +480,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     let drag = view.drag.clone();
     // While a wire is dragged: what follows what, so pins that would close a loop refuse it.
     let flow = drag.as_ref().map(|_| ws.flow(|id| is_value_block(ws, reg, id)));
-    draw_notes(&cui, &painter, ws, &layouts[..node_count], theme, reg, view, edited);
+    draw_notes(&cui, &painter, ws, ws_key, &layouts[..node_count], theme, reg, view, edited, NoteSelection { blocks: selected, multi, notes: selected_notes });
 
     for layout in &layouts[node_count..] {
         let zid = layout.id.clone();
@@ -926,6 +929,10 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             *selected = Some((ws_key.to_string(), id.clone()));
             *multi = std::iter::once(id.clone()).collect();
         }
+        // Picking a block alone lets go of the notes.
+        if ((head.clicked() || body.clicked()) && !toggle) || ((head.drag_started() || body.drag_started()) && !is_selected) {
+            selected_notes.retain(|(w, _)| w != ws_key);
+        }
         // Right-click selects too; the selected block's actions are buttons above it.
         if (head.secondary_clicked() || body.secondary_clicked()) && !multi.contains(id) {
             *selected = Some((ws_key.to_string(), id.clone()));
@@ -1061,6 +1068,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     } else if bg.clicked() {
         *selected = None;
         multi.clear();
+        selected_notes.retain(|(w, _)| w != ws_key);
         *selected_wire = hovered_wire.clone().map(|l| (ws_key.to_string(), l));
     }
     if selected.is_some() {
@@ -1301,8 +1309,15 @@ fn note_rect(n: &Note) -> Rect {
 /// The title band moves a note with the blocks inside it (with Alt, the note
 /// alone), the edges and corners resize it, and the pencil button (or a
 /// double-click on the title) edits it.
+/// What clicking a note's title changes.
+struct NoteSelection<'a> {
+    blocks: &'a mut Option<(String, String)>,
+    multi: &'a mut std::collections::HashSet<String>,
+    notes: &'a mut std::collections::HashSet<(String, String)>,
+}
+
 #[allow(clippy::too_many_arguments)]
-fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, blocks: &[NodeLayout], theme: &Theme, reg: &Registry, view: &mut CanvasView, edited: &mut bool) {
+fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, ws_key: &str, blocks: &[NodeLayout], theme: &Theme, reg: &Registry, view: &mut CanvasView, edited: &mut bool, sel: NoteSelection) {
     let ctx = cui.ctx().clone();
     let zoom = view.zoom;
     // As big on screen at every zoom, like the Try Zone's gear.
@@ -1323,7 +1338,10 @@ fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, blocks: &[N
         let header_h = (10.0 + line + desc_g.as_ref().map_or(0.0, |g| 4.0 + g.size().y) + 10.0).min(r.height());
         let header = Rect::from_min_size(r.min, vec2(r.width(), header_h));
 
-        painter.rect(r, 14.0, with_alpha(color, 10), Stroke::new(1.5, with_alpha(color, 120)), StrokeKind::Inside);
+        let key = (ws_key.to_string(), nid.clone());
+        let chosen = sel.notes.contains(&key);
+        let edge = if chosen { Stroke::new(2.5, theme.accent) } else { Stroke::new(1.5, with_alpha(color, 120)) };
+        painter.rect(r, 14.0, with_alpha(color, 10), edge, StrokeKind::Inside);
         painter.rect_filled(header, CornerRadius { nw: 14, ne: 14, sw: 0, se: 0 }, with_alpha(color, 30));
         let inside = painter.with_clip_rect(r.intersect(painter.clip_rect()));
         let title_h = title_g.size().y;
@@ -1358,7 +1376,20 @@ fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, blocks: &[N
             }
             *edited = true;
         }
-        let band = band.on_hover_text(t!("Drag to move the note with the blocks in it (hold Alt to move only the note). Double-click to edit it."));
+        // A click selects it (Shift or Ctrl: adds it, or takes it away).
+        if band.clicked() {
+            if ctx.input(|i| i.modifiers.shift || i.modifiers.command) {
+                if !sel.notes.remove(&key) {
+                    sel.notes.insert(key.clone());
+                }
+            } else {
+                sel.notes.clear();
+                sel.notes.insert(key.clone());
+                *sel.blocks = None;
+                sel.multi.clear();
+            }
+        }
+        let band = band.on_hover_text(t!("Click to select, drag to move the note with the blocks in it (hold Alt to move only the note). Double-click to edit it."));
 
         // The edit button, on the right of the title.
         let pr = Rect::from_center_size(pos2(header.right() - 8.0 / zoom - button / 2.0, header.top() + 10.0 + line / 2.0), Vec2::splat(button));
@@ -2009,6 +2040,30 @@ Hi ${#1.user}"), "values go in with the block's number: {text:?}");
         // It's saved with the workspace.
         let json = serde_json::to_value(ed.workspace("notes").unwrap()).unwrap();
         assert_eq!(json["notes"]["n1"]["title"], "Hello");
+
+        // A click on its title selects it, and lets go of selected blocks.
+        ed.selected = Some(("notes".into(), "2".into()));
+        ed.multi = std::iter::once("2".to_string()).collect();
+        let r = note(&ed);
+        let p = screen(&ed, pos2(r[0] + 20.0, r[1] + 20.0));
+        let press = |pressed: bool| egui::Event::PointerButton { pos: p, button: PointerButton::Primary, pressed, modifiers: Default::default() };
+        frame(&ctx, &mut ed, "notes", vec![egui::Event::PointerMoved(p)]);
+        frame(&ctx, &mut ed, "notes", vec![press(true), press(false)]);
+        settle(&mut ed);
+        assert_eq!(ed.note_selection("notes"), vec!["n1".to_string()]);
+        assert!(ed.selected.is_none() && ed.multi.is_empty());
+
+        // Duplicate copies it; Delete removes the selected ones; Ctrl+A selects them all.
+        ed.active_workspace = Some("notes".into());
+        ed.duplicate();
+        let ws = ed.workspace("notes").unwrap();
+        assert_eq!((ws.notes.len(), ws.notes["n2"].title.as_str()), (2, "Hello"));
+        assert_eq!(ed.note_selection("notes"), vec!["n2".to_string()], "the copy is selected");
+        ed.delete_selection();
+        assert_eq!(ed.workspace("notes").unwrap().notes.len(), 1);
+        ed.select_all();
+        assert_eq!(ed.note_selection("notes"), vec!["n1".to_string()]);
+        assert_eq!(ed.multi.len(), 2);
     }
 
     #[test]

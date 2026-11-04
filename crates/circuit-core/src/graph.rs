@@ -133,6 +133,8 @@ pub struct Clip {
     pub nodes: IndexMap<String, Node>,
     pub links: Vec<Link>,
     pub zones: IndexMap<String, Zone>,
+    #[serde(skip_serializing_if = "IndexMap::is_empty")]
+    pub notes: IndexMap<String, Note>,
 }
 
 pub const CLIP_FORMAT: &str = "xc-circuit-clip/1";
@@ -140,6 +142,12 @@ pub const CLIP_FORMAT: &str = "xc-circuit-clip/1";
 impl Workspace {
     /// Copies the given blocks, the wires between them and their zones.
     pub fn extract(&self, ids: &[String]) -> Clip {
+        self.extract_with_notes(ids, &[])
+    }
+
+    /// Copies the given blocks (with their wires and zones) and notes.
+    pub fn extract_with_notes(&self, ids: &[String], note_ids: &[String]) -> Clip {
+        let notes = self.notes.iter().filter(|(k, _)| note_ids.contains(k)).map(|(k, n)| (k.clone(), n.clone())).collect();
         let nodes: IndexMap<String, Node> = self.nodes.iter().filter(|(k, _)| ids.contains(k)).map(|(k, n)| (k.clone(), n.clone())).collect();
         let zones = self
             .zones
@@ -149,11 +157,26 @@ impl Workspace {
             .collect::<IndexMap<_, _>>();
         let inside = |id: &str| nodes.contains_key(id) || zones.contains_key(id);
         let links = self.links.iter().filter(|l| inside(&l.from.node) && inside(&l.to.node)).cloned().collect();
-        Clip { format: CLIP_FORMAT.into(), nodes, links, zones }
+        Clip { format: CLIP_FORMAT.into(), nodes, links, zones, notes }
     }
 
     /// Pastes a clip with fresh ids, moved by `offset`. Returns the new block ids.
     pub fn paste(&mut self, clip: &Clip, offset: [f32; 2]) -> Vec<String> {
+        self.paste_all(clip, offset).0
+    }
+
+    /// Pastes a clip with fresh ids, moved by `offset`. Returns the new block
+    /// ids and the new note ids.
+    pub fn paste_all(&mut self, clip: &Clip, offset: [f32; 2]) -> (Vec<String>, Vec<String>) {
+        let mut new_notes = Vec::new();
+        for note in clip.notes.values() {
+            let id = self.next_note_id();
+            let mut n = note.clone();
+            n.rect[0] += offset[0];
+            n.rect[1] += offset[1];
+            self.notes.insert(id.clone(), n);
+            new_notes.push(id);
+        }
         let mut map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
         for (old, zone) in &clip.zones {
             let id = (1..).map(|i| format!("z{i}")).find(|z| !self.zones.contains_key(z) && !self.nodes.contains_key(z)).unwrap();
@@ -175,7 +198,7 @@ impl Workspace {
                 self.links.push(Link { from: PinRef::new(from, &l.from.pin), to: PinRef::new(to, &l.to.pin) });
             }
         }
-        new_ids
+        (new_ids, new_notes)
     }
 }
 
