@@ -67,7 +67,7 @@ pub fn export(dir: &Path, bundle: &Bundle, opts: &ExportOptions, log: &mut dyn F
     let one_line: String = opts.name.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
 
     let index = format!(
-        "#!/usr/bin/env node\n// {name}: {MARKER}. Start it with: node index.js\n\nconst __XC_BUNDLE__ = {bundle};\n\n{runtime}",
+        "#!/usr/bin/env node\n// {name}: {MARKER}. Start it with: node index.js\n// The XC Circuit runtime in this file: Copyright (c) 2026 XCraftTM, all rights reserved.\n// You may run and share this bot as exported (XC Circuit licence, section 2).\n\nconst __XC_BUNDLE__ = {bundle};\n\n{runtime}",
         name = one_line,
         bundle = serde_json::to_string(&bundle.value)?,
         runtime = RUNTIME_SOURCE

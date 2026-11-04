@@ -6,7 +6,10 @@ members = ["crates/*", "plugins/xc.stats"]
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.95"
-authors = ["XC Team"]
+authors = ["XCraftTM"]
+# Source-available, see LICENSE; not published to crates.io.
+license-file = "LICENSE"
+publish = false
 
 [workspace.dependencies]
 circuit-core = { path = "crates/circuit-core" }

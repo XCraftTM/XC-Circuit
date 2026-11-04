@@ -18,10 +18,10 @@ fn main() {
     res.set_icon(ico.to_str().expect("icon path"))
         .set("FileDescription", "XC™ Circuit")
         .set("ProductName", "XC™ Circuit")
-        .set("CompanyName", "XC Team")
+        .set("CompanyName", "XCraftTM")
         .set("InternalName", "xc-circuit")
         .set("OriginalFilename", "xc-circuit.exe")
-        .set("LegalCopyright", "XC Team");
+        .set("LegalCopyright", "Copyright (c) 2026 XCraftTM. All rights reserved.");
     if let Err(e) = res.compile() {
         // A build without the Windows resource compiler still works, only
         // without the icon and name.

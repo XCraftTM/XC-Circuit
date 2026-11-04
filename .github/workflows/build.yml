@@ -16,11 +16,13 @@ jobs:
         include:
           - os: windows-latest
             name: windows-x64
+            target: x86_64-pc-windows-msvc
             exe: xc-circuit.exe
             native: xc_stats.dll
           # 22.04 keeps the Linux build compatible with older distributions (glibc).
           - os: ubuntu-22.04
             name: linux-x64
+            target: x86_64-unknown-linux-gnu
             exe: xc-circuit
             native: libxc_stats.so
     runs-on: ${{ matrix.os }}
@@ -41,6 +43,11 @@ jobs:
         with:
           node-version: 22
 
+      # For the third-party notices.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Tests
         run: cargo test --workspace
 
@@ -60,16 +67,24 @@ jobs:
       - name: Release build
         run: cargo plugin xc-stats --release
 
-      # The program finds plugins/ and examples/ next to itself.
+      # The program finds plugins/ and examples/ next to itself. The licences
+      # go along: the app's own, the crates built into it, and the font's.
       - name: Package
         shell: bash
         run: |
           out="XC-Circuit-${{ matrix.name }}"
-          mkdir -p "$out"
+          mkdir -p "$out/licenses"
           cp "target/release/${{ matrix.exe }}" "$out/"
-          cp -r plugins examples README.md "$out/"
+          cp -r plugins examples README.md LICENSE "$out/"
           cp "target/release/${{ matrix.native }}" "$out/plugins/xc.stats/"
+          python tools/third_party_notices.py "$out/THIRD-PARTY-NOTICES.txt" "${{ matrix.target }}"
+          cp crates/circuit-editor/assets/fonts/LICENCE.txt "$out/licenses/Ubuntu-Font-Licence.txt"
           rm -rf "$out"/examples/*/.circuit
+          # Only what users need: no plugin sources, tools or packages.
+          for dir in "$out"/plugins/*/; do
+            if [ -f "$dir/Cargo.toml" ]; then rm -rf "$dir/src" "$dir/Cargo.toml" "$dir/Cargo.lock" "$dir/build.rs"; fi
+            rm -rf "$dir/tools" "$dir/node_modules" "$dir/target"
+          done
           if [ "$RUNNER_OS" = "Windows" ]; then
             7z a "$out.zip" "$out" > /dev/null
           else

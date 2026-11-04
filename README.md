@@ -189,3 +189,7 @@ Done: editor foundation, running and exporting bots, Try Zones, undo/redo, multi
 The plan for the remaining Discord blocks is in [docs/discord-blocks-plan.md](docs/discord-blocks-plan.md).
 
 Not done yet: sandboxed WebAssembly plugins (the safer plugin tier from the spec), sharing plugins from GitHub inside the editor, the web dashboard blocks, and converting a project to a TypeScript bot.
+
+## Licence
+
+XC™ Circuit is source-available, not open source: see [LICENSE](LICENSE). You may use it for free (also for bots you sell), share the bots you export, and write and share your own plugins. You may fork and change the code to propose changes, such as blocks, translations or fixes, as pull requests; publishing or distributing it, or builds of it, is not allowed. Releases include THIRD-PARTY-NOTICES.txt (made by `python tools/third_party_notices.py`) for the Rust crates built in, and the Ubuntu font's licence.

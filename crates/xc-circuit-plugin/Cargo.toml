@@ -5,6 +5,8 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
+license-file.workspace = true
+publish.workspace = true
 
 [dependencies]
 # These must be exactly the egui features the editor builds with, so a plugin
