@@ -112,6 +112,8 @@ pub enum SideAsk {
     Manage,
     Reload,
     OpenFolder,
+    /// Install a plugin from a .zip file.
+    Install,
 }
 
 /// The Plugins view of the side bar: every loaded plugin, with how it runs.
@@ -122,6 +124,9 @@ pub fn side(ui: &mut egui::Ui, theme: &Theme, ed: &Editor, native: &NativeHost) 
             ui.horizontal_wrapped(|ui| {
                 if dialog::button(ui, theme, t!("Manage…")).on_hover_text(t!("Allow native plugins")).clicked() {
                     ask = Some(SideAsk::Manage);
+                }
+                if dialog::button(ui, theme, t!("Install…")).on_hover_text(t!("Install a plugin from a .zip file (or drop the file on the window)")).clicked() {
+                    ask = Some(SideAsk::Install);
                 }
                 if dialog::button(ui, theme, t!("Reload")).on_hover_text(t!("Load plugin files again")).clicked() {
                     ask = Some(SideAsk::Reload);

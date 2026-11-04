@@ -17,6 +17,7 @@ mod exchange;
 mod fonts;
 mod history;
 mod inputs;
+mod install;
 mod json_view;
 mod layout;
 mod markdown;

@@ -25,6 +25,8 @@ XC Circuit loads plugins from:
 - **Your plugins folder**: `%APPDATA%\XC Circuit\plugins` on Windows, `~/.local/share/xc-circuit/plugins` on Linux. Plugins › Open folder opens it.
 - The open **project's** `plugins/` folder: plugins that belong to one bot and travel with it.
 
+**Installing a plugin someone shared:** Plugins › *Install from Zip…* (or drop the `.zip` on the window). It goes into your plugins folder and loads right away. A zip holds the plugin folder: `plugin.toml` at its top, or in one folder at its top, as GitHub's *Download ZIP* makes them.
+
 Plugin files are watched: saving a block, a theme or an editor script reloads it right away.
 
 ## Two kinds of editor code

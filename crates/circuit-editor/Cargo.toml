@@ -31,6 +31,9 @@ indexmap.workspace = true
 open.workspace = true
 regex = "1"
 rquickjs.workspace = true
+toml.workspace = true
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 ureq = "3"
 rfd.workspace = true
 serde.workspace = true

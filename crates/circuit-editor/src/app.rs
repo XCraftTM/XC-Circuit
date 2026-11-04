@@ -661,6 +661,9 @@ impl CircuitApp {
                     ui.label(RichText::new(t!("No plugin adds commands or panels")).color(theme.text_muted));
                     ui.separator();
                 }
+                if ui.button(t!("Install from Zip…")).clicked() {
+                    self.pick_plugin_zip(ui.ctx());
+                }
                 if ui.button(t!("Manage Plugins…")).clicked() {
                     self.open_plugins();
                 }
@@ -710,6 +713,41 @@ impl CircuitApp {
         self.ed.ui_rects.insert("run".into(), run.rect);
         if run.on_hover_text(t!("Run the bot (F5)")).clicked() {
             self.bot.start(&mut self.ed, ui.ctx());
+        }
+    }
+
+    /// Plugins › Install from Zip…: asks for the file.
+    fn pick_plugin_zip(&mut self, ctx: &egui::Context) {
+        if let Some(path) = rfd::FileDialog::new().set_title(t!("Install a plugin")).add_filter(t!("Plugin (.zip)"), &["zip"]).pick_file() {
+            self.install_plugin_zip(&path, ctx);
+        }
+    }
+
+    /// Installs the plugin in a .zip into the user's plugins folder (asking
+    /// before replacing one) and loads it.
+    fn install_plugin_zip(&mut self, path: &Path, ctx: &egui::Context) {
+        use crate::install::{InstallError, install_zip};
+        let dir = crate::bot::app_data_dir().join("plugins");
+        let result = match install_zip(path, &dir, false) {
+            Err(InstallError::Exists { name, .. }) => {
+                let replace = rfd::MessageDialog::new()
+                    .set_title(t!("Install a plugin"))
+                    .set_description(tf!("{name} is installed already. Replace it with the version in this file?", name = name))
+                    .set_buttons(rfd::MessageButtons::YesNo)
+                    .show();
+                if replace != rfd::MessageDialogResult::Yes {
+                    return;
+                }
+                install_zip(path, &dir, true)
+            }
+            other => other,
+        };
+        match result {
+            Ok(done) => {
+                self.ed.log(Level::Success, tf!("Installed {name} into {folder}", name = done.name, folder = done.dir.display()));
+                self.reload_plugins(ctx);
+            }
+            Err(e) => self.ed.log(Level::Error, tf!("Couldn't install {file}: {error}", file = path.display(), error = e)),
         }
     }
 
@@ -791,6 +829,7 @@ impl CircuitApp {
             SideView::Plugins => match crate::plugin_manager::side(ui, &t, &self.ed, &self.native) {
                 Some(crate::plugin_manager::SideAsk::Manage) => self.open_plugins(),
                 Some(crate::plugin_manager::SideAsk::Reload) => self.reload_plugins(ui.ctx()),
+                Some(crate::plugin_manager::SideAsk::Install) => self.pick_plugin_zip(ui.ctx()),
                 Some(crate::plugin_manager::SideAsk::OpenFolder) => {
                     let dir = crate::bot::app_data_dir().join("plugins");
                     let _ = std::fs::create_dir_all(&dir);
@@ -1458,6 +1497,11 @@ impl eframe::App for CircuitApp {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
         self.edit_shortcuts(&ctx);
+        // A plugin's .zip dropped on the window is installed.
+        let dropped: Vec<std::path::PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect());
+        for path in dropped.into_iter().filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"))) {
+            self.install_plugin_zip(&path, &ctx);
+        }
         // A block that just ran glows and fades out, so repaint while one does;
         // its run time shows for a while, then fades. Failed blocks stay
         // marked, but their mark doesn't move: no repaints.
