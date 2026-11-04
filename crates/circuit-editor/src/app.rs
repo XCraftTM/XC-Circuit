@@ -281,11 +281,20 @@ impl CircuitApp {
             self.dock_before_start = Some(std::mem::replace(&mut self.dock, start));
         } else if self.ed.project.is_some() && showing {
             let mut dock = self.dock_before_start.take().unwrap_or_else(default_layout);
-            close_tabs(&mut dock, |t| matches!(t, Tab::Start | Tab::Canvas(_)));
+            // Where its canvases were, a placeholder keeps the place for the new ones.
+            clear_canvases(&mut dock);
             if dock.main_surface().is_empty() {
                 dock = default_layout();
             }
             self.dock = dock;
+        }
+        self.drop_placeholder();
+    }
+
+    /// Once a canvas is in its place, the placeholder that kept it goes.
+    fn drop_placeholder(&mut self) {
+        if self.dock_before_start.is_none() && self.dock.find_tab_from(|t| matches!(t, Tab::Canvas(_))).is_some() {
+            close_tabs(&mut self.dock, |t| matches!(t, Tab::Start));
         }
     }
 
@@ -306,6 +315,7 @@ impl CircuitApp {
                 }
             }
         }
+        self.drop_placeholder();
     }
 
     fn toggle_panel(&mut self, tab: Tab) {
@@ -392,7 +402,7 @@ impl CircuitApp {
             self.ed.save();
         }
         self.bot.stop(&mut self.ed);
-        close_tabs(&mut self.dock, |t| matches!(t, Tab::Canvas(_)));
+        clear_canvases(&mut self.dock);
         self.ed.close_project();
         self.native.sync(&mut self.ed, self.bundled_plugins.as_deref());
         self.watcher.watch(&self.ed.watch_dirs());
@@ -420,11 +430,19 @@ impl CircuitApp {
             self.ed.save();
         }
         self.bot.stop(&mut self.ed);
-        close_tabs(&mut self.dock, |t| matches!(t, Tab::Canvas(_)));
+        clear_canvases(&mut self.dock);
         self.ed.open_project(dir);
+        // It couldn't be opened: the project before stays, and so does its canvas.
+        if let Some(p) = self.ed.project.as_ref().filter(|p| p.root != dir)
+            && let Some(first) = p.workspaces.keys().next().cloned()
+        {
+            self.ed.actions.push(Action::OpenWorkspace(first));
+        }
         self.native.sync(&mut self.ed, self.bundled_plugins.as_deref());
         self.watcher.watch(&self.ed.watch_dirs());
         self.stored = Default::default();
+        // Its first canvas right away, where the old ones were.
+        self.apply_actions();
     }
 
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
@@ -1846,6 +1864,21 @@ fn open_canvas(dock: &mut DockState<Tab>, key: String) {
     open_center(dock, Tab::Canvas(key));
 }
 
+/// Takes the canvases out of a layout but keeps their area: in each area that
+/// has some, the first becomes a Start tab, which the next canvas to open
+/// joins (and which then goes). Closing them all would close the area too,
+/// and the next canvas would squeeze in next to the Inspector.
+fn clear_canvases(dock: &mut DockState<Tab>) {
+    while let Some(path) = dock.find_tab_from(|t| matches!(t, Tab::Canvas(_))) {
+        let has_start = dock.leaf(path.node_path()).is_ok_and(|l| l.tabs().contains(&Tab::Start));
+        if has_start {
+            dock.remove_tab(path);
+        } else if let Ok(leaf) = dock.leaf_mut(path.node_path()) {
+            leaf.tabs_mut()[path.tab.0] = Tab::Start;
+        }
+    }
+}
+
 /// Focuses a tab of the main area (canvases, Settings), or opens it there.
 fn open_center(dock: &mut DockState<Tab>, tab: Tab) {
     if let Some(path) = dock.find_tab(&tab) {
@@ -1853,12 +1886,10 @@ fn open_center(dock: &mut DockState<Tab>, tab: Tab) {
         dock.set_focused_node_and_surface(path.node_path());
         return;
     }
-    let target = dock
-        .find_tab_from(|t| matches!(t, Tab::Canvas(_)))
-        .map(|p| p.node_path())
-        .or_else(|| dock.find_tab(&Tab::Inspector).map(|p| p.node_path()));
+    let middle = dock.find_tab_from(|t| matches!(t, Tab::Canvas(_) | Tab::Start));
+    let target = middle.map(|p| p.node_path()).or_else(|| dock.find_tab(&Tab::Inspector).map(|p| p.node_path()));
     match target {
-        Some(np) if dock.find_tab_from(|t| matches!(t, Tab::Canvas(_))).is_some() => {
+        Some(np) if middle.is_some() => {
             if let Ok(leaf) = dock.leaf_mut(np) {
                 leaf.append_tab(tab.clone());
             }
@@ -2002,6 +2033,26 @@ mod tests {
             assert!(!open.contains(&Tab::Console), "with the same tabs open");
         }
         assert!(!repair_layout(&mut dock), "a whole layout is left alone");
+    }
+
+    #[test]
+    fn a_new_project_s_canvas_opens_where_the_old_ones_were() {
+        // Inspector on the right, the full height; the Console only under the canvas.
+        let mut dock = DockState::new(vec![Tab::Canvas("old".into()), Tab::Canvas("other".into())]);
+        let surface = dock.main_surface_mut();
+        let [canvas, _] = surface.split_right(NodeIndex::root(), 0.8, vec![Tab::Inspector]);
+        surface.split_below(canvas, 0.7, vec![Tab::Console]);
+        let canvas_rect_index = |dock: &DockState<Tab>| dock.find_tab_from(|t| matches!(t, Tab::Canvas(_))).map(|p| p.node_path().node);
+
+        let before = canvas_rect_index(&dock);
+        clear_canvases(&mut dock);
+        assert!(dock.find_tab_from(|t| matches!(t, Tab::Canvas(_))).is_none());
+        assert!(tree_ok(dock.main_surface()), "the canvas area stays, with a Start tab");
+        open_canvas(&mut dock, "new".into());
+        assert_eq!(canvas_rect_index(&dock), before, "in the old canvas area");
+        close_tabs(&mut dock, |t| matches!(t, Tab::Start));
+        assert_eq!(canvas_rect_index(&dock), before);
+        assert_eq!(dock.iter_all_tabs().count(), 3, "new canvas, Inspector, Console");
     }
 
     #[test]
