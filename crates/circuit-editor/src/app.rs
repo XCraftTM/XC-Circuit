@@ -37,6 +37,8 @@ pub enum Tab {
     Plugins,
     WorkspaceExport,
     WorkspaceImport,
+    /// The start page, while no project is open.
+    Start,
 }
 
 /// Where a tab belongs in the window.
@@ -90,6 +92,8 @@ pub struct CircuitApp {
     problems_found: Option<((u64, u64, String), Vec<panels::ProblemItem>)>,
     /// The dock's size last frame, so side panels keep theirs when it changes.
     dock_size: Option<egui::Vec2>,
+    /// The start page's list of recent projects, read from their folders.
+    start: crate::start_page::StartPage,
     bot: BotUi,
     stored: crate::stored::StoredView,
     watcher: crate::watch::PluginWatcher,
@@ -158,11 +162,21 @@ impl CircuitApp {
 
         let examples_dir = bundled_root.as_ref().map(|r| r.join("examples"));
         let bundled_plugins = bundled_root.map(|r| r.join("plugins"));
-        let project = last_project
-            .filter(|p| ed.prefs.reopen_last_project && p.join(circuit_core::project::PROJECT_FILE).is_file())
-            .or_else(|| examples_dir.as_ref().map(|e| e.join("DemoBot")).filter(|p| p.is_dir()));
+        // The last project; the example on the very first start; nothing (the
+        // start page) when the last one was closed.
+        let closed = last_project.as_ref().is_some_and(|p| p.as_os_str().is_empty());
+        let project = if closed {
+            None
+        } else {
+            last_project
+                .filter(|p| ed.prefs.reopen_last_project && p.join(circuit_core::project::PROJECT_FILE).is_file())
+                .or_else(|| examples_dir.as_ref().map(|e| e.join("DemoBot")).filter(|p| p.is_dir()))
+        };
         if let Some(p) = project {
             ed.open_project(&p);
+            if let Some(root) = ed.project.as_ref().map(|p| p.root.clone()) {
+                ed.prefs.remember_project(&root);
+            }
         }
         // The saved layout is used as-is; opening the project queued its first workspace.
         let dock = match saved_dock {
@@ -200,6 +214,7 @@ impl CircuitApp {
             problem_count: 0,
             problems_found: None,
             dock_size: None,
+            start: Default::default(),
             bot: BotUi::new(),
             stored: Default::default(),
             watcher,
@@ -328,7 +343,57 @@ impl CircuitApp {
         }
     }
 
+    /// Opens a project and puts it first among the recent ones.
     fn switch_project(&mut self, dir: &Path) {
+        self.load_project(dir);
+        if let Some(root) = self.ed.project.as_ref().map(|p| p.root.clone()) {
+            self.ed.prefs.remember_project(&root);
+        }
+    }
+
+    /// A recent project: opened, or taken off the list when it is gone.
+    fn open_recent(&mut self, dir: &Path) {
+        if dir.join(circuit_core::project::PROJECT_FILE).is_file() {
+            self.switch_project(dir);
+        } else {
+            self.ed.log(Level::Warn, format!("{} isn't there any more, so it's off the recent list", dir.display()));
+            self.ed.prefs.forget_project(&dir.display().to_string());
+        }
+    }
+
+    /// Saves and closes the project; the start page shows.
+    fn close_project(&mut self) {
+        if self.ed.project.is_none() {
+            return;
+        }
+        if self.ed.unsaved_now() {
+            self.ed.save();
+        }
+        self.bot.stop(&mut self.ed);
+        close_tabs(&mut self.dock, |t| matches!(t, Tab::Canvas(_)));
+        self.ed.close_project();
+        self.native.sync(&mut self.ed, self.bundled_plugins.as_deref());
+        self.watcher.watch(&self.ed.watch_dirs());
+        self.stored = Default::default();
+    }
+
+    fn start_page_pick(&mut self, pick: crate::start_page::Pick) {
+        use crate::start_page::Pick;
+        match pick {
+            Pick::New => self.new_project_dialog(),
+            Pick::Open => self.open_project_dialog(),
+            Pick::Recent(dir) => self.open_recent(&dir),
+            Pick::Forget(path) => self.ed.prefs.forget_project(&path),
+            Pick::Example => {
+                if let Some(examples) = self.examples_dir.clone() {
+                    self.switch_project(&examples.join("DemoBot"));
+                }
+            }
+        }
+    }
+
+    /// Opens a project without listing it (the tour's).
+    fn load_project(&mut self, dir: &Path) {
         if self.ed.unsaved_now() {
             self.ed.save();
         }
@@ -379,10 +444,25 @@ impl CircuitApp {
                 if ui.button(t!("Open Project…")).clicked() {
                     self.open_project_dialog();
                 }
-                if let Some(examples) = self.examples_dir.clone()
-                    && ui.button(t!("Open Example: DemoBot")).clicked()
-                {
-                    self.switch_project(&examples.join("DemoBot"));
+                let recent = self.ed.prefs.recent_projects.clone();
+                ui.add_enabled_ui(!recent.is_empty(), |ui| {
+                    ui.menu_button(t!("Open Recent"), |ui| {
+                        for path in &recent {
+                            let name = Path::new(path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
+                            if ui.button(name).on_hover_text(path).clicked() {
+                                self.open_recent(Path::new(path));
+                                ui.close();
+                            }
+                        }
+                        ui.separator();
+                        if ui.button(t!("Clear the list")).clicked() {
+                            self.ed.prefs.recent_projects.clear();
+                            ui.close();
+                        }
+                    });
+                });
+                if ui.add_enabled(self.ed.project.is_some(), egui::Button::new(t!("Close Project"))).clicked() {
+                    self.close_project();
                 }
                 ui.separator();
                 if ui.add_enabled(self.ed.project.is_some(), egui::Button::new(t!("Save")).shortcut_text("Ctrl+S")).clicked() {
@@ -539,6 +619,11 @@ impl CircuitApp {
                 }
             });
             ui.menu_button(t!("Help"), |ui| {
+                if let Some(examples) = self.examples_dir.clone()
+                    && ui.button(t!("Open Example: DemoBot")).clicked()
+                {
+                    self.switch_project(&examples.join("DemoBot"));
+                }
                 if ui.button(t!("Welcome and setup…")).clicked() {
                     self.setup = Some(crate::setup::Setup::new());
                 }
@@ -694,7 +779,7 @@ impl CircuitApp {
         self.bot.stop(&mut self.ed);
         let before = self.ed.project.as_ref().map(|p| p.root.clone());
         self.dock_before_tour = Some(self.dock.clone());
-        self.switch_project(&dir);
+        self.load_project(&dir);
         self.dock = tour_layout();
         self.ed.log.clear();
         self.tour = Some(crate::tour::Tour { step: 0, before });
@@ -849,8 +934,16 @@ impl CircuitApp {
         }
         items.push(Item::new(t!("File"), t!("New Project…"), Cmd::NewProject));
         items.push(Item::new(t!("File"), t!("Open Project…"), Cmd::OpenProject));
+        let open = self.ed.project.as_ref().map(|p| p.root.display().to_string());
+        for path in self.ed.prefs.recent_projects.iter().filter(|p| Some(*p) != open.as_ref()) {
+            let name = Path::new(path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
+            items.push(Item::new(t!("Recent"), name, Cmd::OpenRecent(PathBuf::from(path))).detail(path.clone()));
+        }
+        if self.ed.project.is_some() {
+            items.push(Item::new(t!("File"), t!("Close Project"), Cmd::CloseProject));
+        }
         if self.examples_dir.is_some() {
-            items.push(Item::new(t!("File"), t!("Open Example: DemoBot"), Cmd::OpenExample));
+            items.push(Item::new(t!("Help"), t!("Open Example: DemoBot"), Cmd::OpenExample));
         }
         items.push(Item::new(t!("File"), t!("Reload Plugins"), Cmd::ReloadPlugins));
         if self.ed.history.can_undo(&key) {
@@ -926,6 +1019,8 @@ impl CircuitApp {
                     self.switch_project(&examples.join("DemoBot"));
                 }
             }
+            Cmd::OpenRecent(path) => self.open_recent(&path),
+            Cmd::CloseProject => self.close_project(),
             Cmd::Save => {
                 self.ed.save();
                 self.bot.restart_if_running(&mut self.ed, ctx);
@@ -1251,7 +1346,7 @@ impl eframe::App for CircuitApp {
             .exact_size(24.0)
             .frame(Frame::new().fill(theme.status_bar).inner_margin(Margin::symmetric(4, 0)))
             .show(ui, |ui| self.status_bar(ui));
-        if self.ed.prefs.activity_bar && self.setup.is_none() && self.tour.is_none() {
+        if self.ed.prefs.activity_bar && self.setup.is_none() && self.tour.is_none() && self.ed.project.is_some() {
             egui::Panel::left("activity")
                 .exact_size(ACTIVITY_W)
                 .resizable(false)
@@ -1260,6 +1355,7 @@ impl eframe::App for CircuitApp {
         }
         if self.setup.is_none()
             && self.tour.is_none()
+            && self.ed.project.is_some()
             && let Some(view) = self.ed.prefs.side_view
         {
             egui::Panel::left("side-bar")
@@ -1295,6 +1391,14 @@ impl eframe::App for CircuitApp {
             let style = theme.dock_style(ui.style());
             let running = self.bot.state != BotState::Stopped;
             self.sync_dialog_tabs(ui.ctx());
+            // The start page while no project is open, in the middle.
+            match (self.ed.project.is_none(), self.dock.find_tab(&Tab::Start)) {
+                (true, None) => open_center(&mut self.dock, Tab::Start),
+                (false, Some(path)) => {
+                    self.dock.remove_tab(path);
+                }
+                _ => {}
+            }
             let focused_tab = self.dock.find_active_focused().map(|(_, t)| t.clone());
             let mut viewer = Viewer {
                 focused_tab,
@@ -1309,6 +1413,9 @@ impl eframe::App for CircuitApp {
                 settings: &mut self.settings,
                 restore: &mut self.restore,
                 asks: Vec::new(),
+                start: &mut self.start,
+                has_example: self.examples_dir.as_ref().is_some_and(|e| e.join("DemoBot").is_dir()),
+                start_pick: None,
             };
             let size = ui.available_size();
             if let Some(before) = self.dock_size
@@ -1326,10 +1433,14 @@ impl eframe::App for CircuitApp {
                 .show_leaf_collapse_buttons(false)
                 .show_inside(ui, &mut viewer);
             let asks = std::mem::take(&mut viewer.asks);
+            let start_pick = viewer.start_pick.take();
             if repair_layout(&mut self.dock) {
                 self.ed.log(Level::Warn, t!("The panel layout was damaged, so it was put back together."));
             }
             self.settings_asks(asks, ui.ctx());
+            if let Some(pick) = start_pick {
+                self.start_page_pick(pick);
+            }
         });
         }
 
@@ -1410,9 +1521,8 @@ impl eframe::App for CircuitApp {
             Some(t) => t.before.clone(),
             None => self.ed.project.as_ref().map(|p| p.root.clone()),
         };
-        if let Some(root) = project {
-            eframe::set_value(storage, KEY_PROJECT, &root);
-        }
+        // An empty path: closed on purpose, so the start page shows next time.
+        eframe::set_value(storage, KEY_PROJECT, &project.unwrap_or_default());
     }
 }
 
@@ -1436,9 +1546,17 @@ struct Viewer<'a> {
     settings: &'a mut crate::settings::SettingsView,
     restore: &'a mut crate::restore::RestoreView,
     asks: Vec<crate::settings::Ask>,
+    start: &'a mut crate::start_page::StartPage,
+    has_example: bool,
+    start_pick: Option<crate::start_page::Pick>,
 }
 
 impl TabViewer for Viewer<'_> {
+    /// The start page goes when a project opens, not by its ×.
+    fn is_closeable(&self, tab: &Tab) -> bool {
+        !matches!(tab, Tab::Start)
+    }
+
     type Tab = Tab;
 
     fn id(&mut self, tab: &mut Tab) -> Id {
@@ -1460,6 +1578,7 @@ impl TabViewer for Viewer<'_> {
             Tab::BotSettings => t!("Bot settings").into(),
             Tab::Export => t!("Export bot").into(),
             Tab::Plugins => t!("Plugins").into(),
+            Tab::Start => t!("Start").into(),
             Tab::WorkspaceExport => t!("Export workspaces").into(),
             Tab::WorkspaceImport => t!("Import workspaces").into(),
         }
@@ -1512,6 +1631,12 @@ impl TabViewer for Viewer<'_> {
             Tab::Canvas(key) => {
                 let key = key.clone();
                 canvas::show(ui, self.ed, &key);
+            }
+            Tab::Start => {
+                let recent = self.ed.prefs.recent_projects.clone();
+                if let Some(pick) = crate::start_page::show(ui, &self.ed.theme, self.start, &recent, &self.ed.reg, self.has_example) {
+                    self.start_pick = Some(pick);
+                }
             }
             Tab::EmbedBuilder => crate::embed::tab(ui, self.ed),
             Tab::LayoutBuilder => crate::layout::tab(ui, self.ed),

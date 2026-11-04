@@ -37,6 +37,32 @@ pub struct Prefs {
     pub side_view: Option<SideView>,
     /// Where File › New Project put the last project.
     pub new_project_location: Option<String>,
+    /// Projects opened lately, the latest first (folders).
+    pub recent_projects: Vec<String>,
+}
+
+/// How many projects File › Open Recent and the start page remember.
+pub const RECENT_KEPT: usize = 10;
+
+impl Prefs {
+    /// Puts a project first in the recent list.
+    pub fn remember_project(&mut self, root: &std::path::Path) {
+        let path = root.display().to_string();
+        self.recent_projects.retain(|p| !same_folder(p, &path));
+        self.recent_projects.insert(0, path);
+        self.recent_projects.truncate(RECENT_KEPT);
+    }
+
+    /// Takes a project off the recent list.
+    pub fn forget_project(&mut self, root: &str) {
+        self.recent_projects.retain(|p| !same_folder(p, root));
+    }
+}
+
+/// Whether two paths name the same folder (Windows: any capitals, either slash).
+fn same_folder(a: &str, b: &str) -> bool {
+    let norm = |p: &str| p.trim_end_matches(['/', '\\']).replace('\\', "/").to_lowercase();
+    norm(a) == norm(b)
 }
 
 /// The views of the side bar, one shown at a time (picked in the activity bar).
@@ -70,7 +96,7 @@ impl SideView {
 
 impl Default for Prefs {
     fn default() -> Self {
-        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), side_view: Some(SideView::Workspaces), new_project_location: None }
+        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), side_view: Some(SideView::Workspaces), new_project_location: None, recent_projects: Vec::new() }
     }
 }
 

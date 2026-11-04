@@ -10,6 +10,8 @@ pub enum Cmd {
     NewProject,
     OpenProject,
     OpenExample,
+    OpenRecent(std::path::PathBuf),
+    CloseProject,
     Save,
     ReloadPlugins,
     Undo,

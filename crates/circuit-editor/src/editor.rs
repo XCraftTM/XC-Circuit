@@ -253,6 +253,31 @@ impl Editor {
         }
     }
 
+    /// Closes the open project (save first: unsaved changes are dropped).
+    /// The app shows its start page then.
+    pub fn close_project(&mut self) {
+        let Some(project) = self.project.take() else { return };
+        self.log(Level::Info, format!("Closed {}", project.meta.name));
+        self.history.clear();
+        self.recovery_offer = None;
+        self.edited = false;
+        self.selected = None;
+        self.selected_wire = None;
+        self.multi.clear();
+        self.views.clear();
+        self.picker = None;
+        self.active_workspace = None;
+        self.activity.clear();
+        self.embed_edit = None;
+        self.layout_edit = None;
+        self.slash_edit = None;
+        self.ws_export = None;
+        self.ws_import = None;
+        // Without the project's own plugins (DemoBot has one).
+        self.reload_plugins();
+        self.refresh_define_ctx();
+    }
+
     pub fn save(&mut self) {
         let Some(project) = self.project.as_mut() else { return };
         match project.save() {
@@ -990,6 +1015,21 @@ mod tests {
 
     /// The starter templates and the example load, use blocks that exist, and
     /// every wire connects an output (or flow) to an input that the block has.
+    #[test]
+    fn recent_projects_list() {
+        let mut prefs = crate::prefs::Prefs::default();
+        for p in ["C:/a", "C:/b", "C:\\A\\"] {
+            prefs.remember_project(Path::new(p));
+        }
+        assert_eq!(prefs.recent_projects, ["C:\\A\\", "C:/b"], "the same folder once, the latest first");
+        for i in 0..20 {
+            prefs.remember_project(Path::new(&format!("C:/p{i}")));
+        }
+        assert_eq!(prefs.recent_projects.len(), crate::prefs::RECENT_KEPT);
+        prefs.forget_project("c:/p19");
+        assert_eq!(prefs.recent_projects[0], "C:/p18");
+    }
+
     #[test]
     fn templates_are_wired_correctly() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");

@@ -34,6 +34,7 @@ mod reveal;
 mod sidebar;
 mod plugin_manager;
 mod slash;
+mod start_page;
 mod stored;
 mod theme;
 mod titlebar;
