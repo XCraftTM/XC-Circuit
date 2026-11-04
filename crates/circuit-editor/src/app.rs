@@ -170,7 +170,16 @@ impl CircuitApp {
         // The last project; the example on the very first start; nothing (the
         // start page) when the last one was closed.
         let closed = last_project.as_ref().is_some_and(|p| p.as_os_str().is_empty());
-        let project = if closed {
+        // A project folder (or its circuit.json) given on the command line, or
+        // in XC_CIRCUIT_PROJECT, opens instead.
+        let asked = std::env::var_os("XC_CIRCUIT_PROJECT")
+            .map(PathBuf::from)
+            .or_else(|| std::env::args_os().nth(1).map(PathBuf::from))
+            .map(|p| if p.ends_with(circuit_core::project::PROJECT_FILE) { p.parent().map(Path::to_path_buf).unwrap_or(p) } else { p })
+            .filter(|p| p.join(circuit_core::project::PROJECT_FILE).is_file());
+        let project = if let Some(p) = asked {
+            Some(p)
+        } else if closed {
             None
         } else {
             last_project
