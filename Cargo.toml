@@ -17,12 +17,12 @@ circuit-plugins = { path = "crates/circuit-plugins" }
 circuit-runner = { path = "crates/circuit-runner" }
 
 anyhow = "1"
-dirs = "6"
+dirs = "7"
 glob = "0.3"
 indexmap = { version = "2", features = ["serde"] }
 keyring = "4"
 open = "5"
-rfd = "0.15"
+rfd = "0.17"
 rquickjs = "0.14"
 serde = { version = "1", features = ["derive"] }
 # preserve_order keeps fields, outputs and values in the order block files declare them.
