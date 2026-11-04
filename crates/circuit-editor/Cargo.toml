@@ -19,7 +19,7 @@ circuit-runner.workspace = true
 anyhow.workspace = true
 arboard = "3"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-libloading = "0.8"
+libloading = "0.9"
 xc-circuit-plugin = { path = "../xc-circuit-plugin" }
 notify = "8"
 dirs.workspace = true
