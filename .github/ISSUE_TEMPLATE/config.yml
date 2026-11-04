@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Docs and tutorials
+    url: https://xcrafttm.github.io/XC-Circuit/
+    about: How to build bots, write blocks and plugins, and the full API reference.
+  - name: Security problem
+    url: https://github.com/XCraftTM/XC-Circuit/security/advisories/new
+    about: Please report security problems privately, not as a public issue.

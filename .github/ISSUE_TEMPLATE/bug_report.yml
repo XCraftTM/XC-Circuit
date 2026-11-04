@@ -1,0 +1,60 @@
+name: Bug report
+description: Something doesn't work as it should, or XC Circuit crashed.
+title: "Bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! The more of this you fill in, the faster it can be fixed.
+        **Never paste a bot token or other secrets here.**
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, and what went wrong?
+      placeholder: When I drag a wire from Send Message to …, the app …
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to make it happen again
+      placeholder: |
+        1. Open DemoBot
+        2. Select the Rank command workspace
+        3. …
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect instead?
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where?
+      options:
+        - The editor (canvas, blocks, windows)
+        - Running a bot from the editor
+        - An exported bot
+        - Plugins or editor scripts
+        - Installing or updating
+        - The website or docs
+        - Somewhere else
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version and system
+      description: Help › About shows the version. Help › Report a Bug fills this in for you.
+      placeholder: 0.1.0 (Early Access) · windows x86_64
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console output or crash log
+      description: |
+        Copy from the Console panel, or attach the crash log (Help › Open Crash Logs).
+        You can drag files and screenshots into this box.
+      render: text

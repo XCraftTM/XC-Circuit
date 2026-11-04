@@ -1,0 +1,33 @@
+name: Feature idea
+description: A block, a window, a plugin feature or anything else you'd like XC Circuit to have.
+title: "Idea: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      placeholder: A block that …
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: What would you use it for?
+      description: The bot or situation you have in mind helps a lot.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of idea is it?
+      options:
+        - A new block or block option
+        - The editor
+        - Discord or Fluxer features
+        - Plugins and the plugin API
+        - Docs and tutorials
+        - Something else
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else?
+      description: Screenshots, links to how another app does it, sketches …
