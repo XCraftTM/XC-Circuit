@@ -1,0 +1,11 @@
+id          = "fun.desk-pet"
+name        = "Desk Pet"
+version     = "1.0.0"
+author      = "XC Team"
+description = "A little critter that lives on top of the editor. Drag it around; click it and it makes a sound. It naps when you leave it alone and worries when your bot has an error."
+
+[engines]
+circuit = "^1.0"
+
+[editor]
+script = "editor.js"
