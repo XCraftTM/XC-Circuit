@@ -30,6 +30,7 @@ image.workspace = true
 indexmap.workspace = true
 open.workspace = true
 regex = "1"
+rquickjs.workspace = true
 ureq = "3"
 rfd.workspace = true
 serde.workspace = true

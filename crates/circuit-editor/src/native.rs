@@ -1,7 +1,12 @@
-//! Native Rust plugins: `.dll` / `.so` libraries built with the
-//! `xc-circuit-plugin` crate. They are off until the user allows native
-//! plugins, and plugins outside the app's own folder must also be allowed one
-//! by one, because native code can do anything the editor can.
+//! Plugins with editor code: JavaScript plugins (an `editor.js`, see
+//! [`crate::script`]) and native Rust plugins (`.dll` / `.so` libraries built
+//! with the `xc-circuit-plugin` crate). Both add commands, panels and checks
+//! the same way.
+//!
+//! Scripts run sandboxed and load right away. Native plugins are off until
+//! the user allows native plugins, and plugins outside the app's own folder
+//! must also be allowed one by one, because native code can do anything the
+//! editor can.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::CStr;
@@ -43,11 +48,25 @@ struct Instance {
     generation: u32,
 }
 
+/// How a plugin's editor code runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kind {
+    /// JavaScript in a sandbox.
+    Script,
+    /// A compiled Rust library.
+    Native,
+}
+
 pub struct NativePlugin {
     pub id: String,
     pub name: String,
     pub dir: PathBuf,
+    pub kind: Kind,
     library_name: String,
+    /// The script, relative to the plugin folder.
+    script: String,
+    /// The files the script read the last time it loaded, to reload it when one changes.
+    watch: Vec<PathBuf>,
     /// Shipped in the app's own plugins folder.
     pub bundled: bool,
     pub status: Status,
@@ -106,6 +125,13 @@ fn stamp(path: &Path) -> Option<Stamp> {
     Some((m.modified().ok()?, m.len()))
 }
 
+/// One stamp for several files: the latest change, and the sizes and count.
+fn stamp_all(paths: &[PathBuf]) -> Option<Stamp> {
+    let stamps: Vec<Stamp> = paths.iter().filter_map(|p| stamp(p)).collect();
+    let latest = stamps.iter().map(|s| s.0).max()?;
+    Some((latest, stamps.iter().map(|s| s.1).sum::<u64>() + ((stamps.len() as u64) << 48)))
+}
+
 /// Where a plugin's library is looked for: its own folder, its `native/`
 /// folder, then next to the editor (where `cargo build` puts workspace plugins).
 fn find_library(dir: &Path, name: &str) -> Option<PathBuf> {
@@ -157,11 +183,16 @@ impl NativeHost {
     /// plugins folder.
     pub fn sync(&mut self, ed: &mut Editor, bundled_plugins: Option<&Path>) {
         let mut old: Vec<NativePlugin> = std::mem::take(&mut self.plugins);
-        let found: Vec<_> = ed.reg.plugins.iter().filter(|lp| lp.manifest.native.is_some()).cloned().collect();
+        let found: Vec<_> = ed.reg.plugins.iter().filter(|lp| lp.manifest.native.is_some() || lp.manifest.editor.is_some()).cloned().collect();
         for lp in &found {
-            let Some(native) = &lp.manifest.native else { continue };
             let m = &lp.manifest;
-            let prev = old.iter().position(|p| p.id == m.id).map(|i| old.swap_remove(i));
+            // A plugin with both runs its native part.
+            let (kind, library, script) = match (&m.native, &m.editor) {
+                (Some(n), _) => (Kind::Native, n.library.clone(), String::new()),
+                (None, Some(e)) => (Kind::Script, String::new(), if e.script.is_empty() { "editor.js".to_string() } else { e.script.clone() }),
+                (None, None) => continue,
+            };
+            let prev = old.iter().position(|p| p.id == m.id && p.kind == kind && p.dir == lp.dir).map(|i| old.swap_remove(i));
             let bundled = match bundled_plugins {
                 Some(b) => lp.dir.starts_with(b),
                 None => prev.as_ref().is_some_and(|p| p.bundled),
@@ -170,7 +201,10 @@ impl NativeHost {
                 id: m.id.clone(),
                 name: m.name.clone(),
                 dir: lp.dir.clone(),
-                library_name: native.library.clone(),
+                kind,
+                library_name: library.clone(),
+                script: script.clone(),
+                watch: Vec::new(),
                 bundled,
                 status: Status::Off,
                 instance: None,
@@ -178,14 +212,23 @@ impl NativeHost {
                 failed: None,
             });
             plugin.bundled = bundled;
-            plugin.library_name = native.library.clone();
+            plugin.name = m.name.clone();
+            plugin.library_name = library;
+            if plugin.script != script {
+                plugin.script = script;
+                plugin.watch.clear();
+            }
             self.refresh(&mut plugin, ed);
             self.plugins.push(plugin);
         }
     }
 
-    /// Loads the plugin if it's allowed and its library is new or changed.
+    /// Loads the plugin if it's allowed and its library or script is new or changed.
     fn refresh(&mut self, p: &mut NativePlugin, ed: &mut Editor) {
+        if p.kind == Kind::Script {
+            Self::refresh_script(p, ed);
+            return;
+        }
         if !self.allow {
             p.instance = None;
             p.status = Status::Off;
@@ -243,6 +286,56 @@ impl NativeHost {
         }
     }
 
+    /// Loads a script plugin, or loads it again when one of its files changed.
+    fn refresh_script(p: &mut NativePlugin, ed: &mut Editor) {
+        let main = p.dir.join(&p.script);
+        if !main.is_file() {
+            p.instance = None;
+            p.status = Status::Failed(format!("{} is missing", p.script));
+            return;
+        }
+        if p.watch.is_empty() {
+            p.watch = vec![main.clone()];
+        }
+        let st = stamp_all(&p.watch);
+        if p.instance.is_none() && st.is_some() && p.failed == st {
+            return;
+        }
+        if let Some(i) = &p.instance
+            && Some(i.stamp) == st
+        {
+            return;
+        }
+        // A file being saved right now is picked up on a later poll.
+        let changed = p.instance.is_some() || p.failed.is_some();
+        if changed && st.is_some_and(|(t, _)| t.elapsed().unwrap_or_default() < Duration::from_millis(150)) {
+            return;
+        }
+        let generation = p.instance.as_ref().map_or(0, |i| i.generation + 1);
+        p.instance = None;
+        let (result, files) = crate::script::load(&p.name, &p.dir, &p.script);
+        p.watch = files;
+        let st = stamp_all(&p.watch);
+        match result {
+            Ok(obj) => {
+                let obj: Box<dyn PluginObject> = Box::new(obj);
+                let commands = obj.commands().unwrap_or_default();
+                let panels = obj.panels().unwrap_or_default();
+                p.instance = Some(Instance { obj, commands, panels, library: main, stamp: st.unwrap_or((SystemTime::UNIX_EPOCH, 0)), generation });
+                p.status = Status::Loaded;
+                p.failed = None;
+                if changed {
+                    ed.log(Level::Info, format!("Reloaded {}", p.name));
+                }
+            }
+            Err(e) => {
+                p.failed = st;
+                ed.log(Level::Error, format!("{} couldn't start: {e}", p.name));
+                p.status = Status::Failed(e);
+            }
+        }
+    }
+
     fn load(&mut self, lib_path: &Path) -> Result<Box<dyn PluginObject>, Status> {
         // Load a copy, so the original can be rebuilt while the editor runs.
         std::fs::create_dir_all(&self.copies).map_err(|e| Status::Failed(e.to_string()))?;
@@ -281,7 +374,8 @@ impl NativeHost {
         match f(inst.obj.as_mut(), &mut host) {
             Ok(r) => Some(r),
             Err(e) => {
-                ed.log(Level::Error, format!("{} crashed: {e}. It stays off until it's rebuilt.", p.name));
+                let until = if p.kind == Kind::Script { "its files change" } else { "it's rebuilt" };
+                ed.log(Level::Error, format!("{} crashed: {e}. It stays off until {until}.", p.name));
                 p.failed = Some(inst.stamp);
                 p.instance = None;
                 p.status = Status::Failed(format!("crashed: {e}"));
@@ -336,7 +430,7 @@ impl NativeHost {
             ui.label(egui::RichText::new("See Plugins › Manage Plugins.").weak());
             return;
         };
-        let id = egui::Id::new(("native-panel", plugin, panel, inst.generation));
+        let id = egui::Id::new(("plugin-panel", plugin, panel, inst.generation));
         self.call(i, ed, bot_running, |o, h| ui.push_id(id, |ui| o.panel_ui(panel, ui, h)).inner);
     }
 
@@ -362,7 +456,10 @@ fn placeholder() -> NativePlugin {
         id: String::new(),
         name: String::new(),
         dir: PathBuf::new(),
+        kind: Kind::Native,
         library_name: String::new(),
+        script: String::new(),
+        watch: Vec::new(),
         bundled: false,
         status: Status::Off,
         instance: None,
@@ -478,6 +575,48 @@ mod tests {
     use circuit_core::Project;
 
     use super::*;
+
+    /// Script plugins load without approval and reload when their file changes.
+    #[test]
+    fn runs_script_plugins_and_reloads_them() {
+        let tmp = std::env::temp_dir().join(format!("xc-script-host-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let dir = tmp.join("plugins").join("t.script");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("plugin.toml"), "id = \"t.script\"\nname = \"Script Test\"\nversion = \"1.0.0\"\n\n[editor]\nscript = \"editor.js\"\n").unwrap();
+        let script = |v: &str| format!("xc.command({{ id: 't.say', title: 'Say', run() {{ xc.log('{v}', xc.project().name) }} }});\nxc.panel({{ id: 'p', title: 'Panel {v}', render(ui) {{ ui.text('{v}') }} }});");
+        std::fs::write(dir.join("editor.js"), script("v1")).unwrap();
+
+        let mut ed = Editor::new(vec![tmp.join("plugins")], None).unwrap();
+        Project::create(tmp.join("bot"), "Test Bot", "none").unwrap();
+        ed.open_project(&tmp.join("bot"));
+        let mut host = NativeHost::new(false, BTreeSet::new(), BTreeMap::new());
+        host.sync(&mut ed, None);
+        assert_eq!((host.plugins[0].kind, &host.plugins[0].status), (Kind::Script, &Status::Loaded), "{:?}", ed.log);
+        assert_eq!(host.panel_title("t.script", "p").as_deref(), Some("Panel v1"));
+        assert!(host.run_command(&mut ed, "t.say", false));
+        assert_eq!(ed.log.last().unwrap().text, "v1 Test Bot");
+
+        // Saved again: loaded again, with the new commands and panels.
+        std::thread::sleep(Duration::from_millis(50));
+        std::fs::write(dir.join("editor.js"), script("v2")).unwrap();
+        std::thread::sleep(Duration::from_millis(200));
+        host.sync(&mut ed, None);
+        assert!(ed.log.iter().any(|l| l.text == "Reloaded Script Test"), "{:?}", ed.log);
+        assert_eq!(host.panel_title("t.script", "p").as_deref(), Some("Panel v2"));
+        host.run_command(&mut ed, "t.say", false);
+        assert_eq!(ed.log.last().unwrap().text, "v2 Test Bot");
+
+        // A broken file: the error is said once, and the plugin waits for the next save.
+        std::fs::write(dir.join("editor.js"), "xc.command(").unwrap();
+        std::thread::sleep(Duration::from_millis(200));
+        host.sync(&mut ed, None);
+        assert!(matches!(&host.plugins[0].status, Status::Failed(e) if e.contains("at editor.js:2") && !e.contains("eval_script")), "{:?}", host.plugins[0].status);
+        let errors = ed.log.len();
+        host.sync(&mut ed, None);
+        assert_eq!(ed.log.len(), errors);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 
     /// Builds the example plugin, puts it in a plugin folder of its own and
     /// drives it through the editor-side host.

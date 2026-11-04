@@ -20,6 +20,15 @@ pub struct PluginManifest {
     pub contributes: Contributes,
     /// A native Rust part, loaded by the editor (see the xc-circuit-plugin crate).
     pub native: Option<NativeManifest>,
+    /// A JavaScript part that runs in the editor: commands, panels and checks.
+    pub editor: Option<EditorManifest>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct EditorManifest {
+    /// The script, relative to the plugin folder (`editor.js` or `editor.ts`).
+    pub script: String,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]

@@ -5,7 +5,7 @@ use eframe::egui::{self, Frame, Margin, RichText};
 
 use crate::dialog::{self, Part};
 use crate::editor::Editor;
-use crate::native::{NativeHost, Status, status_text};
+use crate::native::{Kind, NativeHost, Status, status_text};
 use crate::theme::Theme;
 
 /// The changes made in the Plugins tab, applied when it is saved.
@@ -49,8 +49,11 @@ pub fn tab(ui: &mut egui::Ui, theme: &Theme, ed: &Editor, native: &NativeHost, d
                         ui.horizontal(|ui| {
                             ui.label(RichText::new(&m.name).size(13.5).strong().color(theme.text));
                             ui.label(RichText::new(format!("v{} · {}", m.version, m.author)).size(11.0).color(theme.text_muted));
+                            let script = np.is_some_and(|p| p.kind == Kind::Script);
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| match np.map(|p| &p.status) {
                                 None => dialog::pill(ui, t!("Blocks & config"), theme.text_muted),
+                                Some(Status::Loaded) if script => dialog::pill(ui, t!("Script · running"), theme.action),
+                                Some(_) if script => dialog::pill(ui, t!("Script · error"), theme.error),
                                 Some(Status::Loaded) => dialog::pill(ui, t!("Native · running"), theme.action),
                                 Some(Status::NeedsApproval) if approved => {
                                     if dialog::secondary_button(ui, theme, t!("Undo")).clicked() {
@@ -130,8 +133,12 @@ pub fn side(ui: &mut egui::Ui, theme: &Theme, ed: &Editor, native: &NativeHost) 
             ui.add_space(8.0);
             for lp in &ed.reg.plugins {
                 let m = &lp.manifest;
-                let (status, color) = match native.plugins.iter().find(|p| p.id == m.id).map(|p| &p.status) {
+                let np = native.plugins.iter().find(|p| p.id == m.id);
+                let script = np.is_some_and(|p| p.kind == Kind::Script);
+                let (status, color) = match np.map(|p| &p.status) {
                     None => (t!("Blocks & config"), theme.text_muted),
+                    Some(Status::Loaded) if script => (t!("Script · running"), theme.action),
+                    Some(_) if script => (t!("Script · error"), theme.error),
                     Some(Status::Loaded) => (t!("Native · running"), theme.action),
                     Some(Status::NeedsApproval) => (t!("Native · needs your OK"), theme.warning),
                     Some(Status::Off) => (t!("Native · off"), theme.text_muted),

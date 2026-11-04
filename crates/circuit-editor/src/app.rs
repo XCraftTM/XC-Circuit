@@ -658,7 +658,7 @@ impl CircuitApp {
                     ui.separator();
                 }
                 if !any {
-                    ui.label(RichText::new(t!("No native plugins are running")).color(theme.text_muted));
+                    ui.label(RichText::new(t!("No plugin adds commands or panels")).color(theme.text_muted));
                     ui.separator();
                 }
                 if ui.button(t!("Manage Plugins…")).clicked() {
@@ -720,7 +720,7 @@ impl CircuitApp {
         self.native.sync(&mut self.ed, self.bundled_plugins.as_deref());
     }
 
-    /// Bot events, checks and queued commands for native plugins.
+    /// Bot events, checks and queued commands for script and native plugins.
     fn run_native(&mut self, ctx: &egui::Context) {
         let running = self.bot.state != BotState::Stopped;
         for ev in std::mem::take(&mut self.bot.events) {
