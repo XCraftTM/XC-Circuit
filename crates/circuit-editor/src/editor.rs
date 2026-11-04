@@ -78,6 +78,9 @@ pub struct Editor {
     pub active_workspace: Option<String>,
     /// What blocks and zones of the running bot did recently, keyed by (workspace, id).
     pub activity: HashMap<(String, String), crate::bot::Activity>,
+    /// The last value each output gave while the bot ran, as a short text,
+    /// and when: (workspace, block or zone, output) → value.
+    pub wire_values: HashMap<(String, String, String), (String, std::time::Instant)>,
     /// Every selected block in the selected workspace (includes `selected`).
     pub multi: HashSet<String>,
     /// Selected notes: (workspace, note).
@@ -128,6 +131,7 @@ impl Editor {
             actions: Vec::new(),
             active_workspace: None,
             activity: HashMap::new(),
+            wire_values: HashMap::new(),
             multi: HashSet::new(),
             selected_notes: HashSet::new(),
             selected_wire: None,

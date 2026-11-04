@@ -53,6 +53,16 @@ impl Activity {
     }
 }
 
+/// How long ago something happened: "just now", "12 s ago", "3 min ago".
+pub fn ago(d: Duration) -> String {
+    match d.as_secs() {
+        0..=2 => t!("just now").to_string(),
+        s @ 3..=59 => tf!("{seconds} s ago", seconds = s),
+        s @ 60..=3599 => tf!("{minutes} min ago", minutes = s / 60),
+        s => tf!("{hours} h ago", hours = s / 3600),
+    }
+}
+
 /// A run time as people read it: 0.4 ms, 12 ms, 1.25 s.
 pub fn format_ms(ms: f64) -> String {
     if ms < 10.0 {
@@ -177,6 +187,7 @@ impl BotUi {
         self.state = BotState::Starting;
         self.question = None;
         ed.activity.clear();
+        ed.wire_values.clear();
         if let Some(s) = self.session.take() {
             s.stop();
             // A bot still stopping from an earlier restart is waited for instead.
@@ -649,7 +660,7 @@ fn plugin_event(ev: &BotEvent) -> Option<xc_circuit_plugin::BotEvent> {
             },
             text: text.clone(),
         },
-        BotEvent::Node { ws, node, phase, ms, error } => P::Block { workspace: ws.clone(), node: node.clone(), phase: phase.clone(), ms: *ms, error: error.clone() },
+        BotEvent::Node { ws, node, phase, ms, error, .. } => P::Block { workspace: ws.clone(), node: node.clone(), phase: phase.clone(), ms: *ms, error: error.clone() },
         _ => return None,
     })
 }
@@ -667,9 +678,12 @@ fn handle_event(ed: &mut Editor, ev: BotEvent) {
             line.target = ws.zip(node);
             ed.push_log(line);
         }
-        BotEvent::Node { ws, node, phase, error, ms } => {
-            let key = (ws, node);
+        BotEvent::Node { ws, node, phase, error, ms, outputs } => {
             let now = Instant::now();
+            for (pin, value) in outputs.into_iter().flatten() {
+                ed.wire_values.insert((ws.clone(), node.clone(), pin), (value, now));
+            }
+            let key = (ws, node);
             // The last run time stays until the block finishes again.
             let last = ed.activity.get(&key).and_then(|a| a.ms);
             let activity = match phase.as_str() {
@@ -679,7 +693,10 @@ fn handle_event(ed: &mut Editor, ev: BotEvent) {
             };
             ed.activity.insert(key, activity);
         }
-        BotEvent::Zone { ws, zone, phase, error } => {
+        BotEvent::Zone { ws, zone, phase, error, outputs } => {
+            for (pin, value) in outputs.into_iter().flatten() {
+                ed.wire_values.insert((ws.clone(), zone.clone(), pin), (value, Instant::now()));
+            }
             let error = if phase == "error" { error.or(Some("failed".into())) } else { None };
             ed.activity.insert((ws, zone), Activity { at: Instant::now(), error, ms: None });
         }
@@ -712,7 +729,7 @@ mod tests {
     fn blocks_show_how_long_they_took() {
         assert_eq!((format_ms(0.42), format_ms(12.4), format_ms(1250.0)), ("0.4 ms".into(), "12 ms".into(), "1.25 s".into()));
         let mut ed = Editor::new(Vec::new(), None).unwrap();
-        let node = |phase: &str, ms: Option<f64>| BotEvent::Node { ws: "w".into(), node: "1".into(), phase: phase.into(), ms, error: None };
+        let node = |phase: &str, ms: Option<f64>| BotEvent::Node { ws: "w".into(), node: "1".into(), phase: phase.into(), ms, error: None, outputs: None };
         handle_event(&mut ed, node("enter", None));
         assert!(ed.activity[&("w".into(), "1".into())].time_shown().is_none(), "no time before it finished");
         handle_event(&mut ed, node("exit", Some(12.0)));

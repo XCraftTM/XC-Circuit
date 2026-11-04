@@ -140,6 +140,9 @@ setTimeout(() => {
   assert.ok(events.some((e) => e.t === "node" && e.node === "yes" && e.phase === "exit"), "node events are emitted");
   const math = events.find((e) => e.t === "node" && e.node === "m" && e.phase === "exit");
   assert.ok(math && typeof math.ms === "number", "value blocks report their runs, with the time they took");
+  assert.equal(math.outputs.result, "42", "and what they gave, for wire tooltips");
+  const zoneError = events.find((e) => e.t === "zone" && e.phase === "error");
+  assert.equal(zoneError.outputs.message, JSON.stringify(zoneError.error), "a caught error's message too");
   assert.ok(events.some((e) => e.t === "zone" && e.phase === "error"), "zone error event");
 
   setTimeout(() => {

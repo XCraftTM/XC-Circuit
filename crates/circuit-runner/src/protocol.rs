@@ -19,12 +19,17 @@ pub enum BotEvent {
         phase: String,
         ms: Option<f64>,
         error: Option<String>,
+        /// On exit: a short text for each output, for wire tooltips.
+        #[serde(default)]
+        outputs: Option<std::collections::BTreeMap<String, String>>,
     },
     Zone {
         ws: String,
         zone: String,
         phase: String,
         error: Option<String>,
+        #[serde(default)]
+        outputs: Option<std::collections::BTreeMap<String, String>>,
     },
     Ready {},
     /// The bot needs a decision (such as how to start when its saved data is

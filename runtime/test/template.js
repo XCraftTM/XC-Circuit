@@ -3,7 +3,7 @@
 "use strict";
 
 const assert = require("assert");
-const { fillTemplate, coerce, compare } = require("../circuit-runtime.js");
+const { fillTemplate, coerce, compare, preview } = require("../circuit-runtime.js");
 
 const run = { event: { user: "from the event", guild: { name: "XC" } }, vars: new Map([["count", 3]]), outputs: new Map([["n1", { result: 42 }]]) };
 
@@ -74,5 +74,20 @@ assert.ok(compare(" 2.5 ", "number") && !compare("2a", "number") && !compare(NaN
 assert.ok(compare("yes", "true") && compare("false", "false") && compare(0, "false"));
 assert.ok(compare(null, "eq", "") && !compare(null, "eq", 0));
 assert.throws(() => compare(1, "nope", 1), /Unknown check/);
+
+// Values in a few words, for wire tooltips.
+class GuildMember {
+  constructor() {
+    this.id = "123";
+    this.displayName = "Alex";
+  }
+}
+assert.strictEqual(preview("hi"), '"hi"');
+assert.strictEqual(preview(42), "42");
+assert.strictEqual(preview(undefined), "nothing");
+assert.strictEqual(preview(new GuildMember()), "GuildMember Alex (123)");
+assert.strictEqual(preview([1, "a", null, 4]), 'list of 4: 1, "a", null, …');
+assert.strictEqual(preview({ a: 1 }), "{ a: 1 }");
+assert.ok(preview("x".repeat(1000)).length < 320, "long texts are cut");
 
 console.log("template ok");

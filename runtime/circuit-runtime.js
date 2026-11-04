@@ -322,7 +322,7 @@ class Graph {
     const run = new Run(this, outputs);
     run.setOutputs(node.id, outputs);
     this.rt.emit("node", { ws: this.key, node: node.id, phase: "enter", run: run.id });
-    this.rt.emit("node", { ws: this.key, node: node.id, phase: "exit", run: run.id, ms: 0 });
+    this.rt.emit("node", { ws: this.key, node: node.id, phase: "exit", run: run.id, ms: 0, outputs: this.rt.debug ? previews(outputs) : undefined });
     return this.follow(run, node.id, "next").then(
       () => run.returned,
       (e) => {
@@ -363,7 +363,7 @@ class Graph {
       const t0 = performance.now();
       const result = await node.def.run({ fields, ctx, node: { id: node.id, workspace: this.key } });
       if (result && typeof result === "object") run.setOutputs(node.id, result);
-      this.rt.emit("node", { ws: this.key, node: node.id, phase: "exit", run: run.id, ms: +(performance.now() - t0).toFixed(1) });
+      this.rt.emit("node", { ws: this.key, node: node.id, phase: "exit", run: run.id, ms: +(performance.now() - t0).toFixed(1), outputs: this.rt.debug ? previews(run.outputs.get(node.id)) : undefined });
       if (!node.def.flows) await this.follow(run, node.id, "next", path);
     } catch (e) {
       if (!e.__xcReported) {
@@ -411,7 +411,7 @@ class Graph {
     }
     const details = describeError(lastError, lastError.__xcNode);
     run.setOutputs(zoneId, { message: details.message, details });
-    this.rt.emit("zone", { ws: this.key, zone: zoneId, phase: "error", run: run.id, error: details.message });
+    this.rt.emit("zone", { ws: this.key, zone: zoneId, phase: "error", run: run.id, error: details.message, outputs: this.rt.debug ? previews({ message: details.message, details }) : undefined });
     const handlers = this.flowsOut.get(`${zoneId}.error`) || [];
     if (!handlers.length) {
       this.rt.log.warn(`${this.name} › Try ${zone.title || zoneId} caught: ${details.message}`);
@@ -441,7 +441,7 @@ class Graph {
           this.rt.emit("node", { ws: this.key, node: node.id, phase: "enter", run: run.id });
           const t0 = performance.now();
           const out = (await node.def.run({ fields, ctx: this.rt.ctxFor(run, node, path), node: { id: node.id, workspace: this.key } })) || {};
-          this.rt.emit("node", { ws: this.key, node: node.id, phase: "exit", run: run.id, ms: +(performance.now() - t0).toFixed(1) });
+          this.rt.emit("node", { ws: this.key, node: node.id, phase: "exit", run: run.id, ms: +(performance.now() - t0).toFixed(1), outputs: this.rt.debug ? previews(out) : undefined });
           return out;
         })(),
       );
@@ -1099,6 +1099,44 @@ function makeLogger(rt, node) {
   return { info: write("info"), success: write("success"), warn: write("warn"), error: write("error"), debug: write("debug") };
 }
 
+/** Short texts for a block's outputs, for the editor's wire tooltips. */
+function previews(outputs) {
+  const out = {};
+  for (const [k, v] of Object.entries(outputs || {})) out[k] = preview(v);
+  return out;
+}
+
+/**
+ * A value in a few words: texts quoted (and cut), lists with their first
+ * items, Discord and Fluxer objects by class, name and id, anything else as
+ * Node's inspect would show it.
+ */
+function preview(v, room = 300) {
+  const cut = (s) => (s.length > room ? `${s.slice(0, room)}…` : s);
+  if (v === undefined) return "nothing";
+  if (v === null) return "null";
+  if (typeof v === "string") return JSON.stringify(cut(v));
+  if (typeof v === "function") return "a function";
+  if (typeof v !== "object") return String(v);
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? "Invalid date" : v.toISOString();
+  if (Array.isArray(v)) {
+    const first = v.slice(0, 3).map((x) => preview(x, 60));
+    return `list of ${v.length}${first.length ? `: ${first.join(", ")}${v.length > 3 ? ", …" : ""}` : ""}`;
+  }
+  const kind = v.constructor && v.constructor.name;
+  if (kind && kind !== "Object") {
+    let label = "";
+    try {
+      label = v.tag ?? v.username ?? v.displayName ?? v.name ?? v.title ?? "";
+    } catch {
+      label = "";
+    }
+    const id = typeof v.id === "string" || typeof v.id === "number" ? ` (${v.id})` : "";
+    return `${kind.replace(/^_/, "")}${label ? ` ${cut(String(label))}` : ""}${id}`;
+  }
+  return cut(inspect(v).replace(/\s+/g, " "));
+}
+
 function inspect(v) {
   try {
     return require("util").inspect(v, { depth: 2, breakLength: 120 });
@@ -1225,4 +1263,4 @@ if (typeof __XC_BUNDLE__ !== "undefined") {
   cli();
 }
 
-module.exports = { start, ungroupBlock, fillTemplate, expressionEnd, coerce, compare, Store, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };
+module.exports = { start, ungroupBlock, fillTemplate, expressionEnd, coerce, compare, preview, Store, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };

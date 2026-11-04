@@ -375,7 +375,7 @@ fn zone_layout(zid: &str, rect: Rect) -> NodeLayout {
 }
 
 pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
-    let Editor { reg, engine, theme, project, shapes, views, selected, edited, picker, active_workspace, activity, multi, selected_notes, define_ctx, embed_edit, layout_edit, selected_wire, prefs, ui_rects, .. } = ed;
+    let Editor { reg, engine, theme, project, shapes, views, selected, edited, picker, active_workspace, activity, wire_values, multi, selected_notes, define_ctx, embed_edit, layout_edit, selected_wire, prefs, ui_rects, .. } = ed;
     let Some(project) = project.as_mut() else { return };
     let mode = reg.mode(&project.meta.mode).or_else(|| reg.modes.first());
     let Some(ws) = project.workspaces.get_mut(ws_key) else {
@@ -669,8 +669,26 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             draw_wire(&painter, a.pos, b.pos, &a.ty, theme, reg, lit);
         }
     }
-    if hovered_wire.is_some() {
+    if let Some(link) = &hovered_wire {
         ctx.set_cursor_icon(CursorIcon::PointingHand);
+        // The last value that went through it, while the bot ran.
+        let is_action = pin_at(&(link.from.node.clone(), link.from.pin.clone(), Dir::Out)).is_some_and(|p| p.ty.is_action());
+        if !is_action {
+            let last = wire_values.get(&(ws_key.to_string(), link.from.node.clone(), link.from.pin.clone()));
+            egui::Tooltip::always_open(ctx.clone(), parent_layer, cui.id().with("wire-value"), egui::PopupAnchor::Pointer).show(|ui| {
+                ui.set_max_width(360.0);
+                match last {
+                    Some((value, at)) => {
+                        ui.label(RichText::new(t!("Last value")).size(11.0).color(theme.text_muted));
+                        ui.add(egui::Label::new(RichText::new(value).monospace().size(12.0).color(theme.text)).wrap());
+                        ui.label(RichText::new(crate::bot::ago(at.elapsed())).size(11.0).color(theme.text_muted));
+                    }
+                    None => {
+                        ui.label(RichText::new(t!("No value yet: run the bot and this shows the last value that went through this wire.")).size(11.5).color(theme.text_muted));
+                    }
+                }
+            });
+        }
     }
 
     // Zones' outputs panels, in their bottom-right corners: over the wires,
