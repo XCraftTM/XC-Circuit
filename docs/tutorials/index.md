@@ -1,18 +1,15 @@
 # Tutorials
 
-Tutorials are lessons: follow the steps in order and you end up with something that works. They explain only as much as you need on the way; the [Explanations](/explanations/) tell you how things work and why, and the [API reference](/api/) lists every option.
+Step by step, with pictures. Each one ends with something that works.
 
-## Building bots
+| | | |
+| --- | --- | --- |
+| 1 | **[Your first bot](./first-bot)** | a `/ping` command, running in Discord · 15 min |
+| 2 | **[Values and texts](./values-and-texts)** | pass values between blocks, remember things · 10 min |
+| 3 | **[Your first block](./first-block)** | write a block in JavaScript · 10 min |
+| 4 | **[Your first editor plugin](./first-editor-plugin)** | add a panel and a command to XC Circuit · 10 min |
+| 5 | **[Translate the app](./translate)** | a new language for the interface · 5 min |
 
-1. **[Your first bot](./first-bot)**: create a project, add a `/ping` command, run it in Discord. About 15 minutes.
-2. **[Values and texts](./values-and-texts)**: use what one block gives in another, write `${…}` in texts, and store a counter that survives restarts.
-
-## Extending XC Circuit
-
-3. **[Your first block](./first-block)**: write a block in JavaScript or TypeScript and use it in a project.
-4. **[Your first editor plugin](./first-editor-plugin)**: add a panel, a command and a check to the editor with JavaScript.
-5. **[Translate the app](./translate)**: add a language for the interface.
-
-::: tip Example project
-Help › Open Example: DemoBot opens a small finished bot with a `/rank` command, a welcome flow, a TypeScript block and an editor plugin. It's a good place to look around after the first tutorial.
+::: tip Look at a finished bot
+**Help › Open Example: DemoBot**, or **File › New Project** › pick a starter such as *Levels & XP*.
 :::

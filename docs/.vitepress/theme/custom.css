@@ -51,3 +51,10 @@
 .vp-doc table code {
   white-space: nowrap;
 }
+
+/* Screenshots: rounded, with a thin edge, so dark ones stand out on the dark page. */
+.vp-doc img {
+  border-radius: 10px;
+  border: 1px solid var(--vp-c-divider);
+  margin: 12px 0;
+}

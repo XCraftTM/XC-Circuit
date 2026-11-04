@@ -1,32 +1,25 @@
 # Your first editor plugin
 
-Editor plugins change XC Circuit itself: they add panels, commands for the Plugins menu and the command palette, and checks for the Problems panel. They are written in JavaScript and run inside the editor, never in the bot.
+Editor plugins add things to XC Circuit itself: panels, commands, checks, even a [desk pet](https://github.com/XCraftTM/XC-Circuit/tree/main/examples/plugins/desk-pet). They're JavaScript too.
 
-In this tutorial you write a *Block Counter*: a panel that shows how many blocks each workspace has, a command that writes the total to the Console, and a check that warns about blocks with an empty text.
+We'll make a **Block Counter**: a command and a panel.
 
 ## 1. The plugin
 
-Use the project's own plugin from [Your first block](./first-block), or create a new one in `plugins/block.counter/` with this `plugin.toml`:
+In your bot's folder: `plugins/block.counter/plugin.toml`
 
 ```toml
-id          = "block.counter"
-name        = "Block Counter"
-version     = "1.0.0"
-author      = "You"
-description = "Counts blocks."
-
-[engines]
-circuit = "^1.0"
+id      = "block.counter"
+name    = "Block Counter"
+version = "1.0.0"
 
 [editor]
 script = "editor.js"
 ```
 
-The `[editor]` table names the script. It starts right away: editor plugins run in a sandbox and can only reach the app through the `xc` object, so, unlike native plugins, they don't need your approval.
+## 2. The script
 
-## 2. A command
-
-Create `editor.js` next to `plugin.toml`:
+`plugins/block.counter/editor.js`:
 
 ```js
 xc.command({
@@ -36,78 +29,48 @@ xc.command({
     xc.log(`${xc.project().name} has ${xc.blocks().length} blocks`);
   },
 });
-```
 
-Save, then open the **Plugins** menu: *Count all blocks* is there, and in the command palette (**Ctrl+P**) too. Run it and look at the Console.
-
-The script reloads every time you save it, so you can keep XC Circuit open while you work.
-
-## 3. A panel
-
-Add to `editor.js`:
-
-```js
 xc.panel({
   id: "counts",
   title: "Block Counter",
   render(ui) {
-    if (!xc.project()) return ui.muted("Open a project first.");
     ui.heading("Blocks per workspace");
     for (const w of xc.workspaces()) {
       const count = Object.keys(xc.workspace(w.key).nodes).length;
       ui.row((ui) => {
-        ui.link(w.name, () => xc.reveal(w.key, Object.keys(xc.workspace(w.key).nodes)[0]));
+        ui.text(w.name);
         ui.text(`${count} blocks`, { muted: true });
       });
     }
-    ui.space();
     ui.button("Count all blocks", () => xc.run("counter.total"), { primary: true });
   },
 });
 ```
 
-Open it from **Plugins › Block Counter panel**. Dock it anywhere, like the Inspector or the Console.
+Save. It loads right away, and again every time you save.
 
-`render(ui)` describes what the panel shows; XC Circuit calls it again whenever the panel is drawn, so it always shows the project as it is now. Buttons and links take a function that runs when they're clicked.
+## 3. Try it
 
-## 4. A check
+Open the **Plugins** menu:
 
-Checks find problems. Add:
+![The Plugins menu](/screens/plugins-menu.png)
 
-```js
-xc.check(() =>
-  xc.blocks()
-    .filter((b) => b.type === "discord.send_message" && !b.values.text && !b.values.embeds)
-    .map((b) => ({
-      message: "Send Message has no text",
-      workspace: b.workspace,
-      block: b.id,
-    })),
-);
-```
+1. Your command: writes to the Console.
+2. Your panel: opens it.
 
-Add a Send Message block with an empty text: within a second the Problems panel lists it, and clicking the entry selects the block.
+![The panel](/screens/block-counter-panel.png)
 
-## 5. Remember something
+1. Dock it anywhere, like any panel.
 
-A panel can keep its own state in variables of the script, and the plugin can store small values that survive restarts:
+## What else `xc` can do
 
-```js
-let clicks = xc.storage.get("clicks") ?? 0;
+| | |
+| --- | --- |
+| `xc.check(fn)` | problems for the Problems panel |
+| `xc.overlay({…})` | something floating over the editor (the desk pet) |
+| `xc.every(ms, fn)` | timers |
+| `xc.playSound(file)` | sounds |
+| `xc.addBlock(…)`, `xc.select(…)` | change the canvas |
+| `xc.on("save" \| "botEvent" \| "selection", fn)` | react to the app |
 
-xc.panel({
-  id: "clicker",
-  title: "Clicker",
-  render(ui) {
-    ui.button(`Clicked ${clicks} times`, () => xc.storage.set("clicks", ++clicks));
-  },
-});
-```
-
-## What you learned
-
-- An editor plugin is a script named in `[editor]` of `plugin.toml`.
-- `xc.command`, `xc.panel` and `xc.check` add commands, panels and checks.
-- Panels are described with `ui.*` and redrawn when shown or clicked.
-
-All of `xc` is in [Editor plugins (xc)](/api/editor), every panel element in [Panels (ui)](/api/panels). DemoBot's `plugins/demo.custom/editor.js` is a bigger example.
+All of it: [Editor plugins (xc)](/api/editor) and [Panels (ui)](/api/panels).
