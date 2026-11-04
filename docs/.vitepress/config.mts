@@ -28,6 +28,15 @@ export default defineConfig({
       { text: "Explanations", link: "/explanations/", activeMatch: "/explanations/" },
       { text: "API", link: "/api/", activeMatch: "/api/" },
       { text: "Download", link: "/download" },
+      {
+        text: "More",
+        items: [
+          { text: "Changelog", link: "/changelog" },
+          { text: "Known issues", link: "/known-issues" },
+          { text: "How XC Circuit is made", link: "/made-with-ai" },
+          { text: "Report a bug", link: "https://github.com/XCraftTM/XC-Circuit/issues/new?template=bug_report.yml" },
+        ],
+      },
     ],
     sidebar: {
       "/tutorials/": [
@@ -56,6 +65,7 @@ export default defineConfig({
             { text: "Plugins", link: "/explanations/plugins" },
             { text: "Running and exporting", link: "/explanations/running" },
             { text: "Tokens and safety", link: "/explanations/safety" },
+            { text: "Everything the editor does", link: "/explanations/editor-reference" },
           ],
         },
       ],

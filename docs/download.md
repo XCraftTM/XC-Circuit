@@ -4,13 +4,33 @@ title: Download
 
 # Download
 
-XC™ Circuit runs on **Windows** (10 and 11, 64-bit) and **Linux** (x86-64).
+::: info Early Access
+XC™ Circuit is in Early Access: it works and is used for real bots, but expect rough edges. See the [known issues](/known-issues) and [what's new](/changelog). It's [built with AI assistance](/made-with-ai).
+:::
+
+XC™ Circuit runs on **Windows** 10 and 11 and **Linux**, on x64 and ARM64 computers.
 
 <p>
   <a class="VPButton medium brand" href="https://github.com/XCraftTM/XC-Circuit/releases/latest" style="display:inline-block">Latest release on GitHub</a>
 </p>
 
-Download the archive for your system, unpack it anywhere and start `xc-circuit` (`xc-circuit.exe` on Windows). Nothing is installed system-wide. The app looks for newer versions itself (Help › Check for Updates; you can turn the check off in Settings).
+## Which file?
+
+| You have | Download | Then |
+| --- | --- | --- |
+| Windows (most PCs) | `…-windows-x64-setup.exe` | run it; it installs for you only, no administrator needed |
+| Windows on ARM (Snapdragon laptops) | `…-windows-arm64-setup.exe` | the same |
+| Windows, without installing | `…-windows-x64.zip` | unpack anywhere, start `xc-circuit.exe` |
+| Linux, any distribution | `…-linux-x86_64.AppImage` | make it executable (`chmod +x`), double-click |
+| Ubuntu, Debian, Mint, Pop!_OS | `…-linux-x86_64.deb` | `sudo apt install ./XC-Circuit-…deb` |
+| Fedora, openSUSE, RHEL | `…-linux-x86_64.rpm` | `sudo dnf install ./XC-Circuit-…rpm` |
+| Linux, without installing | `…-linux-x64.tar.gz` | unpack anywhere, start `xc-circuit` |
+
+The app looks for newer versions itself (Help › Check for Updates; you can turn the check off in Settings).
+
+::: tip "Windows protected your PC"?
+The installer isn't signed yet, so Windows asks first. Choose **More info › Run anyway**.
+:::
 
 ## What you need
 

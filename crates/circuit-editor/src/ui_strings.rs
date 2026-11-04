@@ -112,6 +112,8 @@ pub const UI_STRINGS: &[&str] = &[
     "Build bots by connecting blocks.",
     "GitHub profile",
     "XC Circuit on GitHub",
+    "Designed and directed by XCraftTM, built with AI assistance (Claude).",
+    "How XC Circuit is made",
     "Copyright © 2026 XCraftTM. All rights reserved.",
     "Licence",
     "Third-party licences",

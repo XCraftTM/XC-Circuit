@@ -1,0 +1,56 @@
+<!-- Kept from the README: every feature of the editor, one row each. -->
+# Everything the editor does
+
+| Action | How |
+| --- | --- |
+| Add a block | Add block in the canvas toolbar (bottom left), right-click empty canvas, or press Space |
+| Connect | Drag from a pin to another pin |
+| Add a connected block | Drag a wire into empty space; the picker shows only compatible blocks |
+| Move a block | Drag its title bar |
+| Pan / zoom | Drag empty canvas or middle mouse / mouse wheel |
+| Templates | File › New Project starts empty or from a working bot: Welcome & auto role, Moderation, Levels & XP, Tickets, Role menu (in `examples/templates/`) |
+| JavaScript in texts | Any text field (Send Message, Log, Text, the Embed and Layout Builders …) can hold JavaScript in `${…}`, as in a JavaScript template string: `${user.username}`, `${xp * 2}`, `${member?.nickname ?? user.username}`, `${new Date().getFullYear()}`. `#4` is block #4's outputs: `${#4.message.url}`. Names come from the event, run variables, the block's fields and earlier outputs; a name nothing earlier gives gets an input below the text to connect a value to. A mistake in an expression stops the block with an error naming it. Texts from before, with `{name}`, are changed to `${name}` when a project opens |
+| Values from earlier blocks | Type `${` in any text (on a block, in the Inspector or a builder), or right-click it, for the values the block can use. `${` lists the blocks before this one on its action path; pick one and the list slides to its values (`${#1.user}`, the User output of block #1), and › (or →) goes on to a value's members; ← goes back. Typing a name, or a `.` after a value, inside `${…}` lists what fits with its type, like a code editor: `${#1.user.username}`, `${#1.member.roles.highest.name}`, `${#1.user.displayAvatarURL()}`. Run variables are `${name}`. The Embed and Layout Builders list the values too: click one to put it where the text cursor is |
+| Members of Discord values | They come from discord.js itself: `plugins/xc.discord/types/discordjs.classes.json` is made from discord.js's type definitions by `node plugins/xc.discord/tools/discordjs-catalog.js` (run it again after updating discord.js). Only methods that read are listed |
+| Message previews | The Embed and Layout Builders show the message as Discord will: with the bot's own name and picture (read from Discord with the saved bot token, when there is one) and each `${…}` as a chip, since its value is only known when the bot runs |
+| One path per action | An action output leads to one block: connecting it to another block replaces the old wire. Paths can join, and branch only through blocks made for it (If, Switch, For Each). Older projects with split paths show them in Problems |
+| Yes/no inputs | Switches like Private reply can be connected too: click their pin toggle in the Inspector |
+| Long text | Text fields on blocks are boxes of a few lines; drag a box's corner down to make it taller or shorter and sideways to make the whole block wider or narrower (the block saves both in the project), double-click the corner to reset them |
+| Colors | Click a color swatch for the picker: square and hue bar, hex and RGB, Discord colors and your recent ones |
+| Field as pin | Click a field's faint pin, or "pin" in the Inspector |
+| Select several | Shift-drag a box on empty canvas, or Ctrl+click blocks; Ctrl+A selects all |
+| Block actions | Select a block: Duplicate, Try Zone, Source and Delete are buttons above it (Delete key works too) |
+| Remove a wire | Click it, then its Delete wire button (or press Delete); or drag it off its input and drop it on empty canvas |
+| Zoom | The canvas toolbar: − / + , the percentage goes back to 100%, the corners button shows every block; or the mouse wheel |
+| Undo / Redo | Ctrl+Z / Ctrl+Y (per workspace) |
+| Copy / Paste / Duplicate | Ctrl+C / Ctrl+V (at the mouse) / Ctrl+D; works across workspaces and projects |
+| First start | The welcome page sets up Node.js (finds it, or installs it: winget or the official installer on Windows, a private copy on Linux), a theme and an accent; Help › Welcome and setup… opens it again |
+| Tour | Help › Take the tour: a guided walk through adding, wiring and running blocks on a practice project; skip any time, arrow keys move between steps |
+| Backups | Every save keeps a snapshot outside the project (newest 20, plus one a day for 14 days; Settings › Backups). File › Restore from backup… compares them with now and restores the project or one workspace. Unsaved changes are copied every 30 s and offered back after a crash |
+| Bot data backups | A bot backs up its saved data (store.json) when it starts and every 6 hours, keeping the newest 10 in data/backups. If the data is empty or damaged it asks: restore a backup or start empty (a dialog in XC Circuit, a question in the terminal) |
+| Shortcuts | Settings › Shortcuts: click a shortcut and press the keys you want: any key (letters, digits, F1–F24, arrows, punctuation, Home, Insert …) with any mix of Ctrl, Shift and Alt, or the mouse's side buttons. Each action can have two; a shortcut taken from another action says so. Shortcuts without Ctrl or Alt don't fire while typing. Copy, cut and paste stay the system's keys |
+| Settings | Ctrl+, or the gear at the bottom of the activity bar: theme, accent color (changes live), touch mode, interface size, canvas, window, bot, plugins, shortcuts |
+| Language | English and German come with the app: pick one on the first start page or in Settings › Appearance; it switches right away. Blocks (their names, descriptions and fields) stay in English |
+| Touch mode | Settings › Appearance (or the first start's Look step): bigger buttons, rows and pins with more room between them, for touch screens and pens |
+| Command palette | Ctrl+P or the search box in the title bar: run any command, open a workspace, or jump to a block |
+| Editor tabs | The Embed Builder, Layout Builder, Slash Commands, Bot settings, Export and Plugins open as tabs in their own floating window; drag a tab onto any side or next to other tabs to dock it, or out again. Closing the tab cancels it |
+| Title bar | Drag to move, double-click to maximize, drag the window edges to resize; View › Use system title bar switches to the system one |
+| Save | Ctrl+S (restarts a running bot) |
+| Panels | The Inspector, Console and Problems are tabs: drag them to dock anywhere; reopen closed ones from View › Panels |
+| Workspaces | The Workspaces panel lists them in folders: + and the folder button on the project row add them, drag a workspace onto a folder to move it, double-click a name to rename, the ⋯ button (or right-click) for more |
+| Side bar | Like VS Code: the icons on the far left (the activity bar) each show one view in the side bar next to them: Workspaces, Stored Data or Plugins. Clicking the icon of the view shown folds the side bar away; drag its edge to make it wider. View › Side bar does the same, and View › Show activity bar hides the icons. The gear at the bottom opens Settings |
+| Snap and arrange | The magnet in the canvas toolbar (or Settings › Canvas) snaps dropped blocks and notes to the grid. With several blocks selected, Arrange above them aligns their edges or centres, or spreads them out evenly |
+| Run times and values | While the bot runs from the editor, each block shows how long it took above its corner for 30 seconds, and hovering a wire shows the last value that went through it |
+| Favourite blocks | Star a block in the picker (on its row or in its details): favourites and the blocks you placed lately are listed at the top |
+| Notes | Add note in the canvas toolbar, or select blocks › Note to frame them: a title, a description and a colour (pencil button or double-click the title). Drag the title to move the note with the blocks inside (Alt: only the note); drag its edges or corners to resize it. Notes don't run |
+| Try Zone | Select a block › Try Zone; drop blocks in or out; the gear on the zone's title sets retries and timeout |
+| Embeds | Select a Build Embed block › Open Embed Builder; the block shows a live preview. Every part of an embed is there: author with link and icon, title link, fields, images, footer, and a timestamp (when it's sent, or a set time) |
+| Components V2 | A Build Layout block designs a whole message from Discord's components: containers with an accent color, text (markdown), sections with a picture or button next to the text, media galleries, files, separators, rows of buttons (every style, emoji, link and premium) and select menus (options, users, roles, channels). Edit layout… opens the Layout Builder with a Discord preview; set Send Message's Format to Layout and connect the block. Pictures and files given as file paths are attached when sending |
+| JSON | The Embed Builder, Layout Builder and Slash Commands each switch between Builder and JSON. The JSON is Discord's own: edit it or paste JSON from the Discord docs, discord.js `toJSON()` or a message designer, and it applies as soon as it is valid (errors show the line and column) |
+| Slash commands | Bot › Slash Commands…: options with choices (a name and a value each), length and number limits, channel kinds and autocomplete; subcommands and groups; translations of every name and description into Discord's languages; the permissions people need (any number), where the command works (servers, DMs with the bot, other DMs), how the bot is installed (server or account) and age-restricted. Registered when the bot starts |
+| Stored data | The Stored Data view of the side bar (the database icon) shows what `ctx.store` saved while running |
+| Bot token | Bot › Settings (kept in Windows Credential Manager / Linux Secret Service). The eye button shows what you typed, Copy copies the saved token without showing it, and values are checked as you type (a build mode's settings can set `pattern`, a regular expression, and `patternHint`; `sensitive = true` hides a text setting behind the eye button) |
+| Run / Stop | F5 / Shift+F5, or Run in the title bar. Running blocks glow; failures show on the block |
+| Export | Bot › Export… writes a folder that runs with `node index.js` |
+
+Running needs Node.js 22 or newer; the first start page (or Settings › Bot › Node.js) finds or installs it. The first run installs the mode's npm packages (discord.js, or @fluxerjs/core for Fluxer bots) once, into `%APPDATA%\XC Circuit\packages` or `~/.local/share/xc-circuit/packages`.

@@ -1459,6 +1459,9 @@ impl CircuitApp {
                                 }
                             });
                             ui.add_space(10.0);
+                            ui.label(RichText::new(t!("Designed and directed by XCraftTM, built with AI assistance (Claude).")).size(11.5).color(theme.text_muted));
+                            ui.hyperlink_to(RichText::new(t!("How XC Circuit is made")).size(11.5).color(theme.accent), "https://xcrafttm.github.io/XC-Circuit/made-with-ai");
+                            ui.add_space(6.0);
                             ui.label(RichText::new(t!("Copyright © 2026 XCraftTM. All rights reserved.")).size(11.5).color(theme.text_muted));
                             ui.horizontal(|ui| {
                                 let licence = t!("Licence");
