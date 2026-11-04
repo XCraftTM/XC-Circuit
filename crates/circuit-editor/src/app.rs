@@ -119,6 +119,9 @@ pub struct CircuitApp {
     /// The guided tour, while it runs, and the layout to put back afterwards.
     tour: Option<crate::tour::Tour>,
     dock_before_tour: Option<DockState<Tab>>,
+    /// The panels and tabs while no project is open (only the start page
+    /// shows then); back when a project opens.
+    dock_before_start: Option<DockState<Tab>>,
 }
 
 impl CircuitApp {
@@ -225,6 +228,7 @@ impl CircuitApp {
             setup,
             tour: None,
             dock_before_tour: None,
+            dock_before_start: None,
             settings: Default::default(),
             restore: Default::default(),
             last_recovery: std::time::Instant::now(),
@@ -268,7 +272,25 @@ impl CircuitApp {
         }
     }
 
+    /// Without a project only the start page shows: the panels and tabs are
+    /// put aside, and come back as they were when a project opens.
+    fn swap_start_page(&mut self) {
+        let showing = self.dock_before_start.is_some();
+        if self.ed.project.is_none() && !showing && self.tour.is_none() {
+            let start = DockState::new(vec![Tab::Start]);
+            self.dock_before_start = Some(std::mem::replace(&mut self.dock, start));
+        } else if self.ed.project.is_some() && showing {
+            let mut dock = self.dock_before_start.take().unwrap_or_else(default_layout);
+            close_tabs(&mut dock, |t| matches!(t, Tab::Start | Tab::Canvas(_)));
+            if dock.main_surface().is_empty() {
+                dock = default_layout();
+            }
+            self.dock = dock;
+        }
+    }
+
     fn apply_actions(&mut self) {
+        self.swap_start_page();
         for action in std::mem::take(&mut self.ed.actions) {
             match action {
                 Action::OpenWorkspace(key) => {
@@ -1269,6 +1291,8 @@ impl eframe::App for CircuitApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.reveal.frame(&ctx);
+        // Before anything is drawn: no frame shows the panels without a project.
+        self.swap_start_page();
         // XC_FRAME_STATS=1 prints how many frames a second are drawn, to find
         // what keeps the app busy.
         if let Some((frames, since)) = &mut self.frame_stats {
@@ -1391,14 +1415,6 @@ impl eframe::App for CircuitApp {
             let style = theme.dock_style(ui.style());
             let running = self.bot.state != BotState::Stopped;
             self.sync_dialog_tabs(ui.ctx());
-            // The start page while no project is open, in the middle.
-            match (self.ed.project.is_none(), self.dock.find_tab(&Tab::Start)) {
-                (true, None) => open_center(&mut self.dock, Tab::Start),
-                (false, Some(path)) => {
-                    self.dock.remove_tab(path);
-                }
-                _ => {}
-            }
             let focused_tab = self.dock.find_active_focused().map(|(_, t)| t.clone());
             let mut viewer = Viewer {
                 focused_tab,
@@ -1510,7 +1526,7 @@ impl eframe::App for CircuitApp {
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         // Mid-tour, keep the user's own layout and project.
-        let dock = self.dock_before_tour.as_ref().filter(|_| self.tour.is_some()).unwrap_or(&self.dock);
+        let dock = self.dock_before_tour.as_ref().filter(|_| self.tour.is_some()).or(self.dock_before_start.as_ref()).unwrap_or(&self.dock);
         eframe::set_value(storage, KEY_DOCK, dock);
         eframe::set_value(storage, KEY_THEME, &self.ed.theme.id);
         eframe::set_value(storage, KEY_NATIVE_ALLOW, &self.native.allow);
