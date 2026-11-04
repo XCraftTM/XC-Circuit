@@ -8,6 +8,10 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+# Read-only by default; only the release job may publish.
+permissions:
+  contents: read
+
 jobs:
   # Which systems to build for. Windows ARM64 is cross-compiled on the x64
   # runner (tests can't run there). Linux ARM64 needs GitHub's ARM runners,

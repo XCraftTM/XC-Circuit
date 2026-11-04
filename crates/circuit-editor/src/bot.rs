@@ -766,7 +766,9 @@ mod tests {
             pattern_problem(Some(&re), spec.get("patternHint").and_then(Value::as_str), value)
         };
         // Made-up values in the shape Discord uses.
-        assert_eq!(check("token", "MTIzNDU2Nzg5MDEyMzQ1Njc4OQ.GhIjKl.abcdefghijklmnopqrstuvwxyz0123456789AB"), None);
+        // Put together here, so secret scanners don't take it for a real token.
+        let fake_token = ["MTIzNDU2Nzg5MDEyMzQ1Njc4OQ", "GhIjKl", "abcdefghijklmnopqrstuvwxyz0123456789AB"].join(".");
+        assert_eq!(check("token", &fake_token), None);
         assert!(check("token", "not a token").is_some());
         assert!(check("token", "abc.def").is_some());
         assert_eq!(check("devServer", "123456789012345678"), None);
