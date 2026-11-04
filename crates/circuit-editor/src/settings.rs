@@ -442,6 +442,27 @@ const SHORTCUTS: [(&str, &str); 7] = [
     (n("Esc"), n("Close a picker, menu or editor")),
 ];
 
+/// A shortcut's box, its label centred on the letters themselves (a plain
+/// button centres the text's line, which sits high in the monospace font).
+fn key_chip(ui: &mut Ui, text: &str, fill: Color32, stroke: Stroke, ink: Color32) -> egui::Response {
+    let font = FontId::monospace(12.0);
+    let galley = ui.painter().layout_no_wrap(text.to_string(), font.clone(), ink);
+    let size = vec2((galley.size().x + 22.0).max(64.0), 24.0);
+    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
+    let fill = if resp.hovered() { mix(fill, theme_hover(ui), 0.12) } else { fill };
+    ui.painter().rect(rect, 5.0, fill, stroke, StrokeKind::Inside);
+    // Capitals' height decides the middle, so "Ctrl+," and "F5" sit alike.
+    let caps = ui.painter().layout_no_wrap("H".into(), font, ink).mesh_bounds;
+    let at = pos2(rect.center().x - galley.size().x / 2.0, rect.center().y - caps.center().y);
+    ui.painter().galley(at, galley, ink);
+    resp.on_hover_cursor(CursorIcon::PointingHand)
+}
+
+/// What a hovered chip lightens towards.
+fn theme_hover(ui: &Ui) -> Color32 {
+    ui.visuals().widgets.hovered.bg_fill
+}
+
 /// Settings › Shortcuts: every action with its shortcuts, changed by clicking
 /// one and pressing the new keys.
 fn shortcuts(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView) {
@@ -506,7 +527,10 @@ fn shortcuts(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsVie
         let mut reset = false;
         egui::Frame::new().fill(theme.panel_header).stroke(Stroke::new(1.0, theme.line)).corner_radius(8).inner_margin(egui::Margin::symmetric(14, 8)).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
+            // A row as tall as the key boxes, with the name centred on them.
+            let row_w = ui.available_width();
+            ui.allocate_ui_with_layout(vec2(row_w, 26.0), Layout::left_to_right(Align::Center), |ui| {
+                ui.set_min_height(26.0);
                 ui.label(RichText::new(action.name()).size(13.0).color(theme.text));
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     ui.spacing_mut().item_spacing.x = 6.0;
@@ -529,7 +553,8 @@ fn shortcuts(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsVie
                         let active = recording_here == Some(slot);
                         let fill = if active { mix(theme.field, theme.accent, 0.3) } else { theme.field };
                         let stroke = if active { Stroke::new(1.5, theme.accent) } else { Stroke::new(1.0, theme.line) };
-                        let resp = ui.add(egui::Button::new(RichText::new(&text).monospace().size(12.0).color(if list.get(slot).is_some() || active { theme.text } else { theme.text_muted })).fill(fill).stroke(stroke).corner_radius(5).min_size(vec2(64.0, 24.0)));
+                        let ink = if list.get(slot).is_some() || active { theme.text } else { theme.text_muted };
+                        let resp = key_chip(ui, &text, fill, stroke, ink);
                         let resp = if list.get(slot).is_some() { resp.on_hover_text(t!("Click to change, right-click to remove")) } else { resp.on_hover_text(t!("Add another shortcut")) };
                         if resp.clicked() {
                             start = Some(slot);
