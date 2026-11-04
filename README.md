@@ -61,6 +61,18 @@ The first start opens `examples/DemoBot`. Windows and Linux are supported.
 
 Running needs Node.js 22 or newer; the first start page (or Settings › Bot › Node.js) finds or installs it. The first run installs the mode's npm packages (discord.js, or @fluxerjs/core for Fluxer bots) once, into `%APPDATA%\XC Circuit\packages` or `~/.local/share/xc-circuit/packages`.
 
+## Website and docs
+
+The website, with tutorials, explanations and the plugin API reference, lives in `docs/` and is built with [VitePress](https://vitepress.dev). Work on it with live reload:
+
+```
+cd docs
+npm install
+npm run dev
+```
+
+`npm run build` writes the site to `docs/.vitepress/dist`. The Website workflow (`.github/workflows/website.yml`) publishes it to GitHub Pages; it runs by hand and for `v*` tags.
+
 ## Tests
 
 ```
