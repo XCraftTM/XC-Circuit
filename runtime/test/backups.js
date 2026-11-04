@@ -33,7 +33,38 @@ const file = path.join(dir, "store.json");
   }
   const kept = listStoreBackups(dir);
   assert.strictEqual(kept.length, BACKUPS_KEPT);
-  assert.deepStrictEqual(JSON.parse(fs.readFileSync(kept[0].file, "utf8")), { global: { level: 23 } }, "newest first");
+  assert.deepStrictEqual(
+    kept.map((b) => JSON.parse(fs.readFileSync(b.file, "utf8")).global.level),
+    [23, 22, 21, 20, 19, 18, 17, 16, 15, 14],
+    "newest first"
+  );
+
+  // Backups made in the same millisecond keep their order too.
+  const sameDir = fs.mkdtempSync(path.join(os.tmpdir(), "xc-backups-same-"));
+  const realNow = Date.now;
+  const fixed = realNow();
+  Date.now = () => fixed;
+  const RealDate = Date;
+  global.Date = class extends RealDate {
+    constructor(...a) {
+      super(...(a.length ? a : [fixed]));
+    }
+  };
+  try {
+    for (let i = 0; i < 12; i++) {
+      fs.writeFileSync(path.join(sameDir, "store.json"), JSON.stringify({ global: { n: i } }));
+      backupStore(sameDir, rt);
+    }
+  } finally {
+    global.Date = RealDate;
+    Date.now = realNow;
+  }
+  assert.deepStrictEqual(
+    listStoreBackups(sameDir).map((b) => JSON.parse(fs.readFileSync(b.file, "utf8")).global.n),
+    [11, 10, 9, 8, 7, 6, 5, 4, 3, 2],
+    "same-millisecond backups, newest first"
+  );
+  fs.rmSync(sameDir, { recursive: true, force: true });
 
   // A damaged file is never backed up.
   fs.writeFileSync(file, "{ broken");

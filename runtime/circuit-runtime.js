@@ -686,7 +686,23 @@ function listStoreBackups(dataDir) {
       } catch {}
       return { name, file, time };
     })
-    .sort((a, b) => b.name.localeCompare(a.name));
+    .sort((a, b) => compareBackupNames(b.name, a.name));
+}
+
+/**
+ * Orders backup names by when they were made: by their time stamp, then by
+ * the counter added when two were made in the same millisecond
+ * (store-<stamp>.json, store-<stamp>-2.json, …).
+ */
+function compareBackupNames(a, b) {
+  const parse = (name) => {
+    const m = /^store-(.*Z)(?:-(\d+))?\.json$/.exec(name);
+    return m ? [m[1], Number(m[2] || 1)] : [name, 0];
+  };
+  const [sa, na] = parse(a);
+  const [sb, nb] = parse(b);
+  if (sa !== sb) return sa < sb ? -1 : 1;
+  return na - nb;
 }
 
 /** The saved data's text, or null when there is no file. */
@@ -721,8 +737,11 @@ function backupStore(dataDir, rt, flush = false) {
   try {
     fs.mkdirSync(backups, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    let target = path.join(backups, `store-${stamp}.json`);
-    for (let i = 2; fs.existsSync(target); i++) target = path.join(backups, `store-${stamp}-${i}.json`);
+    // Made in the same millisecond as others: number it after the highest
+    // (not into a gap left by removed ones, which would sort as older).
+    const same = fs.readdirSync(backups).filter((n) => n === `store-${stamp}.json` || n.startsWith(`store-${stamp}-`));
+    const highest = Math.max(0, ...same.map((n) => Number((/-(\d+)\.json$/.exec(n.slice(`store-${stamp}`.length)) || [0, 1])[1])));
+    const target = path.join(backups, highest ? `store-${stamp}-${highest + 1}.json` : `store-${stamp}.json`);
     fs.writeFileSync(target, text);
     for (const old of listStoreBackups(dataDir).slice(BACKUPS_KEPT)) fs.rmSync(old.file, { force: true });
     return target;
