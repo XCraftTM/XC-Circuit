@@ -16,6 +16,12 @@ const LIST_W: f32 = 340.0;
 const ROW_H: f32 = 32.0;
 const HEADER_H: f32 = 24.0;
 /// Categories closed in the picker, kept between sessions.
+/// The picker's own sections above the categories (no category is named like these).
+const FAVORITES: &str = "\u{1}favorites";
+const RECENT: &str = "\u{1}recent";
+/// How many recently placed blocks the picker lists.
+pub const RECENT_SHOWN: usize = 6;
+
 const COLLAPSED_KEY: &str = "picker-collapsed";
 /// The kind filter (All, Events, Actions, Values), kept between sessions.
 const KIND_KEY: &str = "picker-kind";
@@ -185,10 +191,29 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
     } else {
         list.sort_by(|a, b| rank(a.0).cmp(&rank(b.0)).then_with(|| kind_order(a.0.kind).cmp(&kind_order(b.0.kind))).then_with(|| a.0.name.cmp(&b.0.name)));
     }
+    // Favourites, then recently placed blocks, above the categories (not while searching).
+    let mut sections: Vec<Option<&str>> = vec![None; list.len()];
+    if !searching {
+        let pick = |ids: &[String], limit: usize| ids.iter().filter_map(|id| list.iter().find(|e| e.0.id == *id).cloned()).take(limit).collect::<Vec<_>>();
+        let favorites = pick(&ed.prefs.favorite_blocks, usize::MAX);
+        let recent = pick(&ed.prefs.recent_blocks, RECENT_SHOWN);
+        let mut top: Vec<_> = favorites.iter().cloned().map(|e| (e, Some(FAVORITES))).collect();
+        top.extend(recent.into_iter().map(|e| (e, Some(RECENT))));
+        let mut head_sections: Vec<Option<&str>> = top.iter().map(|(_, s)| *s).collect();
+        head_sections.append(&mut sections);
+        sections = head_sections;
+        let mut head: Vec<_> = top.into_iter().map(|(e, _)| e).collect();
+        head.append(&mut list);
+        list = head;
+    }
+    let favorite_ids = ed.prefs.favorite_blocks.clone();
     // Closed categories hide their blocks, except while searching.
     let collapsed: Vec<String> = ctx.data_mut(|d| d.get_persisted::<Vec<String>>(egui::Id::new(COLLAPSED_KEY)).unwrap_or_default());
     let category_of = |d: &BlockDef| d.category.clone().unwrap_or_default();
-    let shown: Vec<usize> = (0..list.len()).filter(|&i| searching || !collapsed.contains(&category_of(list[i].0))).collect();
+    let cat_at = |i: usize| sections[i].map(str::to_string).unwrap_or_else(|| category_of(list[i].0));
+    let shown: Vec<usize> = (0..list.len()).filter(|&i| searching || !collapsed.contains(&cat_at(i))).collect();
+    // A star clicked: the block to add to or take from the favourites.
+    let mut star: Option<String> = None;
     if !shown.contains(&picker.highlighted) {
         picker.highlighted = shown.iter().copied().find(|&i| i >= picker.highlighted).or(shown.last().copied()).unwrap_or(0);
     }
@@ -283,13 +308,17 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                     ui.allocate_ui_with_layout(vec2(LIST_W, body_h), column, |ui| {
                         ScrollArea::vertical().id_salt("picker-list").max_height(body_h).auto_shrink([false, false]).show(ui, |ui| {
                             ui.set_width(LIST_W);
-                            let category_name = |cat: &str| mode.as_ref().and_then(|m| m.category(cat)).map(|c| crate::i18n::tr(&c.name).into_owned()).unwrap_or(cat.to_string());
+                            let category_name = |cat: &str| match cat {
+                                FAVORITES => t!("Favourites").to_string(),
+                                RECENT => t!("Recent").to_string(),
+                                _ => mode.as_ref().and_then(|m| m.category(cat)).map(|c| crate::i18n::tr(&c.name).into_owned()).unwrap_or(cat.to_string()),
+                            };
                             let mut last_cat: Option<String> = None;
                             for (i, (def, pin, _)) in list.iter().enumerate() {
-                                let cat = category_of(def);
+                                let cat = cat_at(i);
                                 if !searching && last_cat.as_deref() != Some(cat.as_str()) {
                                     let closed = collapsed.contains(&cat);
-                                    let count = list.iter().filter(|(d, _, _)| category_of(d) == cat).count();
+                                    let count = (0..list.len()).filter(|&j| cat_at(j) == cat).count();
                                     if category_header(ui, &theme, &category_name(&cat), count, closed).clicked() {
                                         fold = Some(Fold::One(cat.clone()));
                                     }
@@ -317,6 +346,22 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                                 let chip = match def.timing() {
                                     Some(waits) => paint_timing_chip(ui, &theme, waits, chip.left() - 4.0, rect.center().y),
                                     None => chip,
+                                };
+                                // A star: filled for favourites, outlined on the hovered row.
+                                let starred = favorite_ids.contains(&def.id);
+                                let chip = if starred || resp.hovered() || selected {
+                                    let sr = egui::Rect::from_center_size(egui::pos2(chip.left() - 14.0, rect.center().y), vec2(20.0, 20.0));
+                                    let sresp = ui.interact(sr, ui.id().with(("star", i)), egui::Sense::click());
+                                    let tint = if starred { theme.warning } else if sresp.hovered() { theme.text } else { with_alpha(theme.text_muted, 140) };
+                                    if let Some(path) = ed.reg.icons.get(if starred { "star-filled" } else { "star" }) {
+                                        egui::Image::from_uri(crate::editor::file_uri(path)).tint(tint).paint_at(ui, sr.shrink(3.0));
+                                    }
+                                    if sresp.on_hover_text(if starred { t!("Remove from favourites") } else { t!("Add to favourites") }).clicked() {
+                                        star = Some(def.id.clone());
+                                    }
+                                    sr
+                                } else {
+                                    chip
                                 };
                                 if searching {
                                     let note = category_name(&cat);
@@ -353,6 +398,12 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                             ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
                             if let Some((def, _, _)) = list.get(picker.highlighted) {
                                 details(ui, def, &ed.reg, &theme);
+                                ui.add_space(4.0);
+                                let starred = favorite_ids.contains(&def.id);
+                                let label = if starred { t!("★ Favourite") } else { t!("☆ Add to favourites") };
+                                if crate::dialog::button(ui, &theme, label).on_hover_text(t!("Favourites are listed at the top of the picker")).clicked() {
+                                    star = Some(def.id.clone());
+                                }
                             }
                         });
                     });
@@ -389,8 +440,16 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
             p.highlighted = 0;
         }
     }
+    if let Some(id) = star {
+        let favorites = &mut ed.prefs.favorite_blocks;
+        if favorites.contains(&id) {
+            favorites.retain(|f| *f != id);
+        } else {
+            favorites.push(id);
+        }
+    }
     if let Some(fold) = fold {
-        let cats: Vec<String> = list.iter().map(|(d, _, _)| category_of(d)).collect();
+        let cats: Vec<String> = (0..list.len()).map(cat_at).collect();
         ctx.data_mut(|d| {
             let closed = d.get_persisted_mut_or_default::<Vec<String>>(egui::Id::new(COLLAPSED_KEY));
             match fold {
@@ -409,6 +468,11 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
     }
     if let Some((block_id, pin)) = chosen {
         let picker = ed.picker.take().unwrap();
+        // Remembered for the Recent section.
+        let recent = &mut ed.prefs.recent_blocks;
+        recent.retain(|r| *r != block_id);
+        recent.insert(0, block_id.clone());
+        recent.truncate(20);
         place(ed, &picker, &block_id, pin);
     } else if close {
         ed.picker = None;
