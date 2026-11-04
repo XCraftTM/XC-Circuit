@@ -27,7 +27,7 @@ rquickjs = "0.14"
 serde = { version = "1", features = ["derive"] }
 # preserve_order keeps fields, outputs and values in the order block files declare them.
 serde_json = { version = "1", features = ["preserve_order"] }
-toml = { version = "0.9", features = ["preserve_order"] }
+toml = { version = "1", features = ["preserve_order"] }
 
 # egui_dock 0.21 is built against egui 0.36, so eframe and egui_extras stay on 0.36.
 eframe = { version = "0.36", features = ["persistence", "glow"] }

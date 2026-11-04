@@ -346,7 +346,7 @@ impl NativeHost {
 
         // SAFETY: loading runs the library's initializers. This only happens
         // for plugins the user allowed.
-        let lib = unsafe { Library::new(&copy) }.map_err(|e| Status::Failed(e.to_string()))?;
+        let lib = unsafe { Library::new(&copy) }.map_err(|e| Status::Failed(load_error(&e)))?;
         let result = (|| {
             // SAFETY: the fingerprint symbol is a C function returning a static C string.
             let fp = unsafe { lib.get::<api::FingerprintFn>(api::FINGERPRINT_SYMBOL) }
@@ -357,7 +357,7 @@ impl NativeHost {
             }
             // SAFETY: the fingerprints match, so the plugin was built with this
             // compiler and these crates and shares their types.
-            let create = unsafe { lib.get::<api::CreateFn>(api::CREATE_SYMBOL) }.map_err(|e| Status::Failed(e.to_string()))?;
+            let create = unsafe { lib.get::<api::CreateFn>(api::CREATE_SYMBOL) }.map_err(|e| Status::Failed(load_error(&e)))?;
             crate::crash::plugin_call(*create).map_err(|e| Status::Failed(format!("panicked while starting: {e}")))
         })();
         self.libs.push(lib);
@@ -609,6 +609,22 @@ impl api::Host for EditorHost<'_> {
     }
 }
 
+/// A library error with the system's reason (libloading keeps that in
+/// `source`).
+fn load_error(e: &libloading::Error) -> String {
+    use std::error::Error as _;
+    let mut text = e.to_string();
+    let mut cause = e.source();
+    while let Some(c) = cause {
+        let more = c.to_string();
+        if !text.contains(&more) {
+            text = format!("{text}: {more}");
+        }
+        cause = c.source();
+    }
+    text
+}
+
 #[cfg(test)]
 mod tests {
     use std::process::Command as Process;
@@ -616,6 +632,17 @@ mod tests {
     use circuit_core::Project;
 
     use super::*;
+
+    /// A file that isn't a library is refused with the system's reason.
+    #[test]
+    fn load_errors_say_why() {
+        let tmp = std::env::temp_dir().join(format!("xc-not-a-lib-{}.{}", std::process::id(), std::env::consts::DLL_EXTENSION));
+        std::fs::write(&tmp, b"not a library").unwrap();
+        let err = unsafe { Library::new(&tmp) }.map(|_| ()).unwrap_err();
+        let text = load_error(&err);
+        let _ = std::fs::remove_file(&tmp);
+        assert!(text.len() > err.to_string().len(), "no reason given: {text}");
+    }
 
     /// Script plugins load without approval and reload when their file changes.
     #[test]
