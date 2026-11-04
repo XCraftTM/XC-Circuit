@@ -24,6 +24,44 @@ pub enum BotState {
 pub struct Activity {
     pub at: Instant,
     pub error: Option<String>,
+    /// How long the block took the last time it ran, and when that was.
+    pub ms: Option<(f64, Instant)>,
+}
+
+/// How long a block glows after it ran.
+pub const GLOW: Duration = Duration::from_millis(2000);
+/// How long a block shows how long it took.
+pub const TIME_SHOWN: Duration = Duration::from_secs(30);
+
+impl Activity {
+    /// How strongly it glows now: 1 when it just ran, 0 after [`GLOW`].
+    pub fn glow(&self) -> f32 {
+        if self.error.is_some() { 0.0 } else { (1.0 - self.at.elapsed().as_secs_f32() / GLOW.as_secs_f32()).max(0.0) }
+    }
+
+    /// Its last run time while it's still shown, with how visible it is
+    /// (fading out over the last second).
+    pub fn time_shown(&self) -> Option<(f64, f32)> {
+        let (ms, at) = self.ms?;
+        let left = TIME_SHOWN.saturating_sub(at.elapsed()).as_secs_f32();
+        (left > 0.0).then_some((ms, left.min(1.0)))
+    }
+
+    /// Whether the canvas still changes: a glow fading or a time to hide.
+    pub fn live(&self) -> bool {
+        self.error.is_none() && self.at.elapsed() < GLOW || self.time_shown().is_some()
+    }
+}
+
+/// A run time as people read it: 0.4 ms, 12 ms, 1.25 s.
+pub fn format_ms(ms: f64) -> String {
+    if ms < 10.0 {
+        format!("{ms:.1} ms")
+    } else if ms < 1000.0 {
+        format!("{ms:.0} ms")
+    } else {
+        format!("{:.2} s", ms / 1000.0)
+    }
 }
 
 /// One row of the Settings dialog, read from the build mode's `[settings]`.
@@ -629,20 +667,21 @@ fn handle_event(ed: &mut Editor, ev: BotEvent) {
             line.target = ws.zip(node);
             ed.push_log(line);
         }
-        BotEvent::Node { ws, node, phase, error, .. } => {
+        BotEvent::Node { ws, node, phase, error, ms } => {
             let key = (ws, node);
-            match phase.as_str() {
-                "error" => {
-                    ed.activity.insert(key, Activity { at: Instant::now(), error });
-                }
-                _ => {
-                    ed.activity.insert(key, Activity { at: Instant::now(), error: None });
-                }
-            }
+            let now = Instant::now();
+            // The last run time stays until the block finishes again.
+            let last = ed.activity.get(&key).and_then(|a| a.ms);
+            let activity = match phase.as_str() {
+                "error" => Activity { at: now, error, ms: last },
+                "exit" => Activity { at: now, error: None, ms: ms.map(|m| (m, now)).or(last) },
+                _ => Activity { at: now, error: None, ms: last },
+            };
+            ed.activity.insert(key, activity);
         }
         BotEvent::Zone { ws, zone, phase, error } => {
             let error = if phase == "error" { error.or(Some("failed".into())) } else { None };
-            ed.activity.insert((ws, zone), Activity { at: Instant::now(), error });
+            ed.activity.insert((ws, zone), Activity { at: Instant::now(), error, ms: None });
         }
         // Questions are taken in `poll`; one without choices has nothing to show.
         BotEvent::Ready {} | BotEvent::Ask { .. } => {}
@@ -668,6 +707,26 @@ pub fn app_data_dir() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn blocks_show_how_long_they_took() {
+        assert_eq!((format_ms(0.42), format_ms(12.4), format_ms(1250.0)), ("0.4 ms".into(), "12 ms".into(), "1.25 s".into()));
+        let mut ed = Editor::new(Vec::new(), None).unwrap();
+        let node = |phase: &str, ms: Option<f64>| BotEvent::Node { ws: "w".into(), node: "1".into(), phase: phase.into(), ms, error: None };
+        handle_event(&mut ed, node("enter", None));
+        assert!(ed.activity[&("w".into(), "1".into())].time_shown().is_none(), "no time before it finished");
+        handle_event(&mut ed, node("exit", Some(12.0)));
+        let a = &ed.activity[&("w".into(), "1".into())];
+        assert_eq!(a.time_shown(), Some((12.0, 1.0)));
+        assert!(a.glow() > 0.9 && a.live());
+        // Running again keeps the last time until it finishes.
+        handle_event(&mut ed, node("enter", None));
+        assert_eq!(ed.activity[&("w".into(), "1".into())].time_shown().map(|t| t.0), Some(12.0));
+        // After 30 seconds it's gone.
+        let old = Instant::now() - TIME_SHOWN - Duration::from_millis(1);
+        let a = Activity { at: old, error: None, ms: Some((12.0, old)) };
+        assert!(a.time_shown().is_none() && a.glow() == 0.0 && !a.live());
+    }
 
     #[test]
     fn patterns_match_the_whole_value() {

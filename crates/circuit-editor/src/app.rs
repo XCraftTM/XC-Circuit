@@ -1458,11 +1458,18 @@ impl eframe::App for CircuitApp {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
         self.edit_shortcuts(&ctx);
-        // A block that just ran glows and fades out, so repaint while one does.
-        // Failed blocks stay marked, but their mark doesn't move: no repaints.
-        self.ed.activity.retain(|_, a| a.error.is_some() || a.at.elapsed().as_secs_f32() < 1.2);
-        if self.ed.activity.values().any(|a| a.error.is_none()) {
-            ctx.request_repaint_after(std::time::Duration::from_millis(33));
+        // A block that just ran glows and fades out, so repaint while one does;
+        // its run time shows for a while, then fades. Failed blocks stay
+        // marked, but their mark doesn't move: no repaints.
+        self.ed.activity.retain(|_, a| a.error.is_some() || a.live());
+        let glowing = self.ed.activity.values().any(|a| a.glow() > 0.0);
+        let next_fade = self.ed.activity.values().filter_map(|a| a.ms).map(|(_, at)| crate::bot::TIME_SHOWN.saturating_sub(at.elapsed())).min();
+        match next_fade {
+            _ if glowing => ctx.request_repaint_after(std::time::Duration::from_millis(33)),
+            // Fading out over the last second.
+            Some(left) if left <= std::time::Duration::from_secs(1) => ctx.request_repaint_after(std::time::Duration::from_millis(33)),
+            Some(left) => ctx.request_repaint_after(left - std::time::Duration::from_secs(1)),
+            None => {}
         }
 
         let title = match &self.ed.project {

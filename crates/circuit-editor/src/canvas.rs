@@ -464,7 +464,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         draw_grid(&painter, visible, theme, view.zoom);
     }
     let recent = |id: &str| activity.get(&(ws_key.to_string(), id.to_string()));
-    let glow = |id: &str| recent(id).filter(|a| a.error.is_none()).map(|a| (1.0 - a.at.elapsed().as_secs_f32()).max(0.0)).unwrap_or(0.0);
+    let glow = |id: &str| recent(id).map(|a| a.glow()).unwrap_or(0.0);
 
     // How big a pin is to the pointer (in touch mode, about a fingertip).
     let pin_hit = if theme.touch { 30.0 } else { 16.0 };
@@ -651,6 +651,16 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             painter.rect_stroke(layout.rect.expand(3.0), radius + 3.0, Stroke::new(3.0, with_alpha(theme.action, (lit * 200.0) as u8)), StrokeKind::Outside);
         }
         painter.rect(layout.rect, radius, theme.node, border, StrokeKind::Inside);
+        // How long it took the last time it ran, above its top-right corner, for a while.
+        if def.is_some_and(|d| d.kind != BlockKind::Event)
+            && let Some((ms, alpha)) = recent(id).and_then(|a| a.time_shown())
+        {
+            let color = with_alpha(theme.text_muted, (alpha * 255.0) as u8);
+            let galley = painter.layout_no_wrap(crate::bot::format_ms(ms), FontId::monospace(10.5), color);
+            let pill = Rect::from_min_size(layout.rect.right_top() - vec2(galley.size().x + 12.0, galley.size().y + 10.0), galley.size() + vec2(12.0, 6.0));
+            painter.rect_filled(pill, 6.0, with_alpha(theme.panel_header, (alpha * 230.0) as u8));
+            painter.galley(pill.min + vec2(6.0, 3.0), galley, color);
+        }
         if let Some(err) = &failed {
             let text = if err.len() > 60 { format!("{}…", &err[..err.char_indices().nth(60).map(|(i, _)| i).unwrap_or(err.len())]) } else { err.clone() };
             let galley = painter.layout_no_wrap(text, FontId::proportional(11.5), Color32::WHITE);
