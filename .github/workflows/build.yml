@@ -18,7 +18,7 @@ jobs:
       matrix: ${{ steps.plan.outputs.matrix }}
       version: ${{ steps.plan.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: plan
         env:
           PUBLIC: ${{ !github.event.repository.private }}
@@ -43,7 +43,7 @@ jobs:
     env:
       VERSION: ${{ needs.plan.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Linux packages
         if: runner.os == 'Linux'
@@ -59,12 +59,12 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 
       # For the third-party notices.
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -134,7 +134,7 @@ jobs:
         if: runner.os == 'Linux'
         run: bash packaging/linux/build-packages.sh "XC-Circuit-${{ matrix.name }}" "$VERSION" "${{ matrix.arch }}" dist
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: XC-Circuit-${{ matrix.name }}
           path: dist/*
@@ -146,8 +146,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
