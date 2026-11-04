@@ -46,8 +46,13 @@ globalThis.__load = function (key, src) {
       if (typeof block[k] === "function") out["has_" + k] = true;
       else out[k] = block[k];
     }
-    // Async blocks wait for something before the flow goes on.
-    if (typeof block.run === "function" && block.run.constructor && block.run.constructor.name === "AsyncFunction") out.async_run = true;
+    // Async blocks wait for something before the flow goes on: their run()
+    // awaits or chains a promise. Waiting for the rest of the flow
+    // (ctx.next) doesn't count, nor does the async keyword on its own.
+    if (typeof block.run === "function") {
+      const own = Function.prototype.toString.call(block.run).replace(/\b(await|return)\s+ctx\.next\s*\(/g, "ctx.next(");
+      out.async_run = /\bawait\b|\.then\s*\(|\bnew\s+Promise\b|\bPromise\.(all|allSettled|any|race)\s*\(/.test(own);
+    }
     return JSON.stringify({ ok: out });
   } catch (e) {
     return __error(e);
@@ -271,9 +276,14 @@ mod tests {
         assert!(def.finish().is_empty());
         assert_eq!(def.kind, BlockKind::Action);
         assert!(def.has_define && def.has_run);
-        assert_eq!(def.timing(), Some(true), "async run() makes an async block");
-        let sync = engine.load_block("sync", "module.exports = { id: 'x.s', kind: 'value', run() { return {} } }").unwrap();
-        assert_eq!(sync.timing(), Some(false));
+        // `async run() {}` alone isn't waiting for anything.
+        assert_eq!(def.timing(), Some(false));
+        let timing = |src: &str| engine.load_block("t", &format!("module.exports = {{ id: 'x.t', kind: 'action', {src} }}")).unwrap().timing();
+        assert_eq!(timing("run() { return {} }"), Some(false));
+        assert_eq!(timing("async run({ ctx }) { await ctx.next('a') }"), Some(false), "waiting for the rest of the flow isn't waiting");
+        assert_eq!(timing("async run({ ctx }) { const m = await ctx.store.global().get('x'); return { m } }"), Some(true));
+        assert_eq!(timing("run({ fields }) { return fields.member.roles.add('1').then(() => ({})) }"), Some(true));
+        assert_eq!(timing("run() { return new Promise((r) => setTimeout(r, 5)) }"), Some(true));
 
         let connected = json!({ "list": "list<discord.role>" });
         let result = engine.define("for_each", &Map::new(), connected.as_object().unwrap(), &json!({})).unwrap();

@@ -44,15 +44,21 @@ export interface DefineResult {
   flows?: string[];
 }
 
+/** Stored data of one scope (see ctx.store). Every method returns a promise. */
 export interface Store {
   get<T = any>(key: string, fallback?: T): Promise<T>;
   set(key: string, value: unknown): Promise<void>;
   has(key: string): Promise<boolean>;
   delete(key: string): Promise<void>;
+  /** Adds to a number (from 0) and gives the new number. */
   inc(key: string, by?: number): Promise<number>;
+  /** Appends to a list (from empty) and gives the list. */
   push(key: string, value: unknown): Promise<unknown[]>;
+  /** Every key in this scope. */
+  keys(): Promise<string[]>;
 }
 
+/** Variables of one scope (see ctx.vars). Gone when the bot stops. */
 export interface Vars {
   get<T = any>(name: string, fallback?: T): T;
   set(name: string, value: unknown): void;
@@ -60,9 +66,16 @@ export interface Vars {
   delete(name: string): boolean;
 }
 
+/** What blocks get as `ctx` while the bot runs. */
 export interface Ctx {
+  /** Continues on one of the block's `flows`, after setting `outputs`. Resolves when the rest of the flow is done. */
   next(flow: string, outputs?: Record<string, unknown>): Promise<void>;
+  /** Sets one output without continuing. */
   set(output: string, value: unknown): void;
+  /** Reads the block's inputs again (for loops whose condition changes). */
+  resolve(): Promise<Record<string, any>>;
+  /** Sets what this run gives back to the Call block (or emit()) that started it. */
+  returnValue(value: unknown): void;
   log: Record<"info" | "success" | "warn" | "error" | "debug", (...parts: unknown[]) => void>;
   vars: { run: Vars; workspace: Vars; global: Vars };
   store: {
@@ -71,21 +84,48 @@ export interface Ctx {
     user(id: unknown): Store;
     member(serverId: unknown, userId: unknown): Store;
     channel(id: unknown): Store;
+    /** Your own namespace, to keep a plugin's data apart. */
     ns(name: string): Store;
+    /** Every stored entity of a scope, for leaderboards: [{ id, values }]. */
+    each(scope: "global" | "server" | "user" | "member" | "channel" | "ns", serverId?: unknown): { id: string; values: Record<string, unknown> }[];
   };
+  /** Starts every On Signal event with that name, without waiting. */
   signal: { emit(name: string, data?: unknown): void };
-  /** Fills {placeholders} from the event, run variables, earlier outputs and `vars`. */
+  /** Fills ${…} in a text like text fields are filled: from the event, run variables, earlier outputs and `vars`. */
   fill(text: string, vars?: Record<string, unknown>): string;
+  /** The outputs of the event that started this run. */
   event: Record<string, unknown> | undefined;
+  /** The block's own field values as filled in (without connected values). */
   fields: Record<string, any>;
   project: { name: string; mode: string; settings: Record<string, unknown>; data: Record<string, any> };
-  util: { sleep(ms: number): Promise<void>; isURL(s: string): boolean; id(n?: number): string; shuffle<T>(list: T[]): T[]; typeOf(v: unknown): string };
+  util: {
+    sleep(ms: number): Promise<void>;
+    isURL(s: string): boolean;
+    id(n?: number): string;
+    shuffle<T>(list: T[]): T[];
+    typeOf(v: unknown): string;
+    /** Compare's checks: "eq", "ne", "gt", "lt", "gte", "lte", "between", "contains", "starts", "ends", "matches"… as in the Compare block. */
+    compare(a: unknown, check: string, b: unknown, options?: { c?: unknown; ignoreCase?: boolean }): boolean;
+  };
   bot: { readonly uptime: number; stop(): void; restart(): void };
-  runtime: { onError(h: (e: unknown) => void): void; onSignal(name: string, h: (data: unknown) => void): void; onStart(h: () => void): void; setting(name: string): unknown };
+  runtime: {
+    onError(h: (e: unknown) => void): void;
+    onSignal(name: string, h: (data: unknown) => void): void;
+    /** Answers Call blocks with that name: h(data) starts a run and resolves to what it returns. */
+    onCall(name: string, h: (data: unknown) => Promise<unknown>): void;
+    /** Runs the When Called flows with that name and resolves to the first one's return value. */
+    call(name: string, data?: unknown): Promise<unknown>;
+    onStart(h: () => void): void;
+    setting(name: string): unknown;
+  };
+  /** Inside a Try Zone with a timeout: fires when the zone gives up. */
   abortSignal?: AbortSignal;
+  /** Loads an npm package listed in the block's requires.dependencies (or Node's own modules). */
   require(name: string): any;
   /** Added by the Discord Bot mode. */
   discord?: { client: any };
+  /** Added by the Fluxer Bot mode. */
+  fluxer?: { client: any; prefix(): string; [helper: string]: any };
 }
 
 /** What the block is. */
@@ -141,6 +181,11 @@ export interface BlockDef<F = Record<string, any>> extends Partial<BlockInfo>, B
   migrate?(values: Record<string, any>, fromVersion: string): Record<string, any>;
   setup?(ctx: Ctx): void | Promise<void>;
   listen?(ctx: Ctx, emit: (outputs: Record<string, unknown>) => void): void;
+  /**
+   * What the block does. Value blocks and actions without `flows` return their outputs;
+   * actions with `flows` call ctx.next(). Write it `async` only when it awaits something:
+   * the block picker tags blocks that wait as Async.
+   */
   run?(args: { fields: F; ctx: Ctx; node: { id: string; workspace: string } }): unknown;
 }
 
