@@ -85,6 +85,9 @@ pub struct Editor {
     pub multi: HashSet<String>,
     /// Selected notes: (workspace, note).
     pub selected_notes: HashSet<(String, String)>,
+    /// The frame in which Settings › Shortcuts last waited for a key: until
+    /// the next one, no shortcut fires (see `recording_shortcut`).
+    pub recording_frame: Option<u64>,
     /// A selected wire (workspace, link), deleted with Del.
     pub selected_wire: Option<(String, Link)>,
     pub history: Histories,
@@ -134,6 +137,7 @@ impl Editor {
             wire_values: HashMap::new(),
             multi: HashSet::new(),
             selected_notes: HashSet::new(),
+            recording_frame: None,
             selected_wire: None,
             history: Histories::default(),
             prefs: Default::default(),
@@ -641,6 +645,11 @@ impl Editor {
         if self.selected.as_ref().is_some_and(|(w, n)| w == key && !alive.contains(n)) {
             self.clear_selection();
         }
+    }
+
+    /// Whether a shortcut is being recorded in Settings, so none should fire.
+    pub fn recording_shortcut(&self, ctx: &eframe::egui::Context) -> bool {
+        self.recording_frame.is_some_and(|f| f + 1 >= ctx.cumulative_pass_nr())
     }
 
     /// The selected notes of a workspace.

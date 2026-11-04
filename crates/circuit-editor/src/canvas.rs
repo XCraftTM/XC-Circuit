@@ -375,7 +375,7 @@ fn zone_layout(zid: &str, rect: Rect) -> NodeLayout {
 }
 
 pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
-    let Editor { reg, engine, theme, project, shapes, views, selected, edited, picker, active_workspace, activity, wire_values, multi, selected_notes, define_ctx, embed_edit, layout_edit, selected_wire, prefs, ui_rects, .. } = ed;
+    let Editor { reg, engine, theme, project, shapes, views, selected, edited, picker, active_workspace, activity, wire_values, multi, selected_notes, recording_frame, define_ctx, embed_edit, layout_edit, selected_wire, prefs, ui_rects, .. } = ed;
     let Some(project) = project.as_mut() else { return };
     let mode = reg.mode(&project.meta.mode).or_else(|| reg.modes.first());
     let Some(ws) = project.workspaces.get_mut(ws_key) else {
@@ -1162,10 +1162,41 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     if selected.is_some() {
         *selected_wire = None;
     }
+    // The canvas' shortcuts (Settings › Shortcuts): while the mouse is over it and nothing is typed.
     let typing = ctx.text_edit_focused();
-    if over_canvas && !typing && picker.is_none() && ctx.input(|i| i.key_pressed(Key::Space)) {
-        let p = pointer.unwrap();
-        *picker = Some(Picker::new(ws_key, p, to_global.inverse() * p, None));
+    let recording = recording_frame.is_some_and(|f| f + 1 >= ctx.cumulative_pass_nr());
+    if over_canvas && !typing && picker.is_none() && !recording {
+        use crate::keymap::{Action, consume};
+        let keys = &prefs.shortcuts;
+        if consume(&ctx, keys, Action::AddBlock)
+            && let Some(p) = pointer
+        {
+            *picker = Some(Picker::new(ws_key, p, to_global.inverse() * p, None));
+        }
+        if consume(&ctx, keys, Action::AddNote)
+            && let Some(p) = pointer_scene
+        {
+            let id = ws.next_note_id();
+            ws.notes.insert(id.clone(), Note { title: t!("Note").to_string(), rect: [p.x - 40.0, p.y - 30.0, 420.0, 260.0], ..Default::default() });
+            view.edit_note = Some(id);
+            *edited = true;
+        }
+        if consume(&ctx, keys, Action::ToggleSnap) {
+            prefs.snap_to_grid = !prefs.snap_to_grid;
+        }
+        if consume(&ctx, keys, Action::FitView) {
+            fit_view(view, outer, &layouts[..node_count], ws);
+        }
+        let at = pointer.unwrap_or(outer.center());
+        if consume(&ctx, keys, Action::ZoomIn) {
+            view.zoom_at(outer.min, at, 1.25);
+        }
+        if consume(&ctx, keys, Action::ZoomOut) {
+            view.zoom_at(outer.min, at, 1.0 / 1.25);
+        }
+        if consume(&ctx, keys, Action::ZoomReset) {
+            view.zoom_at(outer.min, at, 1.0 / view.zoom);
+        }
     }
 
     // Buttons over the canvas, in screen space and on a layer above it: the

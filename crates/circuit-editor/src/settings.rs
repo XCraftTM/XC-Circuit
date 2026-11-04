@@ -53,6 +53,12 @@ pub struct SettingsView {
     node: Option<Result<String, String>>,
     /// "Create a translation": language code, name in that language, English name.
     new_translation: Option<[String; 3]>,
+    /// The shortcut being recorded: its action and which of its shortcuts (or a new one).
+    recording: Option<(crate::keymap::Action, usize)>,
+    /// What the last change did, shown under that action: "Taken from Save".
+    shortcut_note: Option<(crate::keymap::Action, String)>,
+    /// The Shortcuts page's search.
+    shortcut_filter: String,
 }
 
 const NAV_W: f32 = 190.0;
@@ -85,6 +91,7 @@ pub fn ui(ui: &mut Ui, ed: &mut Editor, native: &NativeHost, view: &mut Settings
         nav_ui.painter().text(rect.left_center() + vec2(36.0, 0.0), Align2::LEFT_CENTER, crate::i18n::t(name), FontId::proportional(13.5), if selected { theme.text } else { theme.text_muted });
         if resp.on_hover_cursor(CursorIcon::PointingHand).clicked() {
             view.section = section;
+            view.recording = None;
         }
     }
 
@@ -104,7 +111,7 @@ pub fn ui(ui: &mut Ui, ed: &mut Editor, native: &NativeHost, view: &mut Settings
                 Section::Bot => bot(ui, ed, &theme, view, asks),
                 Section::Plugins => plugins(ui, ed, native, &theme, asks),
                 Section::Backups => backups(ui, ed, &theme, asks),
-                Section::Shortcuts => shortcuts(ui, &theme),
+                Section::Shortcuts => shortcuts(ui, ed, &theme, view),
                 Section::About => about(ui, ed, &theme),
             }
         });
@@ -425,19 +432,8 @@ fn plugins(ui: &mut Ui, ed: &mut Editor, native: &NativeHost, theme: &Theme, ask
     }
 }
 
-const SHORTCUTS: [(&str, &str); 18] = [
-    (n("Ctrl+P"), n("Command palette: commands, workspaces and blocks")),
-    (n("Ctrl+,"), n("Settings")),
-    (n("Ctrl+S"), n("Save (restarts a running bot)")),
-    (n("F5"), n("Run or restart the bot")),
-    (n("Shift+F5"), n("Stop the bot")),
-    (n("Ctrl+Z"), n("Undo")),
-    (n("Ctrl+Y"), n("Redo")),
-    (n("Ctrl+C / Ctrl+X / Ctrl+V"), n("Copy, cut and paste blocks")),
-    (n("Ctrl+D"), n("Duplicate the selected blocks")),
-    (n("Ctrl+A"), n("Select all blocks")),
-    (n("Delete"), n("Delete the selected blocks or wire")),
-    (n("Space"), n("Open the block picker at the mouse")),
+const SHORTCUTS: [(&str, &str); 7] = [
+    (n("Ctrl+C / Ctrl+X / Ctrl+V"), n("Copy, cut and paste blocks (your system's keys)")),
     (n("Right-click"), n("Block picker on empty canvas; selects a block or wire (its actions show as buttons)")),
     (n("Shift-drag"), n("Select blocks with a box")),
     (n("Mouse wheel"), n("Zoom the canvas")),
@@ -446,7 +442,130 @@ const SHORTCUTS: [(&str, &str); 18] = [
     (n("Esc"), n("Close a picker, menu or editor")),
 ];
 
-fn shortcuts(ui: &mut Ui, theme: &Theme) {
+/// Settings › Shortcuts: every action with its shortcuts, changed by clicking
+/// one and pressing the new keys.
+fn shortcuts(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView) {
+    use crate::keymap::{self, Action, PER_ACTION, Shortcut};
+    // Recording: the next key (with Ctrl, Shift, Alt) or side button is it; Esc cancels.
+    if let Some((action, slot)) = view.recording {
+        ed.recording_frame = Some(ui.ctx().cumulative_pass_nr());
+        let events = ui.ctx().input_mut(|i| std::mem::take(&mut i.events));
+        let pressed = events.iter().find_map(Shortcut::from_event);
+        let cancelled = events.iter().any(|e| matches!(e, egui::Event::Key { key: egui::Key::Escape, pressed: true, .. }));
+        if let Some(new) = pressed {
+            let mut list = keymap::shortcuts(&ed.prefs.shortcuts, action);
+            list.retain(|s| *s != new);
+            if slot < list.len() {
+                list[slot] = new;
+            } else {
+                list.push(new);
+            }
+            list.truncate(PER_ACTION);
+            let taken = keymap::set(&mut ed.prefs.shortcuts, action, list);
+            view.shortcut_note = (!taken.is_empty()).then(|| {
+                let names: Vec<&str> = taken.iter().map(|a| a.name()).collect();
+                (action, tf!("{shortcut} was taken from: {actions}", shortcut = new.text(), actions = names.join(", ")))
+            });
+            view.recording = None;
+        } else if cancelled {
+            view.recording = None;
+        }
+        ui.ctx().request_repaint();
+    }
+
+    ui.label(RichText::new(t!("Click a shortcut, then press the keys you want: any key, with Ctrl, Shift and Alt as you like, or the mouse's side buttons. Esc cancels. Each action can have two.")).size(12.5).color(theme.text_muted));
+    ui.add_space(8.0);
+    ui.horizontal(|ui| {
+        ui.add(crate::inputs::TextLine::new(&mut view.shortcut_filter).hint(t!("Search actions or keys")).width(260.0));
+        if !ed.prefs.shortcuts.is_empty() && crate::dialog::button(ui, theme, t!("Reset all")).on_hover_text(t!("Every shortcut back to how it came")).clicked() {
+            ed.prefs.shortcuts.clear();
+            view.shortcut_note = None;
+        }
+    });
+    ui.add_space(6.0);
+
+    let filter = view.shortcut_filter.trim().to_lowercase();
+    let mut last_group = "";
+    for action in Action::ALL {
+        let list = keymap::shortcuts(&ed.prefs.shortcuts, action);
+        let texts: Vec<String> = list.iter().map(Shortcut::text).collect();
+        if !filter.is_empty() && !action.name().to_lowercase().contains(&filter) && !texts.iter().any(|t| t.to_lowercase().contains(&filter)) {
+            continue;
+        }
+        if action.group() != last_group {
+            last_group = action.group();
+            group(ui, theme, last_group);
+            if action.canvas_only() {
+                ui.label(RichText::new(t!("These work while the mouse is over a canvas.")).size(11.5).color(theme.text_muted));
+                ui.add_space(4.0);
+            }
+        }
+        let changed = list != action.defaults();
+        let mut start: Option<usize> = None;
+        let mut remove: Option<usize> = None;
+        let mut reset = false;
+        egui::Frame::new().fill(theme.panel_header).stroke(Stroke::new(1.0, theme.line)).corner_radius(8).inner_margin(egui::Margin::symmetric(14, 8)).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(action.name()).size(13.0).color(theme.text));
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.spacing_mut().item_spacing.x = 6.0;
+                    if changed && ui.link(RichText::new(t!("Reset")).size(12.0)).on_hover_text(tf!("Back to {keys}", keys = action.defaults().iter().map(Shortcut::text).collect::<Vec<_>>().join(", "))).clicked() {
+                        reset = true;
+                    }
+                    let recording_here = view.recording.filter(|(a, _)| *a == action).map(|(_, s)| s);
+                    // Shown left to right: the shortcuts, then "+".
+                    let slots = (list.len() + 1).min(PER_ACTION);
+                    for slot in (0..slots).rev() {
+                        let text = match (recording_here == Some(slot), list.get(slot)) {
+                            (true, _) => {
+                                let m = ui.input(|i| i.modifiers);
+                                let held: Vec<&str> = [(m.command || m.ctrl, "Ctrl"), (m.shift, "Shift"), (m.alt, "Alt")].into_iter().filter(|(on, _)| *on).map(|(_, n)| n).collect();
+                                if held.is_empty() { t!("Press keys…").to_string() } else { format!("{}+…", held.join("+")) }
+                            }
+                            (false, Some(s)) => s.text(),
+                            (false, None) => t!("+ Add").to_string(),
+                        };
+                        let active = recording_here == Some(slot);
+                        let fill = if active { mix(theme.field, theme.accent, 0.3) } else { theme.field };
+                        let stroke = if active { Stroke::new(1.5, theme.accent) } else { Stroke::new(1.0, theme.line) };
+                        let resp = ui.add(egui::Button::new(RichText::new(&text).monospace().size(12.0).color(if list.get(slot).is_some() || active { theme.text } else { theme.text_muted })).fill(fill).stroke(stroke).corner_radius(5).min_size(vec2(64.0, 24.0)));
+                        let resp = if list.get(slot).is_some() { resp.on_hover_text(t!("Click to change, right-click to remove")) } else { resp.on_hover_text(t!("Add another shortcut")) };
+                        if resp.clicked() {
+                            start = Some(slot);
+                        }
+                        if resp.secondary_clicked() && slot < list.len() {
+                            remove = Some(slot);
+                        }
+                    }
+                    if list.is_empty() && recording_here.is_none() {
+                        ui.label(RichText::new(t!("No shortcut")).size(12.0).color(theme.text_muted));
+                    }
+                });
+            });
+            if let Some((a, note)) = &view.shortcut_note
+                && *a == action
+            {
+                ui.label(RichText::new(note).size(11.5).color(theme.warning));
+            }
+        });
+        ui.add_space(6.0);
+        if let Some(slot) = start {
+            view.recording = Some((action, slot));
+            view.shortcut_note = None;
+        }
+        if let Some(slot) = remove {
+            let mut l = list.clone();
+            l.remove(slot);
+            keymap::set(&mut ed.prefs.shortcuts, action, l);
+        }
+        if reset {
+            let taken = keymap::set(&mut ed.prefs.shortcuts, action, action.defaults());
+            view.shortcut_note = (!taken.is_empty()).then(|| (action, tf!("Taken back from: {actions}", actions = taken.iter().map(|a| a.name()).collect::<Vec<_>>().join(", "))));
+        }
+    }
+
+    group(ui, theme, t!("Mouse and fixed keys"));
     egui::Frame::new().fill(theme.panel_header).stroke(Stroke::new(1.0, theme.line)).corner_radius(8).inner_margin(egui::Margin::symmetric(16, 8)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         egui::Grid::new("shortcuts").num_columns(2).spacing(vec2(24.0, 10.0)).show(ui, |ui| {

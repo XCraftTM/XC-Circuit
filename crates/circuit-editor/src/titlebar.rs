@@ -29,8 +29,8 @@ pub const SEARCH_W: f32 = 380.0;
 
 /// The search box in the middle of the title bar. Clicking it opens the
 /// command palette, which appears on top of it.
-pub fn search_box(ui: &mut egui::Ui, rect: Rect, theme: &Theme, label: &str) -> bool {
-    let resp = ui.interact(rect, ui.id().with("title-search"), Sense::click()).on_hover_text(t!("Search commands, workspaces and blocks (Ctrl+P)"));
+pub fn search_box(ui: &mut egui::Ui, rect: Rect, theme: &Theme, label: &str, shortcut: &str) -> bool {
+    let resp = ui.interact(rect, ui.id().with("title-search"), Sense::click()).on_hover_text(t!("Search commands, workspaces and blocks"));
     let fill = if resp.hovered() { mix(theme.field, theme.text, 0.06) } else { theme.field };
     let p = ui.painter();
     p.rect(rect, 6.0, fill, Stroke::new(1.0, theme.line), egui::StrokeKind::Inside);
@@ -40,7 +40,7 @@ pub fn search_box(ui: &mut egui::Ui, rect: Rect, theme: &Theme, label: &str) -> 
     p.circle_stroke(c, 4.5, stroke);
     p.line_segment([c + vec2(3.3, 3.3), c + vec2(6.5, 6.5)], stroke);
     p.text(rect.left_center() + vec2(30.0, 0.0), egui::Align2::LEFT_CENTER, label, egui::FontId::proportional(12.5), theme.text_muted);
-    p.text(rect.right_center() - vec2(10.0, 0.0), egui::Align2::RIGHT_CENTER, "Ctrl+P", egui::FontId::monospace(10.5), mix(theme.text_muted, theme.field, 0.35));
+    p.text(rect.right_center() - vec2(10.0, 0.0), egui::Align2::RIGHT_CENTER, shortcut, egui::FontId::monospace(10.5), mix(theme.text_muted, theme.field, 0.35));
     resp.clicked()
 }
 

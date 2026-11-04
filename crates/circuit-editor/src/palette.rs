@@ -48,7 +48,7 @@ pub struct Item {
     pub label: String,
     /// Extra words shown dimmed and searched, such as the workspace a block is in.
     pub detail: String,
-    pub shortcut: &'static str,
+    pub shortcut: String,
     pub cmd: Cmd,
     /// Texts inside the item (a block's fields): searched after the label,
     /// as (field label, text).
@@ -57,7 +57,7 @@ pub struct Item {
 
 impl Item {
     pub fn new(group: &'static str, label: impl Into<String>, cmd: Cmd) -> Item {
-        Item { group, label: label.into(), detail: String::new(), shortcut: "", cmd, content: Vec::new() }
+        Item { group, label: label.into(), detail: String::new(), shortcut: String::new(), cmd, content: Vec::new() }
     }
 
     pub fn content(mut self, c: Vec<(String, String)>) -> Item {
@@ -75,8 +75,8 @@ impl Item {
         self
     }
 
-    pub fn shortcut(mut self, s: &'static str) -> Item {
-        self.shortcut = s;
+    pub fn shortcut(mut self, s: impl Into<String>) -> Item {
+        self.shortcut = s.into();
         self
     }
 }
@@ -245,7 +245,7 @@ pub fn show(ctx: &egui::Context, theme: &Theme, state: &mut Palette, items: &[It
                             p.text(after, Align2::LEFT_CENTER, found, egui::FontId::proportional(11.5), theme.accent);
                         }
                         if !item.shortcut.is_empty() {
-                            p.text(rect.right_center() - vec2(10.0, 0.0), Align2::RIGHT_CENTER, item.shortcut, egui::FontId::monospace(11.0), theme.text_muted);
+                            p.text(rect.right_center() - vec2(10.0, 0.0), Align2::RIGHT_CENTER, &item.shortcut, egui::FontId::monospace(11.0), theme.text_muted);
                         }
                         if resp.hovered() && ui.ctx().input(|i| i.pointer.delta() != egui::Vec2::ZERO) {
                             state.highlighted = row;

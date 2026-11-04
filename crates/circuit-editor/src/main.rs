@@ -18,6 +18,7 @@ mod fonts;
 mod history;
 mod inputs;
 mod install;
+mod keymap;
 mod json_view;
 mod layout;
 mod markdown;

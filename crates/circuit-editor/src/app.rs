@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::bot::{BotState, BotUi};
 use crate::i18n::n;
 use crate::editor::{Action, Editor, Level};
+use crate::keymap::{self, Action as Hotkey};
 use crate::palette::{Cmd, Item};
 use crate::{canvas, dialog, palette, panels, picker};
 
@@ -342,6 +343,11 @@ impl CircuitApp {
         place_panel(&mut self.dock, tab);
     }
 
+    /// An action's first shortcut, for menus and the palette.
+    fn key_label(&self, action: Hotkey) -> String {
+        keymap::label(&self.ed.prefs.shortcuts, action)
+    }
+
     fn open_project_dialog(&mut self) {
         if let Some(dir) = rfd::FileDialog::new().set_title(t!("Open a Circuit project folder")).pick_folder() {
             self.switch_project(&dir);
@@ -475,7 +481,7 @@ impl CircuitApp {
             None => t!("Search").into(),
         };
         self.ed.ui_rects.insert("search".into(), search);
-        if crate::titlebar::search_box(ui, search, &theme, &label) {
+        if crate::titlebar::search_box(ui, search, &theme, &label, &self.key_label(Hotkey::CommandPalette)) {
             self.palette = Some(Default::default());
         }
         let row = |ui: &mut egui::Ui, layout| ui.new_child(egui::UiBuilder::new().max_rect(bar).layout(layout));
@@ -494,10 +500,10 @@ impl CircuitApp {
             ui.add(egui::Image::new(egui::include_image!("../assets/icon.svg")).fit_to_exact_size(egui::vec2(18.0, 18.0)));
             ui.add_space(4.0);
             ui.menu_button(t!("File"), |ui| {
-                if ui.button(t!("New Project…")).clicked() {
+                if ui.add(egui::Button::new(t!("New Project…")).shortcut_text(self.key_label(Hotkey::NewProject))).clicked() {
                     self.new_project_dialog();
                 }
-                if ui.button(t!("Open Project…")).clicked() {
+                if ui.add(egui::Button::new(t!("Open Project…")).shortcut_text(self.key_label(Hotkey::OpenProject))).clicked() {
                     self.open_project_dialog();
                 }
                 let recent = self.ed.prefs.recent_projects.clone();
@@ -521,7 +527,7 @@ impl CircuitApp {
                     self.close_project();
                 }
                 ui.separator();
-                if ui.add_enabled(self.ed.project.is_some(), egui::Button::new(t!("Save")).shortcut_text("Ctrl+S")).clicked() {
+                if ui.add_enabled(self.ed.project.is_some(), egui::Button::new(t!("Save")).shortcut_text(self.key_label(Hotkey::Save))).clicked() {
                     self.ed.save();
                     self.bot.restart_if_running(&mut self.ed, ui.ctx());
                 }
@@ -535,7 +541,7 @@ impl CircuitApp {
                 if ui.add_enabled(self.ed.project.is_some(), egui::Button::new(t!("Restore from backup…"))).clicked() {
                     open_center(&mut self.dock, Tab::Backups);
                 }
-                if ui.add(egui::Button::new(t!("Settings…")).shortcut_text("Ctrl+,")).clicked() {
+                if ui.add(egui::Button::new(t!("Settings…")).shortcut_text(self.key_label(Hotkey::Settings))).clicked() {
                     self.open_settings();
                 }
                 if ui.button(t!("Reload Plugins")).clicked() {
@@ -548,10 +554,10 @@ impl CircuitApp {
             });
             ui.menu_button(t!("Edit"), |ui| {
                 let key = self.ed.undo_key();
-                if ui.add_enabled(self.ed.history.can_undo(&key) || self.ed.edited, egui::Button::new(t!("Undo")).shortcut_text("Ctrl+Z")).clicked() {
+                if ui.add_enabled(self.ed.history.can_undo(&key) || self.ed.edited, egui::Button::new(t!("Undo")).shortcut_text(self.key_label(Hotkey::Undo))).clicked() {
                     self.undo();
                 }
-                if ui.add_enabled(self.ed.history.can_redo(&key), egui::Button::new(t!("Redo")).shortcut_text("Ctrl+Y")).clicked() {
+                if ui.add_enabled(self.ed.history.can_redo(&key), egui::Button::new(t!("Redo")).shortcut_text(self.key_label(Hotkey::Redo))).clicked() {
                     self.redo();
                 }
                 ui.separator();
@@ -567,14 +573,14 @@ impl CircuitApp {
                 {
                     self.ed.paste(&text, None);
                 }
-                if ui.add_enabled(has_sel, egui::Button::new(t!("Duplicate")).shortcut_text("Ctrl+D")).clicked() {
+                if ui.add_enabled(has_sel, egui::Button::new(t!("Duplicate")).shortcut_text(self.key_label(Hotkey::Duplicate))).clicked() {
                     self.ed.duplicate();
                 }
-                if ui.add_enabled(has_sel, egui::Button::new(t!("Delete")).shortcut_text("Del")).clicked() {
+                if ui.add_enabled(has_sel, egui::Button::new(t!("Delete")).shortcut_text(self.key_label(Hotkey::Delete))).clicked() {
                     self.ed.delete_selection();
                 }
                 ui.separator();
-                if ui.add(egui::Button::new(t!("Select all")).shortcut_text("Ctrl+A")).clicked() {
+                if ui.add(egui::Button::new(t!("Select all")).shortcut_text(self.key_label(Hotkey::SelectAll))).clicked() {
                     self.ed.select_all();
                 }
             });
@@ -611,7 +617,7 @@ impl CircuitApp {
                 if ui.checkbox(&mut self.ed.prefs.system_titlebar, t!("Use system title bar")).clicked() {
                     ui.ctx().send_viewport_cmd(ViewportCommand::Decorations(self.ed.prefs.system_titlebar));
                 }
-                if ui.add(egui::Button::new(t!("Command Palette…")).shortcut_text("Ctrl+P")).clicked() {
+                if ui.add(egui::Button::new(t!("Command Palette…")).shortcut_text(self.key_label(Hotkey::CommandPalette))).clicked() {
                     self.palette = Some(Default::default());
                 }
                 if ui.button(t!("Reset layout")).clicked() {
@@ -621,10 +627,10 @@ impl CircuitApp {
             let has_project = self.ed.project.is_some();
             ui.menu_button(t!("Bot"), |ui| {
                 let running = self.bot.state != BotState::Stopped;
-                if ui.add_enabled(has_project, egui::Button::new(if running { t!("Restart") } else { t!("Run") }).shortcut_text("F5")).clicked() {
+                if ui.add_enabled(has_project, egui::Button::new(if running { t!("Restart") } else { t!("Run") }).shortcut_text(self.key_label(Hotkey::Run))).clicked() {
                     self.bot.start(&mut self.ed, ui.ctx());
                 }
-                if ui.add_enabled(running, egui::Button::new(t!("Stop")).shortcut_text("Shift+F5")).clicked() {
+                if ui.add_enabled(running, egui::Button::new(t!("Stop")).shortcut_text(self.key_label(Hotkey::Stop))).clicked() {
                     self.bot.stop(&mut self.ed);
                 }
                 ui.separator();
@@ -1019,10 +1025,10 @@ impl CircuitApp {
         let has_sel = !self.ed.selection(&key).is_empty();
         let mut items = Vec::new();
         if has_project {
-            items.push(Item::new(t!("Bot"), if running { t!("Restart bot") } else { t!("Run bot") }, Cmd::Run).shortcut("F5"));
+            items.push(Item::new(t!("Bot"), if running { t!("Restart bot") } else { t!("Run bot") }, Cmd::Run).shortcut(self.key_label(Hotkey::Run)));
         }
         if running {
-            items.push(Item::new(t!("Bot"), t!("Stop bot"), Cmd::Stop).shortcut("Shift+F5"));
+            items.push(Item::new(t!("Bot"), t!("Stop bot"), Cmd::Stop).shortcut(self.key_label(Hotkey::Stop)));
         }
         if has_project {
             if self.ed.has_slash_commands() {
@@ -1030,12 +1036,12 @@ impl CircuitApp {
             }
             items.push(Item::new(t!("Bot"), t!("Bot Settings…"), Cmd::Settings));
             items.push(Item::new(t!("Bot"), "Export…", Cmd::Export));
-            items.push(Item::new(t!("File"), "Save", Cmd::Save).shortcut("Ctrl+S"));
+            items.push(Item::new(t!("File"), "Save", Cmd::Save).shortcut(self.key_label(Hotkey::Save)));
             items.push(Item::new(t!("File"), t!("Import workspaces…"), Cmd::ImportWorkspaces));
             items.push(Item::new(t!("File"), t!("Export workspaces…"), Cmd::ExportWorkspaces));
         }
-        items.push(Item::new(t!("File"), t!("New Project…"), Cmd::NewProject));
-        items.push(Item::new(t!("File"), t!("Open Project…"), Cmd::OpenProject));
+        items.push(Item::new(t!("File"), t!("New Project…"), Cmd::NewProject).shortcut(self.key_label(Hotkey::NewProject)));
+        items.push(Item::new(t!("File"), t!("Open Project…"), Cmd::OpenProject).shortcut(self.key_label(Hotkey::OpenProject)));
         let open = self.ed.project.as_ref().map(|p| p.root.display().to_string());
         for path in self.ed.prefs.recent_projects.iter().filter(|p| Some(*p) != open.as_ref()) {
             let name = Path::new(path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
@@ -1049,17 +1055,17 @@ impl CircuitApp {
         }
         items.push(Item::new(t!("File"), t!("Reload Plugins"), Cmd::ReloadPlugins));
         if self.ed.history.can_undo(&key) {
-            items.push(Item::new(t!("Edit"), "Undo", Cmd::Undo).shortcut("Ctrl+Z"));
+            items.push(Item::new(t!("Edit"), "Undo", Cmd::Undo).shortcut(self.key_label(Hotkey::Undo)));
         }
         if self.ed.history.can_redo(&key) {
-            items.push(Item::new(t!("Edit"), "Redo", Cmd::Redo).shortcut("Ctrl+Y"));
+            items.push(Item::new(t!("Edit"), "Redo", Cmd::Redo).shortcut(self.key_label(Hotkey::Redo)));
         }
         if has_sel {
-            items.push(Item::new(t!("Edit"), "Duplicate", Cmd::Duplicate).shortcut("Ctrl+D"));
-            items.push(Item::new(t!("Edit"), "Delete", Cmd::Delete).shortcut("Del"));
+            items.push(Item::new(t!("Edit"), "Duplicate", Cmd::Duplicate).shortcut(self.key_label(Hotkey::Duplicate)));
+            items.push(Item::new(t!("Edit"), "Delete", Cmd::Delete).shortcut(self.key_label(Hotkey::Delete)));
         }
         if has_project {
-            items.push(Item::new(t!("Edit"), t!("Select all"), Cmd::SelectAll).shortcut("Ctrl+A"));
+            items.push(Item::new(t!("Edit"), t!("Select all"), Cmd::SelectAll).shortcut(self.key_label(Hotkey::SelectAll)));
         }
         for view in SideView::ALL {
             if self.ed.prefs.side_view != Some(view) {
@@ -1080,7 +1086,7 @@ impl CircuitApp {
         }
         items.push(Item::new(t!("View"), t!("Reset layout"), Cmd::ResetLayout));
         items.push(Item::new(t!("Help"), t!("About XC™ Circuit"), Cmd::About));
-        items.push(Item::new(t!("File"), "Settings", Cmd::OpenSettings).shortcut("Ctrl+,"));
+        items.push(Item::new(t!("File"), "Settings", Cmd::OpenSettings).shortcut(self.key_label(Hotkey::Settings)));
         items.push(Item::new(t!("Help"), t!("Take the tour"), Cmd::Tour));
         if has_project {
             items.push(Item::new(t!("File"), t!("Restore from backup…"), Cmd::Backups));
@@ -1260,21 +1266,23 @@ impl CircuitApp {
         if ctx.text_edit_focused() || self.ed.picker.is_some() {
             return;
         }
-        use egui::{Key, Modifiers};
-        let cmd = Modifiers::COMMAND;
-        let cmd_shift = Modifiers::COMMAND | Modifiers::SHIFT;
-        if ctx.input_mut(|i| i.consume_key(cmd_shift, Key::Z) || i.consume_key(cmd, Key::Y)) {
+        if self.ed.recording_shortcut(ctx) {
+            return;
+        }
+        let keys = self.ed.prefs.shortcuts.clone();
+        let hit = |action| keymap::consume(ctx, &keys, action);
+        if hit(Hotkey::Redo) {
             self.redo();
-        } else if ctx.input_mut(|i| i.consume_key(cmd, Key::Z)) {
+        } else if hit(Hotkey::Undo) {
             self.undo();
         }
-        if ctx.input_mut(|i| i.consume_key(cmd, Key::D)) {
+        if hit(Hotkey::Duplicate) {
             self.ed.duplicate();
         }
-        if ctx.input_mut(|i| i.consume_key(cmd, Key::A)) {
+        if hit(Hotkey::SelectAll) {
             self.ed.select_all();
         }
-        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Delete)) {
+        if hit(Hotkey::Delete) {
             self.ed.delete_selection();
         }
         let events = ctx.input(|i| i.events.clone());
@@ -1478,22 +1486,34 @@ impl eframe::App for CircuitApp {
             ctx.send_viewport_cmd(ViewportCommand::CancelClose);
             self.confirm_close = true;
         }
-        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
-            self.ed.save();
-            self.bot.restart_if_running(&mut self.ed, &ctx);
-        }
-        if self.ed.project.is_some() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F5)) {
-            self.bot.start(&mut self.ed, &ctx);
-        }
-        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::SHIFT, egui::Key::F5)) {
-            self.bot.stop(&mut self.ed);
-        }
-        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Comma)) {
-            self.open_settings();
-        }
-        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::P) || i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::P)) {
-            self.palette = if self.palette.is_some() { None } else { Some(Default::default()) };
-            self.ed.picker = None;
+        // Shortcuts that work everywhere (also while typing), unless one is being recorded.
+        if !self.ed.recording_shortcut(&ctx) {
+            let keys = self.ed.prefs.shortcuts.clone();
+            let typing = ctx.text_edit_focused();
+            let hit = |action| keymap::consume_while(&ctx, &keys, action, typing);
+            if hit(Hotkey::Save) {
+                self.ed.save();
+                self.bot.restart_if_running(&mut self.ed, &ctx);
+            }
+            if hit(Hotkey::Run) && self.ed.project.is_some() {
+                self.bot.start(&mut self.ed, &ctx);
+            }
+            if hit(Hotkey::Stop) {
+                self.bot.stop(&mut self.ed);
+            }
+            if hit(Hotkey::Settings) {
+                self.open_settings();
+            }
+            if hit(Hotkey::CommandPalette) {
+                self.palette = if self.palette.is_some() { None } else { Some(Default::default()) };
+                self.ed.picker = None;
+            }
+            if hit(Hotkey::NewProject) {
+                self.new_project_dialog();
+            }
+            if hit(Hotkey::OpenProject) {
+                self.open_project_dialog();
+            }
         }
         self.bot.poll(&mut self.ed, &ctx);
         if let Some(Err(e)) = self.ed.bot_profile.poll() {
