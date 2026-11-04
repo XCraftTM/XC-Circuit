@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use circuit_core::graph::ACTION_IN;
-use circuit_core::{BlockDef, BlockKind, BlockShape, Compat, Flow, Link, PinMode, PinRef, PinType, Workspace};
+use circuit_core::{BlockDef, BlockKind, BlockShape, Compat, Flow, Link, Note, PinMode, PinRef, PinType, Workspace};
 use circuit_plugins::Registry;
 use eframe::egui::{
     self, Align2, Color32, CornerRadius, CursorIcon, FontId, Key, LayerId, PointerButton, Pos2, Rect, Response, RichText, Sense,
@@ -82,6 +82,8 @@ pub struct CanvasView {
     pub field_heights: HashMap<(String, String), f32>,
     /// Where the canvas' top-left corner was, and in which frame.
     pub last_origin: Option<(Pos2, u64)>,
+    /// A note whose editor opens the next time this canvas is drawn (a new one).
+    pub edit_note: Option<String>,
 }
 
 impl CanvasView {
@@ -253,6 +255,7 @@ enum NodeMenu {
     WrapInZone(String),
     LeaveZone(String),
     RemoveZone(String),
+    NoteAround(String),
 }
 
 const ZONE_PANEL_W: f32 = 150.0;
@@ -384,7 +387,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     view.last_origin = Some((outer.min, frame));
 
     if !view.initialized {
-        fit_view(view, outer, &layouts[..node_count]);
+        fit_view(view, outer, &layouts[..node_count], ws);
     }
     if let Some(id) = view.focus.take()
         && let Some(l) = layouts.iter().find(|l| l.id == id)
@@ -474,6 +477,8 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     let drag = view.drag.clone();
     // While a wire is dragged: what follows what, so pins that would close a loop refuse it.
     let flow = drag.as_ref().map(|_| ws.flow(|id| is_value_block(ws, reg, id)));
+    draw_notes(&cui, &painter, ws, &layouts[..node_count], theme, reg, view, edited);
+
     for layout in &layouts[node_count..] {
         let zid = layout.id.clone();
         let r = layout.rect;
@@ -1081,6 +1086,13 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         if tool_button(ui, theme, icon("plus").as_deref(), t!("Add block")).on_hover_text(t!("Add a block (Space or right-click on the canvas)")).clicked() {
             *picker = Some(Picker::new(ws_key, center, to_global.inverse() * center, None));
         }
+        if tool_button(ui, theme, icon("note").as_deref(), t!("Add note")).on_hover_text(t!("A note: a frame with a title and a description, to explain or group blocks")).clicked() {
+            let c = to_global.inverse() * center;
+            let id = ws.next_note_id();
+            ws.notes.insert(id.clone(), Note { title: t!("Note").to_string(), rect: [c.x - 210.0, c.y - 130.0, 420.0, 260.0], ..Default::default() });
+            view.edit_note = Some(id);
+            *edited = true;
+        }
         ui.add_space(6.0);
         if crate::dialog::icon_button(ui, theme, icon("zoom-out").as_deref(), "−", t!("Zoom out")).clicked() {
             view.zoom_at(outer.min, center, 1.0 / 1.25);
@@ -1092,8 +1104,8 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         if crate::dialog::icon_button(ui, theme, icon("zoom-in").as_deref(), "+", t!("Zoom in")).clicked() {
             view.zoom_at(outer.min, center, 1.25);
         }
-        if crate::dialog::icon_button(ui, theme, icon("maximize").as_deref(), t!("Fit"), t!("Show every block")).clicked() {
-            fit_view(view, outer, &layouts[..node_count]);
+        if crate::dialog::icon_button(ui, theme, icon("maximize").as_deref(), t!("Fit"), t!("Show every block and note")).clicked() {
+            fit_view(view, outer, &layouts[..node_count], ws);
         }
     });
 
@@ -1116,6 +1128,9 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                 }
                 if count == 1 && b.can_wrap && tool_button(ui, theme, icon("shield").as_deref(), t!("Try Zone")).on_hover_text(t!("Wrap in a Try Zone, which catches its errors")).clicked() {
                     menu = Some(NodeMenu::WrapInZone(b.node.clone()));
+                }
+                if tool_button(ui, theme, icon("note").as_deref(), t!("Note")).on_hover_text(t!("Put a note around the selected blocks")).clicked() {
+                    menu = Some(NodeMenu::NoteAround(b.node.clone()));
                 }
                 if let Some(src) = b.source.as_ref().filter(|_| count == 1)
                     && tool_button(ui, theme, icon("function").as_deref(), t!("Source")).on_hover_text(t!("Open the block's source file")).clicked()
@@ -1164,6 +1179,18 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         }
         Some(NodeMenu::OpenSource(path)) => {
             let _ = open::that(path);
+        }
+        Some(NodeMenu::NoteAround(n)) => {
+            let ids: Vec<String> = if multi.contains(&n) { multi.iter().cloned().collect() } else { vec![n] };
+            let around = layouts[..node_count].iter().filter(|l| ids.contains(&l.id)).map(|l| l.rect).reduce(|a, b| a.union(b));
+            if let Some(r) = around {
+                // Room for the title above the blocks.
+                let r = Rect::from_min_max(r.min - vec2(30.0, 70.0), r.max + vec2(30.0, 30.0));
+                let id = ws.next_note_id();
+                ws.notes.insert(id.clone(), Note { title: t!("Note").to_string(), rect: [r.min.x, r.min.y, r.width(), r.height()], ..Default::default() });
+                view.edit_note = Some(id);
+                *edited = true;
+            }
         }
         Some(NodeMenu::WrapInZone(n)) => {
             let zid = (1..).map(|i| format!("z{i}")).find(|z| !ws.zones.contains_key(z) && !ws.nodes.contains_key(z)).unwrap();
@@ -1252,6 +1279,172 @@ struct BarFor {
 
 const ACTION_BAR_H: f32 = 42.0;
 const ACTION_BAR_TOUCH_H: f32 = 52.0;
+/// Colours a note can have, besides the theme's accent.
+const NOTE_COLORS: [&str; 6] = ["#F5C451", "#3DFF6E", "#4FB3FF", "#B98CFF", "#FF6F91", "#9AA3AB"];
+const NOTE_MIN: Vec2 = vec2(160.0, 90.0);
+
+fn note_rect(n: &Note) -> Rect {
+    Rect::from_min_size(pos2(n.rect[0], n.rect[1]), vec2(n.rect[2].max(NOTE_MIN.x), n.rect[3].max(NOTE_MIN.y)))
+}
+
+/// Notes: frames with a title and a description, behind everything else.
+/// The title band moves a note with the blocks inside it (with Alt, the note
+/// alone), the edges and corners resize it, and the pencil button (or a
+/// double-click on the title) edits it.
+#[allow(clippy::too_many_arguments)]
+fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, blocks: &[NodeLayout], theme: &Theme, reg: &Registry, view: &mut CanvasView, edited: &mut bool) {
+    let ctx = cui.ctx().clone();
+    let zoom = view.zoom;
+    // As big on screen at every zoom, like the Try Zone's gear.
+    let button = if theme.touch { ZONE_BUTTON_TOUCH } else { ZONE_BUTTON } / zoom;
+    let mut delete: Option<String> = None;
+    let ids: Vec<String> = ws.notes.keys().cloned().collect();
+    for nid in ids {
+        let Some(note) = ws.notes.get(&nid).cloned() else { continue };
+        let r = note_rect(&note);
+        let color = note.color.as_deref().and_then(|c| Color32::from_hex(c).ok()).unwrap_or(theme.accent);
+        let pad = 14.0;
+        let text_w = (r.width() - 2.0 * pad).max(20.0);
+        let title = if note.title.trim().is_empty() { t!("Note").to_string() } else { note.title.clone() };
+        let job = egui::text::LayoutJob::simple(title, crate::fonts::bold(15.0), theme.text, (text_w - button - 8.0).max(20.0));
+        let title_g = painter.layout_job(crate::fonts::usable(&ctx, job));
+        let desc_g = (!note.text.trim().is_empty()).then(|| painter.layout(note.text.clone(), FontId::proportional(12.5), theme.text_muted, text_w));
+        let line = title_g.size().y.max(button);
+        let header_h = (10.0 + line + desc_g.as_ref().map_or(0.0, |g| 4.0 + g.size().y) + 10.0).min(r.height());
+        let header = Rect::from_min_size(r.min, vec2(r.width(), header_h));
+
+        painter.rect(r, 14.0, with_alpha(color, 10), Stroke::new(1.5, with_alpha(color, 120)), StrokeKind::Inside);
+        painter.rect_filled(header, CornerRadius { nw: 14, ne: 14, sw: 0, se: 0 }, with_alpha(color, 30));
+        let inside = painter.with_clip_rect(r.intersect(painter.clip_rect()));
+        let title_h = title_g.size().y;
+        inside.galley(header.min + vec2(pad, 10.0 + (line - title_h) / 2.0), title_g, theme.text);
+        if let Some(g) = desc_g {
+            inside.galley(header.min + vec2(pad, 10.0 + line + 4.0), g, theme.text_muted);
+        }
+        // A grip in the bottom-right corner.
+        for i in 1..=2 {
+            let d = 5.0 * i as f32;
+            painter.line_segment([r.right_bottom() - vec2(d + 4.0, 4.0), r.right_bottom() - vec2(4.0, d + 4.0)], Stroke::new(1.2, with_alpha(color, 160)));
+        }
+
+        // The title band moves the note.
+        let band = cui.interact(header, cui.id().with(("note", &nid)), Sense::click_and_drag());
+        if band.hovered() {
+            ctx.set_cursor_icon(CursorIcon::Grab);
+        }
+        if band.dragged_by(PointerButton::Primary) {
+            let d = band.drag_delta();
+            if !ctx.input(|i| i.modifiers.alt) {
+                for l in blocks.iter().filter(|l| r.contains_rect(l.rect)) {
+                    if let Some(n) = ws.nodes.get_mut(&l.id) {
+                        n.at[0] += d.x;
+                        n.at[1] += d.y;
+                    }
+                }
+            }
+            if let Some(n) = ws.notes.get_mut(&nid) {
+                n.rect[0] += d.x;
+                n.rect[1] += d.y;
+            }
+            *edited = true;
+        }
+        let band = band.on_hover_text(t!("Drag to move the note with the blocks in it (hold Alt to move only the note). Double-click to edit it."));
+
+        // The edit button, on the right of the title.
+        let pr = Rect::from_center_size(pos2(header.right() - 8.0 / zoom - button / 2.0, header.top() + 10.0 + line / 2.0), Vec2::splat(button));
+        let pencil = cui.interact(pr, cui.id().with(("note-edit", &nid)), Sense::click()).on_hover_cursor(CursorIcon::PointingHand);
+        let fill = if pencil.hovered() { mix(theme.panel, color, 0.25) } else { theme.panel };
+        painter.rect(pr, 6.0 / zoom, fill, Stroke::new(1.0 / zoom, with_alpha(color, 120)), StrokeKind::Inside);
+        if let Some(path) = reg.icons.get("pencil") {
+            egui::Image::from_uri(crate::editor::file_uri(path)).tint(color).paint_at(cui, pr.shrink(pr.width() * 0.22));
+        }
+        let pencil = pencil.on_hover_text(t!("Edit note"));
+        if band.double_clicked() || view.edit_note.as_deref() == Some(nid.as_str()) {
+            egui::Popup::open_id(&ctx, egui::Popup::default_response_id(&pencil));
+            view.edit_note = None;
+        }
+        egui::Popup::menu(&pencil).width(300.0).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+            let Some(n) = ws.notes.get_mut(&nid) else { return };
+            ui.spacing_mut().item_spacing.y = 8.0;
+            ui.label(RichText::new(t!("Note")).strong());
+            ui.label(t!("Title"));
+            *edited |= ui.add(crate::inputs::TextLine::new(&mut n.title)).changed();
+            ui.label(t!("Description"));
+            *edited |= ui.add(egui::TextEdit::multiline(&mut n.text).desired_rows(4).desired_width(f32::INFINITY)).changed();
+            ui.label(t!("Color"));
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 6.0;
+                let choices = std::iter::once(None).chain(NOTE_COLORS.iter().map(|c| Some(c.to_string())));
+                for choice in choices {
+                    let swatch = choice.as_deref().and_then(|c| Color32::from_hex(c).ok()).unwrap_or(theme.accent);
+                    let (rect, resp) = ui.allocate_exact_size(vec2(22.0, 22.0), Sense::click());
+                    let chosen = n.color == choice;
+                    ui.painter().circle_filled(rect.center(), 9.0, swatch);
+                    if chosen || resp.hovered() {
+                        ui.painter().circle_stroke(rect.center(), 11.0, Stroke::new(1.5, theme.text));
+                    }
+                    let tip = if choice.is_none() { t!("The theme's accent") } else { t!("Color") };
+                    if resp.on_hover_text(tip).clicked() && !chosen {
+                        n.color = choice;
+                        *edited = true;
+                    }
+                }
+            });
+            ui.separator();
+            if crate::dialog::button(ui, theme, t!("Delete note")).on_hover_text(t!("The blocks in it stay")).clicked() {
+                delete = Some(nid.clone());
+                ui.close();
+            }
+        });
+
+        // Edges and corners resize it; registered last, so they win over the band.
+        let e = 5.0 / zoom;
+        let c = 10.0 / zoom;
+        let (left, right, top, bottom) = (r.left(), r.right(), r.top(), r.bottom());
+        let handles = [
+            ((true, false, false, false), Rect::from_min_max(pos2(left - e, top + c), pos2(left + e, bottom - c)), CursorIcon::ResizeHorizontal),
+            ((false, true, false, false), Rect::from_min_max(pos2(right - e, top + c), pos2(right + e, bottom - c)), CursorIcon::ResizeHorizontal),
+            ((false, false, true, false), Rect::from_min_max(pos2(left + c, top - e), pos2(right - c, top + e)), CursorIcon::ResizeVertical),
+            ((false, false, false, true), Rect::from_min_max(pos2(left + c, bottom - e), pos2(right - c, bottom + e)), CursorIcon::ResizeVertical),
+            ((true, false, true, false), Rect::from_center_size(r.left_top(), Vec2::splat(2.0 * c)), CursorIcon::ResizeNwSe),
+            ((false, true, false, true), Rect::from_center_size(r.right_bottom(), Vec2::splat(2.0 * c)), CursorIcon::ResizeNwSe),
+            ((false, true, true, false), Rect::from_center_size(r.right_top(), Vec2::splat(2.0 * c)), CursorIcon::ResizeNeSw),
+            ((true, false, false, true), Rect::from_center_size(r.left_bottom(), Vec2::splat(2.0 * c)), CursorIcon::ResizeNeSw),
+        ];
+        for (i, ((l, rt, t, b), hr, cursor)) in handles.into_iter().enumerate() {
+            let h = cui.interact(hr, cui.id().with(("note-size", &nid, i)), Sense::drag());
+            if h.hovered() || h.dragged() {
+                ctx.set_cursor_icon(cursor);
+            }
+            if h.dragged_by(PointerButton::Primary)
+                && let Some(n) = ws.notes.get_mut(&nid)
+            {
+                let d = h.drag_delta();
+                let now = note_rect(n);
+                let (mut min, mut max) = (now.min, now.max);
+                if l {
+                    min.x = (min.x + d.x).min(max.x - NOTE_MIN.x);
+                }
+                if rt {
+                    max.x = (max.x + d.x).max(min.x + NOTE_MIN.x);
+                }
+                if t {
+                    min.y = (min.y + d.y).min(max.y - NOTE_MIN.y);
+                }
+                if b {
+                    max.y = (max.y + d.y).max(min.y + NOTE_MIN.y);
+                }
+                n.rect = [min.x, min.y, max.x - min.x, max.y - min.y];
+                *edited = true;
+            }
+        }
+    }
+    if let Some(id) = delete {
+        ws.notes.shift_remove(&id);
+        *edited = true;
+    }
+}
+
 /// The size of a Try Zone's settings button, on screen.
 const ZONE_BUTTON: f32 = 24.0;
 const ZONE_BUTTON_TOUCH: f32 = 36.0;
@@ -1268,10 +1461,11 @@ fn tool_button(ui: &mut Ui, theme: &Theme, icon: Option<&std::path::Path>, text:
 }
 
 /// Centers the view on all blocks, at 100% when they fit.
-fn fit_view(view: &mut CanvasView, outer: Rect, layouts: &[NodeLayout]) {
+/// Shows every block and note.
+fn fit_view(view: &mut CanvasView, outer: Rect, layouts: &[NodeLayout], ws: &Workspace) {
     view.initialized = true;
     view.zoom = 1.0;
-    let Some(bounds) = layouts.iter().map(|l| l.rect).reduce(|a, b| a.union(b)) else {
+    let Some(bounds) = layouts.iter().map(|l| l.rect).chain(ws.notes.values().map(note_rect)).reduce(|a, b| a.union(b)) else {
         view.offset = vec2(40.0, 40.0);
         return;
     };
@@ -1734,6 +1928,77 @@ Hi ${#1.user}"), "values go in with the block's number: {text:?}");
             }
             ed.project.as_mut().unwrap().save().unwrap();
         }
+    }
+
+    #[test]
+    fn notes_move_with_their_blocks_and_resize() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&root.join("examples/DemoBot"));
+        let mut ws = Workspace::new("Notes");
+        ws.nodes.insert("1".into(), circuit_core::Node { block: "core.log@1".into(), at: [100.0, 140.0], ..Default::default() });
+        ws.nodes.insert("2".into(), circuit_core::Node { block: "core.log@1".into(), at: [900.0, 140.0], ..Default::default() });
+        ws.notes.insert("n1".into(), Note { title: "Hello".into(), text: "A note".into(), rect: [60.0, 40.0, 500.0, 400.0], color: None });
+        ed.project.as_mut().unwrap().workspaces.insert("notes".into(), ws);
+        let ctx = egui::Context::default();
+        let settle = |ed: &mut Editor| {
+            for _ in 0..4 {
+                frame(&ctx, ed, "notes", vec![]);
+            }
+        };
+        settle(&mut ed);
+        // Scene to screen, as the canvas draws it.
+        let screen = |ed: &Editor, p: Pos2| {
+            let v = &ed.views["notes"];
+            v.last_origin.unwrap().0 + v.offset + p.to_vec2() * v.zoom
+        };
+        let drag = |ed: &mut Editor, from: Pos2, by: Vec2, alt: bool| {
+            let modifiers = egui::Modifiers { alt, ..Default::default() };
+            let press = |pos: Pos2, pressed: bool| egui::Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers };
+            for _ in 0..3 {
+                frame(&ctx, ed, "notes", vec![egui::Event::PointerMoved(from)]);
+            }
+            frame(&ctx, ed, "notes", vec![egui::Event::ModifiersChanged(modifiers), press(from, true)]);
+            // Steps bigger than egui's drag threshold, so none is taken for a click.
+            for step in 1..=10 {
+                frame(&ctx, ed, "notes", vec![egui::Event::PointerMoved(from + by * (step as f32 / 10.0))]);
+            }
+            frame(&ctx, ed, "notes", vec![press(from + by, false), egui::Event::ModifiersChanged(Default::default())]);
+            settle(ed);
+        };
+        let note = |ed: &Editor| ed.workspace("notes").unwrap().notes["n1"].rect;
+        let at = |ed: &Editor, id: &str| ed.workspace("notes").unwrap().nodes[id].at;
+        let zoom = ed.views["notes"].zoom;
+
+        // The title band moves the note and the block inside it, not the one outside.
+        let from = screen(&ed, pos2(140.0, 60.0));
+        drag(&mut ed, from, vec2(100.0, 50.0), false);
+        let moved = vec2(100.0, 50.0) / zoom;
+        assert!((note(&ed)[0] - (60.0 + moved.x)).abs() < 1.0 && (note(&ed)[1] - (40.0 + moved.y)).abs() < 1.0, "{:?}", note(&ed));
+        assert!((at(&ed, "1")[0] - (100.0 + moved.x)).abs() < 1.0, "the block inside moves along: {:?}", at(&ed, "1"));
+        assert_eq!(at(&ed, "2"), [900.0, 140.0], "the block outside stays");
+
+        // With Alt, only the note moves.
+        let r = note(&ed);
+        let from = screen(&ed, pos2(r[0] + 80.0, r[1] + 20.0));
+        drag(&mut ed, from, vec2(-100.0, 0.0), true);
+        assert!((note(&ed)[0] - (r[0] - 100.0 / zoom)).abs() < 1.0, "{r:?} -> {:?}", note(&ed));
+        assert!((at(&ed, "1")[0] - (100.0 + moved.x)).abs() < 1.0, "the block stays: {:?}", at(&ed, "1"));
+
+        // The bottom-right corner resizes it; it doesn't get smaller than its minimum.
+        let r = note(&ed);
+        let from = screen(&ed, pos2(r[0] + r[2], r[1] + r[3]));
+        drag(&mut ed, from, vec2(100.0, 80.0), false);
+        assert!((note(&ed)[2] - (r[2] + 100.0 / zoom)).abs() < 1.5 && (note(&ed)[3] - (r[3] + 80.0 / zoom)).abs() < 1.5, "{:?}", note(&ed));
+        let r = note(&ed);
+        let from = screen(&ed, pos2(r[0], r[1] + r[3] / 2.0));
+        drag(&mut ed, from, vec2(2000.0, 0.0), false);
+        assert!((note(&ed)[2] - NOTE_MIN.x).abs() < 0.5, "{:?}", note(&ed));
+        assert!((note(&ed)[0] + note(&ed)[2] - (r[0] + r[2])).abs() < 0.5, "the right edge stays put");
+
+        // It's saved with the workspace.
+        let json = serde_json::to_value(ed.workspace("notes").unwrap()).unwrap();
+        assert_eq!(json["notes"]["n1"]["title"], "Hello");
     }
 
     #[test]

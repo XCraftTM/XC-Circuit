@@ -23,8 +23,9 @@ pub struct Workspace {
     pub links: Vec<Link>,
     #[serde(skip_serializing_if = "IndexMap::is_empty")]
     pub zones: IndexMap<String, Zone>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub comments: Vec<Comment>,
+    /// Notes on the canvas: framed areas with a title and a description.
+    #[serde(skip_serializing_if = "IndexMap::is_empty")]
+    pub notes: IndexMap<String, Note>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -213,12 +214,27 @@ impl Flow {
     }
 }
 
+/// A note on the canvas: a frame with a title and a description, placed and
+/// sized by hand. It doesn't run; it explains and groups blocks.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct Comment {
+pub struct Note {
+    pub title: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub text: String,
+    /// x, y, width, height
     #[serde(serialize_with = "round_rect")]
     pub rect: [f32; 4],
+    /// `#RRGGBB`; unset: the theme's accent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+}
+
+impl Workspace {
+    /// An id for a new note: `n1`, `n2` …
+    pub fn next_note_id(&self) -> String {
+        (1..).map(|i| format!("n{i}")).find(|n| !self.notes.contains_key(n)).expect("unbounded range")
+    }
 }
 
 impl Workspace {

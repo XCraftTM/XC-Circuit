@@ -29,6 +29,7 @@ Good habits:
 - **One workspace per command or feature**: *Rank command*, *Welcome*, *Moderation*.
 - **Reuse with Call.** A *When Called* event in one workspace and *Call* blocks elsewhere make a flow you can use from many places, like a function. *Return* gives a value back.
 - **Signals** (Emit Signal and On Signal) let one part of the bot tell others that something happened, without waiting for them.
+- **Notes** explain a part of a workspace: *Add note* in the canvas toolbar, or *Note* above selected blocks to frame them. A note has a title, a description and a colour (the pencil button, or double-click its title). Drag its title to move it with the blocks inside (hold Alt to move only the note), and its edges or corners to resize it.
 
 ## Starters and examples
 

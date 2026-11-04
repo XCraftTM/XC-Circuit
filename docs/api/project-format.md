@@ -67,7 +67,7 @@ Each file in `workspaces/` is one workspace; its file name without `.json` is it
 | `nodes` | Blocks by id (the number shown in their title bar). |
 | `links` | Wires. |
 | `zones` | Try Zones by id. |
-| `comments` | Notes on the canvas. |
+| `notes` | Notes on the canvas, by id. [Below](#notes). |
 
 ### Nodes
 
@@ -101,3 +101,18 @@ A link is `"from > to"`, each side `node.pin`:
 | `rect` | `[x, y, width, height]`, worked out from its blocks. |
 | `retry` | How many times to try again. |
 | `timeoutMs` | Give up after this many milliseconds. |
+
+### Notes
+
+```json
+"notes": { "n1": { "title": "Rank reply", "text": "Builds the embed and replies.", "rect": [0, -80, 1100, 620], "color": "#F5C451" } }
+```
+
+| Key | Description |
+| --- | --- |
+| `title` | Shown in the note's title band. |
+| `text` | The description, under the title. |
+| `rect` | `[x, y, width, height]` on the canvas. |
+| `color` | `#RRGGBB`; missing: the theme's accent. |
+
+Notes don't run: they only explain and group blocks in the editor.
