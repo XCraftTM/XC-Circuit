@@ -656,7 +656,12 @@ fn draw(ui: &mut egui::Ui, items: &mut [Item], path: &mut Vec<usize>, events: &m
                 });
             }
             Item::Section { text, items, open } => {
-                egui::CollapsingHeader::new(RichText::new(text.as_str()).strong()).id_salt(id).default_open(*open).show(ui, |ui| draw(ui, items, path, events));
+                // Unindented: egui's indent guide reads as a broken line here.
+                egui::CollapsingHeader::new(RichText::new(text.as_str()).strong()).id_salt(id).default_open(*open).show_unindented(ui, |ui| {
+                    ui.add_space(2.0);
+                    draw(ui, items, path, events);
+                    ui.add_space(6.0);
+                });
             }
         }
         path.pop();
