@@ -97,6 +97,8 @@ pub struct CircuitApp {
     start: crate::start_page::StartPage,
     /// A newer version on GitHub, when one was found.
     updater: crate::updater::Updater,
+    /// A crash since the last start, offered for a report.
+    crash_offer: Option<crate::crash::Crash>,
     bot: BotUi,
     stored: crate::stored::StoredView,
     watcher: crate::watch::PluginWatcher,
@@ -185,7 +187,7 @@ impl CircuitApp {
         } else {
             last_project
                 .filter(|p| ed.prefs.reopen_last_project && p.join(circuit_core::project::PROJECT_FILE).is_file())
-                .or_else(|| examples_dir.as_ref().map(|e| e.join("DemoBot")).filter(|p| p.is_dir()))
+                .or_else(|| examples_dir.as_deref().and_then(writable_example))
         };
         if let Some(p) = project {
             ed.open_project(&p);
@@ -217,6 +219,7 @@ impl CircuitApp {
         let mut watcher = crate::watch::PluginWatcher::new(move || repaint.request_repaint());
         watcher.watch(&ed.watch_dirs());
         let setup = (!ed.prefs.setup_done).then(crate::setup::Setup::new);
+        let last_crash_seen = ed.prefs.last_crash_seen;
         let mut updater = crate::updater::Updater::default();
         if ed.prefs.check_updates {
             updater.check(false);
@@ -235,6 +238,8 @@ impl CircuitApp {
             dock_size: None,
             start: Default::default(),
             updater,
+            // A crash the user hasn't been told about yet.
+            crash_offer: crate::crash::newest_since(last_crash_seen),
             bot: BotUi::new(),
             stored: Default::default(),
             watcher,
@@ -439,8 +444,8 @@ impl CircuitApp {
             Pick::Recent(dir) => self.open_recent(&dir),
             Pick::Forget(path) => self.ed.prefs.forget_project(&path),
             Pick::Example => {
-                if let Some(examples) = self.examples_dir.clone() {
-                    self.switch_project(&examples.join("DemoBot"));
+                if let Some(example) = self.examples_dir.as_deref().and_then(writable_example) {
+                    self.switch_project(&example);
                 }
             }
         }
@@ -684,11 +689,24 @@ impl CircuitApp {
                 }
             });
             ui.menu_button(t!("Help"), |ui| {
-                if let Some(examples) = self.examples_dir.clone()
+                if self.examples_dir.is_some()
                     && ui.button(t!("Open Example: DemoBot")).clicked()
+                    && let Some(example) = self.examples_dir.as_deref().and_then(writable_example)
                 {
-                    self.switch_project(&examples.join("DemoBot"));
+                    self.switch_project(&example);
                 }
+                if ui.button(t!("Report a Bug…")).on_hover_text(t!("Opens a bug report on GitHub with your version filled in")).clicked() {
+                    let _ = open::that(crate::crash::report_url(crate::crash::Report::Bug));
+                }
+                if ui.button(t!("Suggest a Feature…")).clicked() {
+                    let _ = open::that(crate::crash::report_url(crate::crash::Report::Feature));
+                }
+                if ui.button(t!("Open Crash Logs")).on_hover_text(t!("The folder where XC Circuit writes what happened when it crashed")).clicked() {
+                    let dir = crate::crash::logs_dir();
+                    let _ = std::fs::create_dir_all(&dir);
+                    let _ = open::that(dir);
+                }
+                ui.separator();
                 if ui.add_enabled(!self.updater.busy(), egui::Button::new(t!("Check for Updates…"))).clicked() {
                     self.updater.check(true);
                 }
@@ -900,7 +918,7 @@ impl CircuitApp {
         // The practice project isn't kept.
         self.ed.forget_changes();
         let target = match exit {
-            Exit::DemoBot => self.examples_dir.as_ref().map(|e| e.join("DemoBot")),
+            Exit::DemoBot => self.examples_dir.as_deref().and_then(writable_example),
             Exit::Return | Exit::NewProject => tour.before,
         };
         match target {
@@ -1123,8 +1141,8 @@ impl CircuitApp {
             Cmd::NewProject => self.new_project_dialog(),
             Cmd::OpenProject => self.open_project_dialog(),
             Cmd::OpenExample => {
-                if let Some(examples) = self.examples_dir.clone() {
-                    self.switch_project(&examples.join("DemoBot"));
+                if let Some(example) = self.examples_dir.as_deref().and_then(writable_example) {
+                    self.switch_project(&example);
                 }
             }
             Cmd::OpenRecent(path) => self.open_recent(&path),
@@ -1360,8 +1378,48 @@ impl CircuitApp {
         }
     }
 
+    /// After a crash: what happened, with a ready bug report.
+    fn crash_dialog(&mut self, ctx: &egui::Context) {
+        // Not over the first-start page (or the tour): it waits until they're done.
+        if self.setup.is_some() || self.tour.is_some() {
+            return;
+        }
+        let Some(crash) = self.crash_offer.clone() else { return };
+        let theme = self.ed.theme.clone();
+        let (mut report, mut open_log, mut later) = (false, false, false);
+        let close = dialog::show(
+            ctx,
+            &theme,
+            dialog::Spec { id: "crash", title: t!("XC Circuit stopped unexpectedly"), subtitle: Some(t!("Sorry about that. A report helps fix it.")), icon: None, width: 520.0 },
+            |ui, part| match part {
+                dialog::Part::Body => {
+                    ui.label(RichText::new(t!("What went wrong:")).size(12.5).color(theme.text_muted));
+                    ui.add(egui::Label::new(RichText::new(&crash.panic).monospace().size(12.0).color(theme.text)).wrap());
+                    ui.add_space(6.0);
+                    ui.label(RichText::new(t!("Report on GitHub opens a bug report with this filled in; you can read and change everything before sending it. Please attach the crash log too.")).size(12.0).color(theme.text_muted));
+                }
+                dialog::Part::Footer => {
+                    report = dialog::primary_button(ui, &theme, t!("Report on GitHub")).clicked();
+                    open_log = dialog::secondary_button(ui, &theme, t!("Show crash log")).clicked();
+                    later = dialog::secondary_button(ui, &theme, t!("Not now")).clicked();
+                }
+            },
+        );
+        if report {
+            let _ = open::that(crate::crash::report_url(crate::crash::Report::Crash(&crash)));
+        }
+        if open_log {
+            let _ = open::that(crash.path.parent().unwrap_or(&crash.path));
+        }
+        if report || later || close {
+            self.ed.prefs.last_crash_seen = crash.at;
+            self.crash_offer = None;
+        }
+    }
+
     fn dialogs(&mut self, ctx: &egui::Context) {
         self.update_window(ctx);
+        self.crash_dialog(ctx);
         let theme = self.ed.theme.clone();
         if self.setup.is_none() && self.tour.is_none() {
             self.recovery_dialog(ctx, &theme);
@@ -1382,7 +1440,7 @@ impl CircuitApp {
                             ui.add(egui::Image::new(egui::include_image!("../assets/icon.svg")).fit_to_exact_size(egui::vec2(76.0, 76.0)));
                             ui.add_space(10.0);
                             ui.label(RichText::new(t!("XC™ Circuit")).size(22.0).strong().color(theme.text));
-                            ui.label(RichText::new(format!("Version {}", env!("CARGO_PKG_VERSION"))).size(12.5).color(theme.text_muted));
+                            ui.label(RichText::new(tf!("Version {version} · {channel}", version = env!("CARGO_PKG_VERSION"), channel = crate::crash::CHANNEL)).size(12.5).color(theme.text_muted));
                             ui.add_space(10.0);
                             ui.label(RichText::new(t!("Build bots by connecting blocks.")).size(13.5).color(theme.text));
                             ui.add_space(4.0);
@@ -2127,6 +2185,41 @@ fn find_plugin_dirs() -> (Vec<PathBuf>, Option<PathBuf>) {
     }
     dirs.dedup();
     (dirs, bundled_root)
+}
+
+/// DemoBot as the user's own copy (in the app's data folder), so it can be
+/// saved and run also when XC Circuit is installed in a read-only place. It's
+/// copied the first time; later the copy is opened, with the user's changes.
+fn writable_example(examples: &Path) -> Option<PathBuf> {
+    let from = examples.join("DemoBot");
+    if !from.is_dir() {
+        return None;
+    }
+    let to = crate::bot::app_data_dir().join("examples").join("DemoBot");
+    if to.join(circuit_core::project::PROJECT_FILE).is_file() {
+        return Some(to);
+    }
+    fn copy(from: &Path, to: &Path) -> std::io::Result<()> {
+        std::fs::create_dir_all(to)?;
+        for e in std::fs::read_dir(from)? {
+            let e = e?;
+            let name = e.file_name();
+            if name == ".circuit" {
+                continue;
+            }
+            if e.file_type()?.is_dir() {
+                copy(&e.path(), &to.join(&name))?;
+            } else {
+                std::fs::copy(e.path(), to.join(&name))?;
+            }
+        }
+        Ok(())
+    }
+    match copy(&from, &to) {
+        Ok(()) => Some(to),
+        // Can't copy: open it where it is.
+        Err(_) => Some(from),
+    }
 }
 
 /// Who makes XC Circuit, and where.

@@ -358,7 +358,7 @@ impl NativeHost {
             // SAFETY: the fingerprints match, so the plugin was built with this
             // compiler and these crates and shares their types.
             let create = unsafe { lib.get::<api::CreateFn>(api::CREATE_SYMBOL) }.map_err(|e| Status::Failed(e.to_string()))?;
-            create().map_err(|e| Status::Failed(format!("panicked while starting: {e}")))
+            crate::crash::plugin_call(*create).map_err(|e| Status::Failed(format!("panicked while starting: {e}")))
         })();
         self.libs.push(lib);
         result
@@ -371,7 +371,8 @@ impl NativeHost {
         let inst = p.instance.as_mut()?;
         let storage = self.storage.entry(p.id.clone()).or_default();
         let mut host = EditorHost { ed, storage, queued: &mut self.queued, bot_running };
-        match f(inst.obj.as_mut(), &mut host) {
+        // Its panics are caught and reported here, not crashes of the app.
+        match crate::crash::plugin_call(|| f(inst.obj.as_mut(), &mut host)) {
             Ok(r) => Some(r),
             Err(e) => {
                 let until = if p.kind == Kind::Script { "its files change" } else { "it's rebuilt" };
