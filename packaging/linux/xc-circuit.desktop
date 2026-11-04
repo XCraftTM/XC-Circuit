@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=XC Circuit
+GenericName=Bot Editor
+Comment=Build Discord and Fluxer bots by connecting blocks
+Comment[de]=Discord- und Fluxer-Bots durch Verbinden von Blöcken bauen
+Exec=xc-circuit %F
+Icon=xc-circuit
+Terminal=false
+Categories=Development;IDE;
+Keywords=discord;bot;fluxer;nodes;visual;programming;
+StartupWMClass=xc-circuit

@@ -1,7 +1,7 @@
 name: Build
 
 # Started by hand (Actions › Build › Run workflow, or `gh workflow run build.yml`),
-# so pushes don't use up Actions minutes. A version tag (v1.2.0) builds and
+# so pushes don't use up Actions minutes. A version tag (v0.1.0) builds and
 # publishes a release.
 on:
   push:
@@ -9,23 +9,39 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Which systems to build for. Windows ARM64 is cross-compiled on the x64
+  # runner (tests can't run there). Linux ARM64 needs GitHub's ARM runners,
+  # which are free for public repositories, so it's built once the repository is public.
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: plan
+        env:
+          PUBLIC: ${{ !github.event.repository.private }}
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          entries='{"os":"windows-latest","name":"windows-x64","target":"x86_64-pc-windows-msvc","arch":"x64","exe":"xc-circuit.exe","native":"xc_stats.dll","test":true}'
+          entries+=',{"os":"windows-latest","name":"windows-arm64","target":"aarch64-pc-windows-msvc","arch":"arm64","exe":"xc-circuit.exe","native":"xc_stats.dll","test":false}'
+          # 22.04 keeps the Linux builds compatible with older distributions (glibc).
+          entries+=',{"os":"ubuntu-22.04","name":"linux-x64","target":"x86_64-unknown-linux-gnu","arch":"x86_64","exe":"xc-circuit","native":"libxc_stats.so","test":true}'
+          if [ "$PUBLIC" = "true" ]; then
+            entries+=',{"os":"ubuntu-22.04-arm","name":"linux-arm64","target":"aarch64-unknown-linux-gnu","arch":"aarch64","exe":"xc-circuit","native":"libxc_stats.so","test":true}'
+          fi
+          echo "matrix={\"include\":[$entries]}" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: plan
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            name: windows-x64
-            target: x86_64-pc-windows-msvc
-            exe: xc-circuit.exe
-            native: xc_stats.dll
-          # 22.04 keeps the Linux build compatible with older distributions (glibc).
-          - os: ubuntu-22.04
-            name: linux-x64
-            target: x86_64-unknown-linux-gnu
-            exe: xc-circuit
-            native: libxc_stats.so
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -33,11 +49,15 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libdbus-1-dev libasound2-dev pkg-config
+          sudo apt-get install -y libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libdbus-1-dev libasound2-dev pkg-config rpm
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
 
       - uses: actions/setup-node@v4
         with:
@@ -49,9 +69,11 @@ jobs:
           python-version: "3.12"
 
       - name: Tests
+        if: matrix.test
         run: cargo test --workspace
 
       - name: Runtime tests
+        if: matrix.test
         run: |
           node runtime/test/smoke.js
           node runtime/test/library.js
@@ -68,7 +90,7 @@ jobs:
 
       # Native plugins are built together with the editor so they share one build of egui.
       - name: Release build
-        run: cargo plugin xc-stats --release
+        run: cargo plugin xc-stats --release --target ${{ matrix.target }}
 
       # The program finds plugins/ and examples/ next to itself. The licences
       # go along: the app's own, the crates built into it, and the font's.
@@ -76,10 +98,11 @@ jobs:
         shell: bash
         run: |
           out="XC-Circuit-${{ matrix.name }}"
-          mkdir -p "$out/licenses"
-          cp "target/release/${{ matrix.exe }}" "$out/"
-          cp -r plugins examples README.md LICENSE "$out/"
-          cp "target/release/${{ matrix.native }}" "$out/plugins/xc.stats/"
+          bin="target/${{ matrix.target }}/release"
+          mkdir -p "$out/licenses" dist
+          cp "$bin/${{ matrix.exe }}" "$out/"
+          cp -r plugins examples README.md LICENSE CHANGELOG.md "$out/"
+          cp "$bin/${{ matrix.native }}" "$out/plugins/xc.stats/"
           python tools/third_party_notices.py "$out/THIRD-PARTY-NOTICES.txt" "${{ matrix.target }}"
           cp crates/circuit-editor/assets/fonts/LICENCE.txt "$out/licenses/Ubuntu-Font-Licence.txt"
           rm -rf "$out"/examples/*/.circuit
@@ -89,27 +112,55 @@ jobs:
             rm -rf "$dir/tools" "$dir/node_modules" "$dir/target"
           done
           if [ "$RUNNER_OS" = "Windows" ]; then
-            7z a "$out.zip" "$out" > /dev/null
+            7z a "dist/XC-Circuit-$VERSION-${{ matrix.name }}.zip" "$out" > /dev/null
           else
-            tar -czf "$out.tar.gz" "$out"
+            tar -czf "dist/XC-Circuit-$VERSION-${{ matrix.name }}.tar.gz" "$out"
           fi
+
+      # Setup.exe, for x64 and ARM64 (Inno Setup).
+      - name: Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          & $iscc "/DAppVersion=$env:VERSION" "/DArch=${{ matrix.arch }}" "/DSourceDir=$PWD\XC-Circuit-${{ matrix.name }}" "/DOutputDir=$PWD\dist" packaging\windows\xc-circuit.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # .deb, .rpm and .AppImage.
+      - name: Linux packages
+        if: runner.os == 'Linux'
+        run: bash packaging/linux/build-packages.sh "XC-Circuit-${{ matrix.name }}" "$VERSION" "${{ matrix.arch }}" dist
 
       - uses: actions/upload-artifact@v4
         with:
           name: XC-Circuit-${{ matrix.name }}
-          path: XC-Circuit-${{ matrix.name }}.*
+          path: dist/*
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [plan, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
+          path: dist
           merge-multiple: true
+      # The notes are the version's part of CHANGELOG.md.
+      - name: Release notes
+        run: |
+          awk -v v="${{ needs.plan.outputs.version }}" '
+            /^## / { if (found) exit; if (index($0, v)) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          echo "" >> notes.md
+          echo "Downloads: Windows Setup.exe (x64, ARM64) or .zip, Linux .AppImage, .deb, .rpm or .tar.gz. See the [download page](https://xcrafttm.github.io/XC-Circuit/download)." >> notes.md
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" XC-Circuit-* --repo "${{ github.repository }}" --title "XC Circuit ${{ github.ref_name }}" --generate-notes
+        run: gh release create "${{ github.ref_name }}" dist/* --repo "${{ github.repository }}" --title "XC Circuit ${{ github.ref_name }} (Early Access)" --notes-file notes.md
