@@ -78,6 +78,7 @@ jobs:
 
       - name: Runtime tests
         if: matrix.test
+        shell: bash
         run: |
           node runtime/test/smoke.js
           node runtime/test/library.js
