@@ -226,6 +226,9 @@ pub struct BlockDef {
     pub has_setup: bool,
     pub has_summary: bool,
     pub has_migrate: bool,
+    /// `run` is an `async` function: the block waits for something (Discord,
+    /// the web, a timer, stored data) before the flow goes on.
+    pub async_run: bool,
 
     /// Id of the plugin that contributed this block.
     #[serde(skip)]
@@ -242,6 +245,12 @@ pub struct BlockDef {
 }
 
 impl BlockDef {
+    /// Whether the block waits while it runs (`Some(true)`, async) or is done
+    /// at once (`Some(false)`, sync). Events don't run like that: `None`.
+    pub fn timing(&self) -> Option<bool> {
+        (self.kind != BlockKind::Event && self.has_run).then_some(self.async_run)
+    }
+
     /// Parses type strings and returns problems with required keys.
     pub fn finish(&mut self) -> Vec<String> {
         for f in self.fields.values_mut() {

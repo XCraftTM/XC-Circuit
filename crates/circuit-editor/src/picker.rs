@@ -132,7 +132,12 @@ fn search(def: &BlockDef, query: &str) -> Option<Found> {
     if def.aliases.iter().any(|a| all_in(a)) {
         return Some(Found::Alias);
     }
-    let hay = format!("{} {} {} {} {} {}", def.name, def.aliases.join(" "), def.id, def.description, def.tags.join(" "), def.category.as_deref().unwrap_or(""));
+    let timing = match def.timing() {
+        Some(true) => "async",
+        Some(false) => "sync",
+        None => "",
+    };
+    let hay = format!("{} {} {} {} {} {} {timing}", def.name, def.aliases.join(" "), def.id, def.description, def.tags.join(" "), def.category.as_deref().unwrap_or(""));
     all_in(&hay).then_some(Found::Elsewhere)
 }
 
@@ -309,6 +314,10 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                                 let name_rect = ui.painter().text(rect.left_center() + vec2(36.0, 0.0), Align2::LEFT_CENTER, &def.name, egui::FontId::proportional(14.0), theme.text);
                                 // Its kind as a chip at the right; while searching, its category before that.
                                 let chip = paint_kind_chip(ui, &theme, def.kind, rect.right() - 8.0, rect.center().y);
+                                let chip = match def.timing() {
+                                    Some(waits) => paint_timing_chip(ui, &theme, waits, chip.left() - 4.0, rect.center().y),
+                                    None => chip,
+                                };
                                 if searching {
                                     let note = category_name(&cat);
                                     let font = egui::FontId::proportional(11.5);
@@ -448,6 +457,26 @@ fn paint_kind_chip(ui: &egui::Ui, theme: &Theme, kind: BlockKind, right: f32, ce
     rect
 }
 
+/// Async or Sync, as a quiet outlined chip, its right edge at `right`.
+fn paint_timing_chip(ui: &egui::Ui, theme: &Theme, waits: bool, right: f32, center_y: f32) -> egui::Rect {
+    let text = if waits { t!("Async") } else { t!("Sync") };
+    let galley = ui.painter().layout_no_wrap(text.to_string(), egui::FontId::proportional(10.5), theme.text_muted);
+    let size = galley.size() + vec2(12.0, 4.0);
+    let rect = egui::Rect::from_min_size(egui::pos2(right - size.x, center_y - size.y / 2.0), size);
+    ui.painter().rect_stroke(rect, 99.0, egui::Stroke::new(1.0, with_alpha(theme.text_muted, 90)), egui::StrokeKind::Inside);
+    ui.painter().galley(rect.center() - galley.size() / 2.0, galley, theme.text_muted);
+    rect
+}
+
+/// What Async and Sync mean, for tooltips.
+pub fn timing_text(waits: bool) -> &'static str {
+    if waits {
+        t!("Async: waits for something (Discord, the web, a timer, stored data) before the flow goes on")
+    } else {
+        t!("Sync: done at once, without waiting")
+    }
+}
+
 /// A small icon button in the search row, with its name as a tooltip.
 fn fold_button(ui: &mut egui::Ui, theme: &Theme, icon: &str, tip: &str, reg: &Registry) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(24.0, 24.0), egui::Sense::click());
@@ -470,6 +499,9 @@ fn details(ui: &mut egui::Ui, def: &BlockDef, reg: &Registry, theme: &Theme) {
             BlockKind::Value => t!("Value: gives a value"),
         };
         ui.label(RichText::new(what).size(11.5).color(kind_color(def.kind, theme)));
+        if let Some(waits) = def.timing() {
+            ui.label(RichText::new(if waits { t!("Async") } else { t!("Sync") }).size(11.5).color(theme.text_muted)).on_hover_text(timing_text(waits));
+        }
     });
     ui.label(RichText::new(format!("by {} · v{} · {}", def.author, def.version, def.plugin)).size(12.0).color(theme.text_muted));
     ui.label(&def.description);

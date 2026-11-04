@@ -93,7 +93,9 @@ What `run` does depends on the kind:
 - **Actions without `flows`** return their outputs (or nothing). The flow continues on their single action output after `run` finishes.
 - **Actions with `flows`** call [`ctx.next(flow, outputs)`](./ctx#next) for the way to continue, once or several times (a loop calls it for every item).
 
-`run` may be `async`. Throw an `Error` to fail the block; the message is shown on the block and in the Console.
+`run` may be `async`. The block picker tags blocks **Async** when `run` is an `async` function (it waits for something: Discord, the web, a timer, stored data) and **Sync** otherwise; searching for *async* or *sync* finds them. Declare `run` as `async` whenever it awaits or returns a promise, so the tag is right.
+
+Throw an `Error` to fail the block; the message is shown on the block and in the Console.
 
 ## flows
 

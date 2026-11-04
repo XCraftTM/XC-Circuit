@@ -46,6 +46,8 @@ globalThis.__load = function (key, src) {
       if (typeof block[k] === "function") out["has_" + k] = true;
       else out[k] = block[k];
     }
+    // Async blocks wait for something before the flow goes on.
+    if (typeof block.run === "function" && block.run.constructor && block.run.constructor.name === "AsyncFunction") out.async_run = true;
     return JSON.stringify({ ok: out });
   } catch (e) {
     return __error(e);
@@ -269,6 +271,9 @@ mod tests {
         assert!(def.finish().is_empty());
         assert_eq!(def.kind, BlockKind::Action);
         assert!(def.has_define && def.has_run);
+        assert_eq!(def.timing(), Some(true), "async run() makes an async block");
+        let sync = engine.load_block("sync", "module.exports = { id: 'x.s', kind: 'value', run() { return {} } }").unwrap();
+        assert_eq!(sync.timing(), Some(false));
 
         let connected = json!({ "list": "list<discord.role>" });
         let result = engine.define("for_each", &Map::new(), connected.as_object().unwrap(), &json!({})).unwrap();
