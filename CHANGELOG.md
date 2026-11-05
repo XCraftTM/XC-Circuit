@@ -14,6 +14,7 @@ The first public release.
 - **Forms** with text boxes, menus, file uploads and text (Components V2), and Modal Submitted gives every answer.
 - **Fluxer bots** with 62 blocks: roles, bans, emojis and stickers, webhooks, invites, threads, channel permissions, reactions, Wait For, the audit log, and events for bans, roles, channels, threads, members, voice, typing and more.
 - **Clear errors** when the bot is missing a permission: they say which one, and where to give it. Bot settings lists the privileged intents your blocks need, with a link to turn them on.
+- **Workspaces** in folders, which can be turned off to leave them out of the bot without deleting them.
 - **Notes** to explain and group blocks: title, description, colour, move (with the blocks inside, or alone), resize, copy.
 - **Embed, Layout and Slash Command Builders** with live Discord previews and Discord's own JSON.
 - **Snap to grid**, **align and spread** selected blocks, **favourite and recent** blocks in the picker.

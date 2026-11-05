@@ -18,11 +18,9 @@ pub struct Bundle {
 /// Collects the project's workspaces, the source of every block it uses and the
 /// mode's runtime libraries.
 pub fn build_bundle(project: &Project, reg: &Registry, mode: Option<&BuildMode>) -> Result<Bundle> {
-    let used: BTreeSet<String> = project
-        .workspaces
-        .values()
-        .flat_map(|ws| ws.nodes.values().map(|n| n.block_id().to_string()))
-        .collect();
+    // Workspaces that are turned off aren't part of the bot.
+    let enabled = || project.workspaces.iter().filter(|(_, ws)| !ws.disabled);
+    let used: BTreeSet<String> = enabled().flat_map(|(_, ws)| ws.nodes.values().map(|n| n.block_id().to_string())).collect();
 
     let mut dependencies: IndexMap<String, String> = mode.map(|m| m.dependencies.clone()).unwrap_or_default();
     let mut blocks = Map::new();
@@ -55,9 +53,7 @@ pub fn build_bundle(project: &Project, reg: &Registry, mode: Option<&BuildMode>)
         .map(|(id, t)| (id.clone(), json!({ "check": t.check, "converts": t.converts.iter().map(|c| json!({ "to": c.to, "via": c.via })).collect::<Vec<_>>() })))
         .collect();
 
-    let workspaces: Map<String, Value> = project
-        .workspaces
-        .iter()
+    let workspaces: Map<String, Value> = enabled()
         .map(|(k, ws)| Ok((k.clone(), serde_json::to_value(ws)?)))
         .collect::<Result<_>>()?;
 
@@ -75,4 +71,40 @@ pub fn build_bundle(project: &Project, reg: &Registry, mode: Option<&BuildMode>)
         "workspaces": workspaces,
     });
     Ok(Bundle { value, dependencies })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use circuit_core::{Node, Workspace};
+
+    /// A workspace that is turned off isn't in the bot, and neither are
+    /// blocks only it uses.
+    #[test]
+    fn leaves_out_workspaces_that_are_off() {
+        let dir = std::env::temp_dir().join(format!("xc-bundle-off-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let mut project = Project::create(&dir, "Off", "none").unwrap();
+        let node = |block: &str| Node { block: block.into(), ..Default::default() };
+        let mut on = Workspace::new("On");
+        on.nodes.insert("a".into(), node("core.on_start@1"));
+        let mut off = Workspace::new("Off");
+        off.nodes.insert("b".into(), node("core.wait@1"));
+        off.disabled = true;
+        project.workspaces.insert("on".into(), on);
+        project.workspaces.insert("off".into(), off);
+        let engine = circuit_plugins::BlockEngine::new().unwrap();
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+        let reg = Registry::load(&[root], &engine);
+        let bundle = build_bundle(&project, &reg, None).unwrap();
+        let workspaces = bundle.value["workspaces"].as_object().unwrap();
+        assert!(workspaces.contains_key("on") && !workspaces.contains_key("off"));
+        let blocks = bundle.value["blocks"].as_object().unwrap();
+        assert!(blocks.contains_key("core.on_start") && !blocks.contains_key("core.wait"));
+        // Saved with the project, and only when off.
+        let json = serde_json::to_value(&project.workspaces["off"]).unwrap();
+        assert_eq!(json["disabled"], true);
+        assert!(serde_json::to_value(&project.workspaces["on"]).unwrap().get("disabled").is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

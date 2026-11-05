@@ -39,6 +39,8 @@ enum Do {
     StartRename(Target, String),
     Rename(Target, String),
     Move(String, Option<String>),
+    /// Turns a workspace on (true) or off.
+    SetEnabled(String, bool),
     DeleteWorkspace(String),
     NewWorkspace(Option<String>),
     NewFolder,
@@ -212,8 +214,11 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
             let workspace_row = |ui: &mut Ui, key: &String, ws: &Workspace, depth: usize, todo: &mut Vec<Do>, renaming: &mut Option<Renaming>| {
                 let target = Target::Workspace(key.clone());
                 let editing = renaming.as_ref().is_some_and(|r| r.target == target);
-                let label = if editing { "" } else { ws.name.as_str() };
+                // A workspace that is turned off says so after its name.
+                let off_label = tf!("{name} (off)", name = ws.name);
+                let label = if editing { "" } else if ws.disabled { off_label.as_str() } else { ws.name.as_str() };
                 let (resp, label_area) = row(ui, &theme, &icons, Id::new(("sidebar-ws", key)), depth, None, Some("workspace"), label, active.as_deref() == Some(key.as_str()), false);
+                let resp = if ws.disabled { resp.on_hover_text(t!("Turned off: its blocks don't run. Right-click › Turn on.")) } else { resp };
                 if editing && let Some(r) = renaming.as_mut() {
                     match rename_box(ui, label_area, r) {
                         Some(true) => todo.push(Do::Rename(target.clone(), r.text.clone())),
@@ -236,6 +241,15 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
                     }
                     if ui.button(t!("Rename")).clicked() {
                         todo.push(Do::StartRename(target.clone(), ws.name.clone()));
+                        ui.close();
+                    }
+                    let (switch, tip) = if ws.disabled {
+                        (t!("Turn on"), t!("Its blocks run again when the bot runs."))
+                    } else {
+                        (t!("Turn off"), t!("The bot leaves it out: its events don't fire and its blocks don't run, until you turn it on again."))
+                    };
+                    if ui.button(switch).on_hover_text(tip).clicked() {
+                        todo.push(Do::SetEnabled(key.clone(), ws.disabled));
                         ui.close();
                     }
                     ui.menu_button(t!("Move to"), |ui| {
@@ -420,6 +434,14 @@ fn apply(ed: &mut Editor, ctx: &egui::Context, todo: Vec<Do>, renaming: &mut Opt
                         }
                         uncollapse(ctx, &f);
                     }
+                    ed.edited = true;
+                }
+            }
+            Do::SetEnabled(key, on) => {
+                if let Some(ws) = project.workspaces.get_mut(&key)
+                    && ws.disabled == on
+                {
+                    ws.disabled = !on;
                     ed.edited = true;
                 }
             }

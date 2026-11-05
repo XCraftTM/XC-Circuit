@@ -26,6 +26,10 @@ pub struct Workspace {
     /// Notes on the canvas: framed areas with a title and a description.
     #[serde(skip_serializing_if = "IndexMap::is_empty")]
     pub notes: IndexMap<String, Note>,
+    /// Turned off: the bot leaves it out when it runs or is exported, so
+    /// its events don't fire and its blocks don't run.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub disabled: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

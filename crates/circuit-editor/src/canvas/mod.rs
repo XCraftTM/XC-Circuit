@@ -1009,6 +1009,27 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     let row = egui::Layout::left_to_right(egui::Align::Center);
     let icon = |name: &str| reg.icons.get(name).cloned();
 
+    // A workspace that is turned off says so above its blocks.
+    if ws.disabled {
+        let notice = Rect::from_min_size(outer.left_top() + vec2(12.0, 12.0), vec2(outer.width() - 24.0, if theme.touch { 44.0 } else { 34.0 }));
+        tools(notice, row).scope(|ui| {
+            egui::Frame::new()
+                .fill(theme.panel)
+                .stroke(Stroke::new(1.0, theme.warning))
+                .corner_radius(7)
+                .inner_margin(egui::Margin::symmetric(10, 4))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(t!("This workspace is turned off: the bot leaves it out, so its blocks don't run.")).color(theme.text));
+                        if ui.button(t!("Turn on")).clicked() {
+                            ws.disabled = false;
+                            *edited = true;
+                        }
+                    });
+                });
+        });
+    }
+
     // Toolbar, bottom left.
     let bar_h = if theme.touch { 44.0 } else { 34.0 };
     let bar = Rect::from_min_size(outer.left_bottom() + vec2(12.0, -(bar_h + 12.0)), vec2(outer.width() - 24.0, bar_h));

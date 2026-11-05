@@ -72,6 +72,7 @@ Each file in `workspaces/` is one workspace; its file name without `.json` is it
 | `links` | Wires. |
 | `zones` | Try Zones by id. |
 | `notes` | Notes on the canvas, by id. [Below](#notes). |
+| `disabled` | `true`: the workspace is turned off and left out when the bot runs or is exported. Missing: it is on. |
 
 ### Nodes
 

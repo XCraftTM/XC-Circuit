@@ -37,7 +37,7 @@
 | Title bar | Drag to move, double-click to maximize, drag the window edges to resize; View › Use system title bar switches to the system one |
 | Save | Ctrl+S (restarts a running bot) |
 | Panels | The Inspector, Console and Problems are tabs: drag them to dock anywhere; reopen closed ones from View › Panels |
-| Workspaces | The Workspaces panel lists them in folders: + and the folder button on the project row add them, drag a workspace onto a folder to move it, double-click a name to rename, the ⋯ button (or right-click) for more |
+| Workspaces | The Workspaces panel lists them in folders: + and the folder button on the project row add them, drag a workspace onto a folder to move it, double-click a name to rename, the ⋯ button (or right-click) for more. **Turn off** there leaves a workspace out of the bot (its events don't fire, its blocks don't run) without deleting it; it shows "(off)" until you turn it on again |
 | Side bar | Like VS Code: the icons on the far left (the activity bar) each show one view in the side bar next to them: Workspaces, Stored Data or Plugins. Clicking the icon of the view shown folds the side bar away; drag its edge to make it wider. View › Side bar does the same, and View › Show activity bar hides the icons. The gear at the bottom opens Settings |
 | Snap and arrange | The magnet in the canvas toolbar (or Settings › Canvas) snaps dropped blocks and notes to the grid. With several blocks selected, Arrange above them aligns their edges or centres, or spreads them out evenly |
 | Run times and values | While the bot runs from the editor, each block shows how long it took above its corner for 30 seconds, and hovering a wire shows the last value that went through it |

@@ -286,7 +286,37 @@ pub fn collect_problems(ed: &Editor) -> Vec<ProblemItem> {
         for (stem, why) in &project.unreadable {
             items.push((format!("workspaces/{stem}.json"), format!("couldn't be read, so it isn't open (the file is kept as it is): {why}"), None));
         }
-        for (key, ws) in &project.workspaces {
+        // Call blocks in workspaces that are on, whose When Called block is
+        // only in workspaces that are off: the call would find nothing.
+        let called_in = |on: bool| -> Vec<(String, String)> {
+            let mut out = Vec::new();
+            for ws in project.workspaces.values().filter(|ws| ws.disabled != on) {
+                for node in ws.nodes.values().filter(|n| n.block_id() == "core.on_called") {
+                    if let Some(name) = node.values.get("name").and_then(Value::as_str) {
+                        out.push((name.to_string(), ws.name.clone()));
+                    }
+                }
+            }
+            out
+        };
+        let (live, off) = (called_in(true), called_in(false));
+        for (key, ws) in project.workspaces.iter().filter(|(_, ws)| !ws.disabled) {
+            for (id, node) in ws.nodes.iter().filter(|(_, n)| n.block_id() == "core.call_workspace") {
+                let Some(name) = node.values.get("name").and_then(Value::as_str) else { continue };
+                if live.iter().any(|(n, _)| n == name) {
+                    continue;
+                }
+                if let Some((_, there)) = off.iter().find(|(n, _)| n == name) {
+                    items.push((
+                        format!("{} › Call", ws.name),
+                        tf!("calls {name}, but its When Called block is in {workspace}, which is turned off", name = name, workspace = there),
+                        Some((key.clone(), id.clone())),
+                    ));
+                }
+            }
+        }
+        // Workspaces that are off don't run, so their blocks aren't checked.
+        for (key, ws) in project.workspaces.iter().filter(|(_, ws)| !ws.disabled) {
             for (id, node) in &ws.nodes {
                 let Some(def) = ed.reg.block(&node.block) else {
                     items.push((format!("{} › #{id}", ws.name), format!("block `{}` is not installed", node.block), Some((key.clone(), id.clone()))));
@@ -365,4 +395,44 @@ pub fn problems(ui: &mut Ui, ed: &mut Editor, items: Vec<ProblemItem>) {
             }
         });
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use circuit_core::{Node, Workspace};
+
+    /// A Call whose When Called block is only in a workspace that is off is a
+    /// problem; the blocks of a workspace that is off aren't checked.
+    #[test]
+    fn calls_into_workspaces_that_are_off() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        let dir = std::env::temp_dir().join(format!("xc-problems-off-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        circuit_core::Project::create(&dir, "Off", "none").unwrap();
+        ed.open_project(&dir);
+        let node = |block: &str, name: &str| Node { block: block.into(), values: serde_json::json!({ "name": name }).as_object().cloned().unwrap(), ..Default::default() };
+        let project = ed.project.as_mut().unwrap();
+        let mut caller = Workspace::new("Main");
+        caller.nodes.insert("go".into(), node("core.on_start@1", ""));
+        caller.nodes.insert("call".into(), node("core.call_workspace@1", "greet"));
+        caller.links.push("go.next > call.in".parse().unwrap());
+        let mut helper = Workspace::new("Helpers");
+        helper.nodes.insert("w".into(), node("core.on_called@1", "greet"));
+        // A block nothing runs: a problem only while the workspace is on.
+        helper.nodes.insert("lonely".into(), node("core.log@1", ""));
+        project.workspaces.insert("main".into(), caller);
+        project.workspaces.insert("helpers".into(), helper);
+        let about = |items: &[ProblemItem], what: &str| items.iter().filter(|(_, why, _)| why.contains(what)).count();
+        let items = collect_problems(&ed);
+        assert_eq!(about(&items, "turned off"), 0);
+        assert_eq!(about(&items, "nothing runs this block"), 1);
+
+        ed.project.as_mut().unwrap().workspaces.get_mut("helpers").unwrap().disabled = true;
+        let items = collect_problems(&ed);
+        assert_eq!(about(&items, "calls greet, but its When Called block is in Helpers, which is turned off"), 1, "{items:?}");
+        assert_eq!(about(&items, "nothing runs this block"), 0, "blocks of a workspace that is off aren't checked");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
