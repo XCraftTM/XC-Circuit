@@ -1177,7 +1177,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             && let Some(p) = pointer_scene
         {
             let id = ws.next_note_id();
-            ws.notes.insert(id.clone(), Note { title: t!("Note").to_string(), rect: [p.x - 40.0, p.y - 30.0, 420.0, 260.0], ..Default::default() });
+            ws.notes.insert(id.clone(), Note { title: t!("Note").to_string(), rect: [p.x - 40.0, p.y - 30.0, 420.0, 260.0], loose: true, ..Default::default() });
             view.edit_note = Some(id);
             *edited = true;
         }
@@ -1226,7 +1226,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         if tool_button(ui, theme, icon("note").as_deref(), t!("Add note")).on_hover_text(t!("A note: a frame with a title and a description, to explain or group blocks")).clicked() {
             let c = to_global.inverse() * center;
             let id = ws.next_note_id();
-            ws.notes.insert(id.clone(), Note { title: t!("Note").to_string(), rect: [c.x - 210.0, c.y - 130.0, 420.0, 260.0], ..Default::default() });
+            ws.notes.insert(id.clone(), Note { title: t!("Note").to_string(), rect: [c.x - 210.0, c.y - 130.0, 420.0, 260.0], loose: true, ..Default::default() });
             view.edit_note = Some(id);
             *edited = true;
         }
@@ -1362,7 +1362,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                 // Room for the title above the blocks.
                 let r = Rect::from_min_max(r.min - vec2(30.0, 70.0), r.max + vec2(30.0, 30.0));
                 let id = ws.next_note_id();
-                ws.notes.insert(id.clone(), Note { title: t!("Note").to_string(), rect: [r.min.x, r.min.y, r.width(), r.height()], ..Default::default() });
+                ws.notes.insert(id.clone(), Note { title: t!("Note").to_string(), rect: [r.min.x, r.min.y, r.width(), r.height()], loose: true, ..Default::default() });
                 view.edit_note = Some(id);
                 *edited = true;
             }
