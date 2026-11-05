@@ -47,6 +47,14 @@ pub fn build_bundle(project: &Project, reg: &Registry, mode: Option<&BuildMode>)
         libs.push(json!({ "source": source, "file": path.display().to_string() }));
     }
 
+    // Pin types that convert into others, for the runtime to apply on wires.
+    let types: Map<String, Value> = reg
+        .types
+        .iter()
+        .filter(|(_, t)| t.check.is_some() && !t.converts.is_empty())
+        .map(|(id, t)| (id.clone(), json!({ "check": t.check, "converts": t.converts.iter().map(|c| json!({ "to": c.to, "via": c.via })).collect::<Vec<_>>() })))
+        .collect();
+
     let workspaces: Map<String, Value> = project
         .workspaces
         .iter()
@@ -63,6 +71,7 @@ pub fn build_bundle(project: &Project, reg: &Registry, mode: Option<&BuildMode>)
         },
         "blocks": blocks,
         "libs": libs,
+        "types": types,
         "workspaces": workspaces,
     });
     Ok(Bundle { value, dependencies })

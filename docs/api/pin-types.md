@@ -30,7 +30,7 @@ via = "v => v.user"
 | `extends` | The type this one fits into, usually `object`. A `discord.member` pin can connect where an `object` is expected. |
 | `color` | The colour of its pins and wires. Themes can change it. |
 | `icon` | An icon name. |
-| `check` | A JavaScript function (as text) the runtime uses to check that a value really is of this type. |
+| `check` | A JavaScript function (as text) that tells whether a value is of this type. The runtime uses it to recognise values to [convert](#conversions). |
 | `description` | What the type is, for tooltips. |
 
 ## Conversions
@@ -43,7 +43,7 @@ to = "discord.user"
 via = "v => v.user"
 ```
 
-Now a Member output connects to a User input, and the block gets the member's user.
+Now a Member output connects to a User input, and the block gets the member's user. The runtime converts a wired value when it passes this type's `check`, so a type needs `check` for its conversions to work. Lists are converted item by item; inputs of type `any` get the value as it is.
 
 ## Class catalogs
 

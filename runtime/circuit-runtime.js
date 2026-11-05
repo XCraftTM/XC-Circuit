@@ -31,6 +31,7 @@ class Runtime {
     this.startedAt = Date.now();
     this.require = Module.createRequire(path.join(opts.depsRoot, "package.json"));
     this.blocks = new Map(); // block id -> definition object
+    this.conversions = new Map(); // pin type -> ways to turn other types into it
     this.libs = new Map(); // lib id -> api
     this.workspaces = new Map(); // key -> graph
     this.globalVars = new Map();
@@ -83,6 +84,27 @@ class Runtime {
     return out;
   }
 
+  /**
+   * A wired value as its input's type wants it: a Member wired into a User
+   * input becomes the member's user (one by one in lists).
+   */
+  convert(value, type) {
+    if (value == null || !this.conversions.size) return value;
+    const target = String(type || "").replace(/\?$/, "");
+    const list = /^list<(.+)>$/.exec(target);
+    const ways = this.conversions.get(list ? list[1] : target);
+    if (!ways) return value;
+    const one = (v) => {
+      for (const w of ways) {
+        try {
+          if (w.test(v)) return w.via(v);
+        } catch {}
+      }
+      return v;
+    };
+    return list && Array.isArray(value) ? value.map(one) : one(value);
+  }
+
   loadModule(source, file) {
     const module = { exports: {} };
     // `@xc-circuit/sdk` only helps editors with types; at run time defineBlock returns the block.
@@ -106,6 +128,7 @@ class Runtime {
     this.backupTimer = setInterval(() => backupStore(this.opts.dataDir, this, true), BACKUP_EVERY_MS);
     this.backupTimer.unref?.();
     this.log.info(`Runtime ready · Node ${process.version}`);
+    this.conversions = compileConversions(this.bundle.types, this.log);
     for (const [id, b] of Object.entries(this.bundle.blocks)) {
       try {
         this.blocks.set(id, ungroupBlock(this.loadModule(esmToCommonJs(b.source), b.file)));
@@ -478,6 +501,7 @@ class GraphNode {
       const values = await Promise.all(sources.map((s) => this.graph.read(run, s.node, s.pin, memo, path)));
       const def = (this.def.fields || {})[pin];
       fields[pin] = def && def.multi ? values.flat() : values[0];
+      if (def) fields[pin] = this.graph.rt.convert(fields[pin], def.type);
       wired.add(pin);
     }
     // Values wired into a text field's {name} inputs (pins that aren't fields).
@@ -627,6 +651,36 @@ function lastOutput(run, name) {
   let found = NOT_FOUND;
   for (const outputs of run.outputs.values()) if (outputs && name in outputs) found = outputs[name];
   return found;
+}
+
+/**
+ * Pin type conversions (`[[type.converts]]`) by target type: each with the
+ * source type's `check`, to recognise its values, and `via`, to convert them.
+ */
+function compileConversions(types, log) {
+  const compile = (source, what) => {
+    try {
+      const fn = (0, eval)(`(${source})`);
+      if (typeof fn === "function") return fn;
+      log.warn(`Pin type ${what} isn't a function`);
+    } catch (e) {
+      log.warn(`Pin type ${what}: ${e.message}`);
+    }
+    return null;
+  };
+  const byTarget = new Map();
+  for (const [id, t] of Object.entries(types || {})) {
+    if (!t.check || !(t.converts || []).length) continue;
+    const test = compile(t.check, `${id} check`);
+    if (!test) continue;
+    for (const c of t.converts) {
+      const via = compile(c.via, `${id} → ${c.to}`);
+      if (!via) continue;
+      if (!byTarget.has(c.to)) byTarget.set(c.to, []);
+      byTarget.get(c.to).push({ from: id, test, via });
+    }
+  }
+  return byTarget;
 }
 
 function coerce(value, type) {

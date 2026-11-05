@@ -401,6 +401,8 @@ mod tests {
         }
         let bundle = circuit_runner::build_bundle(ed.project.as_ref().unwrap(), &ed.reg, ed.mode()).unwrap();
         assert!(bundle.dependencies.is_empty());
+        // The pin type conversions go along, for the runtime to apply on wires.
+        assert_eq!(bundle.value["types"]["discord.member"]["converts"][0]["via"], "v => v.user");
         let session = circuit_runner::Session::start(
             circuit_runner::SessionConfig { bundle: bundle.value, dependencies: bundle.dependencies, packages_dir: dir.join("packages"), run_dir: dir.join(".circuit/run"), data_dir: dir.join(".circuit/data"), env: vec![] },
             || {},
