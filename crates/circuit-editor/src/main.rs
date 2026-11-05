@@ -5,6 +5,8 @@ mod i18n;
 mod graphics;
 mod icon;
 mod app;
+#[cfg(test)]
+mod bench;
 mod bot;
 mod bot_profile;
 mod canvas;

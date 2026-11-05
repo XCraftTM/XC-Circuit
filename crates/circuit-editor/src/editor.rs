@@ -778,6 +778,9 @@ struct Known {
     /// A hash of the project data that `define()` sees.
     project: u64,
     names: HashMap<String, Vec<String>>,
+    /// The wires into each block, by their index in the workspace's links;
+    /// built once per pass, so a block finds its own without a search.
+    into: HashMap<String, Vec<usize>>,
 }
 
 impl ShapeCache {
@@ -814,6 +817,10 @@ impl ShapeCache {
             if structure != k.structure || project != k.project {
                 k.names.clear();
                 (k.structure, k.project) = (structure, project);
+            }
+            k.into.clear();
+            for (i, l) in ws.links.iter().enumerate() {
+                k.into.entry(l.to.node.clone()).or_default().push(i);
             }
             k.pass = pass;
         }
@@ -869,7 +876,8 @@ fn known_names(reg: &Registry, engine: &BlockEngine, cache: &mut ShapeCache, ws_
 pub fn node_shape(reg: &Registry, engine: &BlockEngine, cache: &mut ShapeCache, ws_key: &str, ws: &Workspace, node_id: &str, project: &Value) -> Option<BlockShape> {
     let node = ws.nodes.get(node_id)?;
     let def = reg.block(&node.block)?;
-    let connected = connected_types(reg, cache, ws_key, ws, node_id);
+    let into = cache.known(reg, ws_key, ws, project).into.get(node_id).cloned().unwrap_or_default();
+    let connected = connected_types(reg, cache, ws_key, ws, node_id, &into);
     let known = known_names(reg, engine, cache, ws_key, ws, node_id, project);
 
     let mut h = DefaultHasher::new();
@@ -907,9 +915,10 @@ fn connected_types(
     ws_key: &str,
     ws: &Workspace,
     node_id: &str,
+    into: &[usize],
 ) -> Map<String, Value> {
     let mut out = Map::new();
-    for link in ws.links.iter().filter(|l| l.to.node == node_id && l.to.pin != ACTION_IN) {
+    for link in into.iter().filter_map(|&i| ws.links.get(i)).filter(|l| l.to.node == node_id && l.to.pin != ACTION_IN) {
         let Some(src) = ws.nodes.get(&link.from.node) else { continue };
         let cached = cache.get(ws_key, &link.from.node).and_then(|s| s.output(&link.from.pin)).map(|o| o.type_name.clone());
         let ty = cached.or_else(|| reg.block(&src.block).and_then(|d| d.outputs.get(&link.from.pin)).map(|o| o.type_name.clone()));

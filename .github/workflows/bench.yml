@@ -1,0 +1,57 @@
+# Runs the benchmarks (see the website's Performance page) on GitHub's
+# standard machines, as a second, more modest computer than a desktop.
+# Started by hand; the results are uploaded as an artifact.
+name: Benchmarks
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Linux packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libdbus-1-dev libasound2-dev pkg-config
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Machine
+        shell: bash
+        run: |
+          mkdir -p target/bench
+          {
+            echo "os: ${{ runner.os }} (${{ matrix.os }})"
+            echo "cores: $(nproc 2>/dev/null || echo $NUMBER_OF_PROCESSORS)"
+            if [ "${{ runner.os }}" = "Linux" ]; then lscpu | grep 'Model name' | sed 's/ \+/ /g'; else powershell -c "(Get-CimInstance Win32_Processor).Name"; fi
+            echo "node: $(node --version)"
+            rustc --version
+          } | tee target/bench/machine.txt
+
+      - name: Editor
+        shell: bash
+        run: cargo test --release -p circuit-editor bench_ -- --ignored --nocapture --test-threads=1 | tee target/bench/editor.txt
+
+      - name: Runtime
+        shell: bash
+        run: node runtime/bench/runtime.js | tee target/bench/runtime.txt
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bench-${{ matrix.os }}
+          path: target/bench/
