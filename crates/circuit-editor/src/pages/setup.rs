@@ -269,7 +269,7 @@ fn welcome(ui: &mut Ui, ed: &mut Editor, theme: &Theme) {
     ui.add_space(22.0);
     ui.label(RichText::new(t!("LANGUAGE")).size(11.0).strong().color(theme.text_muted));
     ui.add_space(6.0);
-    crate::pages::settings::language_buttons(ui, ed, theme);
+    crate::pages::settings::language_select(ui, ed);
     ui.add_space(18.0);
     for (ic, head, text) in [
         ("workspace", t!("Connect blocks"), t!("Every block does one thing. Wire them together on a canvas, no code needed.")),

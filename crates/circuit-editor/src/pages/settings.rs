@@ -178,26 +178,29 @@ fn toggle(ui: &mut Ui, theme: &Theme, on: &mut bool) -> bool {
 
 /// One button per language; a click switches the whole interface right away.
 /// Shown in Settings and on the first start page.
-pub fn language_buttons(ui: &mut Ui, ed: &mut Editor, theme: &Theme) {
-    ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing.x = 4.0;
-        for (code, name) in crate::i18n::languages(&ed.reg) {
-            let selected = ed.prefs.language == code;
-            let ink = if selected { Color32::from_rgb(0, 24, 28) } else { theme.text };
-            let b = egui::Button::new(RichText::new(&name).size(13.0).color(ink)).min_size(vec2(96.0, crate::ui::inputs::input_height(ui).max(ui.spacing().interact_size.y)));
-            if crate::ui::dialog::styled_button(ui, theme, b, if selected { theme.accent } else { theme.field }, Stroke::NONE).clicked() && !selected {
-                ed.prefs.language = code;
-                ed.apply_language();
+/// The interface language, as a dropdown (there can be many, from plugins).
+pub fn language_select(ui: &mut Ui, ed: &mut Editor) {
+    let languages = crate::i18n::languages(&ed.reg);
+    let current = languages.iter().find(|(code, _)| *code == ed.prefs.language).map_or_else(|| ed.prefs.language.clone(), |(_, name)| name.clone());
+    let mut picked = None;
+    crate::ui::widgets::dropdown(ui, egui::Id::new("settings-language"), 180.0, current, |ui| {
+        for (code, name) in &languages {
+            if ui.selectable_label(ed.prefs.language == *code, name).clicked() {
+                picked = Some(code.clone());
             }
         }
     });
+    if let Some(code) = picked.filter(|c| *c != ed.prefs.language) {
+        ed.prefs.language = code;
+        ed.apply_language();
+    }
 }
 
 fn appearance(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView) {
     let ctx = ui.ctx().clone();
     group(ui, theme, t!("Language"));
     row(ui, theme, t!("Interface language"), t!("Menus and settings; blocks stay in English. More languages come with plugins."), |ui| {
-        ui.with_layout(Layout::left_to_right(Align::Center), |ui| language_buttons(ui, ed, theme));
+        language_select(ui, ed);
     });
     row(ui, theme, t!("Translate XC Circuit"), t!("Makes a file with every text to translate, saved as a plugin you can share. Changes show while you edit it."), |ui| {
         if crate::ui::dialog::button(ui, theme, t!("Create a translation…")).clicked() {
@@ -745,5 +748,31 @@ mod tests {
         ed.prefs.accent = None;
         ed.restyle();
         assert_eq!(ed.theme.accent, light_own, "Reset brings back the theme's own accent");
+    }
+
+    /// The language setting stays put from frame to frame, at any width.
+    #[test]
+    fn language_row_holds_still() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = Editor::new(vec![root.join("plugins")], Some("graphite")).unwrap();
+        let theme = ed.theme.clone();
+        for width in [420.0, 560.0, 760.0, 1100.0] {
+            let ctx = egui::Context::default();
+            let mut places = Vec::new();
+            for _ in 0..12 {
+                let input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(width, 600.0))), ..Default::default() };
+                let mut out = ctx.run_ui(input, |ui| {
+                    row(ui, &theme, "Interface language", "Menus and settings; blocks stay in English. More languages come with plugins.", |ui| {
+                        let before = ui.min_rect();
+                        language_select(ui, &mut ed);
+                        places.push(ui.min_rect().union(before));
+                    });
+                });
+                out.textures_delta.clear();
+            }
+            let last = &places[places.len() - 4..];
+            assert!(last.windows(2).all(|w| w[0] == w[1]), "at {width}: {last:?}");
+            assert!(last[0].right() <= width, "at {width}: inside the window");
+        }
     }
 }
