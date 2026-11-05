@@ -100,7 +100,12 @@ function run(ws, debug) {
       if (s && d) {
         clearTimeout(timer);
         child.kill();
-        fs.rmSync(dir, { recursive: true, force: true });
+        // Removed once the bot has really stopped (it may still be saving).
+        child.once("exit", () => {
+          try {
+            fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
+          } catch {}
+        });
         resolve({ startup: Number(s[1]) - spawned, ms: Number(d[1]) - Number(s[1]), rss: Number(d[2]), lines });
       }
     };
