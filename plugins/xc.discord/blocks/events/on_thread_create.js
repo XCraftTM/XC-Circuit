@@ -22,7 +22,7 @@ module.exports = {
     parent: { type: "text", pin: false, default: "", label: "In channel id", description: "Only threads in this channel or forum. Empty = any." },
   },
   outputs: {
-    thread: { type: "discord.channel", description: "The new thread." },
+    thread: { type: "discord.thread", description: "The new thread." },
     parent: { type: "discord.channel?", description: "The channel or forum it is in." },
     ownerId: { type: "text", label: "Creator id", description: "Who created it." },
     name: { type: "text", description: "Its name." },

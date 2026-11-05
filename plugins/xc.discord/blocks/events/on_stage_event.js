@@ -26,7 +26,7 @@ module.exports = {
   outputs: {
     topic: { type: "text", description: "The stage's topic." },
     beforeTopic: { type: "text", label: "Topic before", description: "For changes: the topic before." },
-    channel: { type: "discord.channel?", description: "The stage channel." },
+    channel: { type: "discord.voice_channel?", description: "The stage channel." },
     stage: { type: "object", description: "The stage instance." },
     server: { type: "discord.guild?", description: "The server." },
   },

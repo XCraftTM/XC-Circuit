@@ -39,6 +39,51 @@ check = "v => typeof v?.isTextBased === 'function'"
 description = "A text, voice, thread or forum channel."
 
 [[type]]
+id = "discord.thread"
+name = "Thread"
+extends = "discord.channel"
+color = "#7B83FF"
+icon = "branch"
+check = "v => v?.isThread?.() === true"
+description = "A thread or forum post. It goes wherever a channel does."
+
+[[type]]
+id = "discord.voice_channel"
+name = "Voice Channel"
+extends = "discord.channel"
+color = "#7B83FF"
+icon = "volume"
+check = "v => v?.isVoiceBased?.() === true"
+description = "A voice or stage channel. It goes wherever a channel does."
+
+[[type]]
+id = "discord.invite"
+name = "Invite"
+extends = "object"
+color = "#7B83FF"
+icon = "user-plus"
+check = "v => v?.constructor?.name === 'Invite'"
+description = "An invite link to a server, with its code, uses and expiry."
+
+[[type]]
+id = "discord.poll"
+name = "Poll"
+extends = "object"
+color = "#7B83FF"
+icon = "check"
+check = "v => v?.constructor?.name === 'Poll'"
+description = "A poll on a message: its question, answers and votes."
+
+[[type]]
+id = "discord.webhook"
+name = "Webhook"
+extends = "object"
+color = "#7B83FF"
+icon = "send"
+check = "v => v?.constructor?.name === 'Webhook'"
+description = "A webhook: posts in a channel with its own name and picture."
+
+[[type]]
 id = "discord.guild"
 name = "Server"
 extends = "object"

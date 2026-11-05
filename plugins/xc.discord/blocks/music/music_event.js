@@ -61,7 +61,7 @@ module.exports = {
     count: { type: "number", description: "For playlists: how many tracks were added." },
     requestedBy: { type: "discord.user?", label: "Requested by", description: "Who asked for the track." },
     channel: { type: "discord.channel?", label: "Text channel", description: "The text channel Play Music was given, to post in." },
-    voiceChannel: { type: "discord.channel?", label: "Voice channel", description: "Where the bot plays." },
+    voiceChannel: { type: "discord.voice_channel?", label: "Voice channel", description: "Where the bot plays." },
     error: { type: "text", description: "For failures: what went wrong." },
   },
   listen(ctx, emit) {

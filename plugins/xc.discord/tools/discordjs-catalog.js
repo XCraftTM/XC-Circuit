@@ -20,6 +20,11 @@ const ROOTS = {
   "discord.guild": "Guild",
   "discord.role": "Role",
   "discord.interaction": "BaseInteraction",
+  "discord.thread": "ThreadChannel",
+  "discord.voice_channel": "VoiceChannel",
+  "discord.invite": "Invite",
+  "discord.poll": "Poll",
+  "discord.webhook": "Webhook",
 };
 // How many steps from a pin type the catalog follows (user → dmChannel → …).
 const DEPTH = 4;

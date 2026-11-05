@@ -24,7 +24,7 @@ module.exports = {
     kind: { type: "select", pin: false, default: "updated", label: "When", choices: KINDS, description: "Which event runs it." },
   },
   outputs: {
-    thread: { type: "discord.channel", description: "The thread (as it is now, or was before deleting)." },
+    thread: { type: "discord.thread", description: "The thread (as it is now, or was before deleting)." },
     beforeName: { type: "text", label: "Name before", description: "Its name before a change." },
     archived: { type: "boolean", description: "Whether it is archived now." },
     locked: { type: "boolean", description: "Whether it is locked now." },

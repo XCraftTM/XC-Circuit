@@ -25,6 +25,7 @@ module.exports = {
   },
   outputs: {
     code: { type: "text", description: "The invite's code." },
+    invite: { type: "discord.invite", description: "The invite itself." },
     url: { type: "text", description: "The invite link." },
     inviter: { type: "discord.user?", description: "Who made it (for new invites)." },
     channel: { type: "discord.channel?", description: "The channel it leads to." },
@@ -32,7 +33,7 @@ module.exports = {
   },
   listen(ctx, emit) {
     ctx.discord.client.on(ctx.fields.kind === "deleted" ? "inviteDelete" : "inviteCreate", (i) =>
-      emit({ code: i.code, url: i.url, inviter: i.inviter ?? null, channel: i.channel ?? null, server: i.guild ?? null }),
+      emit({ code: i.code, invite: i, url: i.url, inviter: i.inviter ?? null, channel: i.channel ?? null, server: i.guild ?? null }),
     );
   },
 };

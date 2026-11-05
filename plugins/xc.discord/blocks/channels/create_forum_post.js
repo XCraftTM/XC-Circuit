@@ -15,6 +15,9 @@ module.exports = {
   look: {
     icon: "message",
   },
+  requires: {
+    permissions: ["ViewChannel", "SendMessages"],
+  },
   fields: {
     forum: { type: "discord.channel", pin: "only", required: true, description: "The forum channel." },
     title: { type: "text", required: true, default: "New post", description: "The post's title." },
@@ -23,7 +26,7 @@ module.exports = {
     tags: { type: "text", default: "", description: "Tag names, comma separated (they must exist in the forum)." },
   },
   outputs: {
-    thread: { type: "discord.channel", description: "The post (a thread)." },
+    thread: { type: "discord.thread", description: "The post (a thread)." },
   },
   async run({ fields: f }) {
     const wanted = String(f.tags || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);

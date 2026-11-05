@@ -7,7 +7,12 @@
   "discord.channel": "TextChannel",
   "discord.guild": "Guild",
   "discord.role": "Role",
-  "discord.interaction": "BaseInteraction"
+  "discord.interaction": "BaseInteraction",
+  "discord.thread": "ThreadChannel",
+  "discord.voice_channel": "VoiceChannel",
+  "discord.invite": "Invite",
+  "discord.poll": "Poll",
+  "discord.webhook": "Webhook"
  },
  "classes": {
   "User": {
@@ -1654,6 +1659,709 @@
     }
    ]
   },
+  "ThreadChannel": {
+   "members": [
+    {
+     "name": "appliedTags",
+     "kind": "property",
+     "type": "Snowflake[]"
+    },
+    {
+     "name": "archived",
+     "kind": "property",
+     "type": "Yes/no",
+     "optional": true
+    },
+    {
+     "name": "archivedAt",
+     "kind": "getter",
+     "type": "Date",
+     "optional": true
+    },
+    {
+     "name": "archiveTimestamp",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "autoArchiveDuration",
+     "kind": "property",
+     "type": "ThreadAutoArchiveDuration",
+     "optional": true
+    },
+    {
+     "name": "createdAt",
+     "kind": "getter",
+     "type": "Date",
+     "optional": true
+    },
+    {
+     "name": "createdTimestamp",
+     "kind": "getter",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "editable",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "flags",
+     "kind": "property",
+     "type": "ChannelFlagsBitField",
+     "class": "ChannelFlagsBitField"
+    },
+    {
+     "name": "guild",
+     "kind": "property",
+     "type": "Guild",
+     "class": "Guild"
+    },
+    {
+     "name": "guildId",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "guildMembers",
+     "kind": "getter",
+     "type": "Collection<Snowflake, GuildMember>"
+    },
+    {
+     "name": "invitable",
+     "kind": "property",
+     "type": "Yes/no",
+     "optional": true
+    },
+    {
+     "name": "joinable",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "joined",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "locked",
+     "kind": "property",
+     "type": "Yes/no",
+     "optional": true
+    },
+    {
+     "name": "manageable",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "memberCount",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "members",
+     "kind": "property",
+     "type": "ThreadMemberManager",
+     "class": "ThreadMemberManager"
+    },
+    {
+     "name": "messageCount",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "name",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "ownerId",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "parent",
+     "kind": "getter",
+     "type": "If<ThreadOnly, ForumChannel | MediaChan…",
+     "optional": true
+    },
+    {
+     "name": "parentId",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "rateLimitPerUser",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "sendable",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "toString",
+     "kind": "method",
+     "type": "Text"
+    },
+    {
+     "name": "totalMessageSent",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "type",
+     "kind": "property",
+     "type": "ThreadChannelType"
+    },
+    {
+     "name": "unarchivable",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "viewable",
+     "kind": "getter",
+     "type": "Yes/no"
+    }
+   ]
+  },
+  "VoiceChannel": {
+   "members": [
+    {
+     "name": "appPermissions",
+     "kind": "property",
+     "type": "PermissionsBitField",
+     "optional": true,
+     "class": "PermissionsBitField"
+    },
+    {
+     "name": "bitrate",
+     "kind": "property",
+     "type": "Number"
+    },
+    {
+     "name": "createdAt",
+     "kind": "getter",
+     "type": "Date"
+    },
+    {
+     "name": "createdTimestamp",
+     "kind": "getter",
+     "type": "Number"
+    },
+    {
+     "name": "deletable",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "flags",
+     "kind": "property",
+     "type": "ChannelFlagsBitField",
+     "class": "ChannelFlagsBitField"
+    },
+    {
+     "name": "full",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "guild",
+     "kind": "property",
+     "type": "Guild",
+     "class": "Guild"
+    },
+    {
+     "name": "guildId",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "id",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "isDMBased",
+     "kind": "method",
+     "type": "Yes/no",
+     "class": "DMChannel"
+    },
+    {
+     "name": "isSendable",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isTextBased",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isThread",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isThreadOnly",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isVoiceBased",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "joinable",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "manageable",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "members",
+     "kind": "getter",
+     "type": "Collection<Snowflake, GuildMember>"
+    },
+    {
+     "name": "name",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "nsfw",
+     "kind": "property",
+     "type": "Yes/no"
+    },
+    {
+     "name": "parent",
+     "kind": "getter",
+     "type": "CategoryChannel",
+     "optional": true,
+     "class": "CategoryChannel"
+    },
+    {
+     "name": "parentId",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "partial",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "permissionOverwrites",
+     "kind": "property",
+     "type": "PermissionOverwriteManager",
+     "class": "PermissionOverwriteManager"
+    },
+    {
+     "name": "permissions",
+     "kind": "property",
+     "type": "PermissionsBitField",
+     "optional": true,
+     "class": "PermissionsBitField"
+    },
+    {
+     "name": "permissionsLocked",
+     "kind": "getter",
+     "type": "Yes/no",
+     "optional": true
+    },
+    {
+     "name": "position",
+     "kind": "getter",
+     "type": "Number"
+    },
+    {
+     "name": "rateLimitPerUser",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "rawPosition",
+     "kind": "property",
+     "type": "Number"
+    },
+    {
+     "name": "rtcRegion",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "speakable",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "toString",
+     "kind": "method",
+     "type": "Text"
+    },
+    {
+     "name": "type",
+     "kind": "property",
+     "type": "ChannelType.GuildVoice"
+    },
+    {
+     "name": "url",
+     "kind": "getter",
+     "type": "Text"
+    },
+    {
+     "name": "userLimit",
+     "kind": "property",
+     "type": "Number"
+    },
+    {
+     "name": "videoQualityMode",
+     "kind": "property",
+     "type": "VideoQualityMode",
+     "optional": true
+    },
+    {
+     "name": "viewable",
+     "kind": "getter",
+     "type": "Yes/no"
+    }
+   ]
+  },
+  "Invite": {
+   "members": [
+    {
+     "name": "channel",
+     "kind": "property",
+     "type": "PartialGroupDMChannel",
+     "optional": true,
+     "class": "PartialGroupDMChannel"
+    },
+    {
+     "name": "channelId",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "code",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "createdAt",
+     "kind": "getter",
+     "type": "Date",
+     "optional": true
+    },
+    {
+     "name": "createdTimestamp",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "deletable",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "expiresAt",
+     "kind": "getter",
+     "type": "Date",
+     "optional": true
+    },
+    {
+     "name": "expiresTimestamp",
+     "kind": "getter",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "flags",
+     "kind": "property",
+     "type": "InviteFlagsBitField",
+     "class": "InviteFlagsBitField"
+    },
+    {
+     "name": "guild",
+     "kind": "property",
+     "type": "InviteGuild",
+     "optional": true,
+     "class": "InviteGuild"
+    },
+    {
+     "name": "guildScheduledEvent",
+     "kind": "property",
+     "type": "GuildScheduledEvent",
+     "optional": true,
+     "class": "GuildScheduledEvent"
+    },
+    {
+     "name": "inviter",
+     "kind": "getter",
+     "type": "User",
+     "optional": true,
+     "class": "User"
+    },
+    {
+     "name": "inviterId",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "maxAge",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "maxUses",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "memberCount",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "presenceCount",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "roles",
+     "kind": "property",
+     "type": "Collection<Snowflake, InviteRole | Role>",
+     "optional": true
+    },
+    {
+     "name": "targetApplication",
+     "kind": "property",
+     "type": "IntegrationApplication",
+     "optional": true,
+     "class": "IntegrationApplication"
+    },
+    {
+     "name": "targetType",
+     "kind": "property",
+     "type": "InviteTargetType",
+     "optional": true
+    },
+    {
+     "name": "targetUser",
+     "kind": "property",
+     "type": "User",
+     "optional": true,
+     "class": "User"
+    },
+    {
+     "name": "temporary",
+     "kind": "property",
+     "type": "Yes/no",
+     "optional": true
+    },
+    {
+     "name": "toString",
+     "kind": "method",
+     "type": "Text"
+    },
+    {
+     "name": "type",
+     "kind": "property",
+     "type": "InviteType"
+    },
+    {
+     "name": "url",
+     "kind": "getter",
+     "type": "Text"
+    },
+    {
+     "name": "uses",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    }
+   ]
+  },
+  "Poll": {
+   "members": [
+    {
+     "name": "allowMultiselect",
+     "kind": "property",
+     "type": "Yes/no"
+    },
+    {
+     "name": "answers",
+     "kind": "property",
+     "type": "Collection<number, PollAnswer | Partial…"
+    },
+    {
+     "name": "channel",
+     "kind": "property",
+     "type": "TextBasedChannel"
+    },
+    {
+     "name": "channelId",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "expiresAt",
+     "kind": "getter",
+     "type": "Date",
+     "optional": true
+    },
+    {
+     "name": "expiresTimestamp",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "layoutType",
+     "kind": "property",
+     "type": "PollLayoutType"
+    },
+    {
+     "name": "message",
+     "kind": "property",
+     "type": "Message",
+     "class": "Message"
+    },
+    {
+     "name": "messageId",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "partial",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "question",
+     "kind": "property",
+     "type": "PollQuestionMedia",
+     "class": "PollQuestionMedia"
+    },
+    {
+     "name": "resultsFinalized",
+     "kind": "property",
+     "type": "Yes/no"
+    }
+   ]
+  },
+  "Webhook": {
+   "members": [
+    {
+     "name": "applicationId",
+     "kind": "property",
+     "type": "Type extends WebhookType.Application ? …"
+    },
+    {
+     "name": "avatar",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "avatarURL",
+     "kind": "method",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "channel",
+     "kind": "getter",
+     "type": "TextChannel",
+     "optional": true,
+     "class": "TextChannel"
+    },
+    {
+     "name": "channelId",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "guildId",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "isApplicationCreated",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isChannelFollower",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isIncoming",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isUserCreated",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "name",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "owner",
+     "kind": "property",
+     "type": "Type extends WebhookType.Incoming ? Use…"
+    },
+    {
+     "name": "sourceChannel",
+     "kind": "property",
+     "type": "Type extends WebhookType.ChannelFollowe…"
+    },
+    {
+     "name": "sourceGuild",
+     "kind": "property",
+     "type": "Type extends WebhookType.ChannelFollowe…"
+    },
+    {
+     "name": "token",
+     "kind": "property",
+     "type": "Type extends WebhookType.Incoming ? str…",
+     "optional": true
+    },
+    {
+     "name": "type",
+     "kind": "property",
+     "type": "Type"
+    }
+   ]
+  },
   "AvatarDecorationData": {
    "members": [
     {
@@ -2467,74 +3175,6 @@
     }
    ]
   },
-  "Poll": {
-   "members": [
-    {
-     "name": "allowMultiselect",
-     "kind": "property",
-     "type": "Yes/no"
-    },
-    {
-     "name": "answers",
-     "kind": "property",
-     "type": "Collection<number, PollAnswer | Partial…"
-    },
-    {
-     "name": "channel",
-     "kind": "property",
-     "type": "TextBasedChannel"
-    },
-    {
-     "name": "channelId",
-     "kind": "property",
-     "type": "Text"
-    },
-    {
-     "name": "expiresAt",
-     "kind": "getter",
-     "type": "Date",
-     "optional": true
-    },
-    {
-     "name": "expiresTimestamp",
-     "kind": "property",
-     "type": "Number",
-     "optional": true
-    },
-    {
-     "name": "layoutType",
-     "kind": "property",
-     "type": "PollLayoutType"
-    },
-    {
-     "name": "message",
-     "kind": "property",
-     "type": "Message",
-     "class": "Message"
-    },
-    {
-     "name": "messageId",
-     "kind": "property",
-     "type": "Text"
-    },
-    {
-     "name": "partial",
-     "kind": "getter",
-     "type": "Yes/no"
-    },
-    {
-     "name": "question",
-     "kind": "property",
-     "type": "PollQuestionMedia",
-     "class": "PollQuestionMedia"
-    },
-    {
-     "name": "resultsFinalized",
-     "kind": "property",
-     "type": "Yes/no"
-    }
-   ]
-  },
   "ReactionManager": {
    "members": [
     {
@@ -2853,215 +3493,6 @@
      "name": "channel",
      "kind": "property",
      "type": "If<ThreadOnly, ForumChannel | MediaChan…"
-    }
-   ]
-  },
-  "VoiceChannel": {
-   "members": [
-    {
-     "name": "appPermissions",
-     "kind": "property",
-     "type": "PermissionsBitField",
-     "optional": true,
-     "class": "PermissionsBitField"
-    },
-    {
-     "name": "bitrate",
-     "kind": "property",
-     "type": "Number"
-    },
-    {
-     "name": "createdAt",
-     "kind": "getter",
-     "type": "Date"
-    },
-    {
-     "name": "createdTimestamp",
-     "kind": "getter",
-     "type": "Number"
-    },
-    {
-     "name": "deletable",
-     "kind": "getter",
-     "type": "Yes/no"
-    },
-    {
-     "name": "flags",
-     "kind": "property",
-     "type": "ChannelFlagsBitField",
-     "class": "ChannelFlagsBitField"
-    },
-    {
-     "name": "full",
-     "kind": "getter",
-     "type": "Yes/no"
-    },
-    {
-     "name": "guild",
-     "kind": "property",
-     "type": "Guild",
-     "class": "Guild"
-    },
-    {
-     "name": "guildId",
-     "kind": "property",
-     "type": "Text"
-    },
-    {
-     "name": "id",
-     "kind": "property",
-     "type": "Text"
-    },
-    {
-     "name": "isDMBased",
-     "kind": "method",
-     "type": "Yes/no",
-     "class": "DMChannel"
-    },
-    {
-     "name": "isSendable",
-     "kind": "method",
-     "type": "Yes/no"
-    },
-    {
-     "name": "isTextBased",
-     "kind": "method",
-     "type": "Yes/no"
-    },
-    {
-     "name": "isThread",
-     "kind": "method",
-     "type": "Yes/no"
-    },
-    {
-     "name": "isThreadOnly",
-     "kind": "method",
-     "type": "Yes/no"
-    },
-    {
-     "name": "isVoiceBased",
-     "kind": "method",
-     "type": "Yes/no"
-    },
-    {
-     "name": "joinable",
-     "kind": "getter",
-     "type": "Yes/no"
-    },
-    {
-     "name": "manageable",
-     "kind": "getter",
-     "type": "Yes/no"
-    },
-    {
-     "name": "members",
-     "kind": "getter",
-     "type": "Collection<Snowflake, GuildMember>"
-    },
-    {
-     "name": "name",
-     "kind": "property",
-     "type": "Text"
-    },
-    {
-     "name": "nsfw",
-     "kind": "property",
-     "type": "Yes/no"
-    },
-    {
-     "name": "parent",
-     "kind": "getter",
-     "type": "CategoryChannel",
-     "optional": true,
-     "class": "CategoryChannel"
-    },
-    {
-     "name": "parentId",
-     "kind": "property",
-     "type": "Text",
-     "optional": true
-    },
-    {
-     "name": "partial",
-     "kind": "getter",
-     "type": "Yes/no"
-    },
-    {
-     "name": "permissionOverwrites",
-     "kind": "property",
-     "type": "PermissionOverwriteManager",
-     "class": "PermissionOverwriteManager"
-    },
-    {
-     "name": "permissions",
-     "kind": "property",
-     "type": "PermissionsBitField",
-     "optional": true,
-     "class": "PermissionsBitField"
-    },
-    {
-     "name": "permissionsLocked",
-     "kind": "getter",
-     "type": "Yes/no",
-     "optional": true
-    },
-    {
-     "name": "position",
-     "kind": "getter",
-     "type": "Number"
-    },
-    {
-     "name": "rateLimitPerUser",
-     "kind": "property",
-     "type": "Number",
-     "optional": true
-    },
-    {
-     "name": "rawPosition",
-     "kind": "property",
-     "type": "Number"
-    },
-    {
-     "name": "rtcRegion",
-     "kind": "property",
-     "type": "Text",
-     "optional": true
-    },
-    {
-     "name": "speakable",
-     "kind": "getter",
-     "type": "Yes/no"
-    },
-    {
-     "name": "toString",
-     "kind": "method",
-     "type": "Text"
-    },
-    {
-     "name": "type",
-     "kind": "property",
-     "type": "ChannelType.GuildVoice"
-    },
-    {
-     "name": "url",
-     "kind": "getter",
-     "type": "Text"
-    },
-    {
-     "name": "userLimit",
-     "kind": "property",
-     "type": "Number"
-    },
-    {
-     "name": "videoQualityMode",
-     "kind": "property",
-     "type": "VideoQualityMode",
-     "optional": true
-    },
-    {
-     "name": "viewable",
-     "kind": "getter",
-     "type": "Yes/no"
     }
    ]
   },
@@ -3541,6 +3972,574 @@
     }
    ]
   },
+  "ThreadMemberManager": {
+   "members": [
+    {
+     "name": "cache",
+     "kind": "getter",
+     "type": "Collection<Key, Holds>"
+    },
+    {
+     "name": "holds",
+     "kind": "property",
+     "type": "Constructable<Holds>"
+    },
+    {
+     "name": "me",
+     "kind": "getter",
+     "type": "ThreadMember",
+     "optional": true,
+     "class": "ThreadMember"
+    },
+    {
+     "name": "thread",
+     "kind": "property",
+     "type": "PublicThreadChannel",
+     "class": "PublicThreadChannel"
+    }
+   ]
+  },
+  "PartialGroupDMChannel": {
+   "members": [
+    {
+     "name": "appPermissions",
+     "kind": "property",
+     "type": "PermissionsBitField",
+     "optional": true,
+     "class": "PermissionsBitField"
+    },
+    {
+     "name": "createdAt",
+     "kind": "getter",
+     "type": "Date",
+     "optional": true
+    },
+    {
+     "name": "createdTimestamp",
+     "kind": "getter",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "flags",
+     "kind": "property",
+     "type": "null",
+     "optional": true
+    },
+    {
+     "name": "icon",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "iconURL",
+     "kind": "method",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "id",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "isDMBased",
+     "kind": "method",
+     "type": "Yes/no",
+     "class": "DMChannel"
+    },
+    {
+     "name": "isSendable",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isTextBased",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isThread",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isThreadOnly",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isVoiceBased",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "name",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "ownerId",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "partial",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "permissions",
+     "kind": "property",
+     "type": "PermissionsBitField",
+     "optional": true,
+     "class": "PermissionsBitField"
+    },
+    {
+     "name": "recipients",
+     "kind": "property",
+     "type": "PartialRecipient[]"
+    },
+    {
+     "name": "toString",
+     "kind": "method",
+     "type": "Text"
+    },
+    {
+     "name": "type",
+     "kind": "property",
+     "type": "ChannelType.GroupDM"
+    },
+    {
+     "name": "url",
+     "kind": "getter",
+     "type": "Text"
+    }
+   ]
+  },
+  "InviteFlagsBitField": {
+   "members": [
+    {
+     "name": "bitfield",
+     "kind": "property",
+     "type": "Type"
+    },
+    {
+     "name": "serialize",
+     "kind": "method",
+     "type": "Record<Flags, boolean>"
+    },
+    {
+     "name": "toArray",
+     "kind": "method",
+     "type": "Flags[]"
+    }
+   ]
+  },
+  "InviteGuild": {
+   "members": [
+    {
+     "name": "banner",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "createdAt",
+     "kind": "getter",
+     "type": "Date"
+    },
+    {
+     "name": "createdTimestamp",
+     "kind": "getter",
+     "type": "Number"
+    },
+    {
+     "name": "description",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "features",
+     "kind": "property",
+     "type": "`${GuildFeature}`[]"
+    },
+    {
+     "name": "icon",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "iconURL",
+     "kind": "method",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "id",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "name",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "nameAcronym",
+     "kind": "getter",
+     "type": "Text"
+    },
+    {
+     "name": "nsfwLevel",
+     "kind": "property",
+     "type": "GuildNSFWLevel"
+    },
+    {
+     "name": "partnered",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "premiumSubscriptionCount",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "splash",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "splashURL",
+     "kind": "method",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "toString",
+     "kind": "method",
+     "type": "Text"
+    },
+    {
+     "name": "vanityURLCode",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "verificationLevel",
+     "kind": "property",
+     "type": "GuildVerificationLevel"
+    },
+    {
+     "name": "verified",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "welcomeScreen",
+     "kind": "property",
+     "type": "WelcomeScreen",
+     "optional": true,
+     "class": "WelcomeScreen"
+    }
+   ]
+  },
+  "GuildScheduledEvent": {
+   "members": [
+    {
+     "name": "channel",
+     "kind": "getter",
+     "type": "VoiceChannel",
+     "optional": true,
+     "class": "VoiceChannel"
+    },
+    {
+     "name": "channelId",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "coverImageURL",
+     "kind": "method",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "createdAt",
+     "kind": "getter",
+     "type": "Date"
+    },
+    {
+     "name": "createdTimestamp",
+     "kind": "getter",
+     "type": "Number"
+    },
+    {
+     "name": "creator",
+     "kind": "property",
+     "type": "User",
+     "optional": true,
+     "class": "User"
+    },
+    {
+     "name": "creatorId",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "description",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "entityId",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "entityMetadata",
+     "kind": "property",
+     "type": "GuildScheduledEventEntityMetadata",
+     "optional": true,
+     "class": "GuildScheduledEventEntityMetadata"
+    },
+    {
+     "name": "entityType",
+     "kind": "property",
+     "type": "GuildScheduledEventEntityType"
+    },
+    {
+     "name": "guild",
+     "kind": "getter",
+     "type": "Guild",
+     "optional": true,
+     "class": "Guild"
+    },
+    {
+     "name": "guildId",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "id",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "image",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "isActive",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isCanceled",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isCompleted",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isScheduled",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "name",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "partial",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "privacyLevel",
+     "kind": "property",
+     "type": "GuildScheduledEventPrivacyLevel"
+    },
+    {
+     "name": "recurrenceRule",
+     "kind": "property",
+     "type": "GuildScheduledEventRecurrenceRule",
+     "optional": true,
+     "class": "GuildScheduledEventRecurrenceRule"
+    },
+    {
+     "name": "scheduledEndAt",
+     "kind": "getter",
+     "type": "Date",
+     "optional": true
+    },
+    {
+     "name": "scheduledEndTimestamp",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "scheduledStartAt",
+     "kind": "getter",
+     "type": "Date",
+     "optional": true
+    },
+    {
+     "name": "scheduledStartTimestamp",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "status",
+     "kind": "property",
+     "type": "Status"
+    },
+    {
+     "name": "toString",
+     "kind": "method",
+     "type": "Text"
+    },
+    {
+     "name": "url",
+     "kind": "getter",
+     "type": "Text"
+    },
+    {
+     "name": "userCount",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    }
+   ]
+  },
+  "IntegrationApplication": {
+   "members": [
+    {
+     "name": "bot",
+     "kind": "property",
+     "type": "User",
+     "optional": true,
+     "class": "User"
+    },
+    {
+     "name": "cover",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "coverURL",
+     "kind": "method",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "createdAt",
+     "kind": "getter",
+     "type": "Date"
+    },
+    {
+     "name": "createdTimestamp",
+     "kind": "getter",
+     "type": "Number"
+    },
+    {
+     "name": "description",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "hook",
+     "kind": "property",
+     "type": "Yes/no",
+     "optional": true
+    },
+    {
+     "name": "icon",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "iconURL",
+     "kind": "method",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "id",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "name",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "privacyPolicyURL",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "rpcOrigins",
+     "kind": "property",
+     "type": "string[]"
+    },
+    {
+     "name": "termsOfServiceURL",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "toString",
+     "kind": "method",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "verifyKey",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    }
+   ]
+  },
+  "PollQuestionMedia": {
+   "members": [
+    {
+     "name": "text",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    }
+   ]
+  },
   "NameplateData": {
    "members": [
     {
@@ -3669,16 +4668,6 @@
     }
    ]
   },
-  "PollQuestionMedia": {
-   "members": [
-    {
-     "name": "text",
-     "kind": "property",
-     "type": "Text",
-     "optional": true
-    }
-   ]
-  },
   "CategoryChannelChildManager": {
    "members": [
     {
@@ -3727,6 +4716,189 @@
      "name": "status",
      "kind": "property",
      "type": "Status"
+    }
+   ]
+  },
+  "ThreadMember": {
+   "members": [
+    {
+     "name": "flags",
+     "kind": "property",
+     "type": "ThreadMemberFlagsBitField",
+     "class": "ThreadMemberFlagsBitField"
+    },
+    {
+     "name": "guildMember",
+     "kind": "getter",
+     "type": "HasMemberData extends true ? GuildMembe…",
+     "optional": true
+    },
+    {
+     "name": "id",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "joinedAt",
+     "kind": "getter",
+     "type": "Date",
+     "optional": true
+    },
+    {
+     "name": "joinedTimestamp",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "manageable",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "partial",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "thread",
+     "kind": "property",
+     "type": "PublicThreadChannel",
+     "class": "PublicThreadChannel"
+    },
+    {
+     "name": "user",
+     "kind": "getter",
+     "type": "User",
+     "optional": true,
+     "class": "User"
+    }
+   ]
+  },
+  "WelcomeScreen": {
+   "members": [
+    {
+     "name": "description",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "enabled",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "guild",
+     "kind": "property",
+     "type": "Guild",
+     "class": "Guild"
+    },
+    {
+     "name": "welcomeChannels",
+     "kind": "property",
+     "type": "Collection<Snowflake, WelcomeChannel>"
+    }
+   ]
+  },
+  "GuildScheduledEventEntityMetadata": {
+   "members": [
+    {
+     "name": "location",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    }
+   ]
+  },
+  "GuildScheduledEventRecurrenceRule": {
+   "members": [
+    {
+     "name": "byMonth",
+     "kind": "property",
+     "type": "readonly GuildScheduledEventRecurrenceR…",
+     "optional": true
+    },
+    {
+     "name": "byMonthDay",
+     "kind": "property",
+     "type": "readonly number[]",
+     "optional": true
+    },
+    {
+     "name": "byNWeekday",
+     "kind": "property",
+     "type": "readonly GuildScheduledEventRecurrenceR…",
+     "optional": true
+    },
+    {
+     "name": "byWeekday",
+     "kind": "property",
+     "type": "readonly GuildScheduledEventRecurrenceR…",
+     "optional": true
+    },
+    {
+     "name": "byYearDay",
+     "kind": "property",
+     "type": "readonly number[]",
+     "optional": true
+    },
+    {
+     "name": "count",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "endAt",
+     "kind": "getter",
+     "type": "Date",
+     "optional": true
+    },
+    {
+     "name": "endTimestamp",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "frequency",
+     "kind": "property",
+     "type": "GuildScheduledEventRecurrenceRuleFreque…"
+    },
+    {
+     "name": "interval",
+     "kind": "property",
+     "type": "Number"
+    },
+    {
+     "name": "startAt",
+     "kind": "getter",
+     "type": "Date"
+    },
+    {
+     "name": "startTimestamp",
+     "kind": "property",
+     "type": "Number"
+    }
+   ]
+  },
+  "ThreadMemberFlagsBitField": {
+   "members": [
+    {
+     "name": "bitfield",
+     "kind": "property",
+     "type": "Type"
+    },
+    {
+     "name": "serialize",
+     "kind": "method",
+     "type": "Record<Flags, boolean>"
+    },
+    {
+     "name": "toArray",
+     "kind": "method",
+     "type": "Flags[]"
     }
    ]
   }

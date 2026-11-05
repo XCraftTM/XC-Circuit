@@ -27,9 +27,10 @@ module.exports = {
     answer: { type: "text", description: "The answer's text." },
     userId: { type: "text", label: "User id", description: "Who voted." },
     message: { type: "discord.message", description: "The poll's message." },
+    poll: { type: "discord.poll?", description: "The poll, with its answers and votes." },
   },
   listen(ctx, emit) {
     const event = ctx.fields.kind === "remove" ? "messagePollVoteRemove" : "messagePollVoteAdd";
-    ctx.discord.client.on(event, (answer, userId) => emit({ answer: answer.text ?? "", userId, message: answer.poll?.message }));
+    ctx.discord.client.on(event, (answer, userId) => emit({ answer: answer.text ?? "", userId, message: answer.poll?.message, poll: answer.poll ?? null }));
   },
 };

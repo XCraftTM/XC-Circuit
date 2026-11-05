@@ -58,7 +58,7 @@ module.exports = {
     length: { type: "text", description: "How long the waiting tracks are together." },
     volume: { type: "number", description: "The volume in percent." },
     repeat: { type: "text", description: "off, track, queue or autoplay." },
-    voiceChannel: { type: "discord.channel?", label: "Voice channel", description: "Where the bot plays." },
+    voiceChannel: { type: "discord.voice_channel?", label: "Voice channel", description: "Where the bot plays." },
   },
   async run({ fields: f, ctx }) {
     const music = ctx.discord.music;

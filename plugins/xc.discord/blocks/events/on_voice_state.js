@@ -26,8 +26,8 @@ module.exports = {
   },
   outputs: {
     member: { type: "discord.member", description: "Who changed." },
-    before: { type: "discord.channel?", description: "The voice channel they were in (empty when joining)." },
-    after: { type: "discord.channel?", description: "The voice channel they are in now (empty when leaving)." },
+    before: { type: "discord.voice_channel?", description: "The voice channel they were in (empty when joining)." },
+    after: { type: "discord.voice_channel?", description: "The voice channel they are in now (empty when leaving)." },
     muted: { type: "boolean", description: "Whether they are muted now (by themselves or the server)." },
     deafened: { type: "boolean", description: "Whether they are deafened now." },
     streaming: { type: "boolean", description: "Whether they are streaming now." },
