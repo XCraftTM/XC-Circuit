@@ -45,7 +45,9 @@ module.exports = {
     interaction: { type: "discord.interaction", description: "The form submission. Connect it to Send Message to answer." },
     user: { type: "discord.user", description: "Who sent it." },
     member: { type: "discord.member?", description: "Who sent it, as a server member. Empty in DMs." },
-    answers: { type: "object", description: "Every answer, by input id." },
+    answers: { type: "object", description: "Every answer, by input id: the text, the chosen values of a menu, or the files of an upload." },
+    files: { type: "list<object>", description: "Every uploaded file (name, url, size, contentType)." },
+    picked: { type: "object", description: "For user, role, channel and mentionable menus: what was picked (the users, roles or channels), by input id." },
     customId: { type: "text", label: "Custom id", description: "The modal's full id." },
     rest: { type: "text", label: "Rest of id", description: "With Starts with: what comes after the prefix (vote:42 gives 42). With a pattern: its first group." },
   },
@@ -62,16 +64,39 @@ module.exports = {
       const rest = test(interaction.customId);
       if (rest === null) return;
       const answers = {};
+      const texts = {};
+      const files = [];
+      const picked = {};
       const all = interaction.fields.fields;
-      if (all && typeof all.forEach === "function") all.forEach((c, id) => (answers[id] = c.value ?? ""));
+      if (all && typeof all.forEach === "function") {
+        all.forEach((c, id) => {
+          if (c.attachments) {
+            // A file upload: its files, and their links as text.
+            const list = [...c.attachments.values()];
+            files.push(...list);
+            answers[id] = list;
+            texts[id] = list.map((a) => a.url).join("\n");
+          } else if (Array.isArray(c.values)) {
+            // A menu: the chosen values, and what they are for user, role and channel menus.
+            answers[id] = [...c.values];
+            texts[id] = c.values.join(", ");
+            const objects = [c.members, c.users, c.roles, c.channels].find((x) => x && x.size);
+            if (objects) picked[id] = [...objects.values()];
+          } else {
+            answers[id] = c.value ?? "";
+            texts[id] = answers[id];
+          }
+        });
+      }
       for (const id of ids) {
+        if (id in texts) continue;
         try {
-          answers[id] = interaction.fields.getTextInputValue(id);
+          texts[id] = answers[id] = interaction.fields.getTextInputValue(id);
         } catch {
-          answers[id] = answers[id] ?? "";
+          texts[id] = answers[id] = answers[id] ?? "";
         }
       }
-      emit({ ...answers, interaction, user: interaction.user, member: interaction.member ?? null, answers, customId: interaction.customId, rest });
+      emit({ ...texts, files, picked, interaction, user: interaction.user, member: interaction.member ?? null, answers, customId: interaction.customId, rest });
     });
   },
 };
