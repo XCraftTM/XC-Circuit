@@ -199,8 +199,8 @@ pub fn field<R>(ui: &mut Ui, theme: &Theme, label: &str, help: Option<&str>, add
 }
 
 /// A full-width text box with comfortable padding.
-pub fn text_input(ui: &mut Ui, value: &mut String, hint: &str, password: bool) -> Response {
-    ui.add(crate::ui::inputs::TextLine::new(value).hint(hint).password(password))
+pub fn text_input(ui: &mut Ui, value: &mut String, hint: &str, hidden: bool) -> Response {
+    ui.add(crate::ui::inputs::TextLine::new(value).hint(hint).hidden(hidden))
 }
 
 /// Adds a button with its own fill and border that still reacts to the

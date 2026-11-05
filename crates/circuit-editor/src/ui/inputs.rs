@@ -16,7 +16,7 @@ const MAX_HEIGHT: f32 = 1200.0;
 pub struct TextLine<'a> {
     value: &'a mut String,
     hint: String,
-    password: bool,
+    hidden: bool,
     monospace: bool,
     width: Option<f32>,
     compact: bool,
@@ -24,7 +24,7 @@ pub struct TextLine<'a> {
 
 impl<'a> TextLine<'a> {
     pub fn new(value: &'a mut String) -> Self {
-        TextLine { value, hint: String::new(), password: false, monospace: false, width: None, compact: false }
+        TextLine { value, hint: String::new(), hidden: false, monospace: false, width: None, compact: false }
     }
 
     pub fn hint(mut self, hint: impl Into<String>) -> Self {
@@ -33,8 +33,8 @@ impl<'a> TextLine<'a> {
     }
 
     /// Hides the text, for tokens and other secrets.
-    pub fn password(mut self, on: bool) -> Self {
-        self.password = on;
+    pub fn hidden(mut self, on: bool) -> Self {
+        self.hidden = on;
         self
     }
 
@@ -59,7 +59,7 @@ impl<'a> TextLine<'a> {
 impl Widget for TextLine<'_> {
     fn ui(self, ui: &mut Ui) -> Response {
         let margin = if self.compact { Margin::symmetric(6, 4) } else { Margin::symmetric(PAD.x as i8, PAD.y as i8) };
-        let mut edit = TextEdit::singleline(self.value).hint_text(self.hint).password(self.password).margin(margin).desired_width(self.width.unwrap_or(f32::INFINITY));
+        let mut edit = TextEdit::singleline(self.value).hint_text(self.hint).password(self.hidden).margin(margin).desired_width(self.width.unwrap_or(f32::INFINITY));
         if self.monospace {
             edit = edit.font(egui::TextStyle::Monospace);
         }
@@ -67,7 +67,7 @@ impl Widget for TextLine<'_> {
         let id = ui.next_auto_id();
         crate::editor::values::before(ui, id);
         let mut resp = ui.add(edit.id(id));
-        if !self.password && crate::editor::values::after(ui, &resp, self.value) {
+        if !self.hidden && crate::editor::values::after(ui, &resp, self.value) {
             resp.mark_changed();
         }
         resp
