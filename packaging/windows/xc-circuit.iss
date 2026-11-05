@@ -78,3 +78,12 @@ Name: "{autodesktop}\XC Circuit"; Filename: "{app}\xc-circuit.exe"; Tasks: deskt
 
 [Run]
 Filename: "{app}\xc-circuit.exe"; Description: "{cm:LaunchProgram,XC Circuit}"; Flags: nowait postinstall skipifsilent
+; An update from inside the app runs this Setup silently with /restart=1:
+; then XC Circuit opens again when it's done (as the user, not as admin).
+Filename: "{app}\xc-circuit.exe"; Flags: nowait runasoriginaluser; Check: RestartWanted
+
+[Code]
+function RestartWanted: Boolean;
+begin
+  Result := ExpandConstant('{param:restart|0}') = '1';
+end;

@@ -142,7 +142,11 @@ impl CircuitApp {
     pub(super) fn update_window(&mut self, ctx: &egui::Context) {
         let Some(r) = self.updater.available.clone().filter(|_| self.updater.show) else { return };
         let theme = self.ed.theme.clone();
-        let (mut download, mut skip, mut later) = (false, false, false);
+        // Installed with the Setup, or an AppImage: it updates itself.
+        let install = crate::app::updater::Install::current();
+        let asset = install.asset(&r).cloned();
+        let progress = self.updater.progress();
+        let (mut download, mut update, mut skip, mut later) = (false, false, false, false);
         let close = dialog::show(
             ctx,
             &theme,
@@ -162,7 +166,16 @@ impl CircuitApp {
                     });
                 }
                 dialog::Part::Footer => {
-                    download = dialog::primary_button(ui, &theme, t!("Download")).on_hover_text(&r.url).clicked();
+                    if let Some(a) = &asset {
+                        let label = match progress {
+                            Some(p) => tf!("Downloading… {percent} %", percent = (p * 100.0).round() as u32),
+                            None => t!("Update and restart").to_string(),
+                        };
+                        let tip = tf!("Downloads {size} MB and installs it when XC Circuit closes, then opens it again. You're asked about unsaved changes first.", size = (a.size as f64 / 1e6).round());
+                        update = ui.add_enabled_ui(progress.is_none(), |ui| dialog::primary_button(ui, &theme, &label)).inner.on_hover_text(tip).clicked();
+                    } else {
+                        download = dialog::primary_button(ui, &theme, t!("Download")).on_hover_text(&r.url).clicked();
+                    }
                     later = dialog::secondary_button(ui, &theme, t!("Later")).clicked();
                     skip = dialog::secondary_button(ui, &theme, t!("Skip this version")).on_hover_text(t!("Not mentioned at start any more; Help › Check for Updates still finds it")).clicked();
                 }
@@ -171,10 +184,14 @@ impl CircuitApp {
         if download {
             let _ = open::that(&r.url);
         }
+        if update && let Some(a) = &asset {
+            self.updater.download(&install, a);
+        }
         if skip {
             self.ed.prefs.skipped_update = Some(r.version.clone());
             self.updater.available = None;
         }
+        // Downloading, the window stays: when the download is done, the app closes.
         if download || skip || later || close {
             self.updater.show = false;
         }
@@ -369,6 +386,20 @@ impl CircuitApp {
         match self.updater.poll(self.ed.prefs.skipped_update.as_deref()) {
             Some(Found::UpToDate) => self.ed.log(Level::Info, tf!("XC Circuit {version} is the latest version (or GitHub couldn't be asked)", version = env!("CARGO_PKG_VERSION"))),
             Some(Found::Newer) | None => {}
+        }
+        match self.updater.poll_download() {
+            // Waiting in the update window: close now (asking about unsaved
+            // changes as always); the update is installed as the app closes.
+            Some(Ok(_)) if self.updater.show => {
+                self.updater.show = false;
+                ctx.send_viewport_cmd(ViewportCommand::Close);
+            }
+            Some(Ok(_)) => {
+                let version = self.updater.available.as_ref().map(|r| r.version.clone()).unwrap_or_default();
+                self.ed.log(Level::Success, tf!("XC Circuit {version} is downloaded: it's installed when you close XC Circuit", version = version));
+            }
+            Some(Err(e)) => self.ed.log(Level::Error, tf!("Couldn't download the update: {error}. The release page has it too (Help › Check for Updates).", error = e)),
+            None => {}
         }
         // Block updates: what's offered for the plugins loaded now.
         if self.block_updates.busy() {

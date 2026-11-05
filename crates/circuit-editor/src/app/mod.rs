@@ -556,6 +556,12 @@ impl eframe::App for CircuitApp {
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         self.bot.stop(&mut self.ed);
+        // A downloaded update: installed now, and it starts the new version.
+        if let Some(file) = self.updater.ready.take()
+            && let Err(e) = crate::app::updater::Install::current().install(&file)
+        {
+            eprintln!("Couldn't install the update ({}): {e}", file.display());
+        }
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
