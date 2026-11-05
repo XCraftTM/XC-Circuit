@@ -2,14 +2,10 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## Unreleased
-
-### Fixed
-- Text boxes with a button after them (Stored Data's filter, New Project's location) leave the button the room its text needs in every language, and are as tall as the button.
-
 ## 0.1.1
 
 ### Fixed
+- Text boxes with a button after them (Stored Data's filter, New Project's location) leave the button the room its text needs in every language, and are as tall as the button.
 - The interface language in Settings no longer moves around so you can't click it; it's a dropdown now, with room for any number of languages.
 
 ## 0.1.0 – Early Access
