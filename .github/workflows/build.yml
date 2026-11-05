@@ -2,7 +2,7 @@ name: Build
 
 # Started by hand (Actions › Build › Run workflow, or `gh workflow run build.yml`),
 # so pushes don't use up Actions minutes. A version tag (v0.1.0) builds and
-# publishes a release.
+# makes a draft release, published by hand.
 on:
   push:
     tags: ["v*"]
@@ -169,7 +169,8 @@ jobs:
           ' CHANGELOG.md > notes.md
           echo "" >> notes.md
           echo "Downloads: Windows Setup.exe (x64, ARM64) or .zip, Linux .AppImage, .deb, .rpm or .tar.gz. See the [download page](https://xcrafttm.github.io/XC-Circuit/download)." >> notes.md
+      # A draft: look it over on the Releases page, then press Publish.
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" dist/* --repo "${{ github.repository }}" --title "XC Circuit ${{ github.ref_name }} (Early Access)" --notes-file notes.md
+        run: gh release create "${{ github.ref_name }}" dist/* --draft --repo "${{ github.repository }}" --title "XC Circuit ${{ github.ref_name }} (Early Access)" --notes-file notes.md
