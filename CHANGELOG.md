@@ -32,6 +32,6 @@ The first public release.
 ### Comfort
 - Command palette, changeable **keyboard shortcuts**, themes and accent colours, touch mode, interface size, English and German.
 - Backups on every save with restore, crash recovery for unsaved changes, and **crash logs with a ready bug report**.
-- Update check (Help › Check for Updates).
+- Update check (Help › Check for Updates), and **block updates** without an app update: newer versions of the bundled blocks download and load right away (Help › Undo Block Updates goes back).
 - Installers: Windows Setup (x64 and ARM64), Linux AppImage, .deb, .rpm and .tar.gz.
 - A [website](https://xcrafttm.github.io/XC-Circuit/) with tutorials, explanations and the full plugin API.

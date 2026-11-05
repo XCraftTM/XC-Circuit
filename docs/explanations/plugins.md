@@ -29,6 +29,14 @@ XC Circuit loads plugins from:
 
 Plugin files are watched: saving a block, a theme or an editor script reloads it right away.
 
+## Block updates
+
+The bundled blocks (Circuit Core, Discord Bot, Fluxer Bot) can get new versions without a new app version. When XC Circuit checks for updates (at start, unless turned off in Settings, and from Help › Check for Updates), it also asks the repository for newer versions of these plugins. If there are some, it lists them; **Update** downloads them, checks them and loads them right away. Projects keep working: blocks that changed are upgraded when a project opens, as after an app update.
+
+Updates go into `plugin-updates` next to your plugins folder. **Help › Undo Block Updates** deletes them, and the blocks the app came with are back. When a later app version brings the same or newer blocks, those are used again by themselves: of two copies of a plugin, the higher version loads. An update that needs a newer app (`engines.app` in its plugin.toml) isn't offered to older apps.
+
+For the people who make XC Circuit: changing a bundled plugin means raising its `version`, or the Checks on pull requests fail. When the version changes on `main`, the Plugins workflow publishes it.
+
 ## Two kinds of editor code
 
 Plugins can change the editor in two ways, and they're trusted differently.

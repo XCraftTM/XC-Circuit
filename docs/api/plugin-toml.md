@@ -46,6 +46,9 @@ script = "editor.js"
 | Key | Description |
 | --- | --- |
 | `circuit` | The plugin API versions the plugin works with: `"^1.0"`, `"1.x"` or `">=1.0"`. Plugins for another major version aren't loaded. Missing means any. |
+| `app` | The oldest XC Circuit version the plugin works with: `"0.2.0"`. Older apps don't load it (and don't download it as a block update). Set it when the plugin's blocks need something only newer apps have. Missing means any. |
+
+When the same plugin (by `id`) is in two folders, the one with the higher `version` loads.
 
 ## `[dependencies]`
 

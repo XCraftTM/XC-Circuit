@@ -52,6 +52,8 @@ On Linux, install the GTK, xkbcommon, D-Bus and ALSA development packages first 
 | `runtime/` | The Node.js runtime that runs bots (also inside exports) and its tests |
 | `plugins/` | Circuit Core, Discord Bot and Fluxer Bot: their blocks, build modes, pin types and runtime libraries |
 
+**Changing blocks:** raise the plugin's `version` in its `plugin.toml` (1.0.0 → 1.0.1 for fixes, 1.1.0 for new blocks), so apps notice the update; the Checks fail otherwise (`python tools/plugin_updates.py check`). Once on `main`, the Plugins workflow publishes it as a block update. If the blocks need something only a newer app has, set `[engines] app = "0.2.0"` too.
+
 Before sending a pull request, please run the tests. If you added interface texts, run the tests with `XC_UPDATE_STRINGS=1` once and add German translations to `plugins/xc.core/locales/de.toml` (or leave them empty; they'll show in English).
 
 ## Style
