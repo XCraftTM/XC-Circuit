@@ -16,8 +16,12 @@ use crate::editor::Action;
 
 /// The workspaces, by key: name and number of blocks.
 const WORKSPACES: [(&str, usize); 4] = [("w25", 25), ("w200", 200), ("w800", 800), ("w1600", 1600)];
-/// Frames left out at the start of each scene (layout settling, caches).
-const WARM_UP: usize = 20;
+/// Time left out at the start of each scene (layout settling, caches).
+const WARM_UP: Duration = Duration::from_millis(400);
+/// A scene goes on until it has this many frames (slow software drawing
+/// needs longer), but not longer than `LONGEST`.
+const MIN_FRAMES: usize = 30;
+const LONGEST: Duration = Duration::from_secs(20);
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Scene {
@@ -64,7 +68,7 @@ pub struct Run {
     began: Instant,
 }
 
-const GIVE_UP: Duration = Duration::from_secs(240);
+const GIVE_UP: Duration = Duration::from_secs(420);
 
 /// Makes the project and the settings folder, and sets the variables that
 /// make the app use them. Returns where the results go.
@@ -134,7 +138,7 @@ impl Run {
             return true;
         };
         self.frames += 1;
-        if self.frames > WARM_UP {
+        if self.scene_start.elapsed() > WARM_UP {
             if let Some(i) = interval {
                 self.intervals.push(i);
             }
@@ -181,7 +185,8 @@ impl Run {
                 }
             }
         }
-        if self.scene_start.elapsed() < scene.length() {
+        let elapsed = self.scene_start.elapsed();
+        if elapsed < scene.length() || (self.intervals.len() < MIN_FRAMES && elapsed < LONGEST) {
             return true;
         }
         self.finish_scene(ctx, w, s);
