@@ -26,7 +26,10 @@ XC™ Circuit runs on **Windows** 10 and 11 and **Linux**, on x64 and ARM64 comp
 | Fedora, openSUSE, RHEL | `…-linux-x86_64.rpm` | `sudo dnf install ./XC-Circuit-…rpm` |
 | Linux, without installing | `…-linux-x64.tar.gz` | unpack anywhere, start `xc-circuit` |
 
-The app looks for newer versions itself (Help › Check for Updates; you can turn the check off in Settings).
+The app looks for newer versions itself (at start, and from Help › Check for Updates; you can turn the check off in Settings).
+
+- **Installed with the Windows Setup, or an AppImage:** **Update and restart** downloads the new version, checks it against the checksum GitHub publishes, and installs it as XC Circuit closes (asking about unsaved changes first). Then XC Circuit opens again. On Windows only a small progress window shows; installed for everyone, Windows asks for administrator rights.
+- **.deb, .rpm, .zip or .tar.gz:** **Download** opens the release page; install the new file as you did the first one.
 
 ::: tip "Windows protected your PC"?
 The installer isn't signed yet, so Windows asks first. Choose **More info › Run anyway**.
