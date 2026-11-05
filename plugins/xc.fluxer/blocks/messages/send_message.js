@@ -16,6 +16,14 @@ module.exports = {
   look: {
     icon: "send",
   },
+  requires: {
+    permissions: {
+      mode: {
+        send: ["ViewChannel", "SendMessages", "EmbedLinks", "AttachFiles"],
+        reply: ["SendMessages", "ReadMessageHistory"],
+      },
+    },
+  },
   fields: {
     mode: { type: "select", pin: false, default: "reply", choices: MODES, description: "What kind of message to send." },
     text: { type: "textarea", template: true, default: "", description: "The message text. ${…} holds JavaScript, such as ${author.username}." },

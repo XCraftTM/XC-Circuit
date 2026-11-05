@@ -14,6 +14,9 @@ module.exports = {
   look: {
     icon: "trash",
   },
+  requires: {
+    permissions: ["ManageMessages", "ReadMessageHistory"],
+  },
   fields: {
     channel: { type: "fluxer.channel", pin: "only", required: true, description: "The channel." },
     count: { type: "number", default: 10, min: 1, max: 100, description: "How many of the latest messages (1 to 100)." },

@@ -16,6 +16,9 @@ module.exports = {
   look: {
     icon: "key",
   },
+  requires: {
+    permissions: ["ManageRoles"],
+  },
   fields: {
     member: { type: "fluxer.member", pin: "only", required: true, description: "Who." },
     action: { type: "select", pin: false, default: "add", choices: ACTIONS, description: "What to do." },

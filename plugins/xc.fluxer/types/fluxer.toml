@@ -66,3 +66,30 @@ extends = "object"
 color = "#3DD9C1"
 icon = "embed"
 description = "A rich message box with a title, text, fields and pictures. Made by Build Embed."
+
+[[type]]
+id = "fluxer.thread"
+name = "Thread"
+extends = "fluxer.channel"
+color = "#6C7BFF"
+icon = "branch"
+check = "v => /^_?ThreadChannel$/.test(v?.constructor?.name)"
+description = "A thread or forum post. It goes wherever a channel does."
+
+[[type]]
+id = "fluxer.invite"
+name = "Invite"
+extends = "object"
+color = "#6C7BFF"
+icon = "user-plus"
+check = "v => /^_?Invite$/.test(v?.constructor?.name)"
+description = "An invite link to a server, with its code, uses and expiry."
+
+[[type]]
+id = "fluxer.webhook"
+name = "Webhook"
+extends = "object"
+color = "#6C7BFF"
+icon = "send"
+check = "v => /^_?Webhook$/.test(v?.constructor?.name)"
+description = "A webhook: posts in a channel with its own name and picture."

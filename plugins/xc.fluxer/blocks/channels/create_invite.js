@@ -14,6 +14,9 @@ module.exports = {
   look: {
     icon: "user-plus",
   },
+  requires: {
+    permissions: ["CreateInstantInvite"],
+  },
   fields: {
     channel: { type: "fluxer.channel", pin: "only", required: true, description: "The channel people land in." },
     hours: { type: "number", default: 24, min: 0, description: "How long it works, in hours. 0 = forever." },

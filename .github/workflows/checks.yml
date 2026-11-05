@@ -55,6 +55,7 @@ jobs:
           node runtime/test/discord_music.js
           node runtime/test/fluxer_blocks.js
           node runtime/test/fluxer_run.js
+          node runtime/test/fluxer_more.js
           node runtime/test/store.js
           node runtime/test/conversions.js
           node runtime/test/permissions.js

@@ -23,6 +23,17 @@ module.exports = {
   look: {
     icon: "message",
   },
+  requires: {
+    permissions: {
+      action: {
+        delete: ["ManageMessages"],
+        react: ["AddReactions", "ReadMessageHistory"],
+        clearReactions: ["ManageMessages"],
+        pin: ["PinMessages"],
+        unpin: ["PinMessages"],
+      },
+    },
+  },
   fields: {
     message: { type: "fluxer.message", pin: "only", required: true, description: "The message." },
     action: { type: "select", pin: false, default: "delete", choices: ACTIONS, description: "What to do with it." },

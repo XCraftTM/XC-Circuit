@@ -14,6 +14,9 @@ module.exports = {
   look: {
     icon: "message",
   },
+  requires: {
+    permissions: ["ReadMessageHistory"],
+  },
   fields: {
     channel: { type: "fluxer.channel", pin: "only", required: true, description: "The channel." },
     messageId: { type: "text", default: "", label: "Message id", description: "One message by its id. Empty = the latest messages." },

@@ -18,6 +18,9 @@ module.exports = {
   look: {
     icon: "hash",
   },
+  requires: {
+    permissions: ["ManageChannels"],
+  },
   fields: {
     action: { type: "select", pin: false, default: "create", choices: ACTIONS, description: "What to do." },
     server: { type: "fluxer.server", pin: "only", required: true, show: { action: ["create"] }, description: "Where to create it." },

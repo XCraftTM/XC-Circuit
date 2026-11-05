@@ -23,6 +23,18 @@ module.exports = {
   look: {
     icon: "shield",
   },
+  requires: {
+    permissions: {
+      action: {
+        kick: ["KickMembers"],
+        ban: ["BanMembers"],
+        tempban: ["BanMembers"],
+        unban: ["BanMembers"],
+        timeout: ["ModerateMembers"],
+        untimeout: ["ModerateMembers"],
+      },
+    },
+  },
   fields: {
     action: { type: "select", pin: false, default: "kick", choices: ACTIONS, description: "What to do." },
     who: { type: "any", pin: true, required: true, description: "A member, a user, or their id or mention (<@id>)." },

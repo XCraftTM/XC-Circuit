@@ -14,6 +14,9 @@ module.exports = {
   look: {
     icon: "user",
   },
+  requires: {
+    permissions: ["ManageNicknames"],
+  },
   fields: {
     member: { type: "fluxer.member", pin: "only", required: true, description: "Who." },
     nickname: { type: "text", default: "", description: "The new nickname (up to 32 characters). Empty removes it." },

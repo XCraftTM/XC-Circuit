@@ -61,7 +61,64 @@ function makeApi(client, prefixSetting) {
       if (!server) throw new Error("Connect the server too, to find a member by id");
       return server.fetchMember(userId);
     },
+    /** A server from a server, anything in one (a member, channel, role, message), or its id. */
+    async server(value) {
+      if (value && typeof value === "object") {
+        if (typeof value.fetchRoles === "function") return value;
+        if (value.guild && typeof value.guild === "object") return value.guild;
+        if (value.guildId) return client.guilds.resolve(String(value.guildId));
+      }
+      const serverId = id(value);
+      if (!serverId) throw new Error("Connect a server, or something in it");
+      return client.guilds.resolve(serverId);
+    },
+    imageData,
+    explainError,
   };
+}
+
+/**
+ * An image as Fluxer takes it for emojis, stickers, icons and webhook
+ * avatars: a data: URI. Takes a link (downloaded) or a data: URI.
+ */
+async function imageData(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  if (text.startsWith("data:")) return text;
+  if (!/^https?:\/\//i.test(text)) throw new Error("Give the image as a link (https://…)");
+  const res = await fetch(text);
+  if (!res.ok) throw new Error(`Couldn't download the image: HTTP ${res.status}`);
+  const type = (res.headers.get("content-type") || "image/png").split(";")[0];
+  const bytes = Buffer.from(await res.arrayBuffer());
+  return `data:${type};base64,${bytes.toString("base64")}`;
+}
+
+/** Fluxer's names for permissions, where the flag name doesn't read well. */
+const PERMISSION_NAMES = { ManageGuild: "Manage Server", ManageExpressions: "Manage Expressions", ModerateMembers: "Timeout Members", CreateInstantInvite: "Create Invite", ViewChannel: "View Channels" };
+const permissionName = (flag) => PERMISSION_NAMES[flag] || String(flag).replace(/([a-z])([A-Z])/g, "$1 $2");
+
+/** The permissions a block needs: a list, or a list per value of one field. */
+function neededPermissions(def, values) {
+  const p = def?.permissions;
+  if (Array.isArray(p)) return p;
+  if (p && typeof p === "object") {
+    for (const [field, byValue] of Object.entries(p)) {
+      const list = byValue?.[values?.[field]];
+      if (Array.isArray(list)) return list;
+    }
+  }
+  return [];
+}
+
+/** A refused request (403) in plain words: which permission the bot needs. */
+function explainError(err, def, values) {
+  const forbidden = Number(err?.statusCode) === 403 || /missing.?permissions/i.test(String(err?.code ?? "")) || /missing permissions/i.test(String(err?.message ?? ""));
+  if (!forbidden) return null;
+  const needed = neededPermissions(def, values).map(permissionName);
+  const what = needed.length
+    ? `The bot is missing a permission for this. It needs ${needed.length > 1 ? "these" : "this"}: ${needed.join(", ")}.`
+    : "The bot is missing a permission for this.";
+  return `${what} Give its role ${needed.length > 1 ? "them" : "it"} in the server's role settings (or in the channel's permissions), and keep its role above the roles of the members it changes.`;
 }
 
 /**
@@ -122,4 +179,4 @@ function embed(design, fill = (s) => s) {
 }
 
 // For tests. (Not `module.exports.id`: that is the library's name, "fluxer".)
-module.exports.helpers = { makeApi, parseCommand, id, embed };
+module.exports.helpers = { makeApi, parseCommand, id, embed, imageData, explainError, neededPermissions };
