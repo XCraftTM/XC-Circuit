@@ -9,7 +9,7 @@ use circuit_core::{BlockDef, PinType, TypeInfo};
 use indexmap::IndexMap;
 
 use crate::engine::BlockEngine;
-use crate::manifest::{PluginManifest, engine_supported};
+use crate::manifest::{PluginManifest, app_supported, compare_versions, engine_supported};
 use crate::mode::BuildMode;
 use crate::theme::ThemeDef;
 use crate::types_def::{PinTypeDef, PinTypeFile};
@@ -68,7 +68,18 @@ impl Registry {
             }
         }
 
-        for plugin in order_by_dependencies(found, &mut reg) {
+        // The same plugin in several folders (the bundled one and a
+        // downloaded update, say): the highest version loads.
+        let mut best: Vec<LoadedPlugin> = Vec::new();
+        for p in found {
+            match best.iter().position(|b| b.manifest.id == p.manifest.id) {
+                Some(i) if compare_versions(&p.manifest.version, &best[i].manifest.version) == std::cmp::Ordering::Greater => best[i] = p,
+                Some(_) => {}
+                None => best.push(p),
+            }
+        }
+
+        for plugin in order_by_dependencies(best, &mut reg) {
             reg.load_plugin(&plugin, engine);
             reg.plugins.push(plugin);
         }
@@ -265,6 +276,12 @@ fn read_manifest(dir: &Path) -> Result<PluginManifest> {
         crate::manifest::HOST_API.0,
         crate::manifest::HOST_API.1
     );
+    anyhow::ensure!(
+        app_supported(m.engines.app.as_deref()),
+        "needs XC Circuit {} or newer (this is {})",
+        m.engines.app.as_deref().unwrap_or("?"),
+        crate::manifest::APP_VERSION
+    );
     Ok(m)
 }
 
@@ -335,6 +352,44 @@ fn display(p: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Of the same plugin in two folders, the higher version loads; one that
+    /// needs a newer app doesn't load at all.
+    #[test]
+    fn the_highest_version_of_a_plugin_loads() {
+        let base = std::env::temp_dir().join(format!("xc-plugin-versions-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        let put = |folder: &str, version: &str, app: &str| {
+            let dir = base.join(folder).join("acme.tools");
+            fs::create_dir_all(&dir).unwrap();
+            let engines = if app.is_empty() { String::new() } else { format!("
+[engines]
+app = \"{app}\"
+") };
+            fs::write(dir.join("plugin.toml"), format!("id = \"acme.tools\"
+name = \"Tools\"
+version = \"{version}\"
+{engines}")).unwrap();
+            base.join(folder)
+        };
+        let bundled = put("bundled", "1.2.0", "");
+        let update = put("updates", "1.10.0", "");
+        let engine = BlockEngine::new().unwrap();
+        let reg = Registry::load(&[bundled.clone(), update.clone()], &engine);
+        assert_eq!(reg.plugins.len(), 1);
+        assert_eq!(reg.plugins[0].manifest.version, "1.10.0", "1.10 is newer than 1.2");
+        let reg = Registry::load(&[update.clone(), bundled.clone()], &engine);
+        assert_eq!(reg.plugins[0].manifest.version, "1.10.0", "whatever the order");
+
+        let future = put("future", "9.0.0", "99.0.0");
+        let reg = Registry::load(&[bundled, future], &engine);
+        assert_eq!(reg.plugins[0].manifest.version, "1.2.0", "the one for a newer app is left out");
+        assert!(reg.problems.iter().any(|p| p.message.contains("needs XC Circuit 99.0.0 or newer")), "{:?}", reg.problems.iter().map(|p| &p.message).collect::<Vec<_>>());
+        let _ = fs::remove_dir_all(&base);
+
+        assert_eq!(compare_versions("0.1.0", "0.1"), std::cmp::Ordering::Equal);
+        assert_eq!(compare_versions("1.2.0-beta", "1.1.9"), std::cmp::Ordering::Greater);
+    }
 
     #[test]
     fn brace_patterns() {

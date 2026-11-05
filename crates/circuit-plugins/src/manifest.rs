@@ -41,6 +41,31 @@ pub struct NativeManifest {
 #[serde(default)]
 pub struct Engines {
     pub circuit: Option<String>,
+    /// The oldest XC Circuit version the plugin works with (`0.2.0`), for
+    /// plugins that need something newer apps have. Missing: any.
+    pub app: Option<String>,
+}
+
+/// This app's version: plugins name the oldest one they work with.
+pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Compares versions such as `1.2.0` and `1.10.0` part by part, as numbers.
+/// A pre-release (`1.2.0-beta`) counts as its version without the suffix.
+pub fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
+    let parts = |v: &str| -> Vec<u64> { v.trim().trim_start_matches('v').split('-').next().unwrap_or("").split('.').map(|p| p.parse().unwrap_or(0)).collect() };
+    let (a, b) = (parts(a), parts(b));
+    for i in 0..a.len().max(b.len()) {
+        let (x, y) = (a.get(i).copied().unwrap_or(0), b.get(i).copied().unwrap_or(0));
+        if x != y {
+            return x.cmp(&y);
+        }
+    }
+    std::cmp::Ordering::Equal
+}
+
+/// Whether this app is new enough for a plugin's `engines.app`.
+pub fn app_supported(min: Option<&str>) -> bool {
+    min.is_none_or(|m| compare_versions(APP_VERSION, m) != std::cmp::Ordering::Less)
 }
 
 /// Every contribution point is a list of paths or globs relative to the plugin folder.
