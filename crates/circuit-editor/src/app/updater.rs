@@ -126,6 +126,18 @@ mod tests {
         assert!(parse(&serde_json::json!({ "message": "Not Found" })).is_none(), "a private repository answers 404");
     }
 
+    /// Against the real repository: the latest release is found and read.
+    /// Needs the internet: `cargo test -p circuit-editor live_ -- --ignored`.
+    #[test]
+    #[ignore]
+    fn live_latest_release() {
+        let r = latest().expect("GitHub's latest release");
+        println!("latest: {} ({}), {} characters of notes", r.version, r.url, r.notes.len());
+        assert!(r.url.contains(&format!("/v{}", r.version)));
+        assert!(!newer(env!("CARGO_PKG_VERSION"), &r.version), "this app isn't newer than the latest release");
+        assert!(newer(&r.version, "0.0.9"), "an older app would be offered it");
+    }
+
     #[test]
     fn checks_quietly() {
         // A check by hand that finds nothing says so; one at start says nothing.

@@ -243,4 +243,27 @@ mod tests {
         assert!(any_in(&dir));
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    /// Against the real "plugins" release: an app with older blocks is offered
+    /// every published plugin, and each one downloads, checks out and unpacks.
+    /// Needs the internet: `cargo test -p circuit-editor live_ -- --ignored`.
+    #[test]
+    #[ignore]
+    fn live_block_updates_download_and_install() {
+        let index = fetch_index().expect("the published index");
+        assert!(!index.is_empty());
+        let loaded: Vec<(String, String)> = index.iter().map(|e| (e.id.clone(), "0.0.1".to_string())).collect();
+        let found = offers(&index, &loaded);
+        assert_eq!(found.len(), index.len(), "{found:?}");
+        let dir = std::env::temp_dir().join(format!("xc-block-updates-live-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        for o in &found {
+            let bytes = get(&format!("{RELEASE}{}", o.entry.file)).unwrap();
+            install_bytes(&o.entry, &bytes, &dir).unwrap();
+            let toml = std::fs::read_to_string(dir.join(&o.entry.id).join("plugin.toml")).unwrap();
+            assert!(toml.contains(&format!("\"{}\"", o.entry.version)), "{} has its version", o.entry.id);
+            println!("{} {}: {} bytes, checksum ok", o.entry.id, o.entry.version, bytes.len());
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
