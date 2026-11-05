@@ -754,7 +754,7 @@ dependencies = [
 
 [[package]]
 name = "circuit-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "indexmap",
@@ -764,7 +764,7 @@ dependencies = [
 
 [[package]]
 name = "circuit-editor"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "arboard",
@@ -800,7 +800,7 @@ dependencies = [
 
 [[package]]
 name = "circuit-plugins"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "circuit-core",
@@ -815,7 +815,7 @@ dependencies = [
 
 [[package]]
 name = "circuit-runner"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "circuit-core",
@@ -6251,7 +6251,7 @@ dependencies = [
 
 [[package]]
 name = "xc-circuit-plugin"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "egui",
  "toml",
