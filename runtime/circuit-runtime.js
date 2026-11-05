@@ -1282,4 +1282,4 @@ if (typeof __XC_BUNDLE__ !== "undefined") {
   cli();
 }
 
-module.exports = { start, ungroupBlock, fillTemplate, expressionEnd, coerce, compare, preview, Store, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };
+module.exports = { start, ungroupBlock, fillTemplate, coerce, compare, preview, Store, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };

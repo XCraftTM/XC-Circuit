@@ -223,8 +223,6 @@ pub struct BlockDef {
     pub has_define: bool,
     pub has_run: bool,
     pub has_listen: bool,
-    pub has_setup: bool,
-    pub has_summary: bool,
     pub has_migrate: bool,
     /// `run` is an `async` function: the block waits for something (Discord,
     /// the web, a timer, stored data) before the flow goes on.

@@ -16,7 +16,6 @@ pub struct PluginManifest {
     pub dependencies: IndexMap<String, String>,
     /// Block ids from other plugins this plugin may replace.
     pub overrides: Vec<String>,
-    pub permissions: Permissions,
     pub contributes: Contributes,
     /// A native Rust part, loaded by the editor (see the xc-circuit-plugin crate).
     pub native: Option<NativeManifest>,
@@ -44,15 +43,6 @@ pub struct Engines {
     pub circuit: Option<String>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(default)]
-pub struct Permissions {
-    pub fs: Vec<String>,
-    pub network: Vec<String>,
-    pub process: bool,
-    pub clipboard: bool,
-}
-
 /// Every contribution point is a list of paths or globs relative to the plugin folder.
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -63,20 +53,7 @@ pub struct Contributes {
     /// Class catalogs (JSON): the members of the values behind pin types, for
     /// `{#1.user.username}` in texts.
     pub classes: Vec<String>,
-    pub field_types: Vec<String>,
-    pub project_editors: Vec<String>,
-    pub runtime_libs: Vec<String>,
-    pub storage_backends: Vec<String>,
-    pub panels: Vec<String>,
-    pub widgets: Vec<String>,
-    pub commands: Vec<String>,
-    pub menus: Vec<String>,
-    pub keybindings: Vec<String>,
     pub themes: Vec<String>,
-    pub layouts: Vec<String>,
-    pub exporters: Vec<String>,
-    pub importers: Vec<String>,
-    pub templates: Vec<String>,
     pub icons: Vec<String>,
     pub locales: Vec<String>,
 }
