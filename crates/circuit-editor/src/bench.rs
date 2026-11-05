@@ -13,7 +13,6 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use circuit_core::{Link, Node, Workspace};
 use eframe::egui::{self, Event, Modifiers, PointerButton, Pos2, Rect, Vec2, pos2, vec2};
 use serde_json::{Value, json};
 
@@ -35,41 +34,9 @@ fn editor() -> Editor {
     ed
 }
 
-/// A canvas of `n` blocks in rows of `cols`, as in a real bot: Send Message,
-/// Math, If and Log in turn, each joined to the next by a green wire, and a
-/// value wire from every Math into the block after it.
+/// A canvas of `n` blocks in rows of `cols` (see `bench_data`).
 fn fill(ed: &mut Editor, n: usize, cols: usize) {
-    let mut ws = Workspace { name: "Bench".into(), ..Default::default() };
-    for i in 0..n {
-        let (block, values, pins): (&str, Value, Vec<String>) = match i % 4 {
-            0 => ("discord.send_message@3", json!({ "text": format!("Hello ${{user.username}}, this is message {i}") }), vec![]),
-            1 => ("core.math@1", json!({ "a": i, "op": "multiply", "b": 2 }), vec![]),
-            2 => ("core.if@1", json!({}), vec![]),
-            _ => ("core.log@1", json!({ "message": format!("Step {i} done") }), vec!["message".into()]),
-        };
-        let values = values.as_object().cloned().unwrap_or_default();
-        let at = [(i % cols) as f32 * 380.0, (i / cols) as f32 * 340.0];
-        ws.nodes.insert(format!("b{i}"), Node { block: block.into(), at, values, pins, ..Default::default() });
-    }
-    let link = |s: String| s.parse::<Link>().unwrap();
-    for i in 1..n {
-        // Flow wires (Math is a value block, so the flow skips over it).
-        let from = if i % 4 == 2 { i - 2 } else { i - 1 };
-        let (from_pin, to_ok) = match (from % 4, i % 4) {
-            (_, 1) => continue,
-            (2, _) => ("true", true),
-            _ => ("next", true),
-        };
-        if to_ok {
-            ws.links.push(link(format!("b{from}.{from_pin} > b{i}.in")));
-        }
-        if i % 4 == 2 {
-            ws.links.push(link(format!("b{}.result > b{i}.condition", i - 1)));
-        }
-        if i % 4 == 3 && i >= 2 {
-            ws.links.push(link(format!("b{}.result > b{i}.message", i - 2)));
-        }
-    }
+    let ws = crate::bench_data::workspace("Bench", n, cols);
     ed.project.as_mut().unwrap().workspaces.insert(WS.into(), ws);
 }
 
@@ -325,4 +292,177 @@ fn bench_startup() {
         rows.push(json!({ "step": step, "ms": ms(d) }));
     }
     save("startup", Value::Array(rows));
+}
+
+/// Everyday tasks: opening projects and workspaces, loading and reloading
+/// blocks, searching in the block picker, copy, paste and undo, starting a
+/// bot and exporting it.
+#[test]
+#[ignore]
+fn bench_tasks() {
+    let ms = |d: Duration| round(d.as_secs_f64() * 1000.0);
+    // The best of a few tries, so a stray hiccup doesn't count.
+    fn best(times: usize, mut f: impl FnMut() -> Duration) -> Duration {
+        (0..times).map(|_| f()).min().unwrap()
+    }
+    let mut rows = Vec::new();
+    let mut add = |task: String, d: Duration| {
+        println!("| {task} | {:.1} |", ms(d));
+        rows.push(json!({ "task": task, "ms": ms(d) }));
+    };
+    println!("\nTasks\n| task | ms |\n|---|---|");
+
+    // Reading the block files on their own, and loading them (read + compile).
+    let files: Vec<PathBuf> = walk(&root().join("plugins"));
+    add(format!("Read the {} plugin files from disk", files.len()), best(3, || {
+        let start = Instant::now();
+        for f in &files {
+            let _ = std::fs::read(f);
+        }
+        start.elapsed()
+    }));
+    let mut ed = editor();
+    add("Load all plugins (read, compile 205 blocks)".into(), best(3, || {
+        let start = Instant::now();
+        let _ = Editor::new(vec![root().join("plugins")], None).unwrap();
+        start.elapsed()
+    }));
+    add("Reload all plugins (after a file changed)".into(), best(3, || {
+        let start = Instant::now();
+        ed.reload_plugins();
+        start.elapsed()
+    }));
+
+    // Projects of each size, saved to disk and opened.
+    let base = std::env::temp_dir().join(format!("xc-bench-tasks-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    for n in [200, 800, 1600] {
+        let dir = base.join(format!("p{n}"));
+        let mut p = circuit_core::Project::create(&dir, "Bench", "discord").unwrap();
+        p.workspaces.insert("main".into(), crate::bench_data::workspace("Main", n, 20));
+        add(format!("Save a project of {n} blocks"), best(3, || {
+            let start = Instant::now();
+            p.save().unwrap();
+            start.elapsed()
+        }));
+        add(format!("Open a project of {n} blocks"), best(3, || {
+            let start = Instant::now();
+            ed.open_project(&dir);
+            start.elapsed()
+        }));
+    }
+
+    // Opening a workspace: its first frame (the text and shapes of its
+    // blocks are laid out for the first time), with the app already warm.
+    ed.open_project(&root().join("examples/DemoBot"));
+    let ctx = context(&ed);
+    fill(&mut ed, 50, 20);
+    look(&mut ed, 1.0, pos2(-40.0, -40.0));
+    for _ in 0..5 {
+        frame(&ctx, &mut ed, &LAPTOP, vec![]);
+    }
+    for n in [25, 200, 800, 1600] {
+        fill(&mut ed, n, 20);
+        ed.views.remove(WS);
+        ed.shapes.clear();
+        look(&mut ed, 1.0, pos2(-40.0, -40.0));
+        let start = Instant::now();
+        frame(&ctx, &mut ed, &LAPTOP, vec![]);
+        add(format!("Open a workspace of {n} blocks (first frame)"), start.elapsed());
+    }
+
+    // The block picker: open, and typing a search a letter at a time.
+    fill(&mut ed, 200, 20);
+    let picker_frame = |ed: &mut Editor| {
+        let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, LAPTOP.size)), ..Default::default() };
+        let start = Instant::now();
+        let out = ctx.run_ui(raw, |ui| {
+            egui::CentralPanel::default().show(ui, |ui| crate::canvas::show(ui, ed, WS));
+            crate::picker::show(ui.ctx(), ed);
+        });
+        let _ = ctx.tessellate(out.shapes, out.pixels_per_point);
+        start.elapsed()
+    };
+    ed.picker = Some(crate::picker::Picker::new(WS, pos2(500.0, 300.0), pos2(500.0, 300.0), None));
+    add("Open the block picker (first frame)".into(), picker_frame(&mut ed));
+    let mut typing = Vec::new();
+    for q in ["s", "se", "sen", "send", "send ", "send m", "send me", "send mes"] {
+        if let Some(p) = ed.picker.as_mut() {
+            p.query = q.into();
+        }
+        typing.push(picker_frame(&mut ed));
+    }
+    typing.sort();
+    add("Type a letter in the block picker (frame, worst)".into(), *typing.last().unwrap());
+    ed.picker = None;
+
+    // Copy, paste and undo 100 blocks.
+    let ids: Vec<String> = (0..100).map(|i| format!("b{i}")).collect();
+    let clip = ed.project.as_ref().unwrap().workspaces[WS].extract_with_notes(&ids, &[]);
+    let text = serde_json::to_string_pretty(&clip).unwrap();
+    ed.active_workspace = Some(WS.into());
+    let start = Instant::now();
+    let pasted = ed.paste(&text, Some(pos2(0.0, 8000.0)));
+    add("Paste 100 blocks".into(), start.elapsed());
+    assert!(pasted, "pasting worked");
+    let start = Instant::now();
+    ed.undo();
+    add("Undo that paste".into(), start.elapsed());
+
+    // Starting a bot: build it, start Node and the runtime, until its first block ran.
+    let dir = base.join("run");
+    let mut p = circuit_core::Project::create(&dir, "Run", "none").unwrap();
+    let mut ws = crate::bench_data::workspace("Main", 0, 1);
+    ws.nodes.insert("go".into(), circuit_core::Node { block: "core.on_start@1".into(), ..Default::default() });
+    ws.nodes.insert("say".into(), circuit_core::Node { block: "core.log@1".into(), values: json!({ "message": "ready" }).as_object().cloned().unwrap(), ..Default::default() });
+    ws.links.push("go.next > say.in".parse().unwrap());
+    p.workspaces.insert("main".into(), ws);
+    p.save().unwrap();
+    add("Start a bot (build, Node, first block ran)".into(), best(3, || {
+        let start = Instant::now();
+        let bundle = circuit_runner::build_bundle(&p, &ed.reg, None).unwrap();
+        let session = circuit_runner::Session::start(
+            circuit_runner::SessionConfig { bundle: bundle.value, dependencies: bundle.dependencies, packages_dir: dir.join("packages"), run_dir: dir.join(".circuit/run"), data_dir: dir.join(".circuit/data"), env: vec![] },
+            || {},
+        );
+        let deadline = Instant::now() + Duration::from_secs(20);
+        while Instant::now() < deadline {
+            let said = session.poll().into_iter().any(|m| matches!(m, circuit_runner::Msg::Bot(circuit_runner::BotEvent::Log { ref text, .. }) if text == "ready"));
+            if said {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        let took = start.elapsed();
+        drop(session);
+        took
+    }));
+
+    // Exporting an 800-block bot (without npm install).
+    ed.open_project(&base.join("p800"));
+    let bundle = circuit_runner::build_bundle(ed.project.as_ref().unwrap(), &ed.reg, ed.mode()).unwrap();
+    let out = base.join("export");
+    add("Export a bot of 800 blocks (without npm install)".into(), best(3, || {
+        let _ = std::fs::remove_dir_all(&out);
+        let opts = circuit_runner::ExportOptions { name: "Bench".into(), token: None, token_env: "DISCORD_TOKEN".into(), secrets: Vec::new(), install: false };
+        let start = Instant::now();
+        circuit_runner::export(&out, &bundle, &opts, &mut |_| {}).unwrap();
+        start.elapsed()
+    }));
+    let _ = std::fs::remove_dir_all(&base);
+    save("tasks", Value::Array(rows));
+}
+
+/// Every file under a folder.
+fn walk(dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            out.extend(walk(&p));
+        } else {
+            out.push(p);
+        }
+    }
+    out
 }

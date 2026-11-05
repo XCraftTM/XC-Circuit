@@ -7,6 +7,7 @@ mod icon;
 mod app;
 #[cfg(test)]
 mod bench;
+mod bench_data;
 mod bot;
 mod bot_profile;
 mod canvas;
@@ -65,6 +66,16 @@ fn main() -> eframe::Result {
         }
         return Ok(());
     }
+    // --fps [results.json]: measure real frame rates (see app/fps.rs).
+    let fps = args.get(1).map(String::as_str) == Some("--fps");
+    if fps {
+        let out = std::path::PathBuf::from(args.get(2).map(String::as_str).unwrap_or("fps-results.json"));
+        let out = std::path::absolute(&out).unwrap_or(out);
+        if let Err(e) = app::fps::prepare(&out) {
+            eprintln!("fps: couldn't prepare the project: {e}");
+            std::process::exit(1);
+        }
+    }
     crash::install();
     let mut options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -82,6 +93,11 @@ fn main() -> eframe::Result {
     // supported ones (see graphics.rs).
     let stage = graphics::stage();
     graphics::configure(&mut options, stage);
+    if fps {
+        // As fast as it can draw, at a fixed size.
+        options.wgpu_options.surface.present_mode = eframe::wgpu::PresentMode::AutoNoVsync;
+        options.window_builder = None;
+    }
     let result = eframe::run_native("XC Circuit", options, Box::new(|cc| Ok(Box::new(app::CircuitApp::new(cc)))));
     if let Err(e) = &result
         && graphics::is_graphics_error(e)

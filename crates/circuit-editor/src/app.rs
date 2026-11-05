@@ -17,6 +17,8 @@ use crate::keymap::{self, Action as Hotkey};
 use crate::palette::{Cmd, Item};
 use crate::{canvas, dialog, palette, panels, picker};
 
+pub(crate) mod fps;
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Tab {
     Canvas(String),
@@ -118,6 +120,8 @@ pub struct CircuitApp {
     reveal: crate::reveal::Reveal,
     /// With XC_FRAME_STATS set: frames drawn since the last report, and when it was.
     frame_stats: Option<(u32, std::time::Instant)>,
+    /// `--fps`: the frame rate measurement that drives the app.
+    fps: Option<fps::Run>,
     /// The First Start page, while it is open.
     setup: Option<crate::setup::Setup>,
     /// The guided tour, while it runs, and the layout to put back afterwards.
@@ -256,6 +260,7 @@ impl CircuitApp {
             last_check: std::time::Instant::now(),
             reveal: crate::reveal::Reveal::new(cc),
             frame_stats: std::env::var_os("XC_FRAME_STATS").map(|_| (0, std::time::Instant::now())),
+            fps: std::env::var_os("XC_FPS_OUT").map(|out| fps::Run::new(PathBuf::from(out), graphics.clone())),
         }
     }
 
@@ -1525,8 +1530,13 @@ impl CircuitApp {
 }
 
 impl eframe::App for CircuitApp {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        if let Some(mut run) = self.fps.take()
+            && run.frame(self, &ctx, frame.info().cpu_usage)
+        {
+            self.fps = Some(run);
+        }
         self.reveal.frame(&ctx);
         self.poll_updates(&ctx);
         // Before anything is drawn: no frame shows the panels without a project.

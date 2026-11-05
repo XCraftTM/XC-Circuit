@@ -51,6 +51,22 @@ jobs:
         shell: bash
         run: node runtime/bench/runtime.js | tee target/bench/runtime.txt
 
+      # The real app in a window, drawing in software (these machines have
+      # no graphics card): Mesa's lavapipe on Linux, WARP on Windows.
+      - name: Frame rates (software drawing)
+        shell: bash
+        env:
+          XC_CIRCUIT_PLUGINS: ${{ github.workspace }}/plugins
+        run: |
+          cargo build --release -p circuit-editor
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            sudo apt-get install -y xvfb mesa-vulkan-drivers libgl1-mesa-dri
+            timeout 300 xvfb-run -a -s "-screen 0 1920x1080x24" ./target/release/xc-circuit --fps target/bench/fps.json || true
+          else
+            timeout 300 ./target/release/xc-circuit.exe --fps target/bench/fps.json || true
+          fi
+          cat target/bench/fps.json || echo "no frame rates"
+
       - uses: actions/upload-artifact@v7
         with:
           name: bench-${{ matrix.os }}
