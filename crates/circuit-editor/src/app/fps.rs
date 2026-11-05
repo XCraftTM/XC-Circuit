@@ -79,7 +79,7 @@ pub fn prepare(out: &Path) -> std::io::Result<()> {
     let mut project = circuit_core::Project::create(dir.join("FPS Bench"), "FPS Bench", "discord").map_err(std::io::Error::other)?;
     project.workspaces.clear();
     for (key, n) in WORKSPACES {
-        project.workspaces.insert(key.into(), crate::bench_data::workspace(&format!("{n} blocks"), n, 20));
+        project.workspaces.insert(key.into(), crate::bench::data::workspace(&format!("{n} blocks"), n, 20));
     }
     project.save().map_err(std::io::Error::other)?;
     // SAFETY: set before the app or any thread starts.

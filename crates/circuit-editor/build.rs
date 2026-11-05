@@ -2,10 +2,10 @@
 //! Explorer shows the icon and Task Manager the name "XC™ Circuit" instead of
 //! the file name.
 
-include!("src/icon.rs");
+include!("src/app/icon.rs");
 
 fn main() {
-    println!("cargo:rerun-if-changed=src/icon.rs");
+    println!("cargo:rerun-if-changed=src/app/icon.rs");
     println!("cargo:rerun-if-changed=build.rs");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return;
