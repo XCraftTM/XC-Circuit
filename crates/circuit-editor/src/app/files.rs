@@ -35,6 +35,8 @@ pub(super) fn find_plugin_dirs() -> (Vec<PathBuf>, Option<PathBuf>) {
     }
     if let Some(data) = dirs::data_dir() {
         let name = if cfg!(windows) { "XC Circuit" } else { "xc-circuit" };
+        // Downloaded block updates; of two copies of a plugin, the higher version loads.
+        dirs.push(data.join(name).join("plugin-updates"));
         dirs.push(data.join(name).join("plugins"));
     }
     dirs.dedup();

@@ -5,4 +5,5 @@ pub mod manager;
 pub mod native;
 pub mod script;
 pub mod sound;
+pub mod updates;
 pub mod watch;

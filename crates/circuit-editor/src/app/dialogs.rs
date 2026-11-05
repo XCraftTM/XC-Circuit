@@ -94,6 +94,51 @@ impl CircuitApp {
     }
 
     /// What's new in an available update, with its download.
+    /// Newer bundled blocks: what they are, with Update and Later.
+    pub(super) fn block_updates_window(&mut self, ctx: &egui::Context) {
+        if !self.block_updates.show || self.block_updates.offers.is_empty() {
+            return;
+        }
+        let theme = self.ed.theme.clone();
+        let offers = self.block_updates.offers.clone();
+        let installing = self.block_updates.installing();
+        let (mut update, mut later) = (false, false);
+        let close = dialog::show(
+            ctx,
+            &theme,
+            dialog::Spec {
+                id: "block-updates",
+                title: t!("Block updates are available"),
+                subtitle: Some(t!("New and improved blocks, without updating the app.")),
+                icon: None,
+                width: 480.0,
+            },
+            |ui, part| match part {
+                dialog::Part::Body => {
+                    for o in &offers {
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(&o.entry.name).strong().color(theme.text));
+                            ui.label(RichText::new(format!("{} → {}", o.current, o.entry.version)).color(theme.text_muted));
+                        });
+                    }
+                    ui.add_space(6.0);
+                    ui.label(RichText::new(t!("Your projects keep working: blocks that changed are upgraded when a project opens. Help › Undo Block Updates goes back.")).size(12.0).color(theme.text_muted));
+                }
+                dialog::Part::Footer => {
+                    let label = if installing { t!("Updating…") } else { t!("Update") };
+                    update = ui.add_enabled_ui(!installing, |ui| dialog::primary_button(ui, &theme, label)).inner.clicked();
+                    later = dialog::secondary_button(ui, &theme, t!("Later")).clicked();
+                }
+            },
+        );
+        if update {
+            self.block_updates.install_all();
+        }
+        if (later || close) && !installing {
+            self.block_updates.show = false;
+        }
+    }
+
     pub(super) fn update_window(&mut self, ctx: &egui::Context) {
         let Some(r) = self.updater.available.clone().filter(|_| self.updater.show) else { return };
         let theme = self.ed.theme.clone();
@@ -208,6 +253,7 @@ impl CircuitApp {
 
     pub(super) fn dialogs(&mut self, ctx: &egui::Context) {
         self.update_window(ctx);
+        self.block_updates_window(ctx);
         self.crash_dialog(ctx);
         let theme = self.ed.theme.clone();
         if self.setup.is_none() && self.tour.is_none() {
@@ -323,6 +369,22 @@ impl CircuitApp {
         match self.updater.poll(self.ed.prefs.skipped_update.as_deref()) {
             Some(Found::UpToDate) => self.ed.log(Level::Info, tf!("XC Circuit {version} is the latest version (or GitHub couldn't be asked)", version = env!("CARGO_PKG_VERSION"))),
             Some(Found::Newer) | None => {}
+        }
+        // Block updates: what's offered for the plugins loaded now.
+        if self.block_updates.busy() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(300));
+        }
+        let loaded: Vec<(String, String)> = self.ed.reg.plugins.iter().map(|p| (p.manifest.id.clone(), p.manifest.version.clone())).collect();
+        if let Some(crate::plugins::updates::Found::None) = self.block_updates.poll(&loaded) {
+            self.ed.log(Level::Info, t!("The blocks are up to date (or GitHub couldn't be asked)"));
+        }
+        match self.block_updates.poll_install() {
+            Some(Ok(done)) => {
+                self.reload_plugins(ctx);
+                self.ed.log(Level::Success, tf!("Blocks updated: {plugins}", plugins = done.join(", ")));
+            }
+            Some(Err(e)) => self.ed.log(Level::Error, tf!("Couldn't update the blocks: {error}", error = e)),
+            None => {}
         }
     }
 }

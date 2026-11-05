@@ -238,8 +238,23 @@ impl CircuitApp {
                     let _ = open::that(dir);
                 }
                 ui.separator();
-                if ui.add_enabled(!self.updater.busy(), egui::Button::new(t!("Check for Updates…"))).clicked() {
+                if ui.add_enabled(!self.updater.busy(), egui::Button::new(t!("Check for Updates…"))).on_hover_text(t!("For the app, and for the bundled blocks")).clicked() {
                     self.updater.check(true);
+                    self.block_updates.check(true);
+                }
+                if ui
+                    .add_enabled(crate::plugins::updates::any_installed() && !self.block_updates.installing(), egui::Button::new(t!("Undo Block Updates")))
+                    .on_hover_text(t!("Back to the blocks this app came with"))
+                    .clicked()
+                {
+                    match crate::plugins::updates::undo() {
+                        Ok(()) => {
+                            self.reload_plugins(ui.ctx());
+                            self.ed.log(Level::Success, t!("Block updates removed: the blocks this app came with are back"));
+                        }
+                        Err(e) => self.ed.log(Level::Error, tf!("Couldn't remove the block updates: {error}", error = e)),
+                    }
+                    ui.close();
                 }
                 if ui.button(t!("Welcome and setup…")).clicked() {
                     self.setup = Some(crate::pages::setup::Setup::new());

@@ -117,6 +117,8 @@ pub struct CircuitApp {
     start: crate::pages::start_page::StartPage,
     /// A newer version on GitHub, when one was found.
     updater: crate::app::updater::Updater,
+    /// Newer versions of the bundled block plugins, without an app update.
+    block_updates: crate::plugins::updates::BlockUpdates,
     /// A crash since the last start, offered for a report.
     crash_offer: Option<crate::app::crash::Crash>,
     bot: BotUi,
@@ -244,8 +246,10 @@ impl CircuitApp {
         let setup = (!ed.prefs.setup_done).then(crate::pages::setup::Setup::new);
         let last_crash_seen = ed.prefs.last_crash_seen;
         let mut updater = crate::app::updater::Updater::default();
+        let mut block_updates = crate::plugins::updates::BlockUpdates::default();
         if ed.prefs.check_updates {
             updater.check(false);
+            block_updates.check(false);
         }
         CircuitApp {
             ed,
@@ -260,6 +264,7 @@ impl CircuitApp {
             dock_size: None,
             start: Default::default(),
             updater,
+            block_updates,
             // A crash the user hasn't been told about yet.
             crash_offer: crate::app::crash::newest_since(last_crash_seen),
             bot: BotUi::new(),
