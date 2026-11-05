@@ -26,73 +26,94 @@ use crate::theme::Theme;
 /// The blocks that run before `node` on its action path, first to last
 /// (for a value block: before the blocks it feeds).
 pub fn upstream(ws: &Workspace, node: &str, reg: &Registry) -> Vec<String> {
+    upstream_with(ws, node, reg, &Wiring::new(ws))
+}
+
+/// A workspace's wires by block, so walks back along them don't go through
+/// all of them at each step. Made once and reused while the wires stay.
+#[derive(Default)]
+pub struct Wiring {
+    action_into: HashMap<String, Vec<String>>,
+    data_from: HashMap<String, Vec<String>>,
+    zone_blocks: HashMap<String, Vec<String>>,
+}
+
+impl Wiring {
+    pub fn new(ws: &Workspace) -> Wiring {
+        let mut w = Wiring::default();
+        for l in &ws.links {
+            if l.to.pin == ACTION_IN {
+                w.action_into.entry(l.to.node.clone()).or_default().push(l.from.node.clone());
+            } else {
+                w.data_from.entry(l.from.node.clone()).or_default().push(l.to.node.clone());
+            }
+        }
+        for (id, n) in &ws.nodes {
+            if let Some(z) = &n.zone {
+                w.zone_blocks.entry(z.clone()).or_default().push(id.clone());
+            }
+        }
+        w
+    }
+}
+
+/// `upstream` with the wires already indexed.
+pub fn upstream_with(ws: &Workspace, node: &str, reg: &Registry, wiring: &Wiring) -> Vec<String> {
     // A value block (no Action wire into it) runs for the blocks it feeds,
     // through other value blocks if need be.
     let is_value = |id: &str| ws.nodes.get(id).and_then(|n| reg.block(&n.block)).is_some_and(|d| d.kind == BlockKind::Value);
-    // The wires by block, so the walk doesn't go through all of them at each step.
-    let mut action_into: HashMap<&str, Vec<&str>> = HashMap::new();
-    let mut data_from: HashMap<&str, Vec<&str>> = HashMap::new();
-    for l in &ws.links {
-        if l.to.pin == ACTION_IN {
-            action_into.entry(&l.to.node).or_default().push(&l.from.node);
-        } else {
-            data_from.entry(&l.from.node).or_default().push(&l.to.node);
-        }
-    }
-    let mut zone_blocks: HashMap<&str, Vec<&str>> = HashMap::new();
-    for (id, n) in &ws.nodes {
-        if let Some(z) = &n.zone {
-            zone_blocks.entry(z).or_default().push(id);
-        }
-    }
-    let mut start = Vec::new();
-    let mut feeds = vec![node.to_string()];
-    let mut fed: HashSet<String> = HashSet::new();
+    let Wiring { action_into, data_from, zone_blocks } = wiring;
+    // Names are borrowed from the wiring while walking; copied once at the end.
+    let mut start: Vec<&str> = Vec::new();
+    let mut feeds: Vec<&str> = vec![node];
+    let mut fed: HashSet<&str> = HashSet::new();
     while let Some(cur) = feeds.pop() {
-        if !fed.insert(cur.clone()) {
+        if !fed.insert(cur) {
             continue;
         }
-        if is_value(&cur) {
-            feeds.extend(data_from.get(cur.as_str()).into_iter().flatten().map(|n| n.to_string()));
+        if is_value(cur) {
+            feeds.extend(data_from.get(cur).into_iter().flatten().map(String::as_str));
         } else {
             start.push(cur);
         }
     }
     // Back along the Action wires; a Try Zone's outputs come after its blocks.
-    let mut seen: HashSet<String> = start.iter().cloned().collect();
-    let mut order: Vec<String> = Vec::new();
+    let mut seen: HashSet<&str> = start.iter().copied().collect();
+    let mut order: Vec<&str> = Vec::new();
     let mut queue = start.clone();
     while let Some(cur) = queue.pop() {
-        let mut before: Vec<&str> = action_into.get(cur.as_str()).cloned().unwrap_or_default();
+        let mut before: Vec<&str> = action_into.get(cur).into_iter().flatten().map(String::as_str).collect();
         // Blocks in the same Try Zone as an entry point ran before it too: the
         // zone's own action input runs the first of them.
-        if let Some(zone) = ws.nodes.get(&cur).and_then(|n| n.zone.as_deref()) {
-            before.extend(action_into.get(zone).into_iter().flatten());
+        if let Some(zone) = ws.nodes.get(cur).and_then(|n| n.zone.as_deref()) {
+            before.extend(action_into.get(zone).into_iter().flatten().map(String::as_str));
         }
         for b in before {
-            let inner: Vec<String> = if ws.zones.contains_key(b) { zone_blocks.get(b).into_iter().flatten().map(|id| id.to_string()).collect() } else { vec![b.to_string()] };
+            let inner: Vec<&str> = if ws.zones.contains_key(b) { zone_blocks.get(b).into_iter().flatten().map(String::as_str).collect() } else { vec![b] };
             for id in inner {
-                if seen.insert(id.clone()) {
-                    order.push(id.clone());
+                if seen.insert(id) {
+                    order.push(id);
                     queue.push(id);
                 }
             }
         }
     }
-    order.retain(|id| !start.contains(id) && id != node);
+    order.retain(|id| !start.contains(id) && *id != node);
     order.reverse();
-    order
+    order.into_iter().map(str::to_string).collect()
 }
 
 /// Names a block gets from earlier blocks without an input: the event's
 /// outputs and run variables. `shape_of` gives a placed block's shape.
-pub fn known_names(ws: &Workspace, upstream: &[String], reg: &Registry, shape_of: &mut dyn FnMut(&str) -> Option<BlockShape>) -> HashSet<String> {
+pub fn known_names(ws: &Workspace, upstream: &[String], reg: &Registry, shape_of: &mut dyn FnMut(&str) -> Option<Arc<BlockShape>>) -> HashSet<String> {
     let mut out = HashSet::new();
     for id in upstream {
         let Some(n) = ws.nodes.get(id) else { continue };
         let Some(def) = reg.block(&n.block) else { continue };
         if def.kind == BlockKind::Event {
-            out.extend(shape_of(id).into_iter().flat_map(|s| s.outputs.into_iter().map(|(k, _)| k)));
+            if let Some(s) = shape_of(id) {
+                out.extend(s.outputs.iter().map(|(k, _)| k.clone()));
+            }
         } else if n.block_id() == "core.set_variable" && n.values.get("scope").and_then(|v| v.as_str()).is_none_or(|s| s == "run") {
             out.extend(n.values.get("name").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(str::to_string));
         }
@@ -144,7 +165,7 @@ impl Scope {
 /// The values block `node` can use, a [`Source`] per block before it on its
 /// action path (the event first), then run variables. Every block value is
 /// written `{#id.key}`. `shape_of` gives a placed block's shape.
-pub fn available(ws: &Workspace, node: &str, reg: &Registry, shape_of: &mut dyn FnMut(&str) -> Option<BlockShape>) -> Scope {
+pub fn available(ws: &Workspace, node: &str, reg: &Registry, shape_of: &mut dyn FnMut(&str) -> Option<Arc<BlockShape>>) -> Scope {
     let order = upstream(ws, node, reg);
     let mut sources = Vec::new();
     let mut vars = Vec::new();
@@ -832,7 +853,7 @@ mod tests {
         let ws = &project.as_ref().unwrap().workspaces[ws_key];
         shapes.begin();
         let shape = crate::editor::node_shape(reg, engine, shapes, ws_key, ws, node, define_ctx).unwrap();
-        shape.fields.into_iter().filter(|(_, f)| f.label.as_deref().is_some_and(|l| l.starts_with("${"))).map(|(k, _)| k).collect()
+        shape.fields.clone().into_iter().filter(|(_, f)| f.label.as_deref().is_some_and(|l| l.starts_with("${"))).map(|(k, _)| k).collect()
     }
 
     #[test]

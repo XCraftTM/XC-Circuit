@@ -1,6 +1,7 @@
 //! The node canvas: pan/zoom, blocks, pins, wires and wire dragging.
 
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
 use circuit_core::graph::ACTION_IN;
 use circuit_core::{BlockDef, BlockKind, BlockShape, Compat, Flow, Link, Note, PinMode, PinRef, PinType, Workspace};
@@ -62,6 +63,9 @@ pub struct PinEnd {
 /// Pan and zoom of one workspace canvas, plus a wire being dragged.
 #[derive(Default)]
 pub struct CanvasView {
+    /// Each block's layout from an earlier frame, with what it was made from
+    /// (a fingerprint, and the shape): used again while those stay the same.
+    layout_cache: HashMap<String, (u64, Option<std::sync::Arc<BlockShape>>, NodeLayout)>,
     /// Screen offset of scene origin from the canvas' top-left corner.
     pub offset: Vec2,
     pub zoom: f32,
@@ -87,6 +91,11 @@ pub struct CanvasView {
 }
 
 impl CanvasView {
+    /// A view at 100%, before it was first drawn.
+    pub fn at_full_size() -> CanvasView {
+        CanvasView { zoom: 1.0, ..Default::default() }
+    }
+
     fn to_global(&self, origin: Pos2) -> TSTransform {
         TSTransform::from_translation(origin.to_vec2() + self.offset) * TSTransform::from_scaling(self.zoom)
     }
@@ -124,8 +133,9 @@ struct NodeLayout {
     rect: Rect,
     header: Rect,
     value_block: bool,
-    rows: Vec<(RowKind, Rect)>,
-    pins: Vec<PinSpot>,
+    /// Shared, so a layout kept from an earlier frame is cheap to use again.
+    rows: std::sync::Arc<Vec<(RowKind, Rect)>>,
+    pins: std::sync::Arc<Vec<PinSpot>>,
 }
 
 /// `tall` gives rows that need more room than one line (text boxes, embed
@@ -138,7 +148,7 @@ fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], width: Option<f32>, d
     let (Some(def), Some(shape)) = (def, shape) else {
         let rect = Rect::from_min_size(pos2(at[0], at[1]), vec2(NODE_W, HEADER_H + ROW_H + PAD_BOTTOM));
         let header = Rect::from_min_size(rect.min, vec2(NODE_W, HEADER_H));
-        return NodeLayout { id: id.into(), rect, header, value_block: false, rows: Vec::new(), pins: Vec::new() };
+        return NodeLayout { id: id.into(), rect, header, value_block: false, rows: Default::default(), pins: Default::default() };
     };
     let value_block = def.kind == BlockKind::Value;
     let width = width.unwrap_or_else(|| default_width(def));
@@ -245,7 +255,7 @@ fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], width: Option<f32>, d
         }
         laid.push((row, r));
     }
-    NodeLayout { id: id.into(), rect, header, value_block, rows: laid, pins }
+    NodeLayout { id: id.into(), rect, header, value_block, rows: laid.into(), pins: pins.into() }
 }
 
 enum NodeMenu {
@@ -371,7 +381,7 @@ fn zone_layout(zid: &str, rect: Rect) -> NodeLayout {
             multi: true,
         })
         .collect();
-    NodeLayout { id: zid.into(), rect, header, value_block: false, rows: Vec::new(), pins }
+    NodeLayout { id: zid.into(), rect, header, value_block: false, rows: Default::default(), pins: std::sync::Arc::new(pins) }
 }
 
 pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
@@ -382,18 +392,48 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         ui.label(t!("This workspace no longer exists."));
         return;
     };
-    let view = views.entry(ws_key.to_string()).or_insert_with(|| CanvasView { zoom: 1.0, ..Default::default() });
+    let view = views.entry(ws_key.to_string()).or_insert_with(CanvasView::at_full_size);
 
     // Shapes and layouts for every node, in scene coordinates.
     let measure = ui.painter().clone();
     let ids: Vec<String> = ws.nodes.keys().cloned().collect();
     let mut layouts: Vec<NodeLayout> = Vec::with_capacity(ids.len());
-    let mut node_shapes: HashMap<String, BlockShape> = HashMap::new();
+    let mut node_shapes: HashMap<&str, std::sync::Arc<BlockShape>> = HashMap::new();
     shapes.begin();
+    // Measured control heights by block, so each block finds its own quickly.
+    let mut heights_of: HashMap<&str, Vec<(&str, f32)>> = HashMap::new();
+    for ((n, f), h) in &view.field_heights {
+        heights_of.entry(n.as_str()).or_default().push((f.as_str(), *h));
+    }
+    // Scene sizes depend on the text size too.
+    let text_scale = (ui.ctx().pixels_per_point().to_bits(), theme.touch);
     for id in &ids {
         let node = &ws.nodes[id];
         let def = reg.block(&node.block);
         let shape = node_shape(reg, engine, shapes, ws_key, ws, id, define_ctx);
+        // Everything the layout is made from besides the shape: where the
+        // block is, its width, pins, resized text boxes and measured rows.
+        let mut h = crate::editor::Fingerprint::default();
+        (node.at[0].to_bits(), node.at[1].to_bits(), node.width.map(f32::to_bits), &node.pins, text_scale).hash(&mut h);
+        for (k, v) in &node.heights {
+            (k, v.to_bits()).hash(&mut h);
+        }
+        for (k, v) in heights_of.get(id.as_str()).into_iter().flatten() {
+            (k, v.to_bits()).hash(&mut h);
+        }
+        let key = h.finish();
+        let same_shape = |cached: &Option<std::sync::Arc<BlockShape>>| match (cached, &shape) {
+            (Some(a), Some(b)) => std::sync::Arc::ptr_eq(a, b),
+            (None, None) => true,
+            _ => false,
+        };
+        if let Some((_, _, layout)) = view.layout_cache.get(id).filter(|(k, s, _)| *k == key && same_shape(s)) {
+            layouts.push(layout.clone());
+            if let Some(s) = shape {
+                node_shapes.insert(id.as_str(), s);
+            }
+            continue;
+        }
         let mut tall = HashMap::new();
         if let Some(s) = &shape {
             // Text fields that are typed into: a label line with the box under it.
@@ -416,15 +456,21 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         }
         // Rows as tall as their control, measured when last drawn.
         let mut fit = HashMap::new();
-        for (key, h) in view.field_heights.iter().filter(|((n, _), _)| n == id) {
-            if !tall.contains_key(&key.1) && *h + 8.0 > ROW_H {
-                fit.insert(key.1.clone(), h + 8.0);
+        for (key, h) in heights_of.get(id.as_str()).into_iter().flatten() {
+            if !tall.contains_key(*key) && *h + 8.0 > ROW_H {
+                fit.insert(key.to_string(), h + 8.0);
             }
         }
-        layouts.push(layout_node(id, node.at, &node.pins, node.width, def, shape.as_ref(), &tall, &fit));
+        let layout = layout_node(id, node.at, &node.pins, node.width, def, shape.as_deref(), &tall, &fit);
+        view.layout_cache.insert(id.clone(), (key, shape.clone(), layout.clone()));
+        layouts.push(layout);
         if let Some(s) = shape {
-            node_shapes.insert(id.clone(), s);
+            node_shapes.insert(id.as_str(), s);
         }
+    }
+    // Blocks that are gone.
+    if view.layout_cache.len() > ids.len() {
+        view.layout_cache.retain(|id, _| ws.nodes.contains_key(id));
     }
     // Try Zones fit around their blocks; their outputs act like a block's pins.
     let node_count = layouts.len();
@@ -435,12 +481,12 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         }
         layouts.push(zone_layout(zid, *rect));
     }
-    let pin_index: HashMap<(String, String, Dir), usize> = layouts
+    let pin_index: HashMap<(&str, &str, Dir), usize> = layouts
         .iter()
         .enumerate()
-        .flat_map(|(li, l)| l.pins.iter().enumerate().map(move |(pi, p)| ((l.id.clone(), p.pin.clone(), p.dir), li * 1000 + pi)))
+        .flat_map(|(li, l)| l.pins.iter().enumerate().map(move |(pi, p)| ((l.id.as_str(), p.pin.as_str(), p.dir), li * 1000 + pi)))
         .collect();
-    let pin_at = |key: &(String, String, Dir)| pin_index.get(key).map(|i| &layouts[i / 1000].pins[i % 1000]);
+    let pin_at = |node: &str, pin: &str, dir: Dir| pin_index.get(&(node, pin, dir)).map(|i| &layouts[i / 1000].pins[i % 1000]);
 
     let (outer, _) = ui.allocate_exact_size(ui.available_size(), Sense::hover());
     ui.painter().rect_filled(outer, 0.0, theme.canvas);
@@ -625,7 +671,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             }
         });
 
-        for spot in &layout.pins {
+        for spot in layout.pins.iter() {
             let resp = cui.interact(Rect::from_center_size(spot.pos, Vec2::splat(pin_hit)), cui.id().with(("zpin", &zid, &spot.pin)), Sense::click_and_drag());
             if resp.drag_started() {
                 start_drag = Some(PinEnd { node: zid.clone(), pin: spot.pin.clone(), dir: Dir::Out, ty: spot.ty.clone(), picked_up: None });
@@ -641,8 +687,8 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     let reach = if theme.touch { 14.0 } else { 6.0 } / view.zoom.max(0.3);
     let mut hovered_wire: Option<Link> = None;
     for link in &ws.links {
-        let a = pin_at(&(link.from.node.clone(), link.from.pin.clone(), Dir::Out));
-        let b = pin_at(&(link.to.node.clone(), link.to.pin.clone(), Dir::In));
+        let a = pin_at(&link.from.node, &link.from.pin, Dir::Out);
+        let b = pin_at(&link.to.node, &link.to.pin, Dir::In);
         if let (Some(a), Some(b)) = (a, b)
             && let Some(p) = wire_pick
             && wire_distance(a.pos, b.pos, p) < reach
@@ -654,8 +700,8 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     // Where the selected wire's Delete button goes (screen).
     let mut wire_mid: Option<Pos2> = None;
     for link in &ws.links {
-        let a = pin_at(&(link.from.node.clone(), link.from.pin.clone(), Dir::Out));
-        let b = pin_at(&(link.to.node.clone(), link.to.pin.clone(), Dir::In));
+        let a = pin_at(&link.from.node, &link.from.pin, Dir::Out);
+        let b = pin_at(&link.to.node, &link.to.pin, Dir::In);
         if let (Some(a), Some(b)) = (a, b) {
             let lit = if a.ty.is_action() { glow(&link.to.node) } else { 0.0 };
             if wire_selected(link) {
@@ -672,7 +718,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     if let Some(link) = &hovered_wire {
         ctx.set_cursor_icon(CursorIcon::PointingHand);
         // The last value that went through it, while the bot ran.
-        let is_action = pin_at(&(link.from.node.clone(), link.from.pin.clone(), Dir::Out)).is_some_and(|p| p.ty.is_action());
+        let is_action = pin_at(&link.from.node, &link.from.pin, Dir::Out).is_some_and(|p| p.ty.is_action());
         if !is_action {
             let last = wire_values.get(&(ws_key.to_string(), link.from.node.clone(), link.from.pin.clone()));
             egui::Tooltip::always_open(ctx.clone(), parent_layer, cui.id().with("wire-value"), egui::PopupAnchor::Pointer).show(|ui| {
@@ -697,7 +743,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         let r = layout.rect;
         let panel = Rect::from_min_max(pos2(r.right() - ZONE_PANEL_W, r.bottom() - ZONE_PANEL_H - 8.0), pos2(r.right(), r.bottom() - 8.0));
         painter.rect(panel, CornerRadius { nw: 9, ne: 0, sw: 9, se: 0 }, theme.node, Stroke::new(1.0, theme.node_border), StrokeKind::Inside);
-        for spot in &layout.pins {
+        for spot in layout.pins.iter() {
             let color = if spot.pin == "error" { theme.error } else if spot.ty.is_action() { theme.text } else { theme.text_muted };
             painter.text(spot.pos - vec2(16.0, 0.0), Align2::RIGHT_CENTER, &spot.label, FontId::proportional(12.0), color);
             let connected = ws.links.iter().any(|l| l.from.node == layout.id && l.from.pin == spot.pin);
@@ -799,10 +845,10 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         );
 
         // Rows.
-        let shape = node_shapes.get(id);
+        let shape = node_shapes.get(id.as_str()).map(|s| &**s);
         let mut open_embed: Option<String> = None;
         let mut open_layout: Option<String> = None;
-        for (row, r) in &layout.rows {
+        for (row, r) in layout.rows.iter() {
             // Hovering a row's name shows what it is, like hovering its pin.
             let (tip_key, tip_dir, tip_rect) = match row {
                 RowKind::Flow(f) => (f, Dir::Out, *r),
@@ -1039,7 +1085,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         }
 
         // Pins.
-        for spot in &layout.pins {
+        for spot in layout.pins.iter() {
             let connected = if spot.dir == Dir::In { ws.links_into(id, &spot.pin).next().is_some() } else { ws.links.iter().any(|l| l.from.node == *id && l.from.pin == spot.pin) };
             let candidate = drag.as_ref().map(|d| drag_compat(d, id, spot, reg, flow.as_ref()));
             draw_pin(&painter, spot, connected, candidate, theme, reg);
@@ -1085,7 +1131,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
 
     // The wire being dragged, and what happens when it is dropped.
     if let Some(d) = view.drag.clone() {
-        let source = pin_at(&(d.node.clone(), d.pin.clone(), d.dir)).map(|s| s.pos);
+        let source = pin_at(&d.node, &d.pin, d.dir).map(|s| s.pos);
         if let (Some(a), Some(p)) = (source, pointer_scene) {
             let (from, to) = if d.dir == Dir::Out { (a, p) } else { (p, a) };
             draw_wire(&painter, from, to, &d.ty, theme, reg, 0.0);

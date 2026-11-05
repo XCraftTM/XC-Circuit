@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use std::collections::HashSet;
 
@@ -556,7 +557,7 @@ impl Editor {
     pub fn reveal(&mut self, ws_key: &str, id: &str) {
         self.actions.push(Action::OpenWorkspace(ws_key.to_string()));
         self.select_only(ws_key, id);
-        let view = self.views.entry(ws_key.to_string()).or_insert_with(|| CanvasView { zoom: 1.0, ..Default::default() });
+        let view = self.views.entry(ws_key.to_string()).or_insert_with(CanvasView::at_full_size);
         view.focus = Some(id.to_string());
     }
 
@@ -759,7 +760,9 @@ impl Editor {
 /// Block shapes, kept until what they are made from changes.
 #[derive(Default)]
 pub struct ShapeCache {
-    blocks: HashMap<(String, String), (u64, BlockShape)>,
+    /// By workspace, then block: a fingerprint of what the shape was made
+    /// from, and the shape (shared, so handing it out copies nothing).
+    blocks: HashMap<String, HashMap<String, (u64, Arc<BlockShape>)>>,
     /// Per workspace: the names each block gets from earlier blocks.
     known: HashMap<String, Known>,
     /// Counts passes over the blocks; see `begin`.
@@ -777,10 +780,14 @@ struct Known {
     structure: u64,
     /// A hash of the project data that `define()` sees.
     project: u64,
-    names: HashMap<String, Vec<String>>,
+    /// Each block's names, and a hash of them.
+    names: HashMap<String, (Vec<String>, u64)>,
     /// The wires into each block, by their index in the workspace's links;
     /// built once per pass, so a block finds its own without a search.
     into: HashMap<String, Vec<usize>>,
+    /// The wires by block, for walking back along them; kept while the
+    /// structure stays the same.
+    wiring: Option<crate::values::Wiring>,
 }
 
 impl ShapeCache {
@@ -796,26 +803,32 @@ impl ShapeCache {
     }
 
     pub fn forget_workspace(&mut self, key: &str) {
-        self.blocks.retain(|(w, _), _| w != key);
+        self.blocks.remove(key);
         self.known.remove(key);
     }
 
     pub fn forget(&mut self, ws_key: &str, node: &str) {
-        self.blocks.remove(&(ws_key.to_string(), node.to_string()));
+        if let Some(blocks) = self.blocks.get_mut(ws_key) {
+            blocks.remove(node);
+        }
     }
 
     fn get(&self, ws_key: &str, node: &str) -> Option<&BlockShape> {
-        self.blocks.get(&(ws_key.to_string(), node.to_string())).map(|(_, s)| s)
+        self.blocks.get(ws_key)?.get(node).map(|(_, s)| &**s)
     }
 
     /// The workspace's names, emptied when what they depend on changed.
     fn known(&mut self, reg: &Registry, ws_key: &str, ws: &Workspace, project: &Value) -> &mut Known {
         let pass = self.pass;
-        let k = self.known.entry(ws_key.to_string()).or_default();
+        if !self.known.contains_key(ws_key) {
+            self.known.insert(ws_key.to_string(), Known::default());
+        }
+        let k = self.known.get_mut(ws_key).expect("just inserted");
         if k.pass != pass || k.names.is_empty() {
             let (structure, project) = (structure_hash(reg, ws), text_hash(project));
             if structure != k.structure || project != k.project {
                 k.names.clear();
+                k.wiring = None;
                 (k.structure, k.project) = (structure, project);
             }
             k.into.clear();
@@ -834,6 +847,67 @@ fn text_hash(v: &impl serde::Serialize) -> u64 {
     h.finish()
 }
 
+/// A fast hasher for the fingerprints above (FxHash: one multiply per
+/// word). They only tell "changed" from "the same", so they needn't resist
+/// attacks the way the standard hasher does.
+#[derive(Default)]
+pub(crate) struct Fingerprint(u64);
+
+impl Hasher for Fingerprint {
+    fn write(&mut self, bytes: &[u8]) {
+        let (chunks, rest) = bytes.as_chunks::<8>();
+        for c in chunks {
+            self.add(u64::from_le_bytes(*c));
+        }
+        if !rest.is_empty() {
+            let mut last = [0u8; 8];
+            last[..rest.len()].copy_from_slice(rest);
+            self.add(u64::from_le_bytes(last) ^ rest.len() as u64);
+        }
+    }
+    fn write_u8(&mut self, i: u8) {
+        self.add(i as u64);
+    }
+    fn write_u64(&mut self, i: u64) {
+        self.add(i);
+    }
+    fn write_usize(&mut self, i: usize) {
+        self.add(i as u64);
+    }
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
+impl Fingerprint {
+    fn add(&mut self, word: u64) {
+        self.0 = (self.0.rotate_left(5) ^ word).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+    }
+}
+
+/// Hashes a JSON value as it is, without writing it out as text first.
+fn hash_value(v: &Value, h: &mut impl Hasher) {
+    match v {
+        Value::Null => 0u8.hash(h),
+        Value::Bool(b) => (1u8, b).hash(h),
+        Value::Number(n) => (2u8, n.as_i64(), n.as_u64(), n.as_f64().map(f64::to_bits)).hash(h),
+        Value::String(s) => (3u8, s).hash(h),
+        Value::Array(a) => {
+            (4u8, a.len()).hash(h);
+            a.iter().for_each(|x| hash_value(x, h));
+        }
+        Value::Object(o) => hash_map(o, h),
+    }
+}
+
+fn hash_map(o: &Map<String, Value>, h: &mut impl Hasher) {
+    (5u8, o.len()).hash(h);
+    for (k, x) in o {
+        k.hash(h);
+        hash_value(x, h);
+    }
+}
+
 /// What the names blocks get from earlier blocks depend on.
 fn structure_hash(reg: &Registry, ws: &Workspace) -> u64 {
     let mut h = DefaultHasher::new();
@@ -844,22 +918,25 @@ fn structure_hash(reg: &Registry, ws: &Workspace) -> u64 {
         (id, &n.block, &n.zone).hash(&mut h);
         let event = reg.block(&n.block).is_some_and(|d| d.kind == circuit_core::BlockKind::Event);
         if event || n.block_id() == "core.set_variable" {
-            serde_json::to_string(&n.values).unwrap_or_default().hash(&mut h);
+            hash_map(&n.values, &mut h);
         }
     }
     ws.zones.keys().for_each(|z| z.hash(&mut h));
     h.finish()
 }
 
-/// Names a block gets from earlier blocks, which need no {name} input
-/// (unless one is wired already).
-fn known_names(reg: &Registry, engine: &BlockEngine, cache: &mut ShapeCache, ws_key: &str, ws: &Workspace, node_id: &str, project: &Value) -> Vec<String> {
-    if let Some(names) = cache.known(reg, ws_key, ws, project).names.get(node_id) {
-        return names.clone();
+/// Works out the names a block gets from earlier blocks, which need no {name}
+/// input (unless one is wired already), and returns a hash of them; the
+/// names themselves are in the cache.
+fn known_names(reg: &Registry, engine: &BlockEngine, cache: &mut ShapeCache, ws_key: &str, ws: &Workspace, node_id: &str, project: &Value) -> u64 {
+    let k = cache.known(reg, ws_key, ws, project);
+    if let Some((_, hash)) = k.names.get(node_id) {
+        return *hash;
     }
+    let wiring = k.wiring.take().unwrap_or_else(|| crate::values::Wiring::new(ws));
     // Only event blocks' shapes are needed for them, and events have nothing
     // before them, so this goes one level deep.
-    let upstream = crate::values::upstream(ws, node_id, reg);
+    let upstream = crate::values::upstream_with(ws, node_id, reg, &wiring);
     let mut known = crate::values::known_names(ws, &upstream, reg, &mut |id| {
         let is_event = ws.nodes.get(id).and_then(|n| reg.block(&n.block)).is_some_and(|d| d.kind == circuit_core::BlockKind::Event);
         if is_event { node_shape(reg, engine, cache, ws_key, ws, id, project) } else { None }
@@ -867,66 +944,68 @@ fn known_names(reg: &Registry, engine: &BlockEngine, cache: &mut ShapeCache, ws_
     known.retain(|name| ws.links_into(node_id, name).next().is_none());
     let mut known: Vec<String> = known.into_iter().collect();
     known.sort();
-    cache.known(reg, ws_key, ws, project).names.insert(node_id.to_string(), known.clone());
-    known
+    let mut h = DefaultHasher::new();
+    known.hash(&mut h);
+    let hash = h.finish();
+    let k = cache.known(reg, ws_key, ws, project);
+    k.names.insert(node_id.to_string(), (known, hash));
+    k.wiring = Some(wiring);
+    hash
+}
+
+/// The type of the output feeding a wire: from its block's shape when known
+/// (`define()` can change it), else from the block's definition.
+fn wire_type<'a>(reg: &'a Registry, cache: &'a ShapeCache, ws_key: &str, ws: &Workspace, link: &Link) -> Option<&'a str> {
+    let src = ws.nodes.get(&link.from.node)?;
+    let cached = cache.get(ws_key, &link.from.node).and_then(|s| s.output(&link.from.pin)).map(|o| o.type_name.as_str());
+    cached.or_else(|| reg.block(&src.block).and_then(|d| d.outputs.get(&link.from.pin)).map(|o| o.type_name.as_str()))
 }
 
 /// The effective shape of a node, re-running `define()` only when its values or
 /// connected types change. Call `cache.begin()` before a pass over the blocks.
-pub fn node_shape(reg: &Registry, engine: &BlockEngine, cache: &mut ShapeCache, ws_key: &str, ws: &Workspace, node_id: &str, project: &Value) -> Option<BlockShape> {
+pub fn node_shape(reg: &Registry, engine: &BlockEngine, cache: &mut ShapeCache, ws_key: &str, ws: &Workspace, node_id: &str, project: &Value) -> Option<Arc<BlockShape>> {
     let node = ws.nodes.get(node_id)?;
     let def = reg.block(&node.block)?;
-    let into = cache.known(reg, ws_key, ws, project).into.get(node_id).cloned().unwrap_or_default();
-    let connected = connected_types(reg, cache, ws_key, ws, node_id, &into);
-    let known = known_names(reg, engine, cache, ws_key, ws, node_id, project);
+    let known_hash = known_names(reg, engine, cache, ws_key, ws, node_id, project);
+    let project_hash = cache.known(reg, ws_key, ws, project).project;
+    let into: &[usize] = cache.known.get(ws_key).and_then(|k| k.into.get(node_id)).map(Vec::as_slice).unwrap_or(&[]);
+    let inputs = || into.iter().filter_map(|&i| ws.links.get(i)).filter(|l| l.to.node == node_id && l.to.pin != ACTION_IN);
 
-    let mut h = DefaultHasher::new();
+    // A fingerprint of everything the shape is made from.
+    let mut h = Fingerprint::default();
     node.block.hash(&mut h);
-    serde_json::to_string(&node.values).unwrap_or_default().hash(&mut h);
-    serde_json::to_string(&connected).unwrap_or_default().hash(&mut h);
-    known.hash(&mut h);
+    hash_map(&node.values, &mut h);
+    for link in inputs() {
+        (&link.to.pin, wire_type(reg, cache, ws_key, ws, link)).hash(&mut h);
+    }
+    known_hash.hash(&mut h);
     if def.has_define {
-        cache.known(reg, ws_key, ws, project).project.hash(&mut h);
+        project_hash.hash(&mut h);
     }
     let hash = h.finish();
-
-    let key = (ws_key.to_string(), node_id.to_string());
-    if let Some((cached_hash, shape)) = cache.blocks.get(&key)
+    if let Some((cached_hash, shape)) = cache.blocks.get(ws_key).and_then(|b| b.get(node_id))
         && *cached_hash == hash
     {
         return Some(shape.clone());
     }
 
+    // Changed (or new): build it again.
+    let mut connected = Map::new();
+    for link in inputs() {
+        if let Some(ty) = wire_type(reg, cache, ws_key, ws, link) {
+            connected.insert(link.to.pin.clone(), Value::String(ty.to_string()));
+        }
+    }
+    let known: HashSet<String> = cache.known.get(ws_key).and_then(|k| k.names.get(node_id)).map(|(v, _)| v.iter().cloned().collect()).unwrap_or_default();
     let define = if def.has_define {
         let engine_key = reg.engine_keys.get(&def.id)?;
         engine.define(engine_key, &node.values, &connected, project).ok()
     } else {
         None
     };
-    let shape = BlockShape::build_with(def, &node.values, define.as_ref(), &known.into_iter().collect());
-    cache.blocks.insert(key, (hash, shape.clone()));
+    let shape = Arc::new(BlockShape::build_with(def, &node.values, define.as_ref(), &known));
+    cache.blocks.entry(ws_key.to_string()).or_default().insert(node_id.to_string(), (hash, shape.clone()));
     Some(shape)
-}
-
-/// For each connected input pin of a node, the type string of the output feeding it.
-fn connected_types(
-    reg: &Registry,
-    cache: &ShapeCache,
-    ws_key: &str,
-    ws: &Workspace,
-    node_id: &str,
-    into: &[usize],
-) -> Map<String, Value> {
-    let mut out = Map::new();
-    for link in into.iter().filter_map(|&i| ws.links.get(i)).filter(|l| l.to.node == node_id && l.to.pin != ACTION_IN) {
-        let Some(src) = ws.nodes.get(&link.from.node) else { continue };
-        let cached = cache.get(ws_key, &link.from.node).and_then(|s| s.output(&link.from.pin)).map(|o| o.type_name.clone());
-        let ty = cached.or_else(|| reg.block(&src.block).and_then(|d| d.outputs.get(&link.from.pin)).map(|o| o.type_name.clone()));
-        if let Some(ty) = ty {
-            out.insert(link.to.pin.clone(), Value::String(ty));
-        }
-    }
-    out
 }
 
 /// An image URI for a local file: `file:///C:/…` on Windows, `file:///home/…` on Linux.
