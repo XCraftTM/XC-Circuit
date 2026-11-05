@@ -1,6 +1,9 @@
 import { defineConfig } from "vitepress";
 
 const repo = "https://github.com/XCraftTM/XC-Circuit";
+const base = process.env.DOCS_BASE ?? "/XC-Circuit/";
+// Where the site lives, for link previews (Discord and others need full URLs).
+const site = (process.env.DOCS_SITE ?? "https://xcrafttm.github.io") + base;
 
 // The site and its docs: tutorials (learn by doing), explanations (how things
 // work and why) and the API reference (every key and function).
@@ -9,7 +12,7 @@ export default defineConfig({
   title: "XC™ Circuit",
   description: "Build Discord and Fluxer bots by connecting blocks. Extend the editor with JavaScript plugins.",
   // GitHub Pages serves the site under /XC-Circuit/; DOCS_BASE changes that (for example "/" on a custom domain).
-  base: process.env.DOCS_BASE ?? "/XC-Circuit/",
+  base,
   cleanUrls: true,
   // Dark like the app; the switch in the top bar still offers light.
   appearance: "dark",
@@ -17,8 +20,20 @@ export default defineConfig({
   // Notes for the people building the app, not pages of the site.
   srcExclude: ["discord-blocks-plan.md", "README.md"],
   head: [
-    ["link", { rel: "icon", type: "image/svg+xml", href: `${process.env.DOCS_BASE ?? "/XC-Circuit/"}icon.svg` }],
+    ["link", { rel: "icon", type: "image/svg+xml", href: `${base}icon.svg` }],
     ["meta", { name: "theme-color", content: "#00E5FF" }],
+    // The picture shown when a link to the site is posted.
+    ["meta", { property: "og:type", content: "website" }],
+    ["meta", { property: "og:site_name", content: "XC™ Circuit" }],
+    ["meta", { property: "og:image", content: `${site}social/github-preview.png` }],
+    ["meta", { property: "og:image:width", content: "1280" }],
+    ["meta", { property: "og:image:height", content: "640" }],
+    ["meta", { name: "twitter:card", content: "summary_large_image" }],
+  ],
+  // Each page's own title and description in link previews.
+  transformHead: ({ title, description }) => [
+    ["meta", { property: "og:title", content: title }],
+    ["meta", { property: "og:description", content: description }],
   ],
   themeConfig: {
     logo: "/icon.svg",
