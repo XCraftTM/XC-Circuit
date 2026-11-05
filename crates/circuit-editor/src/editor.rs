@@ -934,21 +934,15 @@ fn clock() -> String {
 pub fn local_time(ms: u64) -> String {
     use chrono::TimeZone;
     match chrono::Local.timestamp_millis_opt(ms as i64).single() {
-        Some(t) => t.format("%a %-d %b %Y, %H:%M").to_string(),
-        None => "an unknown time".into(),
+        // Digits only, so it reads the same in every language.
+        Some(t) => t.format("%Y-%m-%d, %H:%M").to_string(),
+        None => t!("an unknown time").into(),
     }
 }
 
-/// How long ago a moment was: `just now`, `5 minutes ago`, `3 days ago`.
+/// How long ago a moment (in ms since 1970) was: `just now`, `5 min ago`.
 pub fn ago(ms: u64) -> String {
-    let secs = circuit_core::backup::now_ms().saturating_sub(ms) / 1000;
-    let (n, unit) = match secs {
-        0..60 => return "just now".into(),
-        60..3_600 => (secs / 60, "minute"),
-        3_600..86_400 => (secs / 3_600, "hour"),
-        _ => (secs / 86_400, "day"),
-    };
-    format!("{n} {unit}{} ago", if n == 1 { "" } else { "s" })
+    crate::bot::ago(std::time::Duration::from_millis(circuit_core::backup::now_ms().saturating_sub(ms)))
 }
 
 #[cfg(test)]

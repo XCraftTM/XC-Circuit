@@ -612,9 +612,9 @@ impl PluginObject for ScriptPlugin {
             egui::Frame::new().inner_margin(12).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 if let Some(e) = &view.error {
-                    ui.label(RichText::new(format!("{} couldn't draw this panel", self.name)).strong().color(ui.visuals().error_fg_color));
+                    ui.label(RichText::new(tf!("{plugin} couldn't draw this panel", plugin = self.name)).strong().color(ui.visuals().error_fg_color));
                     ui.add(egui::Label::new(RichText::new(e).monospace().size(11.5)).wrap());
-                    ui.label(RichText::new("Fix the script and save it: the plugin reloads by itself.").weak());
+                    ui.label(RichText::new(t!("Fix the script and save it: the plugin reloads by itself.")).weak());
                     ui.add_space(10.0);
                 }
                 draw(ui, &mut view.items, &self.root, &mut Vec::new(), &mut events);

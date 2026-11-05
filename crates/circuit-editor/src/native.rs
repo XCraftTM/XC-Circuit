@@ -440,8 +440,8 @@ impl NativeHost {
         };
         let p = &self.plugins[i];
         let Some(inst) = &p.instance else {
-            ui.label(format!("{} isn't running: {}.", p.name, status_text(&p.status)));
-            ui.label(egui::RichText::new("See Plugins › Manage Plugins.").weak());
+            ui.label(tf!("{plugin} isn't running: {status}.", plugin = p.name, status = status_text(&p.status)));
+            ui.label(egui::RichText::new(t!("See Plugins › Manage Plugins.")).weak());
             return;
         };
         let id = egui::Id::new(("plugin-panel", plugin, panel, inst.generation));

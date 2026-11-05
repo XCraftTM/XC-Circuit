@@ -217,7 +217,7 @@ fn panel(ctx: &egui::Context, id: Id, button: Rect, state: &mut Open, theme: &Th
                 ui.label(egui::RichText::new("DISCORD").size(10.0).color(theme.text_muted));
                 swatches(ui, PRESETS.iter().filter_map(|(n, h)| Some((n.to_string(), parse_hex(h)?))).collect(), &mut picked, state);
                 if !recent.is_empty() {
-                    ui.label(egui::RichText::new("RECENT").size(10.0).color(theme.text_muted));
+                    ui.label(egui::RichText::new(t!("Recent").to_uppercase()).size(10.0).color(theme.text_muted));
                     swatches(ui, recent.iter().map(|c| ("Recent".to_string(), Color32::from_rgb(c[0], c[1], c[2]))).collect(), &mut picked, state);
                 }
             });

@@ -89,6 +89,15 @@ fn bot_backups(dir: &Path) -> Vec<BotBackup> {
     list
 }
 
+/// Why a snapshot was made, in the interface's language.
+fn reason_text(reason: &str) -> String {
+    match reason {
+        "Saved" => t!("Saved").into(),
+        "Before restore" => t!("Before restore").into(),
+        other => other.into(),
+    }
+}
+
 fn size_text(bytes: u64) -> String {
     match bytes {
         0..1_024 => format!("{bytes} B"),
@@ -168,14 +177,15 @@ fn project_backups(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, theme: 
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
                         ui.label(RichText::new(local_time(snap.info.saved_at)).size(14.0).color(theme.text));
-                        let mut line = format!("{} · {} · {} workspaces · {}", ago(snap.info.saved_at), snap.info.reason, snap.info.workspaces.len(), size_text(snap.size));
+                        let workspaces = tf!("{count} workspaces", count = snap.info.workspaces.len());
+                        let mut line = format!("{} · {} · {workspaces} · {}", ago(snap.info.saved_at), reason_text(&snap.info.reason), size_text(snap.size));
                         if i == 0 {
                             line.push_str(t!(" · newest"));
                         }
                         ui.label(RichText::new(line).size(12.0).color(theme.text_muted));
                     });
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        ui.label(RichText::new(if open { "Hide" } else { "Compare" }).size(12.0).color(theme.accent));
+                        ui.label(RichText::new(if open { t!("Hide") } else { t!("Compare") }).size(12.0).color(theme.accent));
                     });
                 });
                 if open && let Some((_, cmp)) = &view.open {

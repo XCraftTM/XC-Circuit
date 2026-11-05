@@ -53,13 +53,14 @@ impl Activity {
     }
 }
 
-/// How long ago something happened: "just now", "12 s ago", "3 min ago".
+/// How long ago something happened: "just now", "12 s ago", "3 min ago", "2 d ago".
 pub fn ago(d: Duration) -> String {
     match d.as_secs() {
         0..=2 => t!("just now").to_string(),
         s @ 3..=59 => tf!("{seconds} s ago", seconds = s),
         s @ 60..=3599 => tf!("{minutes} min ago", minutes = s / 60),
-        s => tf!("{hours} h ago", hours = s / 3600),
+        s @ 3600..=86_399 => tf!("{hours} h ago", hours = s / 3600),
+        s => tf!("{days} d ago", days = s / 86_400),
     }
 }
 
