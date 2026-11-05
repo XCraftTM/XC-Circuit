@@ -39,7 +39,9 @@ The desktop, a 1440×900 window, Vulkan. Each workspace was shown still, panned 
 | 800 | 493 FPS | 483 FPS | 234 FPS | 🟢 5.9 ms |
 | 1,600 | 312 FPS | 308 FPS | 181 FPS | 🟢 7.4 ms |
 
-Out of more than 10,000 frames, only two took longer than 16.7 ms (single hiccups while zooming). Zooming costs the most, because every text is laid out again at its new size. Your screen still shows at most its own refresh rate (60, 144, 240 …); the rest is headroom.
+**Without a graphics card** (drawing in software with Mesa's llvmpipe on Linux, 4 cores of an AMD EPYC 9V45 server), the same test still runs at about 42–67 FPS still or panning, and 34–51 FPS while zooming: usable, but noticeably less smooth.
+
+Out of more than 10,000 frames on the desktop, only two took longer than 16.7 ms (single hiccups while zooming). Zooming costs the most, because every text is laid out again at its new size. Your screen still shows at most its own refresh rate (60, 144, 240 …); the rest is headroom.
 
 ## Blocks in one workspace
 
@@ -125,7 +127,7 @@ A block takes 5–15 microseconds in an exported bot. Real bots spend almost all
 
 - **Split very big workspaces.** Thousands of blocks in one workspace cost a little each frame, other workspaces cost nothing. Use Call Workspace to run one from another.
 - **Zoom in a bit on big screens.** Hundreds of blocks on a 4K screen are the most expensive thing to draw.
-- **Check the graphics driver.** If no graphics card driver can be used, XC Circuit draws in software (it says so in the Console). That is far slower: on GitHub's machines, which have no graphics card or screen, it managed about 2 frames a second. Installing the graphics driver fixes it.
+- **Check the graphics driver.** If no graphics card driver can be used, XC Circuit draws in software (it says so in the Console). On Linux that still gave 34–67 FPS above; Windows' software renderer was much slower on GitHub's screenless servers (about 2 FPS), though that says more about those servers than about a normal PC. Installing the graphics driver fixes it.
 
 ## Run them yourself
 
