@@ -57,12 +57,13 @@ Wire events, actions and values on a canvas, run your bot with one click, and ex
 
 | | Fast desktop | Everyday computer |
 | --- | --- | --- |
-| A typical bot (up to 100 blocks per workspace), per frame | 1–2 ms | 2–3 ms |
-| Smooth at 60 Hz up to (blocks in one workspace) | 1,600 | 800 |
-| Startup: loading all 205 blocks and opening a bot | 0.2 s | 0.3 s |
-| Exported bot | 200,000 blocks/s | 70,000 blocks/s |
+| Real frame rate, 200 / 1,600 blocks in a workspace | 836 / 312 FPS | — (no graphics card) |
+| A typical bot (up to 100 blocks per workspace), per frame | about 1 ms | about 2 ms |
+| Smooth at 120 Hz up to (blocks in one workspace) | 3,200 | 1,600 |
+| Opening a project | 0.08 s | 0.13 s |
+| Exported bot | 200,000 blocks/s | 74,000 blocks/s |
 
-60 Hz needs a frame every 16.7 ms, 120 Hz every 8.3 ms. Details, 4K screens and how to run the benchmarks yourself: **[Performance](https://xcrafttm.github.io/XC-Circuit/performance)**.
+The fast desktop has a Ryzen 7 9800X3D and an RTX 4070 SUPER; the everyday computer is GitHub's standard 4-core Windows machine. 60 Hz needs a frame every 16.7 ms, 120 Hz every 8.3 ms. Details, 4K screens and how to run the benchmarks yourself: **[Performance](https://xcrafttm.github.io/XC-Circuit/performance)**.
 
 ## Made with AI
 
