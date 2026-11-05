@@ -32,6 +32,26 @@ cd docs && npm install && npm run dev   # the website, with live reload
 
 On Linux, install the GTK, xkbcommon, D-Bus and ALSA development packages first (see `.github/workflows/build.yml`).
 
+### Where things are
+
+| Folder | What's in it |
+| --- | --- |
+| `crates/circuit-core` | Projects, workspaces, blocks and their shapes, pin types, backups |
+| `crates/circuit-plugins` | Loading plugins: plugin.toml, block files (in QuickJS), build modes, pin types, themes, translations |
+| `crates/circuit-runner` | Running bots: bundles, npm packages, the bot process, secrets, export |
+| `crates/circuit-editor/src/app` | The window: menus, commands, dialogs, projects, the tab layout, crash logs, updates |
+| `crates/circuit-editor/src/canvas` | The canvas (its frame is `show` in `mod.rs`), block layout, wires, notes, the block picker |
+| `crates/circuit-editor/src/editor` | The editor's state: the open project, block shapes, undo, preferences, shortcuts, values |
+| `crates/circuit-editor/src/bot` | Running, exporting and Bot settings |
+| `crates/circuit-editor/src/builders` | The Embed, Layout and Slash Command Builders |
+| `crates/circuit-editor/src/plugins` | Editor plugins (script and native), installing them |
+| `crates/circuit-editor/src/pages` | Settings, backups, setup, the tour, the start page, the side bar, the inspector |
+| `crates/circuit-editor/src/ui` | Shared pieces: dialogs, widgets, inputs, the theme, fonts, the command palette |
+| `crates/circuit-editor/src/i18n` | Interface translations |
+| `crates/circuit-editor/src/bench` | Benchmarks (see the website's Performance page) |
+| `runtime/` | The Node.js runtime that runs bots (also inside exports) and its tests |
+| `plugins/` | Circuit Core, Discord Bot and Fluxer Bot: their blocks, build modes, pin types and runtime libraries |
+
 Before sending a pull request, please run the tests. If you added interface texts, run the tests with `XC_UPDATE_STRINGS=1` once and add German translations to `plugins/xc.core/locales/de.toml` (or leave them empty; they'll show in English).
 
 ## Style
