@@ -88,6 +88,18 @@ fn editor(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width:
     }
 }
 
+/// A row with a text box and a control after it (a button): the control takes
+/// what it needs, in any language, and the text box the rest of the width.
+/// The row is as tall as a text box.
+pub fn field_with_button(ui: &mut Ui, field: impl FnOnce(&mut Ui), button: impl FnOnce(&mut Ui)) {
+    let size = egui::vec2(ui.available_width(), crate::ui::inputs::input_height(ui).max(ui.spacing().interact_size.y));
+    ui.allocate_ui_with_layout(size, egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        button(ui);
+        field(ui);
+    });
+}
+
 /// A dropdown as tall as a text box, so the two line up in a row.
 pub fn dropdown<R>(ui: &mut Ui, id_salt: egui::Id, width: f32, selected: impl Into<egui::WidgetText>, contents: impl FnOnce(&mut Ui) -> R) -> Response {
     ui.scope(|ui| {
@@ -183,4 +195,33 @@ pub fn toggle(ui: &mut Ui, on: &mut bool, theme: &Theme) -> Response {
     let knob = if *on { Color32::from_rgb(4, 33, 13) } else { theme.text_muted };
     painter.circle_filled(egui::pos2(x, rect.center().y), r, knob);
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The button keeps its whole text and stays inside the row, however long
+    /// it is in this language, and the text box is just as tall.
+    #[test]
+    fn field_with_button_fits_any_button() {
+        let theme = Theme::from_def(&circuit_plugins::ThemeDef::default());
+        for (width, label) in [(240.0, "Aktualisieren"), (320.0, "Refresh"), (300.0, "Durchsuchen …")] {
+            let ctx = egui::Context::default();
+            let (mut field, mut button) = (egui::Rect::NOTHING, egui::Rect::NOTHING);
+            for _ in 0..3 {
+                let input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 300.0))), ..Default::default() };
+                let mut out = ctx.run_ui(input, |ui| {
+                    let mut text = String::new();
+                    field_with_button(ui, |ui| field = ui.add(crate::ui::inputs::TextLine::new(&mut text).hint("Filter keys")).rect, |ui| button = crate::ui::dialog::button(ui, &theme, label).rect);
+                });
+                out.textures_delta.clear();
+            }
+            let row = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 300.0));
+            assert!(button.right() <= row.right() + 0.5 && field.left() >= row.left() - 0.5, "{label} at {width}: {field:?} {button:?}");
+            assert!(field.right() <= button.left(), "{label}: they don't overlap");
+            assert!((field.height() - button.height()).abs() < 0.5, "{label}: same height, {field:?} {button:?}");
+            assert!(field.width() > 100.0, "{label}: the text box gets the rest");
+        }
+    }
 }

@@ -56,13 +56,17 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, view: &mut StoredView, bot_running: b
 
     let mut changed = false;
     Frame::new().inner_margin(Margin::symmetric(12, 8)).show(ui, |ui| {
-        ui.horizontal(|ui| {
-            let w = (ui.available_width() - 90.0).max(80.0);
-            ui.add(crate::ui::inputs::TextLine::new(&mut view.filter).hint(t!("Filter keys")).width(w).compact());
-            if crate::ui::dialog::button(ui, &theme, t!("Refresh")).clicked() {
-                view.reload(ed);
-            }
-        });
+        let mut refresh = false;
+        crate::ui::widgets::field_with_button(
+            ui,
+            |ui| {
+                ui.add(crate::ui::inputs::TextLine::new(&mut view.filter).hint(t!("Filter keys")));
+            },
+            |ui| refresh = crate::ui::dialog::button(ui, &theme, t!("Refresh")).clicked(),
+        );
+        if refresh {
+            view.reload(ed);
+        }
         let hint = if bot_running { t!("Bot running: read-only, refreshes every 2 s") } else { t!("Double-click a value to edit it. Changes apply on the next run.") };
         ui.add(egui::Label::new(RichText::new(hint).size(11.5).color(theme.text_muted)).wrap());
     });

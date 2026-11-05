@@ -195,19 +195,19 @@ fn form(ui: &mut Ui, theme: &Theme, state: &mut NewProject, reg: &Registry, temp
     }
     dialog::field(ui, theme, t!("Name"), None, |ui| dialog::text_input(ui, &mut state.name, "", false));
     dialog::field(ui, theme, t!("Location"), None, |ui| {
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 6.0;
-            ui.allocate_ui(vec2(ui.available_width() - 96.0, crate::ui::inputs::input_height(ui)), |ui| dialog::text_input(ui, &mut state.location, "", false));
-            if dialog::secondary_button(ui, theme, t!("Browse…")).clicked() {
-                let mut picker = rfd::FileDialog::new().set_title(t!("Where the project goes"));
-                if Path::new(&state.location).is_dir() {
-                    picker = picker.set_directory(&state.location);
-                }
-                if let Some(dir) = picker.pick_folder() {
-                    state.location = dir.display().to_string();
-                }
+        let mut browse = false;
+        crate::ui::widgets::field_with_button(ui, |ui| {
+            dialog::text_input(ui, &mut state.location, "", false);
+        }, |ui| browse = dialog::secondary_button(ui, theme, t!("Browse…")).clicked());
+        if browse {
+            let mut picker = rfd::FileDialog::new().set_title(t!("Where the project goes"));
+            if Path::new(&state.location).is_dir() {
+                picker = picker.set_directory(&state.location);
             }
-        });
+            if let Some(dir) = picker.pick_folder() {
+                state.location = dir.display().to_string();
+            }
+        }
     });
     match target {
         Ok(dir) => ui.label(RichText::new(tf!("Created in {path}", path = dir.display())).size(11.5).color(theme.text_muted)),
