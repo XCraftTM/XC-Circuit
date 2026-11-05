@@ -138,6 +138,26 @@ jobs:
           & $iscc "/DAppVersion=$env:VERSION" "/DArch=${{ matrix.arch }}" "/DSourceDir=$PWD\XC-Circuit-${{ matrix.name }}" "/DOutputDir=$PWD\dist" packaging\windows\xc-circuit.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      # The update from inside the app: the Setup runs silently with the app's
+      # arguments, installs, and opens XC Circuit again (/restart=1).
+      - name: Try the update
+        if: runner.os == 'Windows' && matrix.arch == 'x64'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist\*-setup.exe | Select-Object -First 1
+          $p = Start-Process $setup.FullName -ArgumentList '/SILENT','/SUPPRESSMSGBOXES','/NORESTART','/CLOSEAPPLICATIONS','/restart=1','/CURRENTUSER' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "The Setup ended with $($p.ExitCode)" }
+          $exe = "$env:LOCALAPPDATA\Programs\XC Circuit\xc-circuit.exe"
+          if (-not (Test-Path $exe)) { throw "Not installed at $exe" }
+          $running = $null
+          for ($i = 0; $i -lt 300 -and -not $running; $i++) {
+            Start-Sleep -Milliseconds 100
+            $running = Get-Process xc-circuit -ErrorAction SilentlyContinue
+          }
+          if (-not $running) { throw "XC Circuit didn't open again after the update" }
+          Write-Host "Installed and opened again: $($running.Path)"
+          $running | Stop-Process -Force
+
       # .deb, .rpm and .AppImage.
       - name: Linux packages
         if: runner.os == 'Linux'
