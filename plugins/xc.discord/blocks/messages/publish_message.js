@@ -15,6 +15,9 @@ module.exports = {
   look: {
     icon: "send",
   },
+  requires: {
+    permissions: ["SendMessages", "ManageMessages"],
+  },
   fields: {
     message: { type: "discord.message", pin: "only", required: true, description: "A message in an announcement channel." },
   },

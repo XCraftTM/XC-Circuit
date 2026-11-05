@@ -17,6 +17,9 @@ module.exports = {
   look: {
     icon: "layers",
   },
+  requires: {
+    permissions: ["ManageGuild"],
+  },
   fields: {
     server: { type: "discord.guild", pin: "only", required: true, description: "The server." },
     name: { type: "text", default: "", description: "New name." },

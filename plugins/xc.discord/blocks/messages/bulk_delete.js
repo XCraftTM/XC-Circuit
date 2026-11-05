@@ -15,6 +15,9 @@ module.exports = {
   look: {
     icon: "trash",
   },
+  requires: {
+    permissions: ["ManageMessages", "ReadMessageHistory"],
+  },
   fields: {
     channel: { type: "discord.channel", pin: "only", required: true, description: "The channel to clean." },
     count: { type: "number", default: 10, min: 1, max: 100, step: 1, description: "How many of the latest messages to look at (up to 100)." },

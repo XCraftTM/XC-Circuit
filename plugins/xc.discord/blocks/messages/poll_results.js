@@ -15,6 +15,9 @@ module.exports = {
   look: {
     icon: "scale",
   },
+  requires: {
+    permissions: ["ReadMessageHistory"],
+  },
   fields: {
     message: { type: "discord.message", pin: "only", required: true, description: "The poll's message." },
     end: { type: "boolean", default: false, label: "End it now", description: "Close the poll before reading." },

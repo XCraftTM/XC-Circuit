@@ -15,6 +15,9 @@ module.exports = {
   look: {
     icon: "message",
   },
+  requires: {
+    permissions: ["ManageMessages"],
+  },
   fields: {
     message: { type: "discord.message", pin: "only", required: true, description: "The message to delete." },
     afterSeconds: { type: "number", default: 0, min: 0, label: "After (s)", description: "Wait this long first. 0 = now." },

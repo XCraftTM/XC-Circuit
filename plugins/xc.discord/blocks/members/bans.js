@@ -24,6 +24,9 @@ module.exports = {
   look: {
     icon: "shield",
   },
+  requires: {
+    permissions: ["BanMembers"],
+  },
   fields: {
     action: { type: "select", pin: false, default: "check", choices: ACTIONS, description: "What to do." },
     server: { type: "discord.guild", pin: "only", required: true, description: "The server." },

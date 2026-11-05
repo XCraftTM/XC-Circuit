@@ -17,6 +17,9 @@ module.exports = {
   look: {
     icon: "shield",
   },
+  requires: {
+    permissions: ["ViewAuditLog"],
+  },
   fields: {
     server: { type: "discord.guild", pin: "only", required: true, description: "The server." },
     type: { type: "select", pin: false, default: "any", choices: TYPES, description: "Which actions." },

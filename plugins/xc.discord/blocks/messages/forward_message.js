@@ -15,6 +15,9 @@ module.exports = {
   look: {
     icon: "send",
   },
+  requires: {
+    permissions: ["SendMessages"],
+  },
   fields: {
     message: { type: "discord.message", pin: "only", required: true, description: "The message to forward." },
     channel: { type: "discord.channel", pin: "only", required: true, description: "Where to forward it." },

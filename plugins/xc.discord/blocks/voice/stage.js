@@ -25,6 +25,18 @@ module.exports = {
   look: {
     icon: "bolt",
   },
+  requires: {
+    permissions: {
+      action: {
+        start: ["ManageChannels", "MuteMembers", "MoveMembers"],
+        edit: ["ManageChannels"],
+        end: ["ManageChannels"],
+        speaker: ["MuteMembers"],
+        audience: ["MuteMembers"],
+        request: ["RequestToSpeak"],
+      },
+    },
+  },
   fields: {
     action: { type: "select", pin: false, default: "start", choices: ACTIONS, description: "What to do." },
     channel: { type: "discord.channel?", pin: "only", show: { action: ["start", "edit", "end", "info", "request"] }, label: "Stage channel", description: "The stage channel." },

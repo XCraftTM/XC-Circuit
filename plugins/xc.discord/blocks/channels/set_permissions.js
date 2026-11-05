@@ -68,6 +68,9 @@ module.exports = {
   look: {
     icon: "shield",
   },
+  requires: {
+    permissions: ["ManageChannels", "ManageRoles"],
+  },
   fields: {
     channel: { type: "discord.channel", pin: "only", required: true, description: "The channel." },
     who: { type: "select", pin: false, default: "target", choices: WHO, description: "Whose permissions change." },

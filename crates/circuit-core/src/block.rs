@@ -165,7 +165,7 @@ pub const BLOCK_GROUPS: [(&str, &[&str]); 4] = [
     ("info", &["name", "description", "author", "version", "docs", "deprecated"]),
     ("search", &["category", "aliases", "tags"]),
     ("look", &["icon", "width", "preview"]),
-    ("requires", &["intents", "dependencies"]),
+    ("requires", &["intents", "dependencies", "permissions"]),
 ];
 
 /// Moves the keys in a block file's groups (`info`, `search`, `look`,
@@ -213,6 +213,9 @@ pub struct BlockDef {
     pub outputs: IndexMap<String, OutputDef>,
     pub flows: Option<Vec<String>>,
     pub intents: Vec<String>,
+    /// Permissions the bot needs for it, by Discord's flag names: a list, or
+    /// a list per value of one field (`{ action: { kick: ["KickMembers"] } }`).
+    pub permissions: Value,
     pub dependencies: IndexMap<String, String>,
     pub width: Option<f32>,
     pub preview: Option<String>,

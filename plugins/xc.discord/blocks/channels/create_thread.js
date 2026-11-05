@@ -18,6 +18,9 @@ module.exports = {
   look: {
     icon: "message",
   },
+  requires: {
+    permissions: ["CreatePublicThreads", "CreatePrivateThreads"],
+  },
   fields: {
     from: { type: "select", pin: false, default: "message", choices: FROM, description: "Where the thread starts." },
     message: { type: "discord.message", pin: "only", required: true, show: { from: ["message"] }, description: "The message to start it from." },
@@ -28,7 +31,7 @@ module.exports = {
     reason: { type: "text", default: "", advanced: true, description: "Shown in the audit log." },
   },
   outputs: {
-    thread: { type: "discord.channel", description: "The new thread. Send Message › Send to channel posts in it." },
+    thread: { type: "discord.thread", description: "The new thread. Send Message › Send to channel posts in it." },
   },
   async run({ fields: f }) {
     const { ChannelType } = require("discord.js");

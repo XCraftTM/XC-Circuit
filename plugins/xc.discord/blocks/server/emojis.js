@@ -17,6 +17,14 @@ module.exports = {
   look: {
     icon: "message",
   },
+  requires: {
+    permissions: {
+      action: {
+        create: ["ManageGuildExpressions"],
+        delete: ["ManageGuildExpressions"],
+      },
+    },
+  },
   fields: {
     action: { type: "select", pin: false, default: "list", choices: ACTIONS, description: "What to do." },
     server: { type: "discord.guild", pin: "only", required: true, description: "The server." },

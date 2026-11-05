@@ -28,6 +28,9 @@ module.exports = {
   look: {
     icon: "plug",
   },
+  requires: {
+    permissions: ["ManageWebhooks"],
+  },
   fields: {
     action: { type: "select", pin: false, default: "create", choices: ACTIONS, description: "What to do." },
     where: { type: "select", pin: false, default: "channel", choices: WHERE, show: { action: ["list"] }, description: "Which webhooks to list." },
@@ -39,10 +42,10 @@ module.exports = {
     avatar: { type: "text", default: "", show: { action: ["create", "edit"] }, label: "Avatar URL", description: "Its picture. Empty when changing = keep." },
   },
   outputs: {
-    webhook: { type: "object", description: "The created or changed webhook." },
+    webhook: { type: "discord.webhook", description: "The created or changed webhook." },
     url: { type: "text", description: "Its URL (keep it secret: anyone with it can post)." },
     list: { type: "list<object>", description: "For lists: each id, name, url, channelId, avatar and creator." },
-    webhooks: { type: "list<object>", description: "For lists: the webhook objects." },
+    webhooks: { type: "list<discord.webhook>", description: "For lists: the webhook objects." },
   },
   async run({ fields: f, ctx }) {
     const client = ctx.discord.client;

@@ -18,6 +18,14 @@ module.exports = {
   look: {
     icon: "layers",
   },
+  requires: {
+    permissions: {
+      action: {
+        settings: ["ManageGuild"],
+        set: ["ManageGuild"],
+      },
+    },
+  },
   fields: {
     action: { type: "select", pin: false, default: "info", choices: ACTIONS, description: "What to do." },
     server: { type: "discord.guild", pin: "only", required: true, description: "The server." },

@@ -17,6 +17,13 @@ module.exports = {
   look: {
     icon: "send",
   },
+  requires: {
+    permissions: {
+      target: {
+        channel: ["ManageWebhooks"],
+      },
+    },
+  },
   fields: {
     target: { type: "select", pin: false, default: "channel", choices: TARGETS, description: "Where it goes." },
     channel: { type: "discord.channel", pin: "only", required: true, show: { target: ["channel"] }, description: "The channel. The bot needs Manage Webhooks." },

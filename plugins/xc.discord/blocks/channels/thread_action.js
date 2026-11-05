@@ -17,6 +17,19 @@ module.exports = {
   look: {
     icon: "message",
   },
+  requires: {
+    permissions: {
+      action: {
+        archive: ["ManageThreads"],
+        unarchive: ["ManageThreads"],
+        lock: ["ManageThreads"],
+        unlock: ["ManageThreads"],
+        add: ["SendMessagesInThreads"],
+        remove: ["ManageThreads"],
+        rename: ["ManageThreads"],
+      },
+    },
+  },
   fields: {
     thread: { type: "discord.channel", pin: "only", required: true, description: "The thread." },
     action: { type: "select", pin: false, default: "archive", choices: ACTIONS, description: "What to do." },
@@ -25,7 +38,7 @@ module.exports = {
     reason: { type: "text", default: "", advanced: true, description: "Shown in the audit log." },
   },
   outputs: {
-    thread: { type: "discord.channel", description: "The same thread." },
+    thread: { type: "discord.thread", description: "The same thread." },
   },
   async run({ fields: f }) {
     const t = f.thread;

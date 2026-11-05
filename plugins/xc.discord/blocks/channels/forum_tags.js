@@ -30,6 +30,15 @@ module.exports = {
   look: {
     icon: "tag",
   },
+  requires: {
+    permissions: {
+      action: {
+        add: ["ManageChannels"],
+        remove: ["ManageChannels"],
+        apply: ["ManageThreads"],
+      },
+    },
+  },
   fields: {
     action: { type: "select", pin: false, default: "apply", choices: ACTIONS, description: "What to do." },
     forum: { type: "discord.channel?", pin: "only", show: { action: ["list", "add", "remove"] }, description: "The forum channel." },

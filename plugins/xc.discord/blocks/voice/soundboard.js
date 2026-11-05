@@ -28,6 +28,13 @@ module.exports = {
     icon: "bolt",
   },
   requires: {
+    permissions: {
+      action: {
+        play: ["Connect", "Speak", "UseSoundboard"],
+        create: ["ManageGuildExpressions"],
+        delete: ["ManageGuildExpressions"],
+      },
+    },
     intents: ["Guilds", "GuildVoiceStates", "GuildExpressions"],
   },
   fields: {

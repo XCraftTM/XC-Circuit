@@ -18,6 +18,17 @@ module.exports = {
   look: {
     icon: "clock",
   },
+  requires: {
+    permissions: {
+      action: {
+        create: ["ManageEvents"],
+        edit: ["ManageEvents"],
+        start: ["ManageEvents"],
+        end: ["ManageEvents"],
+        delete: ["ManageEvents"],
+      },
+    },
+  },
   fields: {
     action: { type: "select", pin: false, default: "create", choices: ACTIONS, description: "What to do." },
     server: { type: "discord.guild", pin: "only", required: true, show: { action: ["create", "list"] }, description: "The server." },

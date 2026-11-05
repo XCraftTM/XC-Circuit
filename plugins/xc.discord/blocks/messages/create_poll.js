@@ -15,6 +15,9 @@ module.exports = {
   look: {
     icon: "scale",
   },
+  requires: {
+    permissions: ["SendMessages", "SendPolls"],
+  },
   fields: {
     channel: { type: "discord.channel", pin: "only", required: true, description: "Where to post it." },
     question: { type: "text", required: true, default: "What do you think?", description: "The question (up to 300 characters)." },
@@ -24,6 +27,7 @@ module.exports = {
   },
   outputs: {
     message: { type: "discord.message", description: "The poll's message." },
+    poll: { type: "discord.poll?", description: "The poll: its question, answers and votes." },
   },
   async run({ fields: f }) {
     const answers = String(f.answers || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 10).map((line) => {
@@ -34,6 +38,6 @@ module.exports = {
     const message = await f.channel.send({
       poll: { question: { text: String(f.question).slice(0, 300) }, answers, duration: Math.max(1, Math.min(768, Math.floor(f.hours || 24))), allowMultiselect: Boolean(f.multiple) },
     });
-    return { message };
+    return { message, poll: message.poll ?? null };
   },
 };

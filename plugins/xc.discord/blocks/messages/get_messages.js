@@ -15,6 +15,9 @@ module.exports = {
   look: {
     icon: "message",
   },
+  requires: {
+    permissions: ["ReadMessageHistory"],
+  },
   fields: {
     channel: { type: "discord.channel", pin: "only", required: true, description: "The channel." },
     count: { type: "number", default: 50, min: 1, max: 1000, step: 1, description: "How many (up to 1000, read 100 at a time)." },

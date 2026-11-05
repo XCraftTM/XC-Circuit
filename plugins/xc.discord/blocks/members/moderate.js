@@ -26,6 +26,20 @@ module.exports = {
   look: {
     icon: "shield",
   },
+  requires: {
+    permissions: {
+      action: {
+        timeout: ["ModerateMembers"],
+        untimeout: ["ModerateMembers"],
+        kick: ["KickMembers"],
+        ban: ["BanMembers"],
+        unban: ["BanMembers"],
+        banId: ["BanMembers"],
+        removeRole: ["ManageRoles"],
+        nickname: ["ManageNicknames"],
+      },
+    },
+  },
   fields: {
     action: { type: "select", pin: false, default: "timeout", choices: ACTIONS, description: "What happens to the member: time out, kick, ban, unban or remove a role." },
     member: { type: "discord.member", pin: "only", required: true, description: "Who to moderate.", show: { action: ["timeout", "untimeout", "kick", "ban", "removeRole", "nickname"] } },

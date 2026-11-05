@@ -283,7 +283,7 @@ const BLOCK_GROUPS = {
   info: ["name", "description", "author", "version", "docs", "deprecated"],
   search: ["category", "aliases", "tags"],
   look: ["icon", "width", "preview"],
-  requires: ["intents", "dependencies"],
+  requires: ["intents", "dependencies", "permissions"],
 };
 
 /** Moves the keys in a block's groups (`info`, `search`, …) to the top. */
@@ -701,13 +701,30 @@ function coerce(value, type) {
 function describeError(err, node) {
   const e = err || {};
   return {
-    message: String(e.message || e),
+    message: explainError(e, node) || String(e.message || e),
     code: e.code ?? e.status ?? null,
     block: node ? node.def.name || node.blockId : null,
     node: node ? node.id : null,
     workspace: node ? node.graph.name : null,
     stack: e.stack || null,
   };
+}
+
+/**
+ * A clearer message from the bot's library (`explainError(err, def, values)`),
+ * such as which permission the bot is missing; null when none has one.
+ */
+function explainError(err, node) {
+  const rt = node?.graph?.rt;
+  if (!rt) return null;
+  for (const api of rt.libs.values()) {
+    if (typeof api?.explainError !== "function") continue;
+    try {
+      const better = api.explainError(err, node.def, node.inline());
+      if (better) return better;
+    } catch {}
+  }
+  return null;
 }
 
 /** Every store, so pending changes can be written when the process ends. */

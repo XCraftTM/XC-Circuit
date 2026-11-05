@@ -65,6 +65,9 @@ module.exports = {
   look: {
     icon: "tag",
   },
+  requires: {
+    permissions: ["ManageRoles"],
+  },
   fields: {
     server: { type: "discord.guild", pin: "only", required: true, description: "Where to create it." },
     name: { type: "text", required: true, default: "New role", description: "The role's name." },

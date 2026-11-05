@@ -23,6 +23,13 @@ module.exports = {
   look: {
     icon: "send",
   },
+  requires: {
+    permissions: {
+      mode: {
+        Message: ["ViewChannel", "SendMessages", "EmbedLinks", "AttachFiles"],
+      },
+    },
+  },
   fields: {
     mode: { type: "select", pin: false, default: "reply", choices: MODES, description: "What kind of message to send." },
     format: {

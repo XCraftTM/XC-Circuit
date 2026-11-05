@@ -15,6 +15,9 @@ module.exports = {
   look: {
     icon: "trash",
   },
+  requires: {
+    permissions: ["ManageRoles"],
+  },
   fields: {
     role: { type: "discord.role", pin: "only", required: true, description: "The role to delete." },
     reason: { type: "text", default: "", advanced: true, description: "Shown in the audit log." },

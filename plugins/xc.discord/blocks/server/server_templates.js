@@ -19,6 +19,9 @@ module.exports = {
   look: {
     icon: "copy",
   },
+  requires: {
+    permissions: ["ManageGuild"],
+  },
   fields: {
     action: { type: "select", pin: false, default: "list", choices: ACTIONS, description: "What to do." },
     server: { type: "discord.guild?", pin: "only", show: { action: ["list", "create", "sync", "delete"] }, description: "The server." },

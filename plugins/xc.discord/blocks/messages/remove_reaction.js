@@ -15,6 +15,9 @@ module.exports = {
   look: {
     icon: "message",
   },
+  requires: {
+    permissions: ["ManageMessages"],
+  },
   fields: {
     message: { type: "discord.message", pin: "only", required: true, description: "The message." },
     emoji: { type: "text", default: "", description: "The emoji. Empty removes every reaction." },

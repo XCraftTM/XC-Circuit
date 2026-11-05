@@ -15,6 +15,9 @@ module.exports = {
   look: {
     icon: "message",
   },
+  requires: {
+    permissions: ["AddReactions", "ReadMessageHistory"],
+  },
   fields: {
     message: { type: "discord.message", pin: "only", required: true, description: "The message to react to." },
     emoji: { type: "text", required: true, default: "👍", description: "An emoji such as 👍 or <:name:id>." },

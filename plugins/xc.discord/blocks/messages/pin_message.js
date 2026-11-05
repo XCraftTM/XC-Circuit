@@ -17,6 +17,9 @@ module.exports = {
   look: {
     icon: "message",
   },
+  requires: {
+    permissions: ["PinMessages"],
+  },
   fields: {
     message: { type: "discord.message", pin: "only", required: true, description: "The message." },
     action: { type: "select", pin: false, default: "pin", choices: ACTIONS, description: "Pin or unpin." },

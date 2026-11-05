@@ -15,6 +15,9 @@ module.exports = {
   look: {
     icon: "trash",
   },
+  requires: {
+    permissions: ["ManageChannels"],
+  },
   fields: {
     channel: { type: "discord.channel", pin: "only", required: true, description: "The channel to delete." },
     after: { type: "number", default: 0, min: 0, label: "After (s)", description: "Wait this many seconds first (to let people read a last message)." },

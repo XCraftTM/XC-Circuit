@@ -17,6 +17,18 @@ module.exports = {
   look: {
     icon: "bolt",
   },
+  requires: {
+    permissions: {
+      action: {
+        move: ["MoveMembers"],
+        disconnect: ["MoveMembers"],
+        mute: ["MuteMembers"],
+        unmute: ["MuteMembers"],
+        deafen: ["DeafenMembers"],
+        undeafen: ["DeafenMembers"],
+      },
+    },
+  },
   fields: {
     member: { type: "discord.member", pin: "only", required: true, description: "Who (must be in a voice channel)." },
     action: { type: "select", pin: false, default: "move", choices: ACTIONS, description: "What to do." },

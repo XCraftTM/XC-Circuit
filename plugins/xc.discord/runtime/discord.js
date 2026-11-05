@@ -17,7 +17,7 @@ module.exports = {
     const client = new Client({ intents, partials: [Partials.Channel, Partials.Message, Partials.Reaction], ...sharding });
     rt.log.info(`Intents: ${names.length ? names.join(", ") : "Guilds"}`);
     if (sharding.shards) rt.log.info(`Shards: ${sharding.shardCount ?? "chosen by Discord"}`);
-    return { client, music: createMusic(rt, client) };
+    return { client, music: createMusic(rt, client), explainError };
   },
 
   async start(rt, api) {
@@ -58,6 +58,53 @@ function shardOptions(setting) {
 }
 
 module.exports.shardOptions = shardOptions;
+
+/** Discord's names for permissions, where the flag name doesn't read well. */
+const PERMISSION_NAMES = {
+  ManageGuild: "Manage Server",
+  ManageGuildExpressions: "Manage Expressions",
+  ModerateMembers: "Timeout Members",
+  CreateInstantInvite: "Create Invite",
+  ViewChannel: "View Channels",
+  UseExternalStickers: "Use External Stickers",
+  SendPolls: "Create Polls",
+};
+const permissionName = (flag) => PERMISSION_NAMES[flag] || String(flag).replace(/([a-z])([A-Z])/g, "$1 $2");
+
+/**
+ * The permissions a block needs (its `requires.permissions`): a list, or a
+ * list per value of one of its fields ({ action: { kick: [...] } }).
+ */
+function neededPermissions(def, values) {
+  const p = def?.permissions;
+  if (Array.isArray(p)) return p;
+  if (p && typeof p === "object") {
+    for (const [field, byValue] of Object.entries(p)) {
+      const list = byValue?.[values?.[field]];
+      if (Array.isArray(list)) return list;
+    }
+  }
+  return [];
+}
+
+/**
+ * Discord's "Missing Permissions" and "Missing Access" errors in plain words:
+ * which permission the bot needs here, and where to give it.
+ */
+function explainError(err, def, values) {
+  const code = Number(err?.code);
+  if (code === 50001) {
+    return "The bot can't see this channel or server. Give its role the View Channels permission there (Server Settings › Roles, or the channel's permissions).";
+  }
+  if (code !== 50013) return null;
+  const needed = neededPermissions(def, values).map(permissionName);
+  const what = needed.length
+    ? `The bot is missing a permission for this. It needs ${needed.length > 1 ? "these" : "this"}: ${needed.join(", ")}.`
+    : "The bot is missing a permission for this.";
+  return `${what} Give its role ${needed.length > 1 ? "them" : "it"} in Server Settings › Roles (or in the channel's permissions), and keep its role above the roles of the members it changes.`;
+}
+module.exports.explainError = explainError;
+module.exports.neededPermissions = neededPermissions;
 
 /**
  * The music player the music blocks share, made with discord-player the first

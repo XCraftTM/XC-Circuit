@@ -24,6 +24,15 @@ module.exports = {
   look: {
     icon: "hash",
   },
+  requires: {
+    permissions: {
+      action: {
+        clone: ["ManageChannels"],
+        sync: ["ManageChannels", "ManageRoles"],
+        follow: ["ManageWebhooks"],
+      },
+    },
+  },
   fields: {
     action: { type: "select", pin: false, default: "list", choices: ACTIONS, description: "What to do." },
     server: { type: "discord.guild?", pin: "only", show: { action: ["list"] }, description: "The server." },

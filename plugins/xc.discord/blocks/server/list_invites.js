@@ -15,6 +15,9 @@ module.exports = {
   look: {
     icon: "user-plus",
   },
+  requires: {
+    permissions: ["ManageGuild"],
+  },
   fields: {
     server: { type: "discord.guild", pin: "only", required: true, description: "The server." },
   },

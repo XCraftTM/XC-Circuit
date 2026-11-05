@@ -17,6 +17,9 @@ module.exports = {
   look: {
     icon: "shield",
   },
+  requires: {
+    permissions: ["ManageGuild"],
+  },
   fields: {
     action: { type: "select", pin: false, default: "create", choices: ACTIONS, description: "What to do." },
     server: { type: "discord.guild", pin: "only", required: true, description: "The server." },

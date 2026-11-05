@@ -17,6 +17,9 @@ module.exports = {
   look: {
     icon: "hash",
   },
+  requires: {
+    permissions: ["ManageChannels"],
+  },
   fields: {
     server: { type: "discord.guild", pin: "only", required: true, description: "Where to create it." },
     type: { type: "select", pin: false, default: "text", choices: TYPES, description: "What kind of channel." },

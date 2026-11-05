@@ -15,6 +15,9 @@ module.exports = {
   look: {
     icon: "trash",
   },
+  requires: {
+    permissions: ["KickMembers"],
+  },
   fields: {
     server: { type: "discord.guild", pin: "only", required: true, description: "The server." },
     days: { type: "number", default: 30, min: 1, max: 30, description: "Offline for at least this many days." },

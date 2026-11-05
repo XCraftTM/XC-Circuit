@@ -15,6 +15,9 @@ module.exports = {
   look: {
     icon: "tag",
   },
+  requires: {
+    permissions: ["ManageRoles"],
+  },
   fields: {
     member: { type: "discord.member", pin: "only", required: true, description: "The member who loses the role." },
     role: { type: "any", required: true, default: "", label: "Role", description: "A role, or its id." },

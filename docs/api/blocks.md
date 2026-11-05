@@ -78,6 +78,9 @@ The keys inside `info`, `search`, `look` and `requires` may also stand at the to
 | --- | --- |
 | `intents` | Discord gateway intents the block needs, such as `GuildMessages` or `GuildMembers`. The bot asks Discord for the intents of the blocks used. |
 | `dependencies` | npm packages the block's code needs: `{ "node-fetch": "^3.3.0" }`. They're installed before Run and listed in exports. Load them with [`ctx.require`](./ctx#require). |
+| `permissions` | The bot's permissions the block needs, by the platform's flag names: `["ManageRoles"]`, or a list per value of one field: `{ action: { kick: ["KickMembers"], ban: ["BanMembers"] } }`. When the platform answers "Missing Permissions", the error names them. |
+
+Discord's privileged intents (`GuildMembers`, `GuildPresences`, `MessageContent`) have to be turned on for the bot in the developer portal; Bot settings lists the ones the project's blocks need, with a link there.
 
 ## run
 

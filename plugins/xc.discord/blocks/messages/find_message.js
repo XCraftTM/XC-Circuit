@@ -15,6 +15,9 @@ module.exports = {
   look: {
     icon: "message",
   },
+  requires: {
+    permissions: ["ReadMessageHistory"],
+  },
   fields: {
     message: { type: "text", required: true, default: "", label: "Id or link", description: "A message id, or a link such as https://discord.com/channels/…/…/…" },
     channel: { type: "discord.channel?", pin: "only", description: "Where it is (not needed for a link)." },

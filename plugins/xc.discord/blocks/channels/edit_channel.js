@@ -18,6 +18,9 @@ module.exports = {
   look: {
     icon: "hash",
   },
+  requires: {
+    permissions: ["ManageChannels"],
+  },
   fields: {
     channel: { type: "discord.channel", pin: "only", required: true, description: "The channel to change." },
     name: { type: "text", default: "", description: "New name. Empty keeps it." },

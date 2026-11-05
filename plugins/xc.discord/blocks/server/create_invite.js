@@ -15,6 +15,9 @@ module.exports = {
   look: {
     icon: "user-plus",
   },
+  requires: {
+    permissions: ["CreateInstantInvite"],
+  },
   fields: {
     channel: { type: "discord.channel", pin: "only", required: true, description: "Where the invite leads." },
     hours: { type: "number", default: 24, min: 0, max: 168, description: "How long it works. 0 = forever." },
@@ -26,9 +29,10 @@ module.exports = {
   outputs: {
     url: { type: "text", description: "The invite link." },
     code: { type: "text", description: "Its code." },
+    invite: { type: "discord.invite", description: "The invite itself: its uses, expiry and more." },
   },
   async run({ fields: f }) {
     const invite = await f.channel.createInvite({ maxAge: Math.round((f.hours || 0) * 3600), maxUses: Math.floor(f.uses || 0), temporary: Boolean(f.temporary), unique: Boolean(f.unique), reason: f.reason || undefined });
-    return { url: invite.url, code: invite.code };
+    return { url: invite.url, code: invite.code, invite };
   },
 };

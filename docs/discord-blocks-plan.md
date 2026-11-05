@@ -204,10 +204,7 @@ The blocks below are chosen so these common bots can be built without code:
 
 ## Not built yet
 
-- **Dedicated pin types** for threads, voice channels, invites, polls and webhooks: these use
-  Channel and Object pins for now.
-- **Privileged intents in Bot settings:** a list with a link to turn them on in the developer
-  portal (today the login error explains it).
-- **Friendlier errors** that name the missing permission for every block.
-- **Creating stickers** (listing them works).
-- **Components V2 in modals** (labels, file uploads and select menus in Show Modal).
+Everything planned here is built. Since this list was written: dedicated pin types for threads,
+voice channels, invites, polls and webhooks; privileged intents in Bot settings; errors that
+name the missing permission; creating stickers; and Components V2 in forms (Form Field, File
+Upload and Form Text, and select menus in Show Modal).

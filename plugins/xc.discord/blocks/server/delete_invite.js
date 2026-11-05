@@ -15,6 +15,9 @@ module.exports = {
   look: {
     icon: "trash",
   },
+  requires: {
+    permissions: ["ManageChannels"],
+  },
   fields: {
     code: { type: "text", default: "", label: "Invite", description: "The invite's code or link, such as discord.gg/abc123." },
     reason: { type: "text", template: true, default: "", description: "Shown in the audit log." },

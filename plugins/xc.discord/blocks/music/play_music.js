@@ -37,6 +37,7 @@ module.exports = {
     icon: "bolt",
   },
   requires: {
+    permissions: ["ViewChannel", "Connect", "Speak"],
     intents: ["Guilds", "GuildVoiceStates"],
     dependencies: MUSIC,
   },
