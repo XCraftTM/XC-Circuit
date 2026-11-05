@@ -7,6 +7,9 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 ### Added
 - **Updates install themselves** (from the Windows Setup, or an AppImage): Update and restart downloads the new version, checks it, installs it as XC Circuit closes and opens it again. Other kinds still open the release page.
 
+### Fixed
+- The update window shows what's new formatted (headings, lists, bold), not as raw Markdown.
+
 ## 0.1.1
 
 ### Fixed

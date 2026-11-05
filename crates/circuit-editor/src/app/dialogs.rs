@@ -161,8 +161,11 @@ impl CircuitApp {
                 dialog::Part::Body => {
                     dialog::section(ui, &theme, t!("What's new"));
                     egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
-                        let notes = if r.notes.trim().is_empty() { t!("The release has no notes.").to_string() } else { r.notes.clone() };
-                        ui.label(RichText::new(notes).size(12.5).color(theme.text));
+                        if r.notes.trim().is_empty() {
+                            ui.label(RichText::new(t!("The release has no notes.")).size(12.5).color(theme.text_muted));
+                        } else {
+                            crate::ui::notes::show(ui, &theme, &r.notes, 12.5);
+                        }
                     });
                 }
                 dialog::Part::Footer => {
