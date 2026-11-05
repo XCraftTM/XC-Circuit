@@ -8,9 +8,12 @@ The first public release.
 
 ### Building bots
 - A canvas editor for **Discord** (discord.js) and **Fluxer** (fluxer.js) bots: events start a flow, actions run in order along green wires, values are worked out when an action needs them.
-- **205 blocks**: messages, embeds and Components V2 layouts, slash commands with options and subcommands, buttons, select menus and modals, moderation, roles, channels, members, voice and music, stored data, variables, timers, web requests, JSON, text, numbers, lists, dates, and Run Code / Use Method for anything else.
+- **242 blocks**: messages, embeds and Components V2 layouts, slash commands with options and subcommands, buttons, select menus and modals, moderation, roles, channels, members, voice and music, stored data, variables, timers, web requests, JSON, text, numbers, lists, dates, and Run Code / Use Method for anything else.
 - **JavaScript in every text** with `${…}`, with completion for the values earlier blocks give and their members.
 - **Try Zones** that retry, time out and catch errors; an On Error event.
+- **Forms** with text boxes, menus, file uploads and text (Components V2), and Modal Submitted gives every answer.
+- **Fluxer bots** with 62 blocks: roles, bans, emojis and stickers, webhooks, invites, threads, channel permissions, reactions, Wait For, the audit log, and events for bans, roles, channels, threads, members, voice, typing and more.
+- **Clear errors** when the bot is missing a permission: they say which one, and where to give it. Bot settings lists the privileged intents your blocks need, with a link to turn them on.
 - **Notes** to explain and group blocks: title, description, colour, move (with the blocks inside, or alone), resize, copy.
 - **Embed, Layout and Slash Command Builders** with live Discord previews and Discord's own JSON.
 - **Snap to grid**, **align and spread** selected blocks, **favourite and recent** blocks in the picker.

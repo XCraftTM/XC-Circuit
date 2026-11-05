@@ -241,7 +241,7 @@ fn bench_frame_drops() {
     save("frame_drops", Value::Array(rows));
 }
 
-/// Starting: loading every plugin (205 blocks compiled in QuickJS), opening
+/// Starting: loading every plugin (every block compiled in QuickJS), opening
 /// DemoBot, the first frames, building a bot to run and saving.
 #[test]
 #[ignore]
@@ -281,7 +281,7 @@ fn bench_startup() {
 
     println!("\nStartup and project work\n| step | ms |\n|---|---|");
     for (step, d) in [
-        ("Load all plugins (205 blocks, QuickJS)", load),
+        ("Load all plugins (every block, QuickJS)", load),
         ("Open DemoBot", open),
         ("First frame of a 400-block canvas", first),
         ("Next frames (fonts and shapes cached)", later),
@@ -322,7 +322,7 @@ fn bench_tasks() {
         start.elapsed()
     }));
     let mut ed = editor();
-    add("Load all plugins (read, compile 205 blocks)".into(), best(3, || {
+    add(format!("Load all plugins (read, compile {} blocks)", ed.reg.blocks.len()), best(3, || {
         let start = Instant::now();
         let _ = Editor::new(vec![root().join("plugins")], None).unwrap();
         start.elapsed()
