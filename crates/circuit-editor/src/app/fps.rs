@@ -56,6 +56,8 @@ pub struct Run {
     frames: usize,
     /// When a workspace was asked to open, until its first frame is done.
     opening: Option<Instant>,
+    /// Whether this scene's starting view (100%, top-left) is set.
+    view_set: bool,
     opened_ms: f64,
     results: Vec<Value>,
     /// When it started: it gives up after `GIVE_UP`, so it never hangs.
@@ -97,6 +99,7 @@ impl Run {
             cpu: Vec::new(),
             frames: 0,
             opening: None,
+            view_set: false,
             opened_ms: 0.0,
             results: Vec::new(),
             began: Instant::now(),
@@ -113,9 +116,6 @@ impl Run {
         let now = Instant::now();
         let interval = self.last_frame.map(|t| (now - t).as_secs_f64() * 1000.0);
         self.last_frame = Some(now);
-        if let Some(asked) = self.opening.take() {
-            self.opened_ms = (now - asked).as_secs_f64() * 1000.0;
-        }
 
         if self.began.elapsed() > GIVE_UP {
             eprintln!("fps: gave up after {} s", GIVE_UP.as_secs());
@@ -125,7 +125,9 @@ impl Run {
             return false;
         }
         let Some((w, s)) = self.at else {
-            // Give the window a moment, then start.
+            // The same window size every time; give it a moment, then start.
+            ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(false));
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(1440.0, 900.0)));
             if app.ed.project.is_some() && self.scene_start.elapsed() > Duration::from_secs(1) {
                 self.start(app, 0, 0);
             }
@@ -142,6 +144,26 @@ impl Run {
         }
         let scene = Scene::ALL[s];
         let key = WORKSPACES[w].0;
+        // A canvas makes its view when it's first drawn: by now that frame is done.
+        if let Some(asked) = self.opening
+            && app.ed.views.contains_key(key)
+        {
+            self.opened_ms = (now - asked).as_secs_f64() * 1000.0;
+            self.opening = None;
+        }
+        if !self.view_set
+            && let Some(view) = app.ed.views.get_mut(key)
+        {
+            view.zoom = 1.0;
+            view.offset = egui::vec2(40.0, 40.0);
+            view.initialized = true;
+            self.view_set = true;
+            // Measure from here, with the view in place.
+            self.scene_start = now;
+            self.frames = 0;
+            self.intervals.clear();
+            self.cpu.clear();
+        }
         let t = self.scene_start.elapsed().as_secs_f32();
         if let Some(view) = app.ed.views.get_mut(key) {
             match scene {
@@ -182,10 +204,7 @@ impl Run {
             app.ed.actions.push(Action::OpenWorkspace(key.into()));
             self.opening = Some(Instant::now());
         }
-        if let Some(view) = app.ed.views.get_mut(key) {
-            view.zoom = 1.0;
-            view.offset = egui::vec2(40.0, 40.0);
-        }
+        self.view_set = false;
         eprintln!("fps: {} blocks, {}", WORKSPACES[w].1, Scene::ALL[s].name());
         self.at = Some((w, s));
         self.scene_start = Instant::now();
