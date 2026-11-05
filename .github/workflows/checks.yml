@@ -43,6 +43,15 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # A plugin whose files changed needs a higher version, or apps won't
+      # notice the update (see tools/plugin_updates.py).
+      - name: Plugin versions
+        run: python tools/plugin_updates.py check
+
       - name: Runtime tests
         run: |
           node runtime/test/smoke.js

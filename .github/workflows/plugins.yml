@@ -1,0 +1,71 @@
+# Block updates without an app update: when a bundled plugin's version
+# changes on main, its zip and the index the app reads go on the "plugins"
+# release (a pre-release, so it never counts as an app version). The app
+# offers a plugin there when its version is higher than its own copy.
+# See tools/plugin_updates.py.
+name: Plugins
+
+on:
+  push:
+    branches: [main]
+    paths: ["plugins/**", "tools/plugin_updates.py"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: plugin-updates
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # A plugin whose files changed must have a higher version.
+      - name: Versions
+        run: python tools/plugin_updates.py check
+
+      - name: Pack
+        run: python tools/plugin_updates.py pack dist/plugin-updates
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          if ! gh release view plugins > /dev/null 2>&1; then
+            # The first one is made by hand (Actions › Plugins › Run workflow).
+            if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+              echo "No \"plugins\" release yet: run this workflow by hand once to start publishing block updates."
+              exit 0
+            fi
+            gh release create plugins --prerelease --title "Block updates" \
+              --notes "Updates for the bundled block plugins (Circuit Core, Discord Bot, Fluxer Bot), which XC Circuit downloads by itself. Not an app version: download the app from the latest release."
+          fi
+          # Only when a version changed (or nothing is published yet).
+          if curl -sfL "https://github.com/${GITHUB_REPOSITORY}/releases/download/plugins/index.json" -o published.json; then
+            if python - <<'EOF'
+          import json, sys
+          new = {p["id"]: p["version"] for p in json.load(open("dist/plugin-updates/index.json"))["plugins"]}
+          old = {p["id"]: p["version"] for p in json.load(open("published.json"))["plugins"]}
+          sys.exit(0 if new == old else 1)
+          EOF
+            then
+              echo "No plugin version changed; nothing to publish."
+              exit 0
+            fi
+          fi
+          gh release upload plugins dist/plugin-updates/* --clobber
+          # Zips of versions that aren't in the index any more.
+          keep=$(cd dist/plugin-updates && ls)
+          for asset in $(gh release view plugins --json assets --jq '.assets[].name'); do
+            echo "$keep" | grep -qx "$asset" || gh release delete-asset plugins "$asset" --yes
+          done
+          python -c "import json; [print(p['id'], p['version']) for p in json.load(open('dist/plugin-updates/index.json'))['plugins']]"
