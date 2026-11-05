@@ -103,7 +103,8 @@ pub fn set_language(reg: &Registry, code: &str) {
 /// Writes a translation file with every interface text to fill in. Entries of
 /// `base` (a language being extended) are filled in already; the rest are
 /// empty and show in English until translated.
-pub fn template(reg: &Registry, code: &str, name: &str, english_name: &str) -> String {
+pub fn template(ed: &crate::editor::Editor, code: &str, name: &str, english_name: &str) -> String {
+    let reg = &ed.reg;
     let base = reg.locales.iter().find(|l| l.meta.code == code);
     let q = |s: &str| toml_quote(s);
     let mut out = String::new();
@@ -115,6 +116,8 @@ pub fn template(reg: &Registry, code: &str, name: &str, english_name: &str) -> S
     out.push_str("[strings]\n");
     let mut strings: Vec<String> = UI_STRINGS.iter().map(|s| s.to_string()).collect();
     for mode in &reg.modes {
+        strings.push(mode.name.clone());
+        strings.push(mode.description.clone());
         strings.extend(mode.categories.iter().map(|c| c.name.clone()));
         for spec in mode.settings.values() {
             for key in ["group", "label", "description", "placeholder", "patternHint"] {
@@ -124,8 +127,13 @@ pub fn template(reg: &Registry, code: &str, name: &str, english_name: &str) -> S
             }
         }
     }
+    // The starters New Project offers.
+    for starter in crate::new_project::templates(ed.examples_dir.as_deref(), reg) {
+        strings.push(starter.name);
+        strings.push(starter.description);
+    }
     let mut seen = std::collections::HashSet::new();
-    for s in strings.into_iter().filter(|s| seen.insert(s.clone())) {
+    for s in strings.into_iter().filter(|s| !s.trim().is_empty() && seen.insert(s.clone())) {
         let have = base.and_then(|b| b.strings.get(&s)).map(String::as_str).unwrap_or("");
         out.push_str(&format!("{} = {}\n", q(&s), q(have)));
     }
@@ -150,7 +158,7 @@ fn toml_quote(s: &str) -> String {
 
 /// Creates a plugin that holds a new translation in the user's plugin
 /// folder and returns the file to edit. An existing file is kept.
-pub fn create_translation(plugins_dir: &Path, reg: &Registry, code: &str, name: &str, english_name: &str) -> anyhow::Result<PathBuf> {
+pub fn create_translation(plugins_dir: &Path, ed: &crate::editor::Editor, code: &str, name: &str, english_name: &str) -> anyhow::Result<PathBuf> {
     let code = code.trim();
     anyhow::ensure!(!code.is_empty() && code.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'), "a language code is letters such as de, fr or pt-BR");
     let dir = plugins_dir.join(format!("translation-{}", code.to_lowercase()));
@@ -167,7 +175,7 @@ pub fn create_translation(plugins_dir: &Path, reg: &Registry, code: &str, name: 
         toml_quote(&format!("XC Circuit in {title}")),
     );
     std::fs::write(dir.join("plugin.toml"), manifest)?;
-    std::fs::write(&file, template(reg, code, name, english_name))?;
+    std::fs::write(&file, template(ed, code, name, english_name))?;
     Ok(file)
 }
 
@@ -263,14 +271,22 @@ mod tests {
         }
     }
 
-    /// Every interface text, the Build Modes' ones included, has German.
+    /// Every interface text, the Build Modes' and starters' ones included,
+    /// has German, and German has nothing the app no longer shows.
     #[test]
     fn german_covers_the_build_modes() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let ed = crate::editor::Editor::new(vec![root.join("plugins")], None).unwrap();
-        let full: LocaleDef = toml::from_str(&template(&ed.reg, "de", "Deutsch", "German")).unwrap();
+        let mut ed = crate::editor::Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.examples_dir = Some(root.join("examples"));
+        let full: LocaleDef = toml::from_str(&template(&ed, "de", "Deutsch", "German")).unwrap();
         let strings: Vec<&String> = full.strings.iter().filter(|(_, v)| v.trim().is_empty()).map(|(k, _)| k).collect();
         assert!(strings.is_empty(), "German is missing texts: {strings:?}");
+        // And nothing it translates is gone from the app.
+        let fresh: LocaleDef = toml::from_str(&template(&ed, "xx", "Test", "Test")).unwrap();
+        let path = root.join("plugins/xc.core/locales/de.toml");
+        let de: LocaleDef = toml::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let gone: Vec<&String> = de.strings.keys().filter(|k| !fresh.strings.contains_key(*k)).collect();
+        assert!(gone.is_empty(), "de.toml translates texts the app no longer has: {gone:?}");
     }
 
     #[test]
@@ -295,25 +311,25 @@ mod tests {
         let ed = crate::editor::Editor::new(vec![root.join("plugins")], None).unwrap();
         let code = std::env::var("XC_TEMPLATE_CODE").unwrap_or_else(|_| "de".into());
         let out = std::env::var("XC_TEMPLATE_OUT").expect("XC_TEMPLATE_OUT");
-        std::fs::write(out, template(&ed.reg, &code, "", "")).unwrap();
+        std::fs::write(out, template(&ed, &code, "", "")).unwrap();
     }
 
     #[test]
     fn templates_list_everything_and_keep_existing_entries() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let ed = crate::editor::Editor::new(vec![root.join("plugins")], None).unwrap();
-        let fresh: LocaleDef = toml::from_str(&template(&ed.reg, "fr", "Français", "French")).unwrap();
+        let fresh: LocaleDef = toml::from_str(&template(&ed, "fr", "Français", "French")).unwrap();
         assert_eq!(fresh.meta.code, "fr");
         assert!(fresh.strings.len() >= UI_STRINGS.len(), "every interface text is listed");
         assert!(fresh.strings.values().all(String::is_empty));
-        let german: LocaleDef = toml::from_str(&template(&ed.reg, "de", "Deutsch", "German")).unwrap();
+        let german: LocaleDef = toml::from_str(&template(&ed, "de", "Deutsch", "German")).unwrap();
         assert_eq!(german.strings["Save and close"], "Speichern und schließen", "extending a language starts from what it has");
 
         let dir = std::env::temp_dir().join(format!("xc-translation-{}", std::process::id()));
-        let file = create_translation(&dir, &ed.reg, "fr", "Français", "French").unwrap();
+        let file = create_translation(&dir, &ed, "fr", "Français", "French").unwrap();
         assert!(file.ends_with("translation-fr/locales/fr.toml"));
         assert!(dir.join("translation-fr/plugin.toml").is_file());
-        assert!(create_translation(&dir, &ed.reg, "../x", "", "").is_err());
+        assert!(create_translation(&dir, &ed, "../x", "", "").is_err());
         let _ = std::fs::remove_dir_all(dir);
     }
 }

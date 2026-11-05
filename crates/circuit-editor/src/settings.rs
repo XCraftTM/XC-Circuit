@@ -714,7 +714,7 @@ fn new_translation(ctx: &egui::Context, ed: &mut Editor, theme: &Theme, view: &m
         let dir = crate::bot::app_data_dir().join("plugins");
         let fallback = code.trim().to_string();
         let name = if name.trim().is_empty() { fallback.clone() } else { name.trim().to_string() };
-        match crate::i18n::create_translation(&dir, &ed.reg, code.trim(), &name, english.trim()) {
+        match crate::i18n::create_translation(&dir, ed, code.trim(), &name, english.trim()) {
             Ok(file) => {
                 ed.log(crate::editor::Level::Success, tf!("Translation file ready: {file}", file = file.display()));
                 let _ = open::that(&file);

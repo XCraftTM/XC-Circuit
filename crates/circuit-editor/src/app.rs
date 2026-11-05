@@ -80,7 +80,6 @@ const KEY_NATIVE_STORAGE: &str = "native_storage";
 pub struct CircuitApp {
     ed: Editor,
     dock: DockState<Tab>,
-    examples_dir: Option<PathBuf>,
     title: String,
     show_about: bool,
     /// File › New Project: the starter to begin from (0 = empty), while choosing.
@@ -169,6 +168,7 @@ impl CircuitApp {
         }
 
         let examples_dir = bundled_root.as_ref().map(|r| r.join("examples"));
+        ed.examples_dir = examples_dir.clone();
         let bundled_plugins = bundled_root.map(|r| r.join("plugins"));
         // The last project; the example on the very first start; nothing (the
         // start page) when the last one was closed.
@@ -227,7 +227,6 @@ impl CircuitApp {
         CircuitApp {
             ed,
             dock,
-            examples_dir,
             title: String::new(),
             show_about: false,
             new_project: None,
@@ -371,7 +370,7 @@ impl CircuitApp {
             .filter(|p| p.is_dir())
             .unwrap_or_else(|| {
                 // Next to the open project, unless that is one of the app's examples.
-                let open = self.ed.project.as_ref().map(|p| p.root.as_path()).filter(|r| self.examples_dir.as_ref().is_none_or(|e| !r.starts_with(e)));
+                let open = self.ed.project.as_ref().map(|p| p.root.as_path()).filter(|r| self.ed.examples_dir.as_ref().is_none_or(|e| !r.starts_with(e)));
                 crate::new_project::default_location(open)
             });
         self.new_project = Some(crate::new_project::NewProject::new(&self.ed.reg, location));
@@ -380,7 +379,7 @@ impl CircuitApp {
     fn new_project_chooser(&mut self, ctx: &egui::Context, theme: &crate::theme::Theme) {
         use crate::new_project::Outcome;
         let Some(mut state) = self.new_project.take() else { return };
-        let templates = crate::new_project::templates(self.examples_dir.as_deref(), &self.ed.reg);
+        let templates = crate::new_project::templates(self.ed.examples_dir.as_deref(), &self.ed.reg);
         match crate::new_project::show(ctx, theme, &mut state, &self.ed.reg, &templates) {
             None => self.new_project = Some(state),
             Some(Outcome::Cancel) => {}
@@ -444,7 +443,7 @@ impl CircuitApp {
             Pick::Recent(dir) => self.open_recent(&dir),
             Pick::Forget(path) => self.ed.prefs.forget_project(&path),
             Pick::Example => {
-                if let Some(example) = self.examples_dir.as_deref().and_then(writable_example) {
+                if let Some(example) = self.ed.examples_dir.as_deref().and_then(writable_example) {
                     self.switch_project(&example);
                 }
             }
@@ -689,9 +688,9 @@ impl CircuitApp {
                 }
             });
             ui.menu_button(t!("Help"), |ui| {
-                if self.examples_dir.is_some()
+                if self.ed.examples_dir.is_some()
                     && ui.button(t!("Open Example: DemoBot")).clicked()
-                    && let Some(example) = self.examples_dir.as_deref().and_then(writable_example)
+                    && let Some(example) = self.ed.examples_dir.as_deref().and_then(writable_example)
                 {
                     self.switch_project(&example);
                 }
@@ -918,7 +917,7 @@ impl CircuitApp {
         // The practice project isn't kept.
         self.ed.forget_changes();
         let target = match exit {
-            Exit::DemoBot => self.examples_dir.as_deref().and_then(writable_example),
+            Exit::DemoBot => self.ed.examples_dir.as_deref().and_then(writable_example),
             Exit::Return | Exit::NewProject => tour.before,
         };
         match target {
@@ -1068,7 +1067,7 @@ impl CircuitApp {
         if self.ed.project.is_some() {
             items.push(Item::new(t!("File"), t!("Close Project"), Cmd::CloseProject));
         }
-        if self.examples_dir.is_some() {
+        if self.ed.examples_dir.is_some() {
             items.push(Item::new(t!("Help"), t!("Open Example: DemoBot"), Cmd::OpenExample));
         }
         items.push(Item::new(t!("File"), t!("Reload Plugins"), Cmd::ReloadPlugins));
@@ -1141,7 +1140,7 @@ impl CircuitApp {
             Cmd::NewProject => self.new_project_dialog(),
             Cmd::OpenProject => self.open_project_dialog(),
             Cmd::OpenExample => {
-                if let Some(example) = self.examples_dir.as_deref().and_then(writable_example) {
+                if let Some(example) = self.ed.examples_dir.as_deref().and_then(writable_example) {
                     self.switch_project(&example);
                 }
             }
@@ -1679,6 +1678,7 @@ impl eframe::App for CircuitApp {
             let running = self.bot.state != BotState::Stopped;
             self.sync_dialog_tabs(ui.ctx());
             let focused_tab = self.dock.find_active_focused().map(|(_, t)| t.clone());
+            let has_example = self.ed.examples_dir.as_ref().is_some_and(|e| e.join("DemoBot").is_dir());
             let mut viewer = Viewer {
                 focused_tab,
                 bot: &mut self.bot,
@@ -1693,7 +1693,7 @@ impl eframe::App for CircuitApp {
                 restore: &mut self.restore,
                 asks: Vec::new(),
                 start: &mut self.start,
-                has_example: self.examples_dir.as_ref().is_some_and(|e| e.join("DemoBot").is_dir()),
+                has_example,
                 start_pick: None,
             };
             let size = ui.available_size();

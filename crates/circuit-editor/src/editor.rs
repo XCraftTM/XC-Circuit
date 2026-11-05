@@ -57,6 +57,8 @@ pub struct Editor {
     pub reg: Registry,
     pub engine: BlockEngine,
     pub plugin_dirs: Vec<PathBuf>,
+    /// The bundled `examples` folder (DemoBot and the starters), when found.
+    pub examples_dir: Option<PathBuf>,
     pub theme: Theme,
     pub project: Option<Project>,
     /// Set by every edit, so the history looks for changes on the next
@@ -118,6 +120,7 @@ impl Editor {
         let engine = BlockEngine::new()?;
         let reg = Registry::load(&plugin_dirs, &engine);
         let mut ed = Editor {
+            examples_dir: None,
             reg,
             engine,
             plugin_dirs,
