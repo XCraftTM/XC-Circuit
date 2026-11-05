@@ -123,7 +123,7 @@ mod tests {
     fn zip_of(files: &[(&str, &str)]) -> Cursor<Vec<u8>> {
         let mut out = zip::ZipWriter::new(Cursor::new(Vec::new()));
         for (name, text) in files {
-            out.start_file(*name, zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored)).unwrap();
+            out.start_file(*name, zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated)).unwrap();
             out.write_all(text.as_bytes()).unwrap();
         }
         let mut c = out.finish().unwrap();

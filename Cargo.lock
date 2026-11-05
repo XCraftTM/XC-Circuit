@@ -776,7 +776,6 @@ dependencies = [
  "eframe",
  "egui_dock",
  "egui_extras",
- "flate2",
  "image",
  "indexmap",
  "libloading 0.9.0",
