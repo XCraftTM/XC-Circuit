@@ -48,6 +48,7 @@ export default defineConfig({
         items: [
           { text: "Changelog", link: "/changelog" },
           { text: "Known issues", link: "/known-issues" },
+          { text: "Performance", link: "/performance" },
           { text: "How XC Circuit is made", link: "/made-with-ai" },
           { text: "Report a bug", link: "https://github.com/XCraftTM/XC-Circuit/issues/new?template=bug_report.yml" },
         ],

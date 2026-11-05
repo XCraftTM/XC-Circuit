@@ -53,6 +53,17 @@ Wire events, actions and values on a canvas, run your bot with one click, and ex
 | 🛠️ [Plugin API](https://xcrafttm.github.io/XC-Circuit/api/) | blocks, editor plugins, themes, translations |
 | 📝 [Changelog](CHANGELOG.md) · [Known issues](KNOWN_ISSUES.md) | what's new, what's rough |
 
+## Performance
+
+| | Fast desktop | Everyday computer |
+| --- | --- | --- |
+| A typical bot (up to 100 blocks per workspace), per frame | 1–2 ms | 2–3 ms |
+| Smooth at 60 Hz up to (blocks in one workspace) | 1,600 | 800 |
+| Startup: loading all 205 blocks and opening a bot | 0.2 s | 0.3 s |
+| Exported bot | 200,000 blocks/s | 70,000 blocks/s |
+
+60 Hz needs a frame every 16.7 ms, 120 Hz every 8.3 ms. Details, 4K screens and how to run the benchmarks yourself: **[Performance](https://xcrafttm.github.io/XC-Circuit/performance)**.
+
 ## Made with AI
 
 XC™ Circuit is **designed and directed by XCraftTM and built with AI assistance** (Anthropic's Claude): Claude writes most of the code, docs and bundled art following XCraftTM's decisions, and every feature is tested before release. Your bots and projects are yours, and XC Circuit uses no AI while you build or run them. More: **[How XC Circuit is made](https://xcrafttm.github.io/XC-Circuit/made-with-ai)**.
