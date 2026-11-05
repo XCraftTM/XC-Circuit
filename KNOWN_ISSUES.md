@@ -6,7 +6,7 @@ XC™ Circuit is in **Early Access**: it works and is used for real bots, but so
 
 - **Windows shows "Windows protected your PC"** when you start the installer, because it isn't signed yet. Choose **More info › Run anyway**.
 - **Windows on ARM (ARM64)** builds are made but haven't been tried on ARM hardware yet. The x64 version also runs on ARM devices, a bit slower.
-- **Linux ARM64** packages come once the repository is public.
+- **Linux ARM64** packages are built and pass their tests on ARM machines, but haven't been tried on a real device (such as a Raspberry Pi) yet.
 - **The AppImage** uses your system's GTK 3, ALSA and D-Bus libraries; they're on almost every desktop Linux.
 - **macOS** isn't supported yet.
 

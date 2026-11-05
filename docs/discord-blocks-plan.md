@@ -211,4 +211,3 @@ The blocks below are chosen so these common bots can be built without code:
 - **Friendlier errors** that name the missing permission for every block.
 - **Creating stickers** (listing them works).
 - **Components V2 in modals** (labels, file uploads and select menus in Show Modal).
-- **Music** (voice playback) needs `@discordjs/voice` and ffmpeg; it belongs in its own plugin.
