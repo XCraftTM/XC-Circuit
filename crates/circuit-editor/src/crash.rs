@@ -9,7 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Shown next to the version while the app isn't finished.
 pub const CHANNEL: &str = "Early Access";
-const REPO: &str = "https://github.com/XCraftTM/XC-Circuit";
+pub const REPO: &str = "https://github.com/XCraftTM/XC-Circuit";
 /// Crash logs kept; older ones are deleted.
 const KEPT: usize = 20;
 

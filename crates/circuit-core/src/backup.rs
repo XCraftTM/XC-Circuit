@@ -20,7 +20,7 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use crate::graph::Workspace;
-use crate::project::{PROJECT_FILE, Project, ProjectMeta, WORKSPACE_DIR};
+use crate::project::{PROJECT_FILE, Project, ProjectMeta, WORKSPACE_DIR, write_json};
 
 const INFO: &str = "info.json";
 const RECOVERY: &str = "recovery.json";
@@ -72,13 +72,6 @@ fn content_hash(meta: &ProjectMeta, workspaces: &IndexMap<String, Workspace>) ->
     let text = serde_json::to_string(&(meta, workspaces)).unwrap_or_default();
     let h = text.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3));
     format!("{h:016x}")
-}
-
-fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
-    let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, serde_json::to_string_pretty(value)? + "\n").with_context(|| format!("writing {}", tmp.display()))?;
-    fs::rename(&tmp, path).with_context(|| format!("replacing {}", path.display()))?;
-    Ok(())
 }
 
 fn dir_size(dir: &Path) -> u64 {

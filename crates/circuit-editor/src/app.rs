@@ -1449,7 +1449,7 @@ impl CircuitApp {
                             ui.add_space(4.0);
                             ui.horizontal(|ui| {
                                 // Centred: the links' width, then them.
-                                let links = [(t!("GitHub profile"), CREATOR_URL.to_string()), (t!("XC Circuit on GitHub"), REPO_URL.to_string())];
+                                let links = [(t!("GitHub profile"), CREATOR_URL.to_string()), (t!("XC Circuit on GitHub"), crate::crash::REPO.to_string())];
                                 let width: f32 = links.iter().map(|(l, _)| ui.painter().layout_no_wrap(l.to_string(), egui::FontId::proportional(13.0), theme.accent).size().x).sum::<f32>() + 24.0;
                                 ui.add_space(((ui.available_width() - width) / 2.0).max(0.0));
                                 ui.spacing_mut().item_spacing.x = 24.0;
@@ -2228,7 +2228,6 @@ fn writable_example(examples: &Path) -> Option<PathBuf> {
 /// Who makes XC Circuit, and where.
 const CREATOR: &str = "XCraftTM";
 const CREATOR_URL: &str = "https://github.com/XCraftTM";
-const REPO_URL: &str = "https://github.com/XCraftTM/XC-Circuit";
 
 /// Opens a document that releases have next to the program (LICENSE,
 /// THIRD-PARTY-NOTICES.txt); its page on GitHub when it isn't there.
@@ -2238,11 +2237,11 @@ fn open_doc(app_root: Option<&Path>, file: &str) {
             let _ = open::that(path);
         }
         None if file == "LICENSE" => {
-            let _ = open::that(format!("{REPO_URL}/blob/main/LICENSE"));
+            let _ = open::that(format!("{}/blob/main/LICENSE", crate::crash::REPO));
         }
         // The notices are made for each release.
         None => {
-            let _ = open::that(format!("{REPO_URL}/releases/latest"));
+            let _ = open::that(format!("{}/releases/latest", crate::crash::REPO));
         }
     }
 }

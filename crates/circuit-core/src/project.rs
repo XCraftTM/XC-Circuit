@@ -163,7 +163,7 @@ impl Project {
 }
 
 /// Writes pretty JSON through a temporary file, so a crash never leaves half a file.
-fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
+pub(crate) fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     let mut text = serde_json::to_string_pretty(value)?;
     text.push('\n');
     let tmp = path.with_extension("json.tmp");
