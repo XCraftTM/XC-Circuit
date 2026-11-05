@@ -29,7 +29,7 @@ export interface Workspace {
   nodes: Record<string, { block: string; at: [number, number]; values?: Record<string, any>; pins?: string[]; zone?: string }>;
   links: string[];
   zones?: Record<string, { title: string; rect: [number, number, number, number]; retry: number; timeoutMs?: number }>;
-  notes?: Record<string, { title: string; text?: string; rect: [number, number, number, number]; color?: string }>;
+  notes?: Record<string, { title: string; text?: string; rect: [number, number, number, number]; color?: string; loose?: boolean }>;
 }
 
 export type BotEvent =

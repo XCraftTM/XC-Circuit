@@ -118,5 +118,6 @@ A link is `"from > to"`, each side `node.pin`:
 | `text` | The description, under the title. |
 | `rect` | `[x, y, width, height]` on the canvas. |
 | `color` | `#RRGGBB`; missing: the theme's accent. |
+| `loose` | `true`: dragging the note leaves the blocks inside where they are. Missing: they move with it. |
 
 Notes don't run: they only explain and group blocks in the editor.

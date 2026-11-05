@@ -251,6 +251,9 @@ pub struct Note {
     /// `#RRGGBB`; unset: the theme's accent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+    /// Dragging the note leaves the blocks inside where they are.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub loose: bool,
 }
 
 impl Workspace {

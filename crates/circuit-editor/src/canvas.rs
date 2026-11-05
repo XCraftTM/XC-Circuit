@@ -1475,9 +1475,9 @@ fn note_rect(n: &Note) -> Rect {
 }
 
 /// Notes: frames with a title and a description, behind everything else.
-/// The title band moves a note with the blocks inside it (with Alt, the note
-/// alone), the edges and corners resize it, and the pencil button (or a
-/// double-click on the title) edits it.
+/// The title band moves a note with the blocks inside it, or alone when the
+/// note is set to (Alt swaps that for one drag); the edges and corners resize
+/// it, and the pencil button (or a double-click on the title) edits it.
 /// What clicking a note's title changes.
 struct NoteSelection<'a> {
     blocks: &'a mut Option<(String, String)>,
@@ -1529,9 +1529,11 @@ fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, ws_key: &st
         if band.hovered() {
             ctx.set_cursor_icon(CursorIcon::Grab);
         }
+        // Whether the blocks inside move along: the note's choice, Alt swaps it.
+        let carry = note.loose == ctx.input(|i| i.modifiers.alt);
         if band.dragged_by(PointerButton::Primary) {
             let d = band.drag_delta();
-            if !ctx.input(|i| i.modifiers.alt) {
+            if carry {
                 for l in blocks.iter().filter(|l| r.contains_rect(l.rect)) {
                     if let Some(n) = ws.nodes.get_mut(&l.id) {
                         n.at[0] += d.x;
@@ -1553,7 +1555,7 @@ fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, ws_key: &st
             let d = vec2(snap(n.rect[0]) - n.rect[0], snap(n.rect[1]) - n.rect[1]);
             n.rect[0] += d.x;
             n.rect[1] += d.y;
-            if !ctx.input(|i| i.modifiers.alt) {
+            if carry {
                 let moved = r.translate(band.drag_delta());
                 for l in blocks.iter().filter(|l| moved.contains_rect(l.rect.translate(band.drag_delta()))) {
                     if let Some(node) = ws.nodes.get_mut(&l.id) {
@@ -1576,7 +1578,11 @@ fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, ws_key: &st
                 sel.multi.clear();
             }
         }
-        let band = band.on_hover_text(t!("Click to select, drag to move the note with the blocks in it (hold Alt to move only the note). Double-click to edit it."));
+        let band = band.on_hover_text(if note.loose {
+            t!("Click to select, drag to move the note (hold Alt to move the blocks in it too). Double-click to edit it.")
+        } else {
+            t!("Click to select, drag to move the note with the blocks in it (hold Alt to move only the note). Double-click to edit it.")
+        });
 
         // The edit button, on the right of the title.
         let pr = Rect::from_center_size(pos2(header.right() - 8.0 / zoom - button / 2.0, header.top() + 10.0 + line / 2.0), Vec2::splat(button));
@@ -1618,6 +1624,11 @@ fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, ws_key: &st
                     }
                 }
             });
+            let mut carry = !n.loose;
+            if crate::dialog::toggle_row(ui, theme, &mut carry, t!("Move blocks with the note"), t!("Dragging the title also moves the blocks inside. Hold Alt for the opposite.")).changed() {
+                n.loose = !carry;
+                *edited = true;
+            }
             ui.separator();
             if crate::dialog::button(ui, theme, t!("Delete note")).on_hover_text(t!("The blocks in it stay")).clicked() {
                 delete = Some(nid.clone());
@@ -2194,7 +2205,7 @@ Hi ${#1.user}"), "values go in with the block's number: {text:?}");
         let mut ws = Workspace::new("Notes");
         ws.nodes.insert("1".into(), circuit_core::Node { block: "core.log@1".into(), at: [100.0, 140.0], ..Default::default() });
         ws.nodes.insert("2".into(), circuit_core::Node { block: "core.log@1".into(), at: [900.0, 140.0], ..Default::default() });
-        ws.notes.insert("n1".into(), Note { title: "Hello".into(), text: "A note".into(), rect: [60.0, 40.0, 500.0, 400.0], color: None });
+        ws.notes.insert("n1".into(), Note { title: "Hello".into(), text: "A note".into(), rect: [60.0, 40.0, 500.0, 400.0], color: None, loose: false });
         ed.project.as_mut().unwrap().workspaces.insert("notes".into(), ws);
         let ctx = egui::Context::default();
         let settle = |ed: &mut Editor| {
@@ -2240,6 +2251,19 @@ Hi ${#1.user}"), "values go in with the block's number: {text:?}");
         drag(&mut ed, from, vec2(-100.0, 0.0), true);
         assert!((note(&ed)[0] - (r[0] - 100.0 / zoom)).abs() < 1.0, "{r:?} -> {:?}", note(&ed));
         assert!((at(&ed, "1")[0] - (100.0 + moved.x)).abs() < 1.0, "the block stays: {:?}", at(&ed, "1"));
+
+        // A note set not to move its blocks moves alone; with Alt, it takes them along.
+        ed.project.as_mut().unwrap().workspaces.get_mut("notes").unwrap().notes.get_mut("n1").unwrap().loose = true;
+        let (r, b) = (note(&ed), at(&ed, "1"));
+        let from = screen(&ed, pos2(r[0] + 80.0, r[1] + 20.0));
+        drag(&mut ed, from, vec2(100.0, 0.0), false);
+        assert!((note(&ed)[0] - (r[0] + 100.0 / zoom)).abs() < 1.0, "{r:?} -> {:?}", note(&ed));
+        assert_eq!(at(&ed, "1"), b, "the block stays");
+        let r = note(&ed);
+        let from = screen(&ed, pos2(r[0] + 80.0, r[1] + 20.0));
+        drag(&mut ed, from, vec2(-100.0, 0.0), true);
+        assert!((at(&ed, "1")[0] - (b[0] - 100.0 / zoom)).abs() < 1.0, "with Alt the block moves: {:?}", at(&ed, "1"));
+        ed.project.as_mut().unwrap().workspaces.get_mut("notes").unwrap().notes.get_mut("n1").unwrap().loose = false;
 
         // The bottom-right corner resizes it; it doesn't get smaller than its minimum.
         let r = note(&ed);
