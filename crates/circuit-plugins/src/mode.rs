@@ -28,6 +28,12 @@ pub struct BuildMode {
     pub settings: IndexMap<String, Value>,
     /// npm packages the runtime libraries need.
     pub dependencies: IndexMap<String, String>,
+    /// Intents (as blocks name them) that have to be turned on by hand for
+    /// the bot, with what the platform calls them: Bot settings lists the
+    /// ones the project's blocks need.
+    pub privileged_intents: IndexMap<String, String>,
+    /// Where they are turned on; `{appId}` is the bot's application id.
+    pub intents_page: Option<String>,
     #[serde(skip)]
     pub plugin: String,
 }

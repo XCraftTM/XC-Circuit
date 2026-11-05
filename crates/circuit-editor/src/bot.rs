@@ -126,6 +126,58 @@ impl SettingField {
 pub struct SettingsDraft {
     fields: Vec<SettingField>,
     project_name: String,
+    /// Privileged intents the project's blocks need: what the platform calls
+    /// each, and the blocks that need it.
+    intents: Vec<(String, Vec<String>)>,
+    /// Where to turn them on, for this bot.
+    intents_page: Option<String>,
+}
+
+/// The privileged intents `mode` lists that the project's blocks need, with
+/// the names of those blocks.
+fn privileged_intents(project: &circuit_core::Project, reg: &circuit_plugins::Registry, mode: &circuit_plugins::BuildMode) -> Vec<(String, Vec<String>)> {
+    let mut out: Vec<(String, Vec<String>)> = mode.privileged_intents.values().map(|label| (label.clone(), Vec::new())).collect();
+    for ws in project.workspaces.values() {
+        for node in ws.nodes.values() {
+            let Some(def) = reg.block(&node.block) else { continue };
+            for (i, intent) in mode.privileged_intents.keys().enumerate() {
+                if def.intents.contains(intent) && !out[i].1.contains(&def.name) {
+                    out[i].1.push(def.name.clone());
+                }
+            }
+        }
+    }
+    out.retain(|(_, blocks)| !blocks.is_empty());
+    out
+}
+
+/// A Discord bot's application id: the first part of its token is the id,
+/// in base64.
+fn app_id_from_token(token: &str) -> Option<String> {
+    let first = token.trim().split('.').next()?;
+    let mut bits: u32 = 0;
+    let mut count = 0;
+    let mut out = Vec::new();
+    for c in first.bytes() {
+        let v = match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'+' | b'-' => 62,
+            b'/' | b'_' => 63,
+            b'=' => break,
+            _ => return None,
+        } as u32;
+        bits = (bits << 6) | v;
+        count += 6;
+        if count >= 8 {
+            count -= 8;
+            out.push((bits >> count) as u8);
+            bits &= (1 << count) - 1;
+        }
+    }
+    let id = String::from_utf8(out).ok()?;
+    (id.len() >= 15 && id.bytes().all(|b| b.is_ascii_digit())).then_some(id)
 }
 
 pub struct ExportDraft {
@@ -330,7 +382,14 @@ impl BotUi {
                 }
             })
             .collect();
-        self.settings = Some(SettingsDraft { fields, project_name: project.meta.name.clone() });
+        let intents = privileged_intents(project, &ed.reg, mode);
+        let app_id = secrets::get(&project.root, "token").and_then(|t| app_id_from_token(&t));
+        let intents_page = mode.intents_page.as_ref().map(|page| match &app_id {
+            Some(id) => page.replace("{appId}", id),
+            // Without the bot's id: the list of the account's applications.
+            None => page.split("{appId}").next().unwrap_or(page).to_string(),
+        });
+        self.settings = Some(SettingsDraft { fields, project_name: project.meta.name.clone(), intents, intents_page });
         for line in bad_patterns {
             ed.log(Level::Warn, line);
         }
@@ -471,6 +530,23 @@ impl BotUi {
                             ui.add_space(2.0);
                             ui.label(RichText::new(tf!("Kept in {store}, never in project files.", store = store)).size(11.5).color(theme.text_muted));
                         });
+                    }
+                    if !draft.intents.is_empty() {
+                        dialog::section(ui, &theme, t!("Privileged intents"));
+                        ui.label(RichText::new(t!("Your blocks need these. Turn them on for your bot in the developer portal, under Bot › Privileged Gateway Intents, or it can't log in.")).size(12.0).color(theme.text_muted));
+                        ui.add_space(6.0);
+                        for (intent, blocks) in &draft.intents {
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label(RichText::new(intent).strong().color(theme.text));
+                                ui.label(RichText::new(tf!("for {blocks}", blocks = blocks.join(", "))).size(12.0).color(theme.text_muted));
+                            });
+                        }
+                        if let Some(page) = &draft.intents_page {
+                            ui.add_space(6.0);
+                            if dialog::button(ui, &theme, t!("Open the developer portal")).on_hover_text(page.as_str()).clicked() {
+                                let _ = open::that(page);
+                            }
+                        }
                     }
                 }
                 Part::Footer => {
@@ -755,6 +831,31 @@ mod tests {
         assert_eq!(pattern_problem(Some(&re), Some("Three digits"), "12").as_deref(), Some("Three digits"));
         assert_eq!(pattern_problem(Some(&re), None, ""), None, "empty is left to required");
         assert!(compile_pattern("(").is_err());
+    }
+
+    /// Bot settings names the privileged intents the blocks need, and the
+    /// developer portal page of the bot (its id is the token's first part).
+    #[test]
+    fn lists_privileged_intents_and_the_bot_page() {
+        let fake_token = ["MTIzNDU2Nzg5MDEyMzQ1Njc4OQ", "GhIjKl", "abcdefghijklmnopqrstuvwxyz0123456789AB"].join(".");
+        assert_eq!(app_id_from_token(&fake_token).as_deref(), Some("1234567890123456789"));
+        assert_eq!(app_id_from_token("not a token"), None);
+
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        let mode = ed.reg.modes.iter().find(|m| m.id == "discord-bot").unwrap();
+        let dir = std::env::temp_dir().join(format!("xc-intents-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut project = circuit_core::Project::create(&dir, "Intents", "discord-bot").unwrap();
+        let ws = project.workspaces.values_mut().next().unwrap();
+        for (id, block) in [("a", "discord.on_member_join@1"), ("b", "discord.on_message@1"), ("c", "core.log@1")] {
+            ws.nodes.insert(id.into(), circuit_core::Node { block: block.into(), ..Default::default() });
+        }
+        let found = privileged_intents(&project, &ed.reg, mode);
+        let names: Vec<&str> = found.iter().map(|(i, _)| i.as_str()).collect();
+        assert_eq!(names, ["Server Members Intent", "Message Content Intent"], "{found:?}");
+        assert_eq!(found[0].1, ["Member Joins"], "{found:?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

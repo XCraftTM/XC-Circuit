@@ -9,6 +9,14 @@ runtimeLibs = ["xc.discord/runtime/discord.js"]
 exporter    = "xc.discord/node-bundle"
 tokenEnv    = "DISCORD_TOKEN"
 features    = ["slashCommands"]
+# Bot settings lists the privileged intents the project's blocks need, with a
+# link to turn them on.
+intentsPage = "https://discord.com/developers/applications/{appId}/bot"
+
+[privilegedIntents]
+GuildMembers = "Server Members Intent"
+GuildPresences = "Presence Intent"
+MessageContent = "Message Content Intent"
 
 # Block picker categories, in this order. A block names one with `search.category`;
 # events sit with the blocks they work with (On Signal with Emit Signal).
