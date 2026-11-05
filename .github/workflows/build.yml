@@ -142,10 +142,14 @@ jobs:
       # arguments, installs, and opens XC Circuit again (/restart=1).
       - name: Try the update
         if: runner.os == 'Windows' && matrix.arch == 'x64'
+        timeout-minutes: 5
         shell: pwsh
         run: |
           $setup = Get-ChildItem dist\*-setup.exe | Select-Object -First 1
-          $p = Start-Process $setup.FullName -ArgumentList '/SILENT','/SUPPRESSMSGBOXES','/NORESTART','/CLOSEAPPLICATIONS','/restart=1','/CURRENTUSER' -Wait -PassThru
+          # Not Start-Process -Wait: that also waits for XC Circuit, which the
+          # Setup opens and which keeps running.
+          $p = Start-Process $setup.FullName -ArgumentList '/SILENT','/SUPPRESSMSGBOXES','/NORESTART','/CLOSEAPPLICATIONS','/restart=1','/CURRENTUSER' -PassThru
+          if (-not $p.WaitForExit(180000)) { throw "The Setup didn't finish in 3 minutes" }
           if ($p.ExitCode -ne 0) { throw "The Setup ended with $($p.ExitCode)" }
           $exe = "$env:LOCALAPPDATA\Programs\XC Circuit\xc-circuit.exe"
           if (-not (Test-Path $exe)) { throw "Not installed at $exe" }
