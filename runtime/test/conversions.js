@@ -63,19 +63,22 @@ let out = "";
 child.stdout.on("data", (d) => (out += d));
 child.stderr.on("data", (d) => (out += d));
 
-setTimeout(() => {
-  child.kill();
-  const logs = out
+const logsOf = () =>
+  out
     .split(/\r?\n/)
     .filter((l) => l.startsWith("@@xc "))
     .map((l) => JSON.parse(l.slice(5)))
     .filter((e) => e.t === "log")
     .map((e) => `${e.level}: ${e.text}`);
-  const has = (s) => assert.ok(logs.includes(s), `expected "${s}" in:\n${logs.join("\n")}`);
-  has("info: one user alex");
-  has("info: many user bo, user cy");
-  has("info: raw member");
-  has("info: again user dee");
-  fs.rmSync(dir, { recursive: true, force: true });
+const expected = ["info: one user alex", "info: many user bo, user cy", "info: raw member", "info: again user dee"];
+// Waits until every expected line is there (a slow machine takes longer); gives up after 20 s.
+const started = Date.now();
+const poll = setInterval(() => {
+  const logs = logsOf();
+  if (!expected.every((s) => logs.includes(s)) && Date.now() - started < 20000) return;
+  clearInterval(poll);
+  child.on("exit", () => fs.rmSync(dir, { recursive: true, force: true }));
+  child.kill();
+  for (const s of expected) assert.ok(logs.includes(s), `expected "${s}" in:\n${logs.join("\n")}`);
   console.log("conversions test passed");
-}, 1500);
+}, 100);

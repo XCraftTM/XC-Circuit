@@ -93,24 +93,27 @@ const child = spawn(process.execPath, [path.join(root, "runtime", "circuit-runti
 let out = "";
 child.stdout.on("data", (d) => (out += d));
 child.stderr.on("data", (d) => (out += d));
-setTimeout(() => {
-  child.kill();
-  const logs = out
+const logsOf = () =>
+  out
     .split(/\r?\n/)
     .filter((l) => l.startsWith("@@xc "))
     .map((l) => JSON.parse(l.slice(5)))
     .filter((e) => e.t === "log")
     .map((e) => `${e.level}: ${e.text}`);
-  console.log(logs.join("\n"));
-  const has = (s) => assert.ok(logs.some((l) => l.includes(s)), `expected "${s}"`);
-  has("upper: HELLO WORLD");
-  has("list: a-b-c");
-  has("switch went big");
-  has("round 1");
-  has("round 3");
-  has("prop: 7");
-  has("random: 5");
-  has("not: false");
-  assert.ok(!logs.some((l) => l.startsWith("error")), "no errors");
-  console.log("\nlibrary test passed");
-}, 1500);
+const expected = ["upper: HELLO WORLD", "list: a-b-c", "switch went big", "round 1", "round 3", "prop: 7", "random: 5", "not: false"];
+// Waits until every expected line is there (a slow machine takes longer),
+// then a little more for errors that would follow; gives up after 20 s.
+const started = Date.now();
+const poll = setInterval(() => {
+  const ready = expected.every((s) => logsOf().some((l) => l.includes(s)));
+  if (!ready && Date.now() - started < 20000) return;
+  clearInterval(poll);
+  setTimeout(() => {
+    child.kill();
+    const logs = logsOf();
+    console.log(logs.join("\n"));
+    for (const s of expected) assert.ok(logs.some((l) => l.includes(s)), `expected "${s}"`);
+    assert.ok(!logs.some((l) => l.startsWith("error")), "no errors");
+    console.log("\nlibrary test passed");
+  }, 300);
+}, 100);
