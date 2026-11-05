@@ -12,7 +12,7 @@ XC™ Circuit is in **Early Access**: it works and is used for real bots, but so
 
 ## Bots
 
-- **Exported bots** (Bot › Export) are covered by automated tests but haven't been tried widely yet. Please report anything that runs differently from the editor.
+- **Exported bots** (Bot › Export) are tested, but if one runs differently from the editor, please report it.
 - **Fluxer bots** have no slash commands, buttons or menus, because Fluxer doesn't offer them yet. Commands are text commands such as `!help`.
 - **Running bots needs Node.js 22 or newer.** The first start finds it or installs it; behind strict company networks this can fail. Install Node.js yourself then.
 - Bot tokens are kept in the system's password store. On Linux that needs a running Secret Service (GNOME Keyring or KWallet).
