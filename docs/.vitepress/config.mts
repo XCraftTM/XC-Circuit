@@ -18,7 +18,7 @@ export default defineConfig({
   appearance: "dark",
   lastUpdated: true,
   // Notes for the people building the app, not pages of the site.
-  srcExclude: ["discord-blocks-plan.md", "README.md"],
+  srcExclude: ["discord-blocks-plan.md"],
   head: [
     ["link", { rel: "icon", type: "image/svg+xml", href: `${base}icon.svg` }],
     ["meta", { name: "theme-color", content: "#00E5FF" }],
