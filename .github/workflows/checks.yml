@@ -88,6 +88,7 @@ jobs:
           node runtime/test/alerts.js
           node runtime/test/files.js
           node runtime/test/server_tools.js
+          node runtime/test/captcha.js
 
   # The database blocks against real servers: MariaDB, PostgreSQL and
   # MongoDB (SQLite runs with the other runtime tests). Linux runners only
@@ -153,6 +154,10 @@ jobs:
         env:
           XC_TEST_DEPS: ${{ runner.temp }}/db-deps
         run: node runtime/test/server_tools.js
+      - name: Captcha tests
+        env:
+          XC_TEST_DEPS: ${{ runner.temp }}/db-deps
+        run: node runtime/test/captcha.js
 
   website:
     name: Website builds

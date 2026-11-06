@@ -81,6 +81,7 @@ export default defineConfig({
             { text: "Pictures with Build Canvas", link: "/explanations/canvas" },
             { text: "New-post alerts", link: "/explanations/alerts" },
             { text: "Server tools", link: "/explanations/server-tools" },
+            { text: "Captcha", link: "/explanations/captcha" },
             { text: "Try Zones and errors", link: "/explanations/errors" },
             { text: "Plugins", link: "/explanations/plugins" },
             { text: "Running and exporting", link: "/explanations/running" },
