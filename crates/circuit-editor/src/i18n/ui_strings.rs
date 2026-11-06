@@ -905,6 +905,8 @@ pub const UI_STRINGS: &[&str] = &[
     "Other fonts",
     "Font size",
     "The Console's text size.",
+    "Line spacing",
+    "Room between the Console's lines.",
     "Loaded 6 plugins, 268 blocks, 25 pin types, 3 themes",
     "Running",
     "Restart on save",

@@ -145,6 +145,20 @@ pub fn row_icon(ui: &mut Ui, theme: &Theme, icon: Option<&Path>, fallback: &str,
     resp.on_hover_text(tip)
 }
 
+/// A button that looks like a link: accent-coloured text, underlined on
+/// hover, no taller than a line of `font`. For actions inside lines of text.
+pub fn link(ui: &mut Ui, theme: &Theme, text: &str, font: FontId) -> Response {
+    let galley = ui.painter().layout_no_wrap(text.to_string(), font, theme.accent);
+    let (rect, resp) = ui.allocate_exact_size(galley.size(), Sense::click());
+    let color = if resp.hovered() { theme.text } else { theme.accent };
+    ui.painter().galley(rect.min, galley, color);
+    if resp.hovered() {
+        ui.painter().hline(rect.x_range(), rect.bottom() - 1.0, Stroke::new(1.0, color));
+        ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+    }
+    resp
+}
+
 pub fn secondary_button(ui: &mut Ui, theme: &Theme, text: &str) -> Response {
     styled_button(ui, theme, egui::Button::new(RichText::new(text).color(theme.text)).corner_radius(7).min_size(vec2(84.0, ui.spacing().interact_size.y.max(32.0))), theme.panel, Stroke::new(1.0, theme.node_border))
 }

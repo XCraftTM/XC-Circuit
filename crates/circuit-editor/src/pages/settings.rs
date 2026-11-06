@@ -372,15 +372,27 @@ fn console_font(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut Settings
             ed.prefs.console_font_size = crate::editor::prefs::CONSOLE_FONT_SIZE;
         }
     });
+    kit::setting_row(ui, theme, t!("Line spacing"), t!("Room between the Console's lines."), |ui| {
+        kit::Number::new(&mut ed.prefs.console_line_spacing).range(0.0..=16.0).decimals(0).suffix(" pt").show(ui, theme);
+        if crate::ui::kit::button(ui, theme, t!("Reset")).clicked() {
+            ed.prefs.console_line_spacing = crate::editor::prefs::CONSOLE_LINE_SPACING;
+        }
+    });
     // What it looks like.
     let font = crate::ui::fonts::console(&ctx, ed.prefs.console_font_size);
+    // Two lines, as the Console spaces them.
+    let row_h = ui.fonts_mut(|f| f.row_height(&font)) + ed.prefs.console_line_spacing.max(0.0);
     egui::Frame::new().fill(theme.panel_header).corner_radius(6).inner_margin(egui::Margin::symmetric(12, 8)).show(ui, |ui| {
         ui.set_width(ui.available_width());
-        ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("12:00:00").font(font.clone()).color(theme.text_muted));
-            ui.label(RichText::new("INFO ").font(font.clone()).color(theme.accent));
-            ui.label(RichText::new(t!("Loaded 6 plugins, 268 blocks, 25 pin types, 3 themes")).font(font.clone()).color(theme.text));
-        });
+        ui.spacing_mut().item_spacing.y = 0.0;
+        for (level, color) in [("INFO ", theme.accent), ("DONE ", theme.action)] {
+            ui.horizontal(|ui| {
+                ui.set_height(row_h);
+                ui.label(RichText::new("12:00:00").font(font.clone()).color(theme.text_muted));
+                ui.label(RichText::new(level).font(font.clone()).color(color));
+                ui.add(egui::Label::new(RichText::new(t!("Loaded 6 plugins, 268 blocks, 25 pin types, 3 themes")).font(font.clone()).color(theme.text)).truncate());
+            });
+        }
     });
 }
 

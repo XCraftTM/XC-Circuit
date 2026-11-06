@@ -261,9 +261,10 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
     let font = crate::ui::fonts::console(ui.ctx(), ed.prefs.console_font_size);
     let char_w = ui.fonts_mut(|f| f.glyph_width(&font, 'm')).max(1.0);
     let gap = ui.spacing().item_spacing.x;
-    // Time (8) and level (5) with their gaps; the Show block button on lines that have it.
+    // Time (8) and level (5) with their gaps; the Show block link on lines that have it.
     let lead = char_w * 13.0 + gap * 3.0;
-    let button = 96.0 + gap;
+    let link_font = egui::FontId::proportional((font.size * 0.9).max(10.0));
+    let button = ui.fonts_mut(|f| f.layout_no_wrap(t!("Show block").to_string(), link_font.clone(), theme.accent).size().x) + gap * 2.0;
     let width = ui.available_width() - 24.0 - ui.spacing().scroll.bar_width - 4.0;
     // Narrow (the side bar): the time and level get a row of their own, and the
     // text the whole width under it, a little indented.
@@ -285,8 +286,8 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
             head.into_iter().chain(l.text.split('\n').flat_map(move |part| wrap_columns(part.trim_end_matches('\r'), cols))).enumerate().map(move |(n, part)| (i, n, part))
         })
         .collect();
-    // As tall as the Show block button, or the text when it's bigger.
-    let row_h = crate::ui::kit::input_height(ui).max(ui.fonts_mut(|f| f.row_height(&font)) + 6.0);
+    // As tall as the text, and the room between lines set in Settings › Editor › Console.
+    let row_h = ui.fonts_mut(|f| f.row_height(&font)) + ed.prefs.console_line_spacing.max(0.0);
     ui.spacing_mut().item_spacing.y = 0.0;
     ScrollArea::vertical().auto_shrink([false, false]).stick_to_bottom(true).show_rows(ui, row_h, rows.len(), |ui, range| {
         Frame::new().inner_margin(Margin::symmetric(12, 0)).show(ui, |ui| {
@@ -309,7 +310,7 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
                     }
                     if n == 0
                         && let Some(t) = &line.target
-                        && crate::ui::kit::button(ui, &theme, t!("Show block")).on_hover_text(t!("Show the block that wrote this")).clicked()
+                        && crate::ui::kit::link(ui, &theme, t!("Show block"), link_font.clone()).on_hover_text(t!("Show the block that wrote this")).clicked()
                     {
                         jump = Some(t.clone());
                     }

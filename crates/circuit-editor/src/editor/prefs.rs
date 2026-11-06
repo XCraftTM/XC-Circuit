@@ -45,6 +45,8 @@ pub struct Prefs {
     pub console_font: Option<String>,
     /// The Console's text size, in points.
     pub console_font_size: f32,
+    /// Room between the Console's lines, in points.
+    pub console_line_spacing: f32,
     /// Where File › New Project put the last project.
     pub new_project_location: Option<String>,
     /// Projects opened lately, the latest first (folders).
@@ -133,12 +135,15 @@ impl SideView {
 
 impl Default for Prefs {
     fn default() -> Self {
-        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), activity: SideView::ALL.iter().map(|v| v.key().to_string()).collect(), side_shown: Some(SideView::Workspaces.key().into()), disabled_plugins: Vec::new(), console_font: None, console_font_size: CONSOLE_FONT_SIZE, new_project_location: None, recent_projects: Vec::new(), check_updates: true, skipped_update: None, snap_to_grid: false, recent_blocks: Vec::new(), favorite_blocks: Vec::new(), shortcuts: Default::default(), last_crash_seen: 0 }
+        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), activity: SideView::ALL.iter().map(|v| v.key().to_string()).collect(), side_shown: Some(SideView::Workspaces.key().into()), disabled_plugins: Vec::new(), console_font: None, console_font_size: CONSOLE_FONT_SIZE, console_line_spacing: CONSOLE_LINE_SPACING, new_project_location: None, recent_projects: Vec::new(), check_updates: true, skipped_update: None, snap_to_grid: false, recent_blocks: Vec::new(), favorite_blocks: Vec::new(), shortcuts: Default::default(), last_crash_seen: 0 }
     }
 }
 
 /// The Console's text size to start with (egui's monospaced size).
 pub const CONSOLE_FONT_SIZE: f32 = 13.0;
+
+/// Room between the Console's lines to start with.
+pub const CONSOLE_LINE_SPACING: f32 = 2.0;
 
 /// Interface sizes offered on the Settings page.
 pub const UI_SCALES: [f32; 6] = [0.8, 0.9, 1.0, 1.1, 1.25, 1.5];
