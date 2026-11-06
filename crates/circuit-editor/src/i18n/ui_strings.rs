@@ -2,6 +2,7 @@
 //! templates and checks. Generated: run the tests with XC_UPDATE_STRINGS=1.
 
 pub const UI_STRINGS: &[&str] = &[
+    "Move to the main area",
     "Settings (Ctrl+,)",
     "Bot stopped",
     "Bot starting",

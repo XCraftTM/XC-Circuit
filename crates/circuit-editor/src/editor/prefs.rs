@@ -33,9 +33,11 @@ pub struct Prefs {
     pub touch: bool,
     /// The interface language's code (`en`, `de`).
     pub language: String,
-    /// The view the side bar showed before it was part of the dock: a layout
-    /// saved then gets that view (and the others) as tabs on the left.
-    pub side_view: Option<SideView>,
+    /// The activity bar's icons, in order, by key: Workspaces, Stored Data and
+    /// Plugins to start with, and what's been dragged there from the dock.
+    pub activity: Vec<String>,
+    /// The one of them the side bar shows; `None` folds the side bar away.
+    pub side_shown: Option<String>,
     /// Where File › New Project put the last project.
     pub new_project_location: Option<String>,
     /// Projects opened lately, the latest first (folders).
@@ -100,6 +102,19 @@ impl SideView {
         }
     }
 
+    /// Its key in [`Prefs::activity`].
+    pub fn key(self) -> &'static str {
+        match self {
+            SideView::Workspaces => "workspaces",
+            SideView::StoredData => "stored-data",
+            SideView::Plugins => "plugins",
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<SideView> {
+        SideView::ALL.into_iter().find(|v| v.key() == key)
+    }
+
     pub fn icon(self) -> &'static str {
         match self {
             SideView::Workspaces => "layers",
@@ -111,7 +126,7 @@ impl SideView {
 
 impl Default for Prefs {
     fn default() -> Self {
-        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), side_view: Some(SideView::Workspaces), new_project_location: None, recent_projects: Vec::new(), check_updates: true, skipped_update: None, snap_to_grid: false, recent_blocks: Vec::new(), favorite_blocks: Vec::new(), shortcuts: Default::default(), last_crash_seen: 0 }
+        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), activity: SideView::ALL.iter().map(|v| v.key().to_string()).collect(), side_shown: Some(SideView::Workspaces.key().into()), new_project_location: None, recent_projects: Vec::new(), check_updates: true, skipped_update: None, snap_to_grid: false, recent_blocks: Vec::new(), favorite_blocks: Vec::new(), shortcuts: Default::default(), last_crash_seen: 0 }
     }
 }
 

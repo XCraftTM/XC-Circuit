@@ -1,38 +1,8 @@
-//! The activity bar, the side bar, the status bar, the tour and settings.
+//! The status bar, the tour and settings.
 
 use super::*;
 
 impl CircuitApp {
-    /// The activity bar: an icon each for Workspaces, Stored Data and Plugins,
-    /// which are dock tabs. Clicking one brings its tab to the front (opening
-    /// it on the left when it's closed); clicking the one in front closes it.
-    pub(super) fn activity(&mut self, ui: &mut egui::Ui) {
-        let t = self.ed.theme.clone();
-        let line = ui.max_rect();
-        ui.painter().vline(line.right() - 0.5, line.y_range(), egui::Stroke::new(1.0, t.line));
-        ui.spacing_mut().item_spacing.y = 2.0;
-        for view in SideView::ALL {
-            let tab = Tab::Side(view);
-            let path = self.dock.find_tab(&tab);
-            let in_front = path.is_some_and(|p| self.dock.leaf(p.node_path()).is_ok_and(|l| l.active == p.tab));
-            if self.activity_item(ui, view.icon(), view.name(), in_front) {
-                match path {
-                    Some(_) if in_front => close_tabs(&mut self.dock, |t| *t == tab),
-                    Some(p) => {
-                        let _ = self.dock.set_active_tab(p);
-                        self.dock.set_focused_node_and_surface(p.node_path());
-                    }
-                    None => place_panel(&mut self.dock, tab),
-                }
-            }
-        }
-        ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
-            if self.activity_item(ui, "settings", t!("Settings (Ctrl+,)"), self.dock.find_tab(&Tab::Settings).is_some()) {
-                self.toggle_settings();
-            }
-        });
-    }
-
     /// What the Plugins tab's buttons asked for.
     pub(super) fn plugins_side_ask(&mut self, ask: crate::plugins::manager::SideAsk, ctx: &egui::Context) {
         match ask {
@@ -45,21 +15,6 @@ impl CircuitApp {
                 let _ = open::that(dir);
             }
         }
-    }
-
-    /// One activity bar icon. Returns true when clicked.
-    pub(super) fn activity_item(&self, ui: &mut egui::Ui, icon: &str, tip: &str, active: bool) -> bool {
-        let t = &self.ed.theme;
-        let (rect, resp) = ui.allocate_exact_size(egui::vec2(ACTIVITY_W, 40.0), egui::Sense::click());
-        let resp = resp.on_hover_text(tip).on_hover_cursor(egui::CursorIcon::PointingHand);
-        if active {
-            ui.painter().rect_filled(egui::Rect::from_min_size(rect.min, egui::vec2(2.0, rect.height())), 0.0, t.accent);
-        }
-        let color = if active || resp.hovered() { t.text } else { t.text_muted };
-        if let Some(path) = self.ed.reg.icons.get(icon) {
-            egui::Image::from_uri(crate::editor::file_uri(path)).tint(color).paint_at(ui, egui::Rect::from_center_size(rect.center(), egui::vec2(20.0, 20.0)));
-        }
-        resp.clicked()
     }
 
     /// Starts the guided tour on a fresh practice project, with a reduced layout.
@@ -190,12 +145,7 @@ impl CircuitApp {
         if self.problem_count > 0 {
             let label = if self.problem_count == 1 { t!("⚠ 1 problem").to_string() } else { tf!("⚠ {count} problems", count = self.problem_count) };
             if status_item(&mut left, &t, None, &label).on_hover_text(t!("Show the Problems panel")).clicked() {
-                match self.dock.find_tab(&Tab::Problems) {
-                    Some(path) => {
-                        let _ = self.dock.set_active_tab(path);
-                    }
-                    None => self.toggle_panel(Tab::Problems),
-                }
+                self.show_panel(Tab::Problems);
             }
         }
 
@@ -220,6 +170,9 @@ impl CircuitApp {
     }
 
     pub(super) fn reset_layout(&mut self) {
+        let fresh = crate::editor::prefs::Prefs::default();
+        self.ed.prefs.activity = fresh.activity;
+        self.ed.prefs.side_shown = fresh.side_shown;
         let canvases: Vec<Tab> = self.dock.iter_all_tabs().map(|(_, t)| t.clone()).filter(|t| matches!(t, Tab::Canvas(_))).collect();
         self.dock = default_layout();
         for t in canvases {
@@ -230,6 +183,14 @@ impl CircuitApp {
     }
 
     pub(super) fn toggle_panel(&mut self, tab: Tab) {
+        // One in the activity bar is shown or hidden in the side bar.
+        if let Some(key) = tab.side_key()
+            && self.ed.prefs.activity.contains(&key)
+        {
+            let shown = self.ed.prefs.side_shown.as_deref() == Some(key.as_str());
+            self.ed.prefs.side_shown = (!shown).then_some(key);
+            return;
+        }
         if self.dock.find_tab(&tab).is_some() {
             close_tabs(&mut self.dock, |t| *t == tab);
             return;

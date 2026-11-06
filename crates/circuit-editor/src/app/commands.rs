@@ -55,11 +55,11 @@ impl CircuitApp {
         }
         for view in SideView::ALL {
             let tab = Tab::Side(view);
-            let label = if self.dock.find_tab(&tab).is_some() { tf!("Close {name}", name = view.name()) } else { tf!("Show {name}", name = view.name()) };
+            let label = if self.panel_open(&tab) { tf!("Close {name}", name = view.name()) } else { tf!("Show {name}", name = view.name()) };
             items.push(Item::new(t!("View"), label, Cmd::TogglePanel(tab)));
         }
         for (tab, name) in Tab::PANELS {
-            let label = if self.dock.find_tab(&tab).is_some() { tf!("Close {name} panel", name = crate::i18n::t(name)) } else { tf!("Show {name} panel", name = crate::i18n::t(name)) };
+            let label = if self.panel_open(&tab) { tf!("Close {name} panel", name = crate::i18n::t(name)) } else { tf!("Show {name} panel", name = crate::i18n::t(name)) };
             items.push(Item::new(t!("View"), label, Cmd::TogglePanel(tab)));
         }
         for t in &self.ed.reg.themes {
@@ -81,7 +81,7 @@ impl CircuitApp {
             }
             for panel in p.panels() {
                 let tab = Tab::Plugin(p.id.clone(), panel.id.clone());
-                let verb = if self.dock.find_tab(&tab).is_some() { "Close" } else { "Show" };
+                let verb = if self.panel_open(&tab) { "Close" } else { "Show" };
                 items.push(Item::new("Plugin", format!("{verb} {} panel", panel.title), Cmd::TogglePluginPanel(p.id.clone(), panel.id.clone())).detail(p.name.clone()));
             }
         }

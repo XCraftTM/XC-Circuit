@@ -24,6 +24,7 @@ use crate::editor::keymap::{self, Action as Hotkey};
 use crate::ui::palette::{Cmd, Item};
 use crate::{canvas, ui::dialog, ui::palette, pages::panels, canvas::picker};
 
+mod activity;
 mod chrome;
 mod commands;
 mod dialogs;
@@ -62,8 +63,7 @@ pub enum Tab {
     WorkspaceImport,
     /// The start page, while no project is open.
     Start,
-    /// What used to be the side bar (Workspaces, Stored Data, Plugins): tabs
-    /// like the others, in a column on the left to start with.
+    /// Workspaces, Stored Data or Plugins, dragged out of the activity bar.
     Side(SideView),
 }
 
@@ -92,6 +92,35 @@ impl Tab {
     }
 
     const PANELS: [(Tab, &'static str); 3] = [(Tab::Inspector, n("Inspector")), (Tab::Console, n("Console")), (Tab::Problems, n("Problems"))];
+
+    /// The key of a tab that can be an icon in the activity bar: Workspaces,
+    /// Stored Data, Plugins and the panels (not workspaces, builders or pages).
+    pub(super) fn side_key(&self) -> Option<String> {
+        Some(match self {
+            Tab::Side(view) => view.key().into(),
+            Tab::Inspector => "inspector".into(),
+            Tab::Console => "console".into(),
+            Tab::Problems => "problems".into(),
+            Tab::Plugin(plugin, panel) => format!("plugin:{plugin}:{panel}"),
+            _ => return None,
+        })
+    }
+
+    /// The tab an activity bar key names.
+    pub(super) fn from_side_key(key: &str) -> Option<Tab> {
+        if let Some(view) = SideView::from_key(key) {
+            return Some(Tab::Side(view));
+        }
+        Some(match key {
+            "inspector" => Tab::Inspector,
+            "console" => Tab::Console,
+            "problems" => Tab::Problems,
+            _ => {
+                let (plugin, panel) = key.strip_prefix("plugin:")?.split_once(':')?;
+                Tab::Plugin(plugin.into(), panel.into())
+            }
+        })
+    }
 }
 
 const KEY_DOCK: &str = "dock";
@@ -119,6 +148,8 @@ pub struct CircuitApp {
     problems_found: Option<((u64, u64, String), Vec<panels::ProblemItem>)>,
     /// The dock's size last frame, so side panels keep theirs when it changes.
     dock_size: Option<egui::Vec2>,
+    /// Where the activity bar's icons are (by key), for dropping between them.
+    activity_slots: Vec<(String, egui::Rect)>,
     /// The start page's list of recent projects, read from their folders.
     start: crate::pages::start_page::StartPage,
     /// A newer version on GitHub, when one was found.
@@ -234,12 +265,6 @@ impl CircuitApp {
                     ed.log(Level::Warn, t!("The panel layout was damaged, so it was put back together."));
                 }
                 close_tabs(&mut d, |t| matches!(t, Tab::Canvas(k) if !keys.contains(k)));
-                // Saved before the side bar was part of the dock: its views become tabs on the left.
-                if d.find_tab_from(|t| matches!(t, Tab::Side(_))).is_none()
-                    && let Some(view) = ed.prefs.side_view.take()
-                {
-                    add_side_column(&mut d, view);
-                }
                 d
             }
             None => default_layout(),
@@ -274,6 +299,7 @@ impl CircuitApp {
             problem_count: 0,
             problems_found: None,
             dock_size: None,
+            activity_slots: Vec::new(),
             start: Default::default(),
             updater,
             block_updates,
@@ -425,16 +451,27 @@ impl eframe::App for CircuitApp {
         if self.problems_found.as_ref().is_none_or(|(k, _)| *k != key) {
             self.problems_found = Some((key, panels::collect_problems(&self.ed)));
         }
-        if self.ed.prefs.activity_bar && self.setup.is_none() && self.tour.is_none() && self.ed.project.is_some() {
+        let mut problems = self.problems_found.as_ref().map(|(_, p)| p.clone()).unwrap_or_default();
+        problems.extend(self.native.problems());
+        self.problem_count = problems.len();
+        let bars = self.setup.is_none() && self.tour.is_none() && self.ed.project.is_some();
+        if self.ed.prefs.activity_bar && bars {
             egui::Panel::left("activity")
                 .exact_size(ACTIVITY_W)
                 .resizable(false)
                 .frame(Frame::new().fill(theme.frame).inner_margin(Margin::symmetric(0, 6)))
                 .show(ui, |ui| self.activity(ui));
         }
-        let mut problems = self.problems_found.as_ref().map(|(_, p)| p.clone()).unwrap_or_default();
-        problems.extend(self.native.problems());
-        self.problem_count = problems.len();
+        // What the activity bar's icon picked, beside it.
+        let side = self.ed.prefs.side_shown.clone().filter(|k| self.ed.prefs.activity.contains(k)).and_then(|k| self.activity_tab(&k).map(|t| (k, t)));
+        if bars && let Some((key, tab)) = side {
+            egui::Panel::left("side-bar")
+                .resizable(true)
+                .default_size(270.0)
+                .size_range(200.0..=560.0)
+                .frame(Frame::new().fill(theme.panel))
+                .show(ui, |ui| self.side_bar(ui, &key, tab, &problems));
+        }
         // Filled, so the dock's rounded panel corners show the frame color and not
         // whatever is behind the window's content.
         if let Some(mut setup) = self.setup.take() {
@@ -475,6 +512,8 @@ impl eframe::App for CircuitApp {
                 tab_font: egui::TextStyle::Button.resolve(ui.style()),
                 stored: &mut self.stored,
                 side_ask: None,
+                to_side: None,
+                dragging: None,
             };
             let size = ui.available_size();
             if let Some(before) = self.dock_size
@@ -494,8 +533,16 @@ impl eframe::App for CircuitApp {
             let asks = std::mem::take(&mut viewer.asks);
             let start_pick = viewer.start_pick.take();
             let side_ask = viewer.side_ask.take();
+            let to_side = viewer.to_side.take();
+            if let Some(tab) = viewer.dragging.take() {
+                let frame = ui.ctx().cumulative_frame_nr();
+                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new(dock::DRAGGING_TAB), (tab, frame)));
+            }
             if let Some(ask) = side_ask {
                 self.plugins_side_ask(ask, ui.ctx());
+            }
+            if let Some((tab, pos)) = to_side {
+                self.move_to_side(tab, pos);
             }
             if repair_layout(&mut self.dock) {
                 self.ed.log(Level::Warn, t!("The panel layout was damaged, so it was put back together."));
@@ -507,6 +554,8 @@ impl eframe::App for CircuitApp {
         });
         }
 
+        self.activity_drag(&ctx);
+        self.keep_side_items();
         if self.setup.is_none()
             && let Some(mut tour) = self.tour.take()
         {

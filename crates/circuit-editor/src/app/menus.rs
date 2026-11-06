@@ -140,7 +140,7 @@ impl CircuitApp {
                 ui.label(RichText::new(t!("SIDE BAR")).size(10.5).color(theme.text_muted));
                 for view in SideView::ALL {
                     let tab = Tab::Side(view);
-                    let mut open = self.dock.find_tab(&tab).is_some();
+                    let mut open = self.panel_open(&tab);
                     if kit::checkbox(ui, &theme, &mut open, view.name()).clicked() {
                         self.toggle_panel(tab);
                     }
@@ -149,7 +149,7 @@ impl CircuitApp {
                 ui.label(RichText::new(t!("PANELS")).size(10.5).color(theme.text_muted));
                 for (tab, name) in Tab::PANELS {
                     let name = crate::i18n::t(name);
-                    let mut open = self.dock.find_tab(&tab).is_some();
+                    let mut open = self.panel_open(&tab);
                     if kit::checkbox(ui, &theme, &mut open, name).clicked() {
                         self.toggle_panel(tab);
                     }
@@ -216,7 +216,7 @@ impl CircuitApp {
                     }
                     for panel in panels {
                         let tab = Tab::Plugin(id.clone(), panel.id.clone());
-                        let mut open = self.dock.find_tab(&tab).is_some();
+                        let mut open = self.panel_open(&tab);
                         if kit::checkbox(ui, &theme, &mut open, format!("{} panel", panel.title)).clicked() {
                             self.toggle_panel(tab);
                         }

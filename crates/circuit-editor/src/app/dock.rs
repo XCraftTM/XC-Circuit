@@ -25,6 +25,23 @@ pub(super) struct Viewer<'a> {
     pub(super) stored: &'a mut crate::pages::stored::StoredView,
     /// What the Plugins tab's buttons asked for (handled by the app).
     pub(super) side_ask: Option<crate::plugins::manager::SideAsk>,
+    /// A tab dropped on the activity bar or the side bar (and where): it
+    /// becomes an icon there.
+    pub(super) to_side: Option<(Tab, Option<egui::Pos2>)>,
+    /// A tab that can go there, being dragged (kept in egui's memory after
+    /// the dock is drawn: egui_dock calls on_tab_button with that memory locked).
+    pub(super) dragging: Option<Tab>,
+}
+
+/// Where a tab being dragged is kept for the activity bar (with the frame it
+/// was seen in), so it can show that it takes it.
+pub(super) const DRAGGING_TAB: &str = "xc-dragging-tab";
+
+/// The tab being dragged that can go into the activity bar, if one was this
+/// frame or the one before.
+pub(super) fn dragging_tab(ctx: &egui::Context) -> Option<Tab> {
+    let now = ctx.cumulative_frame_nr();
+    ctx.data(|d| d.get_temp::<(Tab, u64)>(egui::Id::new(DRAGGING_TAB))).filter(|(_, at)| now.saturating_sub(*at) <= 1).map(|(t, _)| t)
 }
 
 /// Room before a tab's title for its icon.
@@ -63,7 +80,7 @@ fn with_icon_room(text: String, font: egui::FontId) -> WidgetText {
 }
 
 /// Paints an icon file (once its texture is loaded) into `rect`.
-fn paint_icon(ctx: &egui::Context, painter: &egui::Painter, path: &Path, rect: egui::Rect, tint: egui::Color32) {
+pub(super) fn paint_icon(ctx: &egui::Context, painter: &egui::Painter, path: &Path, rect: egui::Rect, tint: egui::Color32) {
     let size = egui::load::SizeHint::Size { width: (rect.width() * 2.0) as u32, height: (rect.height() * 2.0) as u32, maintain_aspect_ratio: true };
     if let Ok(egui::load::TexturePoll::Ready { texture }) = ctx.try_load_texture(&crate::editor::file_uri(path), egui::TextureOptions::LINEAR, size) {
         painter.image(texture.id, rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), tint);
@@ -107,6 +124,21 @@ impl TabViewer for Viewer<'_> {
     }
 
     fn on_tab_button(&mut self, tab: &mut Tab, response: &egui::Response) {
+        // A tab that can be an icon, dragged onto the activity bar or the side bar, goes there.
+        if tab.side_key().is_some() {
+            let ctx = &response.ctx;
+            // egui_dock draws the dragged tab as another button (its id with
+            // "dragged"); the drag itself is the original button's.
+            let dragging = response.dragged() || ctx.dragged_id().is_some_and(|d| d == response.id || d.with("dragged") == response.id);
+            if dragging {
+                self.dragging = Some(tab.clone());
+            }
+            let pos = ctx.pointer_interact_pos().or_else(|| ctx.pointer_hover_pos());
+            let over_side = pos.is_some_and(|p| ["activity-bar", "side-bar"].iter().any(|k| self.ed.ui_rects.get(*k).is_some_and(|r| r.contains(p))));
+            if response.drag_stopped() && over_side {
+                self.to_side = Some((tab.clone(), pos));
+            }
+        }
         let r = response.rect;
         let painter = response.ctx.layer_painter(response.layer_id);
         let focused = self.focused_tab.as_ref() == Some(tab);
@@ -151,8 +183,9 @@ impl TabViewer for Viewer<'_> {
         }
         match tab {
             Tab::Side(view) => {
-                let view = *view;
-                self.side_view(ui, view);
+                if let Some(ask) = side_view_ui(ui, self.ed, self.stored, self.native, self.running, &self.problems, *view) {
+                    self.side_ask = Some(ask);
+                }
             }
             Tab::Inspector => panels::inspector(ui, self.ed),
             Tab::Console => panels::console(ui, self.ed),
@@ -209,33 +242,43 @@ impl TabViewer for Viewer<'_> {
     }
 }
 
-impl Viewer<'_> {
-    /// Workspaces, Stored Data or Plugins.
-    fn side_view(&mut self, ui: &mut egui::Ui, view: SideView) {
-        match view {
-            SideView::Workspaces => {
-                // The Problems panel's entries, counted per workspace.
-                let mut counts = std::collections::HashMap::new();
-                for (_, _, at) in &self.problems {
-                    if let Some((ws, _)) = at {
-                        *counts.entry(ws.clone()).or_insert(0) += 1;
-                    }
+/// Workspaces, Stored Data or Plugins, as a tab or in the side bar. Returns
+/// what the Plugins view's buttons asked for.
+pub(super) fn side_view_ui(
+    ui: &mut egui::Ui,
+    ed: &mut Editor,
+    stored: &mut crate::pages::stored::StoredView,
+    native: &mut crate::plugins::native::NativeHost,
+    running: bool,
+    problems: &[panels::ProblemItem],
+    view: SideView,
+) -> Option<crate::plugins::manager::SideAsk> {
+    match view {
+        SideView::Workspaces => {
+            // The Problems panel's entries, counted per workspace.
+            let mut counts = std::collections::HashMap::new();
+            for (_, _, at) in problems {
+                if let Some((ws, _)) = at {
+                    *counts.entry(ws.clone()).or_insert(0) += 1;
                 }
-                crate::pages::sidebar::panel(ui, self.ed, &counts);
             }
-            SideView::StoredData => crate::pages::stored::panel(ui, self.ed, self.stored, self.running),
-            SideView::Plugins => {
-                let theme = self.ed.theme.clone();
-                if let Some(ask) = crate::plugins::manager::side(ui, &theme, self.ed, self.native) {
-                    self.side_ask = Some(ask);
-                }
-            }
+            crate::pages::sidebar::panel(ui, ed, &counts);
+            None
+        }
+        SideView::StoredData => {
+            crate::pages::stored::panel(ui, ed, stored, running);
+            None
+        }
+        SideView::Plugins => {
+            let theme = ed.theme.clone();
+            crate::plugins::manager::side(ui, &theme, ed, native)
         }
     }
 }
 
-/// Where the main area is: the whole layout, or (with the column on the
-/// left) its right part. New areas for panels split this, not the column.
+/// Where the main area is: the whole layout, or (with a column of Workspaces
+/// and the like on the left) its right part. New areas for panels split
+/// this, not the column.
 fn main_part(tree: &Tree<Tab>) -> NodeIndex {
     let root = NodeIndex::root();
     if tree.len() > 2
@@ -248,22 +291,6 @@ fn main_part(tree: &Tree<Tab>) -> NodeIndex {
     }
 }
 
-/// Adds the column on the left with Workspaces, Stored Data and Plugins,
-/// `shown` in front.
-pub(super) fn add_side_column(dock: &mut DockState<Tab>, shown: SideView) {
-    let tabs: Vec<Tab> = SideView::ALL.iter().map(|v| Tab::Side(*v)).filter(|t| dock.find_tab(t).is_none()).collect();
-    if tabs.is_empty() {
-        return;
-    }
-    if dock.main_surface().is_empty() {
-        *dock.main_surface_mut() = Tree::new(tabs);
-    } else {
-        dock.main_surface_mut().split_left(NodeIndex::root(), 0.22, tabs);
-    }
-    if let Some(path) = dock.find_tab(&Tab::Side(shown)) {
-        let _ = dock.set_active_tab(path);
-    }
-}
 
 /// Gives a change in the dock's size (`grow`) to the canvases, so the panels
 /// beside and below them (Inspector, Console …) keep their size. Splits are
@@ -328,8 +355,6 @@ pub(super) fn default_layout() -> DockState<Tab> {
     // The side bar, outside the dock, has Workspaces. A split's fraction is
     // the share of its left/top child.
     surface.split_above(NodeIndex::root(), 0.76, vec![Tab::Inspector]);
-    // Workspaces, Stored Data and Plugins in a column on the left, the whole height.
-    add_side_column(&mut dock, SideView::Workspaces);
     dock
 }
 
