@@ -126,12 +126,24 @@ fn npm() -> Command {
     cmd
 }
 
+/// Versions npm installs instead of the ones packages ask for (npm's
+/// `overrides`), for packages bots use that pin a version with known holes:
+/// - axios: @mithron/deezer-music-metadata (the Deezer music source) asks for
+///   ^0.27, and every axios 0.x has SSRF and credential-leak advisories. It
+///   only calls axios.get(url, options) and reads .data, which 1.x does alike.
+pub const NPM_OVERRIDES: [(&str, &str); 1] = [("axios", "^1.21.0")];
+
+/// The `overrides` of a package.json for [`NPM_OVERRIDES`].
+pub fn npm_overrides() -> serde_json::Value {
+    serde_json::Value::Object(NPM_OVERRIDES.iter().map(|(k, v)| (k.to_string(), serde_json::Value::String(v.to_string()))).collect())
+}
+
 /// Makes sure `dir/node_modules` has the packages, running `npm install` when the
 /// list changed or a package is missing. Output lines go to `log`. When
 /// `cancel` turns true, npm is ended and this returns an error.
 pub fn ensure_packages(dir: &Path, name: &str, deps: &IndexMap<String, String>, log: &mut dyn FnMut(String), cancel: &dyn Fn() -> bool) -> Result<()> {
     fs::create_dir_all(dir)?;
-    let manifest = json!({ "name": name, "private": true, "dependencies": deps });
+    let manifest = json!({ "name": name, "private": true, "dependencies": deps, "overrides": npm_overrides() });
     let text = serde_json::to_string_pretty(&manifest)? + "\n";
     let manifest_path = dir.join("package.json");
     if deps.is_empty() {

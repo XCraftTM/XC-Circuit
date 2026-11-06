@@ -89,6 +89,7 @@ pub fn export(dir: &Path, bundle: &Bundle, opts: &ExportOptions, log: &mut dyn F
         "scripts": { "start": "node index.js" },
         "engines": { "node": ">=22" },
         "dependencies": bundle.dependencies,
+        "overrides": crate::node::npm_overrides(),
     });
     fs::write(dir.join("package.json"), serde_json::to_string_pretty(&package)? + "\n")?;
 
