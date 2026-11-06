@@ -19,11 +19,12 @@ circuit-runner.workspace = true
 anyhow.workspace = true
 arboard = "3"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-libloading = "0.9"
-xc-circuit-plugin = { path = "../xc-circuit-plugin" }
 notify = "8"
 dirs.workspace = true
 eframe.workspace = true
+# The symbol and emoji fonts (⚠, ✓, ▶ …) egui bundled up to 0.36; from 0.37
+# on they come only with this feature.
+egui = { version = "0.37", default-features = false, features = ["monochrome_emoji_fonts"] }
 egui_extras.workspace = true
 image.workspace = true
 indexmap.workspace = true

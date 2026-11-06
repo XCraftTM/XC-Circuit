@@ -56,7 +56,7 @@ impl CircuitApp {
         self.bot.stop(&mut self.ed);
         clear_canvases(&mut self.dock);
         self.ed.close_project();
-        self.native.sync(&mut self.ed, self.bundled_plugins.as_deref());
+        self.plugin_host.sync(&mut self.ed, self.bundled_plugins.as_deref());
         self.watcher.watch(&self.ed.watch_dirs());
         self.stored = Default::default();
     }
@@ -90,7 +90,7 @@ impl CircuitApp {
         {
             self.ed.actions.push(Action::OpenWorkspace(first));
         }
-        self.native.sync(&mut self.ed, self.bundled_plugins.as_deref());
+        self.plugin_host.sync(&mut self.ed, self.bundled_plugins.as_deref());
         self.watcher.watch(&self.ed.watch_dirs());
         self.stored = Default::default();
         // Its first canvas right away, where the old ones were.

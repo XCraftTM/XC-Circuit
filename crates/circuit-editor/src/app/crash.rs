@@ -14,12 +14,12 @@ pub const REPO: &str = "https://github.com/XCraftTM/XC-Circuit";
 const KEPT: usize = 20;
 
 thread_local! {
-    /// A native plugin is running on this thread: its panics are caught and
-    /// reported in the Console, so they aren't crashes of the app.
+    /// A plugin's script is being served on this thread: its panics are
+    /// caught and reported in the Console, so they aren't crashes of the app.
     static IN_PLUGIN: Cell<bool> = const { Cell::new(false) };
 }
 
-/// Runs `f` (a call into a native plugin), marking its panics as caught ones.
+/// Runs `f` (a call into a plugin), marking its panics as caught ones.
 pub fn plugin_call<R>(f: impl FnOnce() -> R) -> R {
     let before = IN_PLUGIN.with(|c| c.replace(true));
     let r = f();

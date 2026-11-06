@@ -197,8 +197,8 @@ impl CircuitApp {
             }).response);
             tops.push(ui.menu_button(t!("Plugins"), |ui| {
                 let mut any = false;
-                for i in 0..self.native.plugins.len() {
-                    let p = &self.native.plugins[i];
+                for i in 0..self.plugin_host.plugins.len() {
+                    let p = &self.plugin_host.plugins[i];
                     if p.commands().is_empty() && p.panels().is_empty() {
                         continue;
                     }
@@ -211,7 +211,7 @@ impl CircuitApp {
                             b = b.on_hover_text(&c.description);
                         }
                         if b.clicked() {
-                            self.native.queued.push(c.id.clone());
+                            self.plugin_host.queued.push(c.id.clone());
                         }
                     }
                     for panel in panels {

@@ -8,9 +8,9 @@
 //! ```
 //!
 //! Each plugin gets its own QuickJS sandbox with a time and memory limit. It
-//! reaches the app only through `xc` (no files, network or processes), so,
-//! unlike native plugins, scripts need no approval. They run in the editor
-//! only; bot code never runs here.
+//! reaches the app only through `xc` (no files, network or processes), so
+//! scripts need no approval. They run in the editor only; bot code never
+//! runs here.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -23,7 +23,7 @@ use eframe::egui::{self, RichText, vec2};
 use rquickjs::{Context, Ctx, Function, Object, Runtime};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use xc_circuit_plugin::{self as api, BotEvent, Command, Host, PanelInfo, PluginObject, Problem};
+use crate::plugins::api::{self, BotEvent, Command, Host, PanelInfo, PluginObject, Problem};
 
 /// Commands and clicks may do more work than drawing a panel or a check,
 /// which run often.

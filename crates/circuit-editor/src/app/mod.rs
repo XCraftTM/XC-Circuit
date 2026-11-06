@@ -48,7 +48,7 @@ pub enum Tab {
     Settings,
     /// Backups and restoring.
     Backups,
-    /// A native plugin's panel: plugin id, panel id.
+    /// A plugin's panel: plugin id, panel id.
     Plugin(String, String),
     /// Editors that used to be dialogs. Each is open while its draft exists.
     EmbedBuilder,
@@ -123,11 +123,10 @@ const KEY_LAYOUT: &str = "layout";
 const KEY_THEME: &str = "theme";
 const KEY_PROJECT: &str = "project";
 const KEY_SYSTEM_TITLEBAR: &str = "system_titlebar";
-const KEY_NATIVE_ALLOW: &str = "native_allow";
 const KEY_ACTIVITY_BAR: &str = "activity_bar";
 const KEY_PREFS: &str = "prefs";
-const KEY_NATIVE_TRUSTED: &str = "native_trusted";
-const KEY_NATIVE_STORAGE: &str = "native_storage";
+/// Plugins' own key-value stores (the name is from when native plugins had them too).
+const KEY_PLUGIN_STORAGE: &str = "native_storage";
 
 pub struct CircuitApp {
     ed: Editor,
@@ -159,11 +158,11 @@ pub struct CircuitApp {
     watcher: crate::plugins::watch::PluginWatcher,
     palette: Option<palette::Palette>,
     /// Use the operating system's title bar instead of ours.
-    native: crate::plugins::native::NativeHost,
+    plugin_host: crate::plugins::host::PluginHost,
     /// The app's own plugins folder.
     bundled_plugins: Option<PathBuf>,
     /// The Plugins tab's unsaved changes, while it is open.
-    plugins: Option<crate::plugins::manager::Draft>,
+    plugins_open: bool,
     settings: crate::pages::settings::SettingsView,
     restore: crate::pages::restore::RestoreView,
     /// When unsaved changes were last copied for crash recovery.
@@ -268,12 +267,8 @@ impl CircuitApp {
             None => default_layout(),
         };
 
-        let mut native = crate::plugins::native::NativeHost::new(
-            cc.storage.and_then(|s| eframe::get_value(s, KEY_NATIVE_ALLOW)).unwrap_or(false),
-            cc.storage.and_then(|s| eframe::get_value(s, KEY_NATIVE_TRUSTED)).unwrap_or_default(),
-            cc.storage.and_then(|s| eframe::get_value(s, KEY_NATIVE_STORAGE)).unwrap_or_default(),
-        );
-        native.sync(&mut ed, bundled_plugins.as_deref());
+        let mut plugin_host = crate::plugins::host::PluginHost::new(cc.storage.and_then(|s| eframe::get_value(s, KEY_PLUGIN_STORAGE)).unwrap_or_default());
+        plugin_host.sync(&mut ed, bundled_plugins.as_deref());
 
         let repaint = cc.egui_ctx.clone();
         let mut watcher = crate::plugins::watch::PluginWatcher::new(move || repaint.request_repaint());
@@ -307,9 +302,9 @@ impl CircuitApp {
             stored: Default::default(),
             watcher,
             palette: None,
-            native,
+            plugin_host,
             bundled_plugins,
-            plugins: None,
+            plugins_open: false,
             setup,
             tour: None,
             dock_before_tour: None,
@@ -395,7 +390,7 @@ impl eframe::App for CircuitApp {
         if self.ed.bot_profile.busy() {
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
         }
-        self.run_native(&ctx);
+        self.run_plugins(&ctx);
         if self.watcher.poll() {
             self.ed.log(Level::Info, t!("Plugin files changed, reloading"));
             self.reload_plugins(&ctx);
@@ -450,7 +445,7 @@ impl eframe::App for CircuitApp {
             self.problems_found = Some((key, panels::collect_problems(&self.ed)));
         }
         let mut problems = self.problems_found.as_ref().map(|(_, p)| p.clone()).unwrap_or_default();
-        problems.extend(self.native.problems());
+        problems.extend(self.plugin_host.problems());
         self.problem_count = problems.len();
         let bars = self.setup.is_none() && self.tour.is_none() && self.ed.project.is_some();
         if self.ed.prefs.activity_bar && bars {
@@ -491,13 +486,12 @@ impl eframe::App for CircuitApp {
             let has_example = self.ed.examples_dir.as_ref().is_some_and(|e| e.join("DemoBot").is_dir());
             let mut viewer = Viewer {
                 bot: &mut self.bot,
-                bundled_plugins: self.bundled_plugins.as_deref(),
-                plugins: &mut self.plugins,
+                plugins_open: &mut self.plugins_open,
                 ed: &mut self.ed,
                 problem_count: self.problem_count,
                 problems,
                 running,
-                native: &mut self.native,
+                plugin_host: &mut self.plugin_host,
                 settings: &mut self.settings,
                 restore: &mut self.restore,
                 asks: Vec::new(),
@@ -621,10 +615,8 @@ impl eframe::App for CircuitApp {
         let dock = self.dock_before_tour.as_ref().filter(|_| self.tour.is_some()).or(self.dock_before_start.as_ref()).unwrap_or(&self.dock);
         eframe::set_value(storage, KEY_LAYOUT, dock);
         eframe::set_value(storage, KEY_THEME, &self.ed.theme.id);
-        eframe::set_value(storage, KEY_NATIVE_ALLOW, &self.native.allow);
         eframe::set_value(storage, KEY_PREFS, &self.ed.prefs);
-        eframe::set_value(storage, KEY_NATIVE_TRUSTED, &self.native.trusted);
-        eframe::set_value(storage, KEY_NATIVE_STORAGE, &self.native.storage);
+        eframe::set_value(storage, KEY_PLUGIN_STORAGE, &self.plugin_host.storage);
         let project = match &self.tour {
             Some(t) => t.before.clone(),
             None => self.ed.project.as_ref().map(|p| p.root.clone()),

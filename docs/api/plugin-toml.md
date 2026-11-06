@@ -1,7 +1,7 @@
 # plugin.toml
 
 ::: info In short
-The file that makes a folder a plugin: its `id`, `name` and `version`, and what it adds (`[contributes]`, `[editor]`, `[native]`).
+The file that makes a folder a plugin: its `id`, `name` and `version`, and what it adds (`[contributes]`, `[editor]`).
 :::
 
 Every plugin folder has a `plugin.toml` at its top. It says what the plugin is and what it contributes.
@@ -79,13 +79,7 @@ Runtime libraries are named by the build mode that uses them ([`runtimeLibs`](./
 | --- | --- |
 | `script` | The editor script, relative to the plugin folder: `editor.js` or `editor.ts`. Default `editor.js`. See [Editor plugins](./editor). |
 
-## `[native]`
-
-| Key | Description |
-| --- | --- |
-| `library` | The library name without prefix or extension: `my_plugin` means `my_plugin.dll` on Windows, `libmy_plugin.so` on Linux. See [Native plugins](./native). |
-
-A plugin with both `[native]` and `[editor]` runs its native part.
+A `[native]` section (a compiled Rust library) is no longer loaded: XC Circuit runs editor code written in JavaScript only. Such a plugin's blocks and settings still load, and Plugins › Manage Plugins says its native part isn't supported.
 
 ## Where plugins are loaded from
 

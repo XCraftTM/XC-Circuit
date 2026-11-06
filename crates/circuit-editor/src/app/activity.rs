@@ -32,7 +32,7 @@ impl CircuitApp {
     pub(super) fn activity_tab(&self, key: &str) -> Option<Tab> {
         let tab = Tab::from_side_key(key)?;
         match &tab {
-            Tab::Plugin(plugin, panel) => self.native.panel_title(plugin, panel).map(|_| tab),
+            Tab::Plugin(plugin, panel) => self.plugin_host.panel_title(plugin, panel).map(|_| tab),
             _ => Some(tab),
         }
     }
@@ -41,7 +41,7 @@ impl CircuitApp {
     pub(super) fn panel_name(&self, tab: &Tab) -> String {
         match tab {
             Tab::Side(view) => view.name().to_string(),
-            Tab::Plugin(plugin, panel) => self.native.panel_title(plugin, panel).unwrap_or_else(|| panel.clone()),
+            Tab::Plugin(plugin, panel) => self.plugin_host.panel_title(plugin, panel).unwrap_or_else(|| panel.clone()),
             other => Tab::PANELS.iter().find(|(t, _)| t == other).map(|(_, n)| crate::i18n::t(n).to_string()).unwrap_or_default(),
         }
     }
@@ -293,7 +293,7 @@ impl CircuitApp {
         let running = self.bot.state != BotState::Stopped;
         match tab {
             Tab::Side(view) => {
-                if let Some(ask) = side_view_ui(ui, &mut self.ed, &mut self.stored, &mut self.native, running, problems, view) {
+                if let Some(ask) = side_view_ui(ui, &mut self.ed, &mut self.stored, &mut self.plugin_host, running, problems, view) {
                     self.plugins_side_ask(ask, ui.ctx());
                 }
             }
@@ -306,7 +306,7 @@ impl CircuitApp {
                 panels::console(ui, &mut self.ed);
             }
             Tab::Problems => panels::problems(ui, &mut self.ed, problems.to_vec()),
-            Tab::Plugin(plugin, panel) => self.native.panel_ui(ui, &mut self.ed, &plugin, &panel, running),
+            Tab::Plugin(plugin, panel) => self.plugin_host.panel_ui(ui, &mut self.ed, &plugin, &panel, running),
             _ => {}
         }
         if out {

@@ -1,8 +1,9 @@
-//! Editor plugins: script and native ones, installing them from zips, watching their files, and their sounds.
+//! Editor plugins: their scripts and what they see of the editor, installing them from zips, watching their files, and their sounds.
 
 pub mod install;
 pub mod manager;
-pub mod native;
+pub mod api;
+pub mod host;
 pub mod script;
 pub mod sound;
 pub mod updates;

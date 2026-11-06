@@ -1,5 +1,5 @@
-"""Writes THIRD-PARTY-NOTICES.txt: every Rust crate built into the app and its
-native plugins, with its licence and the licence texts it ships.
+"""Writes THIRD-PARTY-NOTICES.txt: every Rust crate built into the app, with
+its licence and the licence texts it ships.
 
 Usage: python tools/third_party_notices.py [out-file] [target]   (from the repository root)
 The target (such as x86_64-pc-windows-msvc) defaults to this computer's.
@@ -10,8 +10,8 @@ import os
 import subprocess
 import sys
 
-# The crates that end up in a release: the app and the bundled native plugin.
-ROOTS = ["circuit-editor", "xc-stats"]
+# The crate that ends up in a release: the app.
+ROOTS = ["circuit-editor"]
 LICENCE_FILES = ("LICENSE", "LICENCE", "COPYING", "NOTICE", "COPYRIGHT", "UNLICENSE")
 
 

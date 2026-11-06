@@ -29,12 +29,12 @@ jobs:
         run: |
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          entries='{"os":"windows-latest","name":"windows-x64","target":"x86_64-pc-windows-msvc","arch":"x64","exe":"xc-circuit.exe","native":"xc_stats.dll","test":true}'
-          entries+=',{"os":"windows-latest","name":"windows-arm64","target":"aarch64-pc-windows-msvc","arch":"arm64","exe":"xc-circuit.exe","native":"xc_stats.dll","test":false}'
+          entries='{"os":"windows-latest","name":"windows-x64","target":"x86_64-pc-windows-msvc","arch":"x64","exe":"xc-circuit.exe","test":true}'
+          entries+=',{"os":"windows-latest","name":"windows-arm64","target":"aarch64-pc-windows-msvc","arch":"arm64","exe":"xc-circuit.exe","test":false}'
           # 22.04 keeps the Linux builds compatible with older distributions (glibc).
-          entries+=',{"os":"ubuntu-22.04","name":"linux-x64","target":"x86_64-unknown-linux-gnu","arch":"x86_64","exe":"xc-circuit","native":"libxc_stats.so","test":true}'
+          entries+=',{"os":"ubuntu-22.04","name":"linux-x64","target":"x86_64-unknown-linux-gnu","arch":"x86_64","exe":"xc-circuit","test":true}'
           if [ "$PUBLIC" = "true" ]; then
-            entries+=',{"os":"ubuntu-22.04-arm","name":"linux-arm64","target":"aarch64-unknown-linux-gnu","arch":"aarch64","exe":"xc-circuit","native":"libxc_stats.so","test":true}'
+            entries+=',{"os":"ubuntu-22.04-arm","name":"linux-arm64","target":"aarch64-unknown-linux-gnu","arch":"aarch64","exe":"xc-circuit","test":true}'
           fi
           echo "matrix={\"include\":[$entries]}" >> "$GITHUB_OUTPUT"
 
@@ -109,9 +109,8 @@ jobs:
           node runtime/test/captcha.js
           node runtime/test/transcript.js
 
-      # Native plugins are built together with the editor so they share one build of egui.
       - name: Release build
-        run: cargo plugin xc-stats --release --target ${{ matrix.target }}
+        run: cargo build -p circuit-editor --release --target ${{ matrix.target }}
 
       # The program finds plugins/ and examples/ next to itself. The licences
       # go along: the app's own, the crates built into it, and the font's.
@@ -123,7 +122,6 @@ jobs:
           mkdir -p "$out/licenses" dist
           cp "$bin/${{ matrix.exe }}" "$out/"
           cp -r plugins examples README.md LICENSE CHANGELOG.md "$out/"
-          cp "$bin/${{ matrix.native }}" "$out/plugins/xc.stats/"
           python tools/third_party_notices.py "$out/THIRD-PARTY-NOTICES.txt" "${{ matrix.target }}"
           cp crates/circuit-editor/assets/fonts/LICENCE.txt "$out/licenses/Ubuntu-Font-Licence.txt"
           rm -rf "$out"/examples/*/.circuit

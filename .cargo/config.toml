@@ -1,5 +1,0 @@
-[alias]
-# Builds a native plugin together with the editor, so both share one build of
-# egui (a plugin built on its own gets different dependency features and the
-# editor refuses it). Usage: cargo plugin xc-stats [--release]
-plugin = ["build", "-p", "circuit-editor", "-p"]

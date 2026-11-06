@@ -1,4 +1,4 @@
-//! Installing plugins from zips, reloading them and running native ones.
+//! Installing plugins from zips, reloading them and running their scripts.
 
 use super::*;
 
@@ -7,7 +7,7 @@ impl CircuitApp {
     pub(super) fn open_plugins(&mut self) {
         match self.dock.contains(&Tab::Plugins) {
             true => self.dock.focus(&Tab::Plugins),
-            false => self.plugins = Some(crate::plugins::manager::Draft::new(&self.native)),
+            false => self.plugins_open = true,
         }
     }
 
@@ -50,33 +50,33 @@ impl CircuitApp {
         self.ed.reload_plugins();
         self.ed.refresh_define_ctx();
         self.ed.theme.apply(ctx);
-        self.native.sync(&mut self.ed, self.bundled_plugins.as_deref());
+        self.plugin_host.sync(&mut self.ed, self.bundled_plugins.as_deref());
     }
 
-    /// Bot events, checks and queued commands for script and native plugins.
-    pub(super) fn run_native(&mut self, ctx: &egui::Context) {
+    /// Bot events, checks and queued commands for plugins' scripts.
+    pub(super) fn run_plugins(&mut self, ctx: &egui::Context) {
         let running = self.bot.state != BotState::Stopped;
         for ev in std::mem::take(&mut self.bot.events) {
-            self.native.bot_event(&mut self.ed, &ev, running);
+            self.plugin_host.bot_event(&mut self.ed, &ev, running);
         }
-        self.native.tick(&mut self.ed, running);
-        for id in std::mem::take(&mut self.native.queued) {
+        self.plugin_host.tick(&mut self.ed, running);
+        for id in std::mem::take(&mut self.plugin_host.queued) {
             match id.as_str() {
                 "bot.run" => self.run_command(Cmd::Run, ctx),
                 "bot.stop" => self.run_command(Cmd::Stop, ctx),
                 "file.save" => self.run_command(Cmd::Save, ctx),
                 _ => {
-                    if !self.native.run_command(&mut self.ed, &id, running) {
+                    if !self.plugin_host.run_command(&mut self.ed, &id, running) {
                         self.ed.log(Level::Warn, format!("No command `{id}`"));
                     }
                 }
             }
         }
-        if self.native.plugins.iter().any(|p| p.status == crate::plugins::native::Status::Loaded) {
+        if self.plugin_host.plugins.iter().any(|p| p.status == crate::plugins::host::Status::Loaded) {
             ctx.request_repaint_after(std::time::Duration::from_secs(1));
         }
         // Plugins' timers, and what they float over the editor (a desk pet …).
-        if let Some(wake) = self.native.frame(ctx, &mut self.ed, running) {
+        if let Some(wake) = self.plugin_host.frame(ctx, &mut self.ed, running) {
             ctx.request_repaint_after(wake);
         }
     }

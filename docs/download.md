@@ -45,7 +45,7 @@ The installer isn't signed yet, so Windows asks first. Choose **More info › Ru
 | File or folder | What it is |
 | --- | --- |
 | `xc-circuit` / `xc-circuit.exe` | The editor, with the Node.js runtime that runs your block graphs built in |
-| `plugins/` | The bundled plugins: Circuit Core, Discord Bot, Fluxer Bot, and Project Stats (an example native plugin) |
+| `plugins/` | The bundled plugins: Circuit Core, Discord Bot, Fluxer Bot and Server Tools |
 | `examples/` | DemoBot and the starters New Project offers |
 | `README.md` | A short guide to the editor |
 | `LICENSE`, `THIRD-PARTY-NOTICES.txt`, `licenses/` | The licence and the licences of what's built in |

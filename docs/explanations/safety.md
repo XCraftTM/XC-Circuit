@@ -19,7 +19,7 @@ An exported bot reads its token from `.env`. Export only includes the token ther
 - They have **no** access to files, the network, other programs or your secrets.
 - Each call has a **time limit** (an endless loop is stopped) and each plugin a **memory limit**.
 
-That's why they start without asking. [Native plugins](/api/native) have none of these limits, so they need your explicit approval.
+That's why they start without asking.
 
 ## What bot code can do
 

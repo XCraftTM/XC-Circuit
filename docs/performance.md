@@ -89,7 +89,7 @@ A workspace of 400 blocks at 50% zoom: what moving around and editing cost compa
 
 Panning and dragging cost no more than standing still. A 400-block workspace with 120 blocks on a 4K screen is the one case that isn't smooth on an everyday computer (just under 60 frames a second).
 
-When nothing changes, XC Circuit doesn't redraw (at most once a second, when a native plugin is turned on), so an idle window uses almost no processor time. While blocks glow after running, the canvas redraws about 30 times a second.
+When nothing changes, XC Circuit doesn't redraw (at most once a second, while a plugin's script runs), so an idle window uses almost no processor time. While blocks glow after running, the canvas redraws about 30 times a second.
 
 ## Everyday tasks
 

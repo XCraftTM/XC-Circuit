@@ -17,7 +17,8 @@ pub struct PluginManifest {
     /// Block ids from other plugins this plugin may replace.
     pub overrides: Vec<String>,
     pub contributes: Contributes,
-    /// A native Rust part, loaded by the editor (see the xc-circuit-plugin crate).
+    /// A compiled Rust part, from when the editor loaded those. It doesn't
+    /// any more; it's read only to say so in Plugins › Manage Plugins.
     pub native: Option<NativeManifest>,
     /// A JavaScript part that runs in the editor: commands, panels and checks.
     pub editor: Option<EditorManifest>,
@@ -33,7 +34,7 @@ pub struct EditorManifest {
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(default)]
 pub struct NativeManifest {
-    /// Library name without prefix or extension: `xc_stats` means `xc_stats.dll` or `libxc_stats.so`.
+    /// Library name without prefix or extension: `my_plugin` meant `my_plugin.dll` or `libmy_plugin.so`.
     pub library: String,
 }
 

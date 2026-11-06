@@ -101,8 +101,8 @@ pub struct BotUi {
     pub settings: Option<SettingsDraft>,
     pub export: Option<ExportDraft>,
     jobs: Vec<Receiver<(Level, String)>>,
-    /// What the bot did since the last frame, for native plugins.
-    pub events: Vec<xc_circuit_plugin::BotEvent>,
+    /// What the bot did since the last frame, for plugins' scripts.
+    pub events: Vec<crate::plugins::api::BotEvent>,
     /// A question from the bot, waiting for an answer.
     question: Option<(String, String, Vec<circuit_runner::protocol::Choice>)>,
 }
@@ -206,12 +206,12 @@ impl BotUi {
                 Msg::Error(t) => ed.log(Level::Error, t),
                 Msg::Started => {
                     self.state = BotState::Running;
-                    self.events.push(xc_circuit_plugin::BotEvent::Started);
+                    self.events.push(crate::plugins::api::BotEvent::Started);
                 }
                 Msg::Exited(code) => {
                     self.state = BotState::Stopped;
                     self.session = None;
-                    self.events.push(xc_circuit_plugin::BotEvent::Stopped);
+                    self.events.push(crate::plugins::api::BotEvent::Stopped);
                     match code {
                         Some(0) | None => {}
                         Some(c) => ed.log(Level::Warn, format!("Bot process ended (exit code {c})")),
@@ -408,9 +408,9 @@ impl BotUi {
     }
 }
 
-/// The bot's events in the shape native plugins get them.
-fn plugin_event(ev: &BotEvent) -> Option<xc_circuit_plugin::BotEvent> {
-    use xc_circuit_plugin::{BotEvent as P, Level as L};
+/// The bot's events in the shape plugins' scripts get them.
+fn plugin_event(ev: &BotEvent) -> Option<crate::plugins::api::BotEvent> {
+    use crate::plugins::api::{BotEvent as P, Level as L};
     Some(match ev {
         BotEvent::Log { level, text, .. } => P::Log {
             level: match level.as_str() {

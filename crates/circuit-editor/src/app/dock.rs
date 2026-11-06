@@ -5,12 +5,12 @@ use super::*;
 pub(super) struct Viewer<'a> {
     pub(super) ed: &'a mut Editor,
     pub(super) bot: &'a mut BotUi,
-    pub(super) bundled_plugins: Option<&'a Path>,
-    pub(super) plugins: &'a mut Option<crate::plugins::manager::Draft>,
+    /// Whether the Plugins tab is open.
+    pub(super) plugins_open: &'a mut bool,
     pub(super) running: bool,
     pub(super) problem_count: usize,
     pub(super) problems: Vec<panels::ProblemItem>,
-    pub(super) native: &'a mut crate::plugins::native::NativeHost,
+    pub(super) plugin_host: &'a mut crate::plugins::host::PluginHost,
     pub(super) settings: &'a mut crate::pages::settings::SettingsView,
     pub(super) restore: &'a mut crate::pages::restore::RestoreView,
     pub(super) asks: Vec<crate::pages::settings::Ask>,
@@ -69,7 +69,7 @@ impl DockViewer<Tab> for Viewer<'_> {
             Tab::Problems => tf!("Problems  {count}", count = self.problem_count),
             Tab::Settings => t!("Settings").into(),
             Tab::Backups => t!("Backups").into(),
-            Tab::Plugin(plugin, panel) => self.native.panel_title(plugin, panel).unwrap_or_else(|| panel.clone()),
+            Tab::Plugin(plugin, panel) => self.plugin_host.panel_title(plugin, panel).unwrap_or_else(|| panel.clone()),
             Tab::Canvas(key) => self.ed.workspace(key).map(|w| w.name.clone()).unwrap_or_else(|| key.clone()),
             Tab::EmbedBuilder => t!("Embed Builder").into(),
             Tab::LayoutBuilder => t!("Layout Builder").into(),
@@ -111,7 +111,7 @@ impl DockViewer<Tab> for Viewer<'_> {
             Tab::SlashCommands => self.ed.slash_edit = None,
             Tab::BotSettings => self.bot.settings = None,
             Tab::Export => self.bot.export = None,
-            Tab::Plugins => *self.plugins = None,
+            Tab::Plugins => *self.plugins_open = false,
             Tab::WorkspaceExport => self.ed.ws_export = None,
             Tab::WorkspaceImport => self.ed.ws_import = None,
             Tab::Side(view) => self.closed_side.push(*view),
@@ -131,18 +131,18 @@ impl DockViewer<Tab> for Viewer<'_> {
         }
         match tab {
             Tab::Side(view) => {
-                if let Some(ask) = side_view_ui(ui, self.ed, self.stored, self.native, self.running, &self.problems, *view) {
+                if let Some(ask) = side_view_ui(ui, self.ed, self.stored, self.plugin_host, self.running, &self.problems, *view) {
                     self.side_ask = Some(ask);
                 }
             }
             Tab::Inspector => panels::inspector(ui, self.ed),
             Tab::Console => panels::console(ui, self.ed),
             Tab::Problems => panels::problems(ui, self.ed, self.problems.clone()),
-            Tab::Settings => crate::pages::settings::ui(ui, self.ed, self.native, self.settings, &mut self.asks),
+            Tab::Settings => crate::pages::settings::ui(ui, self.ed, self.settings, &mut self.asks),
             Tab::Backups => crate::pages::restore::ui(ui, self.ed, self.restore, self.running),
             Tab::Plugin(plugin, panel) => {
                 let (plugin, panel) = (plugin.clone(), panel.clone());
-                self.native.panel_ui(ui, self.ed, &plugin, &panel, self.running);
+                self.plugin_host.panel_ui(ui, self.ed, &plugin, &panel, self.running);
             }
             Tab::Canvas(key) => {
                 let key = key.clone();
@@ -163,23 +163,9 @@ impl DockViewer<Tab> for Viewer<'_> {
             Tab::WorkspaceExport => crate::editor::exchange::export_tab(ui, self.ed),
             Tab::WorkspaceImport => crate::editor::exchange::import_tab(ui, self.ed),
             Tab::Plugins => {
-                use crate::plugins::manager::Ask;
                 let theme = self.ed.theme.clone();
-                let Some(draft) = self.plugins.as_mut() else { return };
-                match crate::plugins::manager::tab(ui, &theme, self.ed, self.native, draft) {
-                    Some(Ask::Save(close)) => {
-                        let draft = self.plugins.take().unwrap();
-                        self.native.allow = draft.allow;
-                        self.native.sync(self.ed, self.bundled_plugins);
-                        for id in &draft.trust {
-                            self.native.trust(id, self.ed);
-                        }
-                        if !close {
-                            *self.plugins = Some(crate::plugins::manager::Draft::new(self.native));
-                        }
-                    }
-                    Some(Ask::Cancel) => *self.plugins = None,
-                    None => {}
+                if let Some(ask) = crate::plugins::manager::tab(ui, &theme, self.ed, self.plugin_host) {
+                    self.side_ask = Some(ask);
                 }
             }
         }
@@ -192,7 +178,7 @@ pub(super) fn side_view_ui(
     ui: &mut egui::Ui,
     ed: &mut Editor,
     stored: &mut crate::pages::stored::StoredView,
-    native: &mut crate::plugins::native::NativeHost,
+    plugin_host: &mut crate::plugins::host::PluginHost,
     running: bool,
     problems: &[panels::ProblemItem],
     view: SideView,
@@ -215,7 +201,7 @@ pub(super) fn side_view_ui(
         }
         SideView::Plugins => {
             let theme = ed.theme.clone();
-            crate::plugins::manager::side(ui, &theme, ed, native)
+            crate::plugins::manager::side(ui, &theme, ed, plugin_host)
         }
     }
 }

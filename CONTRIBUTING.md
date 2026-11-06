@@ -44,7 +44,7 @@ On Linux, install the GTK, xkbcommon, D-Bus and ALSA development packages first 
 | `crates/circuit-editor/src/editor` | The editor's state: the open project, block shapes, undo, preferences, shortcuts, values |
 | `crates/circuit-editor/src/bot` | Running, exporting and Bot settings |
 | `crates/circuit-editor/src/builders` | The Embed, Layout and Slash Command Builders |
-| `crates/circuit-editor/src/plugins` | Editor plugins (script and native), installing them |
+| `crates/circuit-editor/src/plugins` | Editor plugins (their scripts), installing them |
 | `crates/circuit-editor/src/pages` | Settings, backups, setup, the tour, the start page, the side bar, the inspector |
 | `crates/circuit-editor/src/ui` | Shared pieces: dialogs, widgets, inputs, the theme, fonts, the command palette |
 | `crates/circuit-editor/src/i18n` | Interface translations |

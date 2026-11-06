@@ -6,7 +6,6 @@ use eframe::egui::{self, Align, Align2, Color32, CursorIcon, FontId, Layout, Rec
 use crate::ui::kit;
 use crate::editor::Editor;
 use crate::i18n::n;
-use crate::plugins::native::NativeHost;
 use crate::editor::prefs::{ACCENTS, UI_SCALES};
 use crate::ui::theme::{Theme, mix, with_alpha};
 
@@ -41,7 +40,6 @@ pub enum Ask {
     Export,
     ManagePlugins,
     ReloadPlugins,
-    AllowNative(bool),
     ResetLayout,
     NodeSetup,
     OpenBackups,
@@ -77,7 +75,7 @@ pub fn narrow_bar(ui: &Ui, theme: &Theme, full: Rect) -> (Rect, Rect) {
 }
 const CONTENT_MAX: f32 = 680.0;
 
-pub fn ui(ui: &mut Ui, ed: &mut Editor, native: &NativeHost, view: &mut SettingsView, asks: &mut Vec<Ask>) {
+pub fn ui(ui: &mut Ui, ed: &mut Editor, view: &mut SettingsView, asks: &mut Vec<Ask>) {
     let theme = ed.theme.clone();
     let full = ui.max_rect();
     ui.painter().rect_filled(full, 0.0, theme.panel);
@@ -131,7 +129,7 @@ pub fn ui(ui: &mut Ui, ed: &mut Editor, native: &NativeHost, view: &mut Settings
                 Section::Appearance => appearance(ui, ed, &theme, view),
                 Section::Editor => editor(ui, ed, &theme, asks),
                 Section::Bot => bot(ui, ed, &theme, view, asks),
-                Section::Plugins => plugins(ui, ed, native, &theme, asks),
+                Section::Plugins => plugins(ui, ed, &theme, asks),
                 Section::Backups => backups(ui, ed, &theme, asks),
                 Section::Shortcuts => shortcuts(ui, ed, &theme, view),
                 Section::About => about(ui, ed, &theme),
@@ -376,7 +374,7 @@ fn backups(ui: &mut Ui, ed: &mut Editor, theme: &Theme, asks: &mut Vec<Ask>) {
     kit::setting_row(ui, theme, t!("Backups by the bot"), t!("Every bot backs up its saved data each time it starts and every 6 hours, keeping the newest 10. If the data is ever empty, it asks whether to restore a backup."), |_| {});
 }
 
-fn plugins(ui: &mut Ui, ed: &mut Editor, native: &NativeHost, theme: &Theme, asks: &mut Vec<Ask>) {
+fn plugins(ui: &mut Ui, ed: &mut Editor, theme: &Theme, asks: &mut Vec<Ask>) {
     kit::group(ui, theme, t!("Plugins"));
     kit::setting_row(ui, theme, t!("Installed plugins"), &tf!("{plugins} plugins with {blocks} blocks and {themes} themes are loaded.", plugins = ed.reg.plugins.len(), blocks = ed.reg.blocks.len(), themes = ed.reg.themes.len()), |ui| {
         if crate::ui::kit::button(ui, theme, t!("Manage…")).clicked() {
@@ -384,12 +382,6 @@ fn plugins(ui: &mut Ui, ed: &mut Editor, native: &NativeHost, theme: &Theme, ask
         }
         if crate::ui::kit::button(ui, theme, t!("Reload")).on_hover_text(t!("Load plugin files again")).clicked() {
             asks.push(Ask::ReloadPlugins);
-        }
-    });
-    let mut allow = native.allow;
-    kit::setting_row(ui, theme, t!("Allow native plugins"), t!("Native plugins are compiled Rust code with full access to your computer. Only turn this on for plugins you trust."), |ui| {
-        if toggle(ui, theme, &mut allow) {
-            asks.push(Ask::AllowNative(allow));
         }
     });
     kit::group(ui, theme, t!("Plugin folders"));

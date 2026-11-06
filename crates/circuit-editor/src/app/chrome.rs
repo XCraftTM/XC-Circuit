@@ -88,10 +88,6 @@ impl CircuitApp {
                 Ask::Export => self.bot.open_export(&self.ed),
                 Ask::ManagePlugins => self.open_plugins(),
                 Ask::ReloadPlugins => self.reload_plugins(ctx),
-                Ask::AllowNative(on) => {
-                    self.native.allow = on;
-                    self.native.sync(&mut self.ed, self.bundled_plugins.as_deref());
-                }
                 Ask::ResetLayout => self.reset_layout(),
                 Ask::NodeSetup => self.setup = Some(crate::pages::setup::Setup::node_only()),
                 Ask::OpenBackups => open_center(&mut self.dock, Tab::Backups),
@@ -218,7 +214,7 @@ impl CircuitApp {
             (Tab::SlashCommands, self.ed.slash_edit.is_some(), egui::vec2(1320.0, 720.0)),
             (Tab::BotSettings, self.bot.settings.is_some(), egui::vec2(820.0, 620.0)),
             (Tab::Export, self.bot.export.is_some(), egui::vec2(560.0, 620.0)),
-            (Tab::Plugins, self.plugins.is_some(), egui::vec2(580.0, 560.0)),
+            (Tab::Plugins, self.plugins_open, egui::vec2(580.0, 560.0)),
             (Tab::WorkspaceExport, self.ed.ws_export.is_some(), egui::vec2(660.0, 680.0)),
             (Tab::WorkspaceImport, self.ed.ws_import.is_some(), egui::vec2(660.0, 680.0)),
         ];

@@ -87,9 +87,8 @@ crates/circuit-core      graph model, pin types, block definitions, project form
 crates/circuit-plugins   plugin.toml, contributions, QuickJS sandbox for block files
 crates/circuit-runner    bundles, npm packages, the bot process, debug protocol, secrets, export
 crates/circuit-editor    the egui app (bin: xc-circuit)
-crates/xc-circuit-plugin the crate native Rust plugins are written with
 runtime/                 the Node.js runtime that runs block graphs (also inside exports)
-plugins/                 Circuit Core, Discord Bot, Fluxer Bot, Project Stats (native example)
+plugins/                 Circuit Core, Discord Bot, Fluxer Bot, Server Tools
 examples/                DemoBot, the starter bots, and the Desk Pet editor plugin
 docs/                    the website (VitePress)
 packaging/               the Windows installer and Linux packages

@@ -106,7 +106,6 @@ export default defineConfig({
           items: [
             { text: "Editor plugins (xc)", link: "/api/editor" },
             { text: "Panels (ui)", link: "/api/panels" },
-            { text: "Native plugins (Rust)", link: "/api/native" },
           ],
         },
         {

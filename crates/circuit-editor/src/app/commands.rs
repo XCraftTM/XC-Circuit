@@ -75,7 +75,7 @@ impl CircuitApp {
             items.push(Item::new(t!("File"), t!("Restore from backup…"), Cmd::Backups));
         }
         items.push(Item::new(t!("Plugins"), t!("Manage Plugins…"), Cmd::ManagePlugins));
-        for p in &self.native.plugins {
+        for p in &self.plugin_host.plugins {
             for c in p.commands() {
                 items.push(Item::new("Plugin", c.title.clone(), Cmd::PluginCommand(c.id.clone())).detail(p.name.clone()));
             }
@@ -140,7 +140,7 @@ impl CircuitApp {
             Cmd::Tour => self.start_tour(),
             Cmd::Backups => open_center(&mut self.dock, Tab::Backups),
             Cmd::ManagePlugins => self.open_plugins(),
-            Cmd::PluginCommand(id) => self.native.queued.push(id),
+            Cmd::PluginCommand(id) => self.plugin_host.queued.push(id),
             Cmd::TogglePluginPanel(plugin, panel) => self.toggle_panel(Tab::Plugin(plugin, panel)),
             Cmd::OpenWorkspace(key) => self.ed.actions.push(Action::OpenWorkspace(key)),
             Cmd::RevealBlock(ws, id) => self.ed.reveal(&ws, &id),

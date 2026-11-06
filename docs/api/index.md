@@ -14,7 +14,6 @@ Every key and function plugins can use. New here? Start with the tutorials [Your
 | **translate** the app | [Translations](./locales) |
 | offer a **starter bot** in New Project | [Templates](./templates) |
 | read or write **project files** with other tools | [Project format](./project-format) |
-| draw with **Rust and egui** directly | [Native plugins](./native) |
 
 ## Every plugin is a folder
 

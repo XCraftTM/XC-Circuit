@@ -14,7 +14,6 @@ A folder with a [`plugin.toml`](/api/plugin-toml) that says what it contributes:
 | [Pin types](/api/pin-types) | value types with colours and conversions | the bot (checks) and the editor |
 | [Themes](/api/themes), [translations](/api/locales), [templates](/api/templates) | looks, languages, starters | the editor |
 | [Editor script](/api/editor) | panels, commands, checks | the editor, sandboxed |
-| [Native library](/api/native) | panels, commands, checks in Rust | the editor, with full access |
 
 ## Where plugins come from
 
@@ -37,13 +36,11 @@ Updates go into `plugin-updates` next to your plugins folder. **Help › Undo Bl
 
 For the people who make XC Circuit: changing a bundled plugin means raising its `version`, or the Checks on pull requests fail. When the version changes on `main`, the Plugins workflow publishes it.
 
-## Two kinds of editor code
+## Editor code
 
-Plugins can change the editor in two ways, and they're trusted differently.
+Plugins change the editor with **editor scripts (JavaScript)**. Each runs in its own sandbox with a time and memory limit, and can only reach the app through the [`xc` object](/api/editor): read and change the project, add panels and commands, log. No files, no network, no programs. Because of that, scripts start without asking, also in a project you downloaded.
 
-**Editor scripts (JavaScript)** are the normal way. Each runs in its own sandbox with a time and memory limit, and can only reach the app through the [`xc` object](/api/editor): read and change the project, add panels and commands, log. No files, no network, no programs. Because of that, scripts start without asking, also in a project you downloaded.
-
-**Native plugins (Rust)** are compiled libraries loaded into the editor. They draw with egui directly and can do anything the app can, including reading your files. That's why they're **off** until you allow native plugins (Plugins › Manage Plugins), and plugins outside the app's own folder must also be allowed one by one. A native plugin must also be built with exactly the same compiler and libraries as the app. Use them only when a script can't do what you need.
+XC Circuit used to load compiled Rust libraries (native plugins) too. It doesn't any more: they had full access to your computer and had to be built with exactly the app's own compiler and libraries.
 
 ## Bot code is different
 
