@@ -207,18 +207,21 @@ pub fn text_input(ui: &mut Ui, value: &mut String, hint: &str, hidden: bool) -> 
 /// pointer: lighter (or darker, in light themes) on hover and while pressed.
 /// egui's `Button::fill` and `stroke` would turn those effects off.
 pub fn styled_button(ui: &mut Ui, theme: &Theme, button: egui::Button, fill: Color32, stroke: Stroke) -> Response {
-    ui.scope(|ui| {
-        let w = &mut ui.visuals_mut().widgets;
-        let border = |t: f32| if stroke.width > 0.0 { Stroke::new(stroke.width, mix(stroke.color, theme.text, t)) } else { Stroke::NONE };
-        w.inactive.weak_bg_fill = fill;
-        w.inactive.bg_stroke = stroke;
-        w.hovered.weak_bg_fill = mix(fill, theme.text, 0.10);
-        w.hovered.bg_stroke = border(0.35);
-        w.active.weak_bg_fill = mix(fill, theme.text, 0.20);
-        w.active.bg_stroke = border(0.5);
-        ui.add(button)
-    })
-    .inner
+    // Styled on `ui` itself and put back afterwards, not in a ui.scope: a
+    // scope is placed in the room left on the line, so in a wrapping row a
+    // button that doesn't fit would stick out instead of starting a new line.
+    let before = ui.visuals().widgets.clone();
+    let w = &mut ui.visuals_mut().widgets;
+    let border = |t: f32| if stroke.width > 0.0 { Stroke::new(stroke.width, mix(stroke.color, theme.text, t)) } else { Stroke::NONE };
+    w.inactive.weak_bg_fill = fill;
+    w.inactive.bg_stroke = stroke;
+    w.hovered.weak_bg_fill = mix(fill, theme.text, 0.10);
+    w.hovered.bg_stroke = border(0.35);
+    w.active.weak_bg_fill = mix(fill, theme.text, 0.20);
+    w.active.bg_stroke = border(0.5);
+    let resp = ui.add(button);
+    ui.visuals_mut().widgets = before;
+    resp
 }
 
 pub fn primary_button(ui: &mut Ui, theme: &Theme, text: &str) -> Response {

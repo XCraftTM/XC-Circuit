@@ -230,10 +230,8 @@ fn steps_bar(ui: &mut Ui, theme: &Theme, current: Step) {
     });
 }
 
-/// A drawn check mark (the font has no ✓).
 fn check_mark(ui: &Ui, center: egui::Pos2, size: f32, color: Color32) {
-    let s = size / 2.0;
-    ui.painter().line(vec![center + vec2(-s, 0.0), center + vec2(-s * 0.3, s * 0.65), center + vec2(s, -s * 0.6)], Stroke::new(size / 6.0 + 0.6, color));
+    crate::ui::widgets::check_mark(ui.painter(), center, size, color);
 }
 
 fn title(ui: &mut Ui, theme: &Theme, text: &str, sub: &str) {

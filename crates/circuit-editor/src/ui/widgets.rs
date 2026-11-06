@@ -91,6 +91,25 @@ fn editor(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width:
 /// A row with a text box and a control after it (a button): the control takes
 /// what it needs, in any language, and the text box the rest of the width.
 /// The row is as tall as a text box.
+/// A drawn check mark: the interface font has no ✓.
+pub fn check_mark(painter: &egui::Painter, center: egui::Pos2, size: f32, color: Color32) {
+    let s = size / 2.0;
+    painter.line(vec![center + egui::vec2(-s, 0.0), center + egui::vec2(-s * 0.3, s * 0.65), center + egui::vec2(s, -s * 0.6)], egui::Stroke::new(size / 6.0 + 0.6, color));
+}
+
+/// A check mark and `text`, in `color`: something that worked.
+pub fn done_label(ui: &mut Ui, text: impl Into<egui::RichText>, color: Color32) -> Response {
+    let text = text.into().color(color);
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 5.0;
+        let size = ui.text_style_height(&egui::TextStyle::Body);
+        let (r, _) = ui.allocate_exact_size(egui::vec2(size * 0.8, size), Sense::hover());
+        check_mark(ui.painter(), r.center(), size * 0.62, color);
+        ui.label(text);
+    })
+    .response
+}
+
 /// A row of a label and controls, all in its middle. egui centres each item
 /// in the height the row has when the item is added, so a label put before
 /// a taller control (a dropdown, a slider, a field) would sit at the top:

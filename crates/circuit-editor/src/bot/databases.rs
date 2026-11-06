@@ -488,7 +488,7 @@ fn connection_ui(ui: &mut Ui, ed: &Editor, theme: &Theme, c: &mut Connection, pr
                     ui.label(RichText::new(t!("Connecting … (the first time, its npm package is installed)")).size(12.0).color(theme.text_muted));
                 }
                 Some(Test::Done(Ok(r))) if r.ok => {
-                    ui.label(RichText::new(found(r)).size(12.0).color(theme.action));
+                    crate::ui::widgets::done_label(ui, RichText::new(found(r)).size(12.0), theme.action);
                 }
                 Some(Test::Done(Ok(r))) => {
                     ui.label(RichText::new(r.error.clone().unwrap_or_default()).size(12.0).color(theme.error));
@@ -514,7 +514,7 @@ fn found(r: &TestResult) -> String {
             tf!("{count} tables: {names}", count = n, names = format!("{}{more}", shown.join(", ")))
         }
     };
-    format!("✓ {} · {} {} · {tables}", t!("Connected"), t!("version"), r.version.as_deref().unwrap_or("?"))
+    format!("{} · {} {} · {tables}", t!("Connected"), t!("version"), r.version.as_deref().unwrap_or("?"))
 }
 
 /// A password or URL box, with the eye button and whether one is saved.
@@ -607,7 +607,7 @@ mod tests {
     #[test]
     fn describes_what_a_test_found() {
         let r = TestResult { ok: true, version: Some("11.4.2".into()), tables: (1..=8).map(|i| format!("t{i}")).collect(), ..Default::default() };
-        assert_eq!(found(&r), "✓ Connected · version 11.4.2 · 8 tables: t1, t2, t3, t4, t5, t6 …");
+        assert_eq!(found(&r), "Connected · version 11.4.2 · 8 tables: t1, t2, t3, t4, t5, t6 …");
         assert!(found(&TestResult { ok: true, ..Default::default() }).ends_with("no tables yet"));
     }
 }
