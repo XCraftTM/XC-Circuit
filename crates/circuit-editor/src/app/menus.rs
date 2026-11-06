@@ -2,6 +2,20 @@
 
 use super::*;
 
+/// As in Windows' menu bars: while one menu is open, pointing at another
+/// menu's name opens that one (and closes the first).
+fn switch_on_hover(ctx: &egui::Context, tops: &[egui::Response]) {
+    let ids: Vec<egui::Id> = tops.iter().map(egui::Popup::default_response_id).collect();
+    let Some(open) = ids.iter().position(|id| egui::Popup::is_id_open(ctx, *id)) else { return };
+    let Some(pos) = ctx.pointer_hover_pos() else { return };
+    if let Some(i) = tops.iter().position(|r| r.interact_rect.contains(pos))
+        && i != open
+    {
+        egui::Popup::close_id(ctx, ids[open]);
+        egui::Popup::open_id(ctx, ids[i]);
+    }
+}
+
 impl CircuitApp {
     pub(super) fn menu_bar(&mut self, ui: &mut egui::Ui) {
         let theme = self.ed.theme.clone();
@@ -31,11 +45,12 @@ impl CircuitApp {
         // the menu bar: it sizes its row from this.)
         left.spacing_mut().interact_size.y = bar.height();
         egui::MenuBar::new().ui(&mut left, |ui| {
+            let mut tops: Vec<egui::Response> = Vec::new();
             ui.spacing_mut().button_padding.x = 10.0;
             ui.spacing_mut().item_spacing.x = 0.0;
             ui.add(egui::Image::new(egui::include_image!("../../assets/icon.svg")).fit_to_exact_size(egui::vec2(18.0, 18.0)));
             ui.add_space(4.0);
-            ui.menu_button(t!("File"), |ui| {
+            tops.push(ui.menu_button(t!("File"), |ui| {
                 if ui.add(egui::Button::new(t!("New Project…")).shortcut_text(self.key_label(Hotkey::NewProject))).clicked() {
                     self.new_project_dialog();
                 }
@@ -87,8 +102,8 @@ impl CircuitApp {
                 if ui.button(t!("Exit")).clicked() {
                     ui.ctx().send_viewport_cmd(ViewportCommand::Close);
                 }
-            });
-            ui.menu_button(t!("Edit"), |ui| {
+            }).response);
+            tops.push(ui.menu_button(t!("Edit"), |ui| {
                 let key = self.ed.undo_key();
                 if ui.add_enabled(self.ed.history.can_undo(&key) || self.ed.edited, egui::Button::new(t!("Undo")).shortcut_text(self.key_label(Hotkey::Undo))).clicked() {
                     self.undo();
@@ -119,8 +134,8 @@ impl CircuitApp {
                 if ui.add(egui::Button::new(t!("Select all")).shortcut_text(self.key_label(Hotkey::SelectAll))).clicked() {
                     self.ed.select_all();
                 }
-            });
-            ui.menu_button(t!("View"), |ui| {
+            }).response);
+            tops.push(ui.menu_button(t!("View"), |ui| {
                 ui.label(RichText::new(t!("SIDE BAR")).size(10.5).color(theme.text_muted));
                 for view in SideView::ALL {
                     if ui.radio(self.ed.prefs.side_view == Some(view), view.name()).clicked() {
@@ -159,9 +174,9 @@ impl CircuitApp {
                 if ui.button(t!("Reset layout")).clicked() {
                     self.reset_layout();
                 }
-            });
+            }).response);
             let has_project = self.ed.project.is_some();
-            ui.menu_button(t!("Bot"), |ui| {
+            tops.push(ui.menu_button(t!("Bot"), |ui| {
                 let running = self.bot.state != BotState::Stopped;
                 if ui.add_enabled(has_project, egui::Button::new(if running { t!("Restart") } else { t!("Run") }).shortcut_text(self.key_label(Hotkey::Run))).clicked() {
                     self.bot.start(&mut self.ed, ui.ctx());
@@ -179,8 +194,8 @@ impl CircuitApp {
                 if ui.add_enabled(has_project, egui::Button::new(t!("Export…"))).clicked() {
                     self.bot.open_export(&self.ed);
                 }
-            });
-            ui.menu_button(t!("Plugins"), |ui| {
+            }).response);
+            tops.push(ui.menu_button(t!("Plugins"), |ui| {
                 let mut any = false;
                 for i in 0..self.native.plugins.len() {
                     let p = &self.native.plugins[i];
@@ -218,8 +233,8 @@ impl CircuitApp {
                 if ui.button(t!("Manage Plugins…")).clicked() {
                     self.open_plugins();
                 }
-            });
-            ui.menu_button(t!("Help"), |ui| {
+            }).response);
+            tops.push(ui.menu_button(t!("Help"), |ui| {
                 if self.ed.examples_dir.is_some()
                     && ui.button(t!("Open Example: DemoBot")).clicked()
                     && let Some(example) = self.ed.examples_dir.as_deref().and_then(writable_example)
@@ -265,7 +280,8 @@ impl CircuitApp {
                 if ui.button(t!("About XC™ Circuit")).clicked() {
                     self.show_about = true;
                 }
-            });
+            }).response);
+            switch_on_hover(ui.ctx(), &tops);
         });
 
         }
