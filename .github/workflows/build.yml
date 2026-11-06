@@ -106,6 +106,7 @@ jobs:
           node runtime/test/files.js
           node runtime/test/server_tools.js
           node runtime/test/captcha.js
+          node runtime/test/transcript.js
 
       # Native plugins are built together with the editor so they share one build of egui.
       - name: Release build
