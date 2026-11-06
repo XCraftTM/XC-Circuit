@@ -6,6 +6,13 @@ function allowed(ctx) {
   if (ctx.runtime.setting("serverToolsAllowed") !== true) throw new Error("Server tools are off: allow them in Bot › Settings › Server tools");
 }
 
+/** Servers given on a block (from a command's options, say) need their own switch. */
+function givenAllowed(ctx) {
+  if (ctx.runtime.setting("serverGivenAllowed") !== true) throw new Error("Servers given on a block are off: allow them in Bot › Settings › Server tools › Safety");
+}
+
+const SERVER = { settings: "From Bot Settings", given: "Given here" };
+
 /** A value as one word for a POSIX shell: in single quotes. */
 const quote = (v) => `'${String(v ?? "").replace(/'/g, "'\\''")}'`;
 
@@ -17,17 +24,34 @@ function command(parts) {
   return out;
 }
 
-/**
- * Runs `cmd` over SSH. The server's key is remembered the first time and
- * checked after that, so a different machine in its place is refused.
- */
-async function sshRun(ctx, cmd, timeoutMs) {
-  const { Client } = ctx.require("ssh2");
-  const host = String(ctx.runtime.setting("sshHost") || "").trim();
+/** The SSH login: the one of Bot › Settings › Server tools, or the one the block gives. */
+function sshLogin(ctx, fields, given) {
+  const text = (v) => (v === undefined || v === null ? "" : String(v));
+  if (given) {
+    givenAllowed(ctx);
+    const host = text(fields.host).trim();
+    if (!host) throw new Error("The block gives no SSH host.");
+    return { host, port: Number(fields.port) || 22, user: text(fields.user).trim(), password: text(fields.password) || undefined, key: text(fields.key) || undefined };
+  }
+  const host = text(ctx.runtime.setting("sshHost")).trim();
   if (!host) throw new Error("No SSH server yet: Bot › Settings › Server tools › SSH");
-  const port = Number(ctx.runtime.setting("sshPort")) || 22;
-  const key = ctx.runtime.secret("sshKey");
-  const password = ctx.runtime.secret("sshPassword");
+  return {
+    host,
+    port: Number(ctx.runtime.setting("sshPort")) || 22,
+    user: text(ctx.runtime.setting("sshUser")).trim(),
+    password: ctx.runtime.secret("sshPassword") || undefined,
+    key: ctx.runtime.secret("sshKey") || undefined,
+  };
+}
+
+/**
+ * Runs `cmd` over SSH with `login` (from sshLogin). The server's key is
+ * remembered the first time and checked after that, so a different machine
+ * in its place is refused.
+ */
+async function sshRun(ctx, login, cmd, timeoutMs) {
+  const { Client } = ctx.require("ssh2");
+  const { host, port, key, password } = login;
   const known = ctx.store.ns("xc.server");
   const remembered = await known.get(`hostkey:${host}:${port}`);
   let seen = null;
@@ -58,7 +82,7 @@ async function sshRun(ctx, cmd, timeoutMs) {
     c.connect({
       host,
       port,
-      username: String(ctx.runtime.setting("sshUser") || "").trim() || undefined,
+      username: login.user || undefined,
       password: key ? undefined : password,
       privateKey: key || undefined,
       passphrase: key ? password : undefined,
@@ -81,9 +105,9 @@ module.exports = {
   kind: "action",
   info: {
     name: "SSH Command",
-    description: "Runs a command on the SSH server of Bot › Settings › Server tools and gives what it printed. ${…} values are quoted, so they can't run commands of their own.",
+    description: "Runs a command on the SSH server of Bot › Settings › Server tools, or one given on the block, and gives what it printed. ${…} values are quoted, so they can't run commands of their own.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "servertools",
@@ -97,6 +121,12 @@ module.exports = {
     dependencies: { ssh2: "^1.17.0" },
   },
   fields: {
+    server: { type: "select", pin: false, default: "settings", choices: SERVER, description: "Bot › Settings › Server tools › SSH, or a server given here (from a command's options, say). Given here needs its own switch in Bot › Settings › Server tools." },
+    host: { type: "text", default: "", show: { server: ["given"] }, placeholder: "server.example.com", description: "The SSH server's address." },
+    port: { type: "number", default: 22, min: 1, max: 65535, show: { server: ["given"] } },
+    user: { type: "text", default: "", show: { server: ["given"] }, placeholder: "bot" },
+    password: { type: "text", pin: "only", show: { server: ["given"] }, description: "Connect it from a command's option or a form (only the bot sees those): typed into a block, it would be saved in the project file. With a key, the key's passphrase." },
+    key: { type: "text", pin: "only", show: { server: ["given"] }, label: "Private key", description: "The whole private key, instead of a password. Connected, like the password." },
     command: {
       type: "textarea",
       pin: false,
@@ -116,12 +146,13 @@ module.exports = {
   async run({ fields, ctx }) {
     allowed(ctx);
     const cmd = command(fields.command);
-    const r = await sshRun(ctx, cmd, (Number(fields.seconds) || 30) * 1000);
+    const r = await sshRun(ctx, sshLogin(ctx, fields, fields.server === "given"), cmd, (Number(fields.seconds) || 30) * 1000);
     if (fields.failOnError && r.code !== 0) throw new Error(`The command ended with code ${r.code}: ${r.err.trim().split("\n").pop() || r.out.trim().split("\n").pop() || ""}`);
     return { output: r.out.trimEnd(), errors: r.err.trimEnd(), code: r.code };
   },
 
-  // For Server Usage and tests.
+  // For tests.
   sshRun,
+  sshLogin,
   command,
 };

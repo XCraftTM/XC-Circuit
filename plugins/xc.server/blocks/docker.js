@@ -8,6 +8,13 @@ function allowed(ctx) {
   if (ctx.runtime.setting("serverToolsAllowed") !== true) throw new Error("Server tools are off: allow them in Bot › Settings › Server tools");
 }
 
+/** Servers given on a block (from a command's options, say) need their own switch. */
+function givenAllowed(ctx) {
+  if (ctx.runtime.setting("serverGivenAllowed") !== true) throw new Error("Servers given on a block are off: allow them in Bot › Settings › Server tools › Safety");
+}
+
+const SERVER = { settings: "From Bot Settings", given: "Given here" };
+
 /** Asks Docker: { status, body } (body as bytes). */
 function docker(where, method, path) {
   const http = require("http");
@@ -51,7 +58,7 @@ module.exports = {
     name: "Docker",
     description: "Lists Docker containers, starts, stops or restarts one, or reads its latest log lines.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "servertools",
@@ -62,6 +69,8 @@ module.exports = {
     icon: "terminal",
   },
   fields: {
+    server: { type: "select", pin: false, default: "settings", choices: SERVER, description: "The Docker of Bot › Settings › Server tools, or one given here. Given here needs its own switch in Bot › Settings › Server tools." },
+    host: { type: "text", default: "", show: { server: ["given"] }, placeholder: "tcp://host:2375", description: "Where that Docker answers." },
     action: { type: "select", pin: false, default: "list", choices: ACTIONS, description: "What to do." },
     container: { type: "text", default: "", required: true, show: { action: ["start", "stop", "restart", "logs"] }, description: "The container's name (or id)." },
     lines: { type: "number", pin: false, default: 20, min: 1, max: 1000, show: { action: ["logs"] }, description: "How many of the latest lines." },
@@ -73,7 +82,10 @@ module.exports = {
   },
   async run({ fields, ctx }) {
     allowed(ctx);
-    const where = ctx.runtime.setting("dockerHost");
+    const given = fields.server === "given";
+    if (given) givenAllowed(ctx);
+    const where = given ? String(fields.host ?? "").trim() : ctx.runtime.setting("dockerHost");
+    if (given && !where) throw new Error("The block gives no Docker address.");
     const name = encodeURIComponent(String(fields.container || "").trim().replace(/^\//, ""));
     const fail = (r) => {
       let msg = r.body.toString("utf8");

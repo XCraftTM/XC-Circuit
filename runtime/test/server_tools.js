@@ -181,6 +181,11 @@ const say = (message) => n("core.log", { message, level: "info" });
     ["pc", n("server.port_check", { host: "127.0.0.1", port: rconPort })],
     ["pc2", n("server.port_check", { host: "127.0.0.1", port: freePort })],
     ["pcLog", say("ports: ${#pc.open} ${#pc2.open} ${#pc2.error}")],
+    // Given on the block instead of Bot › Settings.
+    ["rg", n("server.rcon_command", { command: "list", server: "given", host: "127.0.0.1", port: rcon2Port, password: "another" })],
+    ["rgLog", say("rcon given: ${#rg.answer}")],
+    ["dv", n("server.docker", { action: "list", server: "given", host: `tcp://127.0.0.1:${dockPort}` })],
+    ["dvLog", say("docker given: ${#dv.containers.length}")],
     ["us", n("server.server_usage", { where: "here" })],
     ["usLog", say("usage: ${#us.cpu >= 0 && #us.cpu <= 100} ${#us.memory > 0 && #us.memory <= 100} ${#us.disk > 0} ${#us.uptime > 0} ${#us.text.startsWith('CPU ')}")],
   ];
@@ -190,6 +195,10 @@ const say = (message) => n("core.log", { message, level: "info" });
       ["shLog", say("ssh: ${#sh.code} ${JSON.stringify(#sh.output)}")],
       ["su", n("server.server_usage", { where: "ssh" })],
       ["suLog", say("ssh usage: ${#su.cpu} ${#su.memory} ${#su.disk} ${#su.uptime}")],
+      ["sg", n("server.ssh_command", { command: "hostname", server: "given", host: "127.0.0.1", user: "bot", password: "secret" })],
+      ["sgLog", say("ssh given: ${JSON.stringify(#sg.output)}")],
+      ["ug", n("server.server_usage", { where: "given", host: "127.0.0.1", user: "bot", password: "secret" })],
+      ["ugLog", say("usage given: ${#ug.disk}")],
     );
   }
   const nodes = { start: n("core.on_start") };
@@ -203,7 +212,7 @@ const say = (message) => n("core.log", { message, level: "info" });
   nodes.sh && (nodes.sh.values.who = "x'; rm -rf / #");
   // A wrong RCON password, and an unknown container, in flows of their own.
   nodes.s2 = n("core.on_start");
-  nodes.badRcon = n("server.rcon_command", { command: "list", address: `127.0.0.1:${rcon2Port}` });
+  nodes.badRcon = n("server.rcon_command", { command: "list", server: "given", host: "127.0.0.1", port: rcon2Port, password: "pw" });
   nodes.s3 = n("core.on_start");
   nodes.badDock = n("server.docker", { action: "stop", container: "nope" });
   links.push("s2.next > badRcon.in", "s3.next > badDock.in");
@@ -229,9 +238,10 @@ const say = (message) => n("core.log", { message, level: "info" });
       );
     });
     Object.assign(sshSettings, { sshHost: "127.0.0.1", sshPort: await listen(sshServer), sshUser: "bot" });
+    nodes.sg.values.port = nodes.ug.values.port = sshSettings.sshPort;
   }
 
-  const settings = { serverToolsAllowed: true, rconHost: "127.0.0.1", rconPort, dockerHost: `tcp://127.0.0.1:${dockPort}`, ...sshSettings };
+  const settings = { serverToolsAllowed: true, serverGivenAllowed: true, rconHost: "127.0.0.1", rconPort, dockerHost: `tcp://127.0.0.1:${dockPort}`, ...sshSettings };
   const env = { XC_SECRET_RCONPASSWORD: "pw", XC_SECRET_SSHPASSWORD: "secret" };
   const seen = await runBot(nodes, links, settings, env, chain.filter(([id]) => id.endsWith("Log")).length + 2, dir);
   const all = seen.join("\n");
@@ -244,6 +254,8 @@ const say = (message) => n("core.log", { message, level: "info" });
   has('logs: "started\\nwarning: slow"');
   has("ports: true false refused");
   has("usage: true true true true true");
+  has("rcon given: There are 2 of 10 players online: Alex, Bea");
+  has("docker given: 2");
   assert.ok(seen.some((s) => s.startsWith("error:") && s.includes("RCON password is wrong")), all);
   assert.ok(seen.some((s) => s.startsWith("error:") && s.includes("No such container: nope")), all);
   if (ssh2) {
@@ -251,6 +263,8 @@ const say = (message) => n("core.log", { message, level: "info" });
     assert.deepStrictEqual(ran[0], `echo 'x'\\''; rm -rf / #' && whoami`);
     has(`ssh: 0 "ran echo 'x'\\\\''; rm -rf / #' && whoami"`);
     has("ssh usage: 50 25 25 3601");
+    has('ssh given: "ran hostname"');
+    has("usage given: 25");
     // The same address with another key: refused.
     sshServer.close();
     const other = new ssh2.Server({ hostKeys: [ssh2.utils.generateKeyPairSync("ed25519").private] }, (c) => c.on("error", () => {}).on("authentication", (x) => x.accept()));
@@ -269,6 +283,16 @@ const say = (message) => n("core.log", { message, level: "info" });
     await assert.rejects(block.run({ fields: { command: "x", action: "list" }, ctx }), /Server tools are off/, id);
   }
   await assert.rejects(require(blocks["server.server_usage"].file).run({ fields: { where: "ssh" }, ctx }), /Server tools are off/);
+  // Allowed, but not servers given on blocks: those refuse, before connecting anywhere.
+  const toolsOnly = { runtime: { setting: (k) => k === "serverToolsAllowed", secret: () => "" }, require: (m) => require(m), store: { ns: () => ({ get: async () => null }) } };
+  for (const [id, fields] of [
+    ["server.ssh_command", { command: "x", server: "given", host: "127.0.0.1" }],
+    ["server.rcon_command", { command: "x", server: "given", host: "127.0.0.1" }],
+    ["server.docker", { action: "list", server: "given", host: "tcp://127.0.0.1:1" }],
+    ["server.server_usage", { where: "given", host: "127.0.0.1" }],
+  ]) {
+    await assert.rejects(require(blocks[id].file).run({ fields, ctx: toolsOnly }), /Servers given on a block are off/, id);
+  }
 
   for (const s of [rcon, rcon2, java, dock]) s.close();
   bedrock.close();

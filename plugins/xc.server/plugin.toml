@@ -1,6 +1,6 @@
 id          = "xc.server"
 name        = "Server Tools"
-version     = "1.0.0"
+version     = "1.0.1"
 author      = "XC Team"
 description = "Blocks for looking after servers: SSH commands, CPU/RAM/disk use, Docker containers, RCON, Minecraft server status and port checks. SSH, RCON and Docker only run once allowed in Bot › Settings › Server tools."
 

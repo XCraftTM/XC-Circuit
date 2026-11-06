@@ -10,6 +10,7 @@ order = 60
 
 [settings]
 serverToolsAllowed = { type = "boolean", page = "server-tools", group = "Safety", label = "Allow SSH, RCON and Docker", default = false, description = "On: the SSH Command, RCON Command, Docker and Server Usage (over SSH) blocks may run. Only turn it on for a bot whose commands you wrote yourself." }
+serverGivenAllowed = { type = "boolean", page = "server-tools", group = "Safety", label = "Allow servers given on blocks", default = false, description = "On: an SSH, Server Usage, RCON or Docker block set to Given here connects to the host, user and password it's given (from a command's options, say). Anyone who can use such a command can make the bot connect where they say, so only turn it on for commands you trust them with." }
 sshHost = { page = "server-tools", group = "SSH", label = "Host", placeholder = "server.example.com or 203.0.113.5", description = "The server the SSH blocks connect to." }
 sshPort = { type = "number", page = "server-tools", group = "SSH", label = "Port", default = 22, min = 1, max = 65535 }
 sshUser = { page = "server-tools", group = "SSH", label = "User", placeholder = "bot" }

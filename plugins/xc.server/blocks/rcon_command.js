@@ -5,6 +5,13 @@ function allowed(ctx) {
   if (ctx.runtime.setting("serverToolsAllowed") !== true) throw new Error("Server tools are off: allow them in Bot › Settings › Server tools");
 }
 
+/** Servers given on a block (from a command's options, say) need their own switch. */
+function givenAllowed(ctx) {
+  if (ctx.runtime.setting("serverGivenAllowed") !== true) throw new Error("Servers given on a block are off: allow them in Bot › Settings › Server tools › Safety");
+}
+
+const SERVER = { settings: "From Bot Settings", given: "Given here" };
+
 const AUTH = 3;
 const COMMAND = 2;
 
@@ -67,7 +74,7 @@ module.exports = {
     name: "RCON Command",
     description: "Sends a command to a game server's console over RCON (Minecraft, Rust, ARK, CS2 …) and gives its answer, such as whitelist add ${name} or list.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "servertools",
@@ -79,7 +86,10 @@ module.exports = {
   },
   fields: {
     command: { type: "text", default: "list", required: true, description: "The console command, without a /: list, whitelist add ${name}, say Hello." },
-    address: { type: "text", default: "", advanced: true, description: "Another server than Bot › Settings › Server tools › RCON: host:port (the password there is used)." },
+    server: { type: "select", pin: false, default: "settings", choices: SERVER, description: "Bot › Settings › Server tools › RCON, or a server given here (from a command's options, say). Given here needs its own switch in Bot › Settings › Server tools." },
+    host: { type: "text", default: "", show: { server: ["given"] }, placeholder: "mc.example.com", description: "The game server's address." },
+    port: { type: "number", default: 25575, min: 1, max: 65535, show: { server: ["given"] }, description: "Its RCON port (rcon.port in Minecraft's server.properties)." },
+    password: { type: "text", pin: "only", show: { server: ["given"] }, description: "Its RCON password. Connect it from a command's option or a form: typed into a block, it would be saved in the project file." },
     seconds: { type: "number", pin: false, default: 10, min: 1, max: 120, advanced: true, label: "Timeout (s)" },
   },
   outputs: {
@@ -87,11 +97,13 @@ module.exports = {
   },
   async run({ fields, ctx }) {
     allowed(ctx);
-    const other = String(fields.address || "").trim();
-    const host = other ? other.replace(/:\d+$/, "") : String(ctx.runtime.setting("rconHost") || "").trim();
-    const port = other && /:(\d+)$/.test(other) ? Number(/:(\d+)$/.exec(other)[1]) : Number(ctx.runtime.setting("rconPort")) || 25575;
-    if (!host) throw new Error("No RCON server yet: Bot › Settings › Server tools › RCON");
-    const password = ctx.runtime.secret("rconPassword") || "";
+    // The password of Bot Settings only ever goes to the server of Bot Settings.
+    const given = fields.server === "given";
+    if (given) givenAllowed(ctx);
+    const host = String((given ? fields.host : ctx.runtime.setting("rconHost")) ?? "").trim();
+    const port = Number(given ? fields.port : ctx.runtime.setting("rconPort")) || 25575;
+    if (!host) throw new Error(given ? "The block gives no RCON host." : "No RCON server yet: Bot › Settings › Server tools › RCON");
+    const password = String((given ? fields.password : ctx.runtime.secret("rconPassword")) ?? "");
     const answer = await rcon(host, port, password, String(fields.command || "").replace(/^\//, ""), (Number(fields.seconds) || 10) * 1000);
     return { answer: answer.replace(/§./g, "").trim() };
   },
