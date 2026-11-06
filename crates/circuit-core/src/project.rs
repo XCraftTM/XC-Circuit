@@ -29,6 +29,10 @@ pub struct ProjectMeta {
     /// Workspace folders in sidebar order, kept even while empty.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub folders: Vec<String>,
+    /// Workspace keys in sidebar order, when it isn't their files' order (by
+    /// name). Workspaces it doesn't name come after these, by name.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub order: Vec<String>,
 }
 
 impl Default for ProjectMeta {
@@ -41,6 +45,7 @@ impl Default for ProjectMeta {
             settings: Map::new(),
             data: Map::new(),
             folders: Vec::new(),
+            order: Vec::new(),
         }
     }
 }
@@ -88,7 +93,23 @@ impl Project {
                 }
             }
         }
-        Ok(Project { root, meta, workspaces, unreadable, removed: Vec::new() })
+        // The sidebar order: the saved one first, then the rest as their files came.
+        let mut ordered = IndexMap::new();
+        for key in &meta.order {
+            if let Some(ws) = workspaces.shift_remove(key) {
+                ordered.insert(key.clone(), ws);
+            }
+        }
+        ordered.extend(workspaces);
+        Ok(Project { root, meta, workspaces: ordered, unreadable, removed: Vec::new() })
+    }
+
+    /// The order to save: empty while it's the files' own order (by name).
+    fn order_to_save(&self) -> Vec<String> {
+        let keys: Vec<String> = self.workspaces.keys().cloned().collect();
+        let mut by_file = keys.clone();
+        by_file.sort_by_key(|k| format!("{k}.json"));
+        if keys == by_file { Vec::new() } else { keys }
     }
 
     /// Creates a new project folder with one empty workspace.
@@ -110,6 +131,7 @@ impl Project {
 
     pub fn save(&mut self) -> Result<()> {
         fs::create_dir_all(self.root.join(WORKSPACE_DIR))?;
+        self.meta.order = self.order_to_save();
         write_json(&self.root.join(PROJECT_FILE), &self.meta)?;
         for (stem, ws) in &self.workspaces {
             write_json(&self.workspace_path(stem), ws)?;

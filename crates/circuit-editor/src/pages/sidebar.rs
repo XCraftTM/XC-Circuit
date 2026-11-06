@@ -1,6 +1,7 @@
 //! The Workspaces panel: the project's workspaces as a tree with folders, and
-//! its slash commands. Drag a workspace onto a folder to move it there;
-//! double-click a name to rename it. Each workspace shows its problems,
+//! its slash commands. Drag a workspace onto a folder to move it there, or
+//! above or below another workspace to put it there (a line shows where);
+//! drag folders to order them too. Double-click a name to rename it. Each workspace shows its problems,
 //! whether its blocks just ran (or failed), and whether it's turned off.
 
 use std::collections::HashMap;
@@ -42,6 +43,11 @@ enum Do {
     StartRename(Target, String),
     Rename(Target, String),
     Move(String, Option<String>),
+    /// A workspace dropped next to another: its new folder, the other one,
+    /// and whether it goes before (true) or after it.
+    Place(String, Option<String>, String, bool),
+    /// A folder dropped before (true) or after another folder.
+    PlaceFolder(String, String, bool),
     /// Turns a workspace on (true) or off.
     SetEnabled(String, bool),
     DeleteWorkspace(String),
@@ -53,6 +59,23 @@ enum Do {
     SlashCommands,
     Export(crate::editor::exchange::Preselect),
     Import,
+}
+
+/// What a dragged folder carries (a dragged workspace carries its key).
+#[derive(Clone)]
+struct FolderDrag(String);
+
+/// Whether something dropped on `rect` goes before it: the pointer is in its upper half.
+fn drops_before(ui: &Ui, rect: Rect) -> bool {
+    ui.ctx().pointer_hover_pos().is_some_and(|p| p.y < rect.center().y)
+}
+
+/// The line that shows where a dragged row will land: above or below `rect`.
+fn insertion_line(ui: &Ui, theme: &Theme, rect: Rect, before: bool) {
+    let y = if before { rect.top() } else { rect.bottom() };
+    let left = rect.left() + 8.0;
+    ui.painter().hline(left..=rect.right() - 8.0, y, Stroke::new(2.0, theme.accent));
+    ui.painter().circle_filled(pos2(left, y), 3.5, theme.accent);
 }
 
 /// Icon files by name, looked up before the project is borrowed.
@@ -139,7 +162,9 @@ fn row(ui: &mut Ui, theme: &Theme, icons: &Icons, id: Id, depth: usize, open: Op
     let h = if theme.touch { ROW_TOUCH_H } else { ROW_H };
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), h), Sense::hover());
     let resp = ui.interact(rect, id, Sense::click_and_drag());
-    let drop_target = resp.dnd_hover_payload::<String>().is_some();
+    // A workspace dragged over a folder or the project goes into it (the row
+    // fills); over another workspace it goes next to it (a line shows where).
+    let drop_target = resp.dnd_hover_payload::<String>().is_some() && icon != Some("workspace");
     if active {
         ui.painter().rect_filled(rect, 0.0, with_alpha(theme.accent, 38));
         ui.painter().rect_filled(Rect::from_min_size(rect.min, vec2(2.0, rect.height())), 0.0, theme.accent);
@@ -263,7 +288,9 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
         } else if resp.clicked() {
             todo.push(Do::Toggle(PROJECT_ROW.into()));
         }
-        if let Some(key) = resp.dnd_release_payload::<String>() {
+        if egui::DragAndDrop::has_payload_of_type::<String>(ui.ctx())
+            && let Some(key) = resp.dnd_release_payload::<String>()
+        {
             todo.push(Do::Move((*key).clone(), None));
         }
         resp.context_menu(|ui| {
@@ -339,6 +366,18 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                     return;
                 }
                 resp.dnd_set_drag_payload(key.clone());
+                // Another workspace dropped here goes above or below this one, in its folder.
+                if let Some(dragged) = resp.dnd_hover_payload::<String>()
+                    && *dragged != *key
+                {
+                    insertion_line(ui, &theme, resp.rect, drops_before(ui, resp.rect));
+                }
+                if egui::DragAndDrop::has_payload_of_type::<String>(ui.ctx())
+                    && let Some(dragged) = resp.dnd_release_payload::<String>()
+                    && *dragged != *key
+                {
+                    todo.push(Do::Place((*dragged).clone(), ws.folder.clone(), key.clone(), drops_before(ui, resp.rect)));
+                }
                 let more = more_button(ui, &theme, &icons, resp.rect, Id::new(("sidebar-ws-more", key)));
                 if resp.double_clicked() {
                     todo.push(Do::StartRename(target.clone(), ws.name.clone()));
@@ -436,8 +475,25 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                     } else if resp.clicked() {
                         todo.push(Do::Toggle(folder.clone()));
                     }
-                    if let Some(key) = resp.dnd_release_payload::<String>() {
+                    // egui's dnd_release_payload takes whatever is dragged, even of
+                    // another type: ask for the one that's there.
+                    if egui::DragAndDrop::has_payload_of_type::<String>(ui.ctx())
+                        && let Some(key) = resp.dnd_release_payload::<String>()
+                    {
                         todo.push(Do::Move((*key).clone(), Some(folder.clone())));
+                    }
+                    // Folders are ordered by dragging one above or below another.
+                    resp.dnd_set_drag_payload(FolderDrag(folder.clone()));
+                    if let Some(dragged) = resp.dnd_hover_payload::<FolderDrag>()
+                        && dragged.0 != *folder
+                    {
+                        insertion_line(ui, &theme, resp.rect, drops_before(ui, resp.rect));
+                    }
+                    if egui::DragAndDrop::has_payload_of_type::<FolderDrag>(ui.ctx())
+                        && let Some(dragged) = resp.dnd_release_payload::<FolderDrag>()
+                        && dragged.0 != *folder
+                    {
+                        todo.push(Do::PlaceFolder(dragged.0.clone(), folder.clone(), drops_before(ui, resp.rect)));
                     }
                     let mut menu = |ui: &mut Ui| {
                         ui.set_min_width(200.0);
@@ -578,6 +634,41 @@ fn apply(ed: &mut Editor, ctx: &egui::Context, todo: Vec<Do>, renaming: &mut Opt
                     ed.edited = true;
                 }
             }
+            Do::Place(key, folder, next_to, before) => {
+                if key != next_to
+                    && let Some(mut ws) = project.workspaces.shift_remove(&key)
+                {
+                    ws.folder = folder.clone();
+                    let at = project.workspaces.get_index_of(&next_to).map_or(project.workspaces.len(), |i| if before { i } else { i + 1 });
+                    project.workspaces.shift_insert(at, key, ws);
+                    if let Some(f) = folder {
+                        if !project.meta.folders.contains(&f) {
+                            project.meta.folders.push(f.clone());
+                        }
+                        uncollapse(ctx, &f);
+                    }
+                    ed.edited = true;
+                }
+            }
+            Do::PlaceFolder(name, next_to, before) => {
+                // The list may lack folders only a workspace names: complete it first.
+                for ws in project.workspaces.values() {
+                    if let Some(f) = &ws.folder
+                        && !project.meta.folders.contains(f)
+                    {
+                        project.meta.folders.push(f.clone());
+                    }
+                }
+                let folders = &mut project.meta.folders;
+                if name != next_to
+                    && let Some(i) = folders.iter().position(|f| *f == name)
+                {
+                    folders.remove(i);
+                    let at = folders.iter().position(|f| *f == next_to).map_or(folders.len(), |j| if before { j } else { j + 1 });
+                    folders.insert(at, name);
+                    ed.edited = true;
+                }
+            }
             Do::SetEnabled(key, on) => {
                 if let Some(ws) = project.workspaces.get_mut(&key)
                     && ws.disabled == on
@@ -659,6 +750,57 @@ mod tests {
     use eframe::egui::{Event, Modifiers, PointerButton, Pos2};
 
     use super::*;
+
+    /// Workspaces go above or below another by dragging, folders too; the order is saved.
+    #[test]
+    fn workspaces_and_folders_reorder_by_dragging() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let dir = std::env::temp_dir().join(format!("xc-reorder-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        copy_dir(&root.join("examples/DemoBot"), &dir);
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&dir);
+        let ctx = egui::Context::default();
+        frame(&ctx, &mut ed, vec![]);
+        frame(&ctx, &mut ed, vec![]);
+        let drag = |ctx: &egui::Context, ed: &mut Editor, from: Pos2, to: Pos2| {
+            frame(ctx, ed, vec![Event::PointerMoved(from)]);
+            frame(ctx, ed, vec![press(from, true)]);
+            for i in 1..=8 {
+                frame(ctx, ed, vec![Event::PointerMoved(from + (to - from) * (i as f32 / 8.0))]);
+            }
+            frame(ctx, ed, vec![press(to, false)]);
+            frame(ctx, ed, vec![]);
+        };
+        let keys = |ed: &Editor| ed.project.as_ref().unwrap().workspaces.keys().cloned().collect::<Vec<_>>();
+        assert_eq!(keys(&ed), ["rank-command", "startup", "welcome"]);
+
+        // Rows: DemoBot, Commands, Rank command, Events, Startup, Welcome. Startup below Welcome.
+        drag(&ctx, &mut ed, row_at(4), row_at(5) + vec2(0.0, ROW_H / 2.0 - 3.0));
+        assert_eq!(keys(&ed), ["rank-command", "welcome", "startup"]);
+        // Now …, Events, Welcome, Startup. The Events folder above Commands.
+        drag(&ctx, &mut ed, row_at(3), row_at(1) - vec2(0.0, ROW_H / 2.0 - 3.0));
+        assert_eq!(ed.project.as_ref().unwrap().meta.folders, ["Events", "Commands"]);
+
+        // Saved, and the same when opened again.
+        ed.project.as_mut().unwrap().save().unwrap();
+        let again = circuit_core::Project::load(&dir).unwrap();
+        assert_eq!(again.workspaces.keys().cloned().collect::<Vec<_>>(), ["rank-command", "welcome", "startup"]);
+        assert_eq!(again.meta.folders, ["Events", "Commands"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn copy_dir(from: &std::path::Path, to: &std::path::Path) {
+        std::fs::create_dir_all(to).unwrap();
+        for e in std::fs::read_dir(from).unwrap().flatten() {
+            let target = to.join(e.file_name());
+            if e.path().is_dir() {
+                copy_dir(&e.path(), &target);
+            } else {
+                std::fs::copy(e.path(), target).unwrap();
+            }
+        }
+    }
 
     fn frame(ctx: &egui::Context, ed: &mut Editor, events: Vec<Event>) {
         let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(260.0, 600.0))), events, ..Default::default() };
