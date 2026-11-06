@@ -143,7 +143,7 @@ impl Default for Prefs {
 pub const CONSOLE_FONT_SIZE: f32 = 13.0;
 
 /// Room between the Console's lines to start with.
-pub const CONSOLE_LINE_SPACING: f32 = 2.0;
+pub const CONSOLE_LINE_SPACING: f32 = 0.0;
 
 /// Interface sizes offered on the Settings page.
 pub const UI_SCALES: [f32; 6] = [0.8, 0.9, 1.0, 1.1, 1.25, 1.5];
