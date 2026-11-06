@@ -2,6 +2,11 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
+## Unreleased
+
+### Changed
+- **Canvas text stays readable when zoomed out**: below about 9 points on screen, labels, titles and values are drawn bold instead of in the light font, grey text gets brighter, and the smallest text gets a little bigger (never more than 15% wider than its place, so it doesn't run into its neighbours). Text that wraps in a box (a message, the embed preview) keeps its size and only gets brighter. At 100% and closer nothing changes. Zooming is a little smoother too: text laid out for one zoom is reused for the next.
+
 ## 0.1.3
 
 ### Changed

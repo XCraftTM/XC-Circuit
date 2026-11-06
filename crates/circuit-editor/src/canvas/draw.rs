@@ -58,12 +58,31 @@ pub(super) fn pin_tooltip(ui: &mut Ui, spot: &PinSpot, reg: &Registry, theme: &T
     }
 }
 
+/// Below this size on screen (in points), canvas text gets help to stay
+/// readable: a heavier weight, more contrast and (below [`MIN_TEXT`]) a little more size.
+const SMALL_TEXT: f32 = 9.5;
+/// The smallest canvas text on screen, in points, as far as [`MAX_GROW`] allows.
+const MIN_TEXT: f32 = 8.0;
+/// How much bigger than its place small text may get.
+const MAX_GROW: f32 = 1.3;
+/// How much wider than it was small text may get, bold and bigger: wider
+/// still, and it would run into what's next to it.
+const MAX_WIDER: f32 = 1.15;
+
+/// A text laid out again, its size on screen in points, how much brighter
+/// grey goes (0 to 1), and the scale left over from rounding its size.
+type Redone = (std::sync::Arc<egui::Galley>, f32, f32, f32);
+
 /// egui draws text in a zoomed layer from glyphs rendered for 100% and then
 /// scales them, which blurs them (at 65% the letters are shrunken bitmaps).
 /// This lays every text in the canvas out again at the size it appears on
 /// screen, shrinks it back so the layer's zoom brings it to exactly that size,
 /// and snaps it to whole pixels.
-pub(super) fn sharpen_text(ctx: &egui::Context, layer: LayerId, to_global: TSTransform) {
+///
+/// Zoomed out, text that would be tiny is also made readable: bold instead of
+/// Ubuntu Light, grey text brighter (towards `text`), and the smallest a
+/// little bigger, centred on where it was.
+pub(super) fn sharpen_text(ctx: &egui::Context, layer: LayerId, to_global: TSTransform, text: Color32) {
     let zoom = to_global.scaling;
     let ppp = ctx.pixels_per_point();
     let texts: Vec<(usize, Pos2, std::sync::Arc<egui::Galley>)> = ctx.graphics(|g| {
@@ -74,14 +93,47 @@ pub(super) fn sharpen_text(ctx: &egui::Context, layer: LayerId, to_global: TSTra
     if texts.is_empty() {
         return;
     }
-    let rescale = (zoom - 1.0).abs() > 0.001;
+    let bold = ctx.fonts(|f| f.definitions().families.contains_key(&crate::ui::fonts::bold(1.0).family));
     // Laid out before touching the paint lists: both need the context's lock.
-    let sharp: Vec<(usize, Pos2, Option<std::sync::Arc<egui::Galley>>)> = texts
+    let sharp: Vec<(usize, Pos2, Option<Redone>)> = texts
         .into_iter()
         .map(|(i, pos, galley)| {
-            let screen = to_global * pos;
-            let snapped = to_global.inverse() * pos2((screen.x * ppp).round() / ppp, (screen.y * ppp).round() / ppp);
-            let big = rescale.then(|| ctx.fonts_mut(|f| f.layout_job(scaled_job(&galley.job, zoom))));
+            let size = galley.job.sections.iter().map(|s| s.format.font_id.size).fold(0.0, f32::max);
+            let screen = size * zoom;
+            let small = screen > 0.0 && screen < SMALL_TEXT;
+            // Only a single line that doesn't wrap may get bigger and bolder:
+            // wrapped text (a message box, the embed preview) has to fit its box.
+            let free = galley.rows.len() <= 1 && !galley.job.wrap.max_width.is_finite();
+            let grow = if small && free && screen < MIN_TEXT { (MIN_TEXT / screen).min(MAX_GROW) } else { 1.0 };
+            let redo = (zoom - 1.0).abs() > 0.001 || small;
+            // In steps, like the size below: a zoom in progress then reuses
+            // the layouts egui keeps, instead of laying everything out anew.
+            let how = (((SMALL_TEXT - screen) / (SMALL_TEXT - 5.0)).clamp(0.0, 1.0) * 8.0).round() / 8.0;
+            // Laid out at `k` times its size, rounded to a quarter point; the
+            // returned scale (within a percent or two of 1) makes up the rest.
+            let lay = |k: f32| {
+                let kq = if size > 0.0 { ((size * k * 4.0).round() / 4.0).max(0.25) / size } else { k };
+                let mut job = scaled_job(&galley.job, kq);
+                if small {
+                    readable(&mut job, how, text, bold && free);
+                }
+                (ctx.fonts_mut(|f| f.layout_job(job)), k / kq)
+            };
+            let big = redo.then(|| {
+                let (mut g, mut fix) = lay(zoom * grow);
+                let wider = g.size().x * fix / zoom / galley.size().x.max(0.1);
+                if free && small && wider > MAX_WIDER {
+                    (g, fix) = lay(zoom * grow * MAX_WIDER / wider);
+                }
+                (g, screen, how, fix)
+            });
+            // Bigger (or bolder, so wider) text stays centred on its place.
+            let pos = match &big {
+                Some((g, _, _, fix)) if free => pos - (g.size() * *fix / zoom - galley.size()) / 2.0,
+                _ => pos,
+            };
+            let screen_pos = to_global * pos;
+            let snapped = to_global.inverse() * pos2((screen_pos.x * ppp).round() / ppp, (screen_pos.y * ppp).round() / ppp);
             (i, snapped, big)
         })
         .collect();
@@ -90,15 +142,45 @@ pub(super) fn sharpen_text(ctx: &egui::Context, layer: LayerId, to_global: TSTra
         for (i, pos, big) in sharp {
             list.mutate_shape(egui::layers::ShapeIdx(i), |c| {
                 if let egui::Shape::Text(t) = &mut c.shape {
-                    if let Some(big) = big {
+                    if let Some((big, screen, how, fix)) = big {
                         t.galley = big;
-                        t.transform(TSTransform::from_scaling(1.0 / zoom));
+                        t.transform(TSTransform::from_scaling(fix / zoom));
+                        if screen < SMALL_TEXT {
+                            t.fallback_color = brighter(t.fallback_color, text, how);
+                        }
                     }
                     t.pos = pos;
                 }
             });
         }
     });
+}
+
+/// Small text made readable: bold instead of the light regular font (when
+/// the bold font is installed), grey colours brighter by `how` (0 to 1).
+fn readable(job: &mut egui::text::LayoutJob, how: f32, text: Color32, bold: bool) {
+    for s in &mut job.sections {
+        let f = &mut s.format;
+        if bold && f.font_id.family == egui::FontFamily::Proportional {
+            f.font_id = crate::ui::fonts::bold(f.font_id.size);
+        }
+        f.color = brighter(f.color, text, how);
+    }
+}
+
+/// A grey `color` moved towards `text` by up to 60% (`how` from 0 to 1);
+/// colours (accents, errors) and the placeholder stay as they are.
+fn brighter(color: Color32, text: Color32, how: f32) -> Color32 {
+    if color == Color32::PLACEHOLDER {
+        return color;
+    }
+    let [r, g, b, a] = color.to_array();
+    let grey = r.max(g).max(b) - r.min(g).min(b) < 32;
+    if !grey {
+        return color;
+    }
+    let mixed = crate::ui::theme::mix(color, text, how.clamp(0.0, 1.0) * 0.6);
+    Color32::from_rgba_unmultiplied(mixed.r(), mixed.g(), mixed.b(), a)
 }
 
 /// A copy of a layout job with every size multiplied by `k`.

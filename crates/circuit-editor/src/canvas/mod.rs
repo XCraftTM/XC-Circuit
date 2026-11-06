@@ -1294,7 +1294,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     if let Some(b) = selection_box {
         painter.rect(b, 4.0, with_alpha(theme.accent, 30), Stroke::new(1.0, theme.accent), StrokeKind::Inside);
     }
-    sharpen_text(&ctx, layer, to_global);
+    sharpen_text(&ctx, layer, to_global, theme.text);
     for l in &layouts[..node_count] {
         ui_rects.insert(format!("node:{}", l.id), to_global * l.rect);
         if *tour_parts {
