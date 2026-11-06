@@ -126,7 +126,10 @@ impl CircuitApp {
             Cmd::Delete => self.ed.delete_selection(),
             Cmd::SelectAll => self.ed.select_all(),
             Cmd::TogglePanel(tab) => self.toggle_panel(tab),
-            Cmd::SideView(view) => self.ed.prefs.side_view = view,
+            Cmd::SideView(view) => {
+                self.ed.prefs.side_tab = None;
+                self.ed.prefs.side_view = view;
+            }
             Cmd::Theme(id) => {
                 self.ed.set_theme(&id);
                 self.ed.theme.apply(ctx);

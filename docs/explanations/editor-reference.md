@@ -25,6 +25,8 @@
 | Undo / Redo | Ctrl+Z / Ctrl+Y (per workspace) |
 | Copy / Paste / Duplicate | Ctrl+C / Ctrl+V (at the mouse) / Ctrl+D; works across workspaces and projects |
 | First start | The welcome page sets up Node.js (finds it, or installs it: winget or the official installer on Windows, a private copy on Linux), a theme and an accent; Help › Welcome and setup… opens it again |
+| Workspaces in order | Drag a workspace above or below another (a line shows where), or onto a folder to move it there; drag folders to order them too. The order is saved with the project |
+| Panels in the side bar | Drag the Inspector, Console, Problems or a plugin's panel by its tab onto the activity bar (or the side bar): it gets an icon there like Workspaces. Right-click the icon › Move back to the main area |
 | Tour | Help › Take the tour: build a tiny bot on a practice project. What to click next glows (the Add block button, the Math entry, the two pins to wire, the Inspector's fields, Run), the card says what to do right now and what went wrong, and Do it for me does any step. Skip any time; arrow keys move between steps |
 | Backups | Every save keeps a snapshot outside the project (newest 20, plus one a day for 14 days; Settings › Backups). File › Restore from backup… compares them with now and restores the project or one workspace. Unsaved changes are copied every 30 s and offered back after a crash |
 | Bot data backups | A bot backs up its saved data (store.json) when it starts and every 6 hours, keeping the newest 10 in data/backups. If the data is empty or damaged it asks: restore a backup or start empty (a dialog in XC Circuit, a question in the terminal) |

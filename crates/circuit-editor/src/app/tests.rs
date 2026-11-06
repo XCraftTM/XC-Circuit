@@ -107,3 +107,16 @@ fn every_tab_has_an_icon() {
         assert!(ed.reg.icons.contains_key(tab.icon()), "{tab:?}: no icon {}", tab.icon());
     }
 }
+
+/// Panels (and only panels) can move into the side bar, under keys that come back as the same tab.
+#[test]
+fn panels_have_side_bar_keys() {
+    for tab in [Tab::Inspector, Tab::Console, Tab::Problems, Tab::Plugin("xc.stats".into(), "stats".into())] {
+        let key = tab.side_key().expect("a panel");
+        assert_eq!(Tab::from_side_key(&key), Some(tab));
+    }
+    for tab in [Tab::Canvas("main".into()), Tab::Settings, Tab::BotSettings, Tab::Start] {
+        assert!(tab.side_key().is_none(), "{tab:?} stays in the main area");
+    }
+    assert_eq!(Tab::from_side_key("nothing"), None);
+}

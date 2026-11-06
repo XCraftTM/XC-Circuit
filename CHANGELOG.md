@@ -7,6 +7,8 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 ### Changed
 - **The Workspaces list shows more**: each workspace's problems, a dot while its blocks run (red after one failed), and a mark when it's turned off; folders show how many workspaces they hold. Hover for its blocks, events and when it last ran. The menus have icons, and **Duplicate** makes a copy of a workspace (turned off, so it doesn't answer twice).
 - **Menus switch on hover**, as in Windows: with File (or any menu) open, pointing at another menu's name opens it and closes the first.
+- **Workspaces can be put in order**: drag one above or below another (a line shows where), into a folder, or drag folders to order them. The order is saved with the project.
+- **Panels can move into the side bar**: drag the Inspector, Console, Problems or a plugin's panel by its tab onto the activity bar, and it gets an icon there like Workspaces and Stored Data. Right-click it › Move back to the main area.
 - **Tabs have icons** before their names: workspaces, Inspector, Console, Problems, the builders, Settings …
 - **The tour shows you where to click**: whatever comes next glows (the Add block button, the Math entry in the picker, the two pins to wire with a hand that shows the drag, the Inspector's fields, Run), the card says what to do right now and notices mistakes, such as a wire to the wrong pin or a wrong number.
 - **New project shows templates as smaller cards, grouped** into Basics, Community, Moderation, Notifications and Games & servers.

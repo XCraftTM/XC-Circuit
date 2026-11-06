@@ -35,6 +35,11 @@ pub struct Prefs {
     pub language: String,
     /// The view the side bar shows; `None` folds the side bar away.
     pub side_view: Option<SideView>,
+    /// Panels dragged into the side bar (Inspector, Console, Problems, a
+    /// plugin's), by key, in the activity bar's order.
+    pub side_tabs: Vec<String>,
+    /// The one of them the side bar shows instead of `side_view`.
+    pub side_tab: Option<String>,
     /// Where File › New Project put the last project.
     pub new_project_location: Option<String>,
     /// Projects opened lately, the latest first (folders).
@@ -110,7 +115,7 @@ impl SideView {
 
 impl Default for Prefs {
     fn default() -> Self {
-        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), side_view: Some(SideView::Workspaces), new_project_location: None, recent_projects: Vec::new(), check_updates: true, skipped_update: None, snap_to_grid: false, recent_blocks: Vec::new(), favorite_blocks: Vec::new(), shortcuts: Default::default(), last_crash_seen: 0 }
+        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), side_view: Some(SideView::Workspaces), side_tabs: Vec::new(), side_tab: None, new_project_location: None, recent_projects: Vec::new(), check_updates: true, skipped_update: None, snap_to_grid: false, recent_blocks: Vec::new(), favorite_blocks: Vec::new(), shortcuts: Default::default(), last_crash_seen: 0 }
     }
 }
 

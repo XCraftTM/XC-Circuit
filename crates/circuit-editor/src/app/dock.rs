@@ -21,6 +21,21 @@ pub(super) struct Viewer<'a> {
     pub(super) start_pick: Option<crate::pages::start_page::Pick>,
     /// The tab titles' font, for the room left for their icons.
     pub(super) tab_font: egui::FontId,
+    /// A panel's tab dropped on the activity bar or the side bar: it moves there.
+    pub(super) to_side: Option<Tab>,
+    /// A panel's tab being dragged (kept in egui's memory after the dock is
+    /// drawn: egui_dock calls on_tab_button with that memory locked).
+    pub(super) dragging: Option<Tab>,
+}
+
+/// Where a panel's tab being dragged is kept for the activity bar (with the
+/// frame it was seen in), so it can show that it takes it.
+pub(super) const DRAGGING_TAB: &str = "xc-dragging-tab";
+
+/// The panel tab being dragged, if one was this frame or the one before.
+pub(super) fn dragging_tab(ctx: &egui::Context) -> Option<Tab> {
+    let now = ctx.cumulative_frame_nr();
+    ctx.data(|d| d.get_temp::<(Tab, u64)>(egui::Id::new(DRAGGING_TAB))).filter(|(_, at)| now.saturating_sub(*at) <= 1).map(|(t, _)| t)
 }
 
 /// Room before a tab's title for its icon.
@@ -101,6 +116,20 @@ impl TabViewer for Viewer<'_> {
     }
 
     fn on_tab_button(&mut self, tab: &mut Tab, response: &egui::Response) {
+        // A panel's tab dragged onto the activity bar or the side bar moves there.
+        if tab.side_key().is_some() {
+            let ctx = &response.ctx;
+            // egui_dock draws the dragged tab as another button (its id with
+            // "dragged"); the drag itself is the original button's.
+            let dragging = response.dragged() || ctx.dragged_id().is_some_and(|d| d == response.id || d.with("dragged") == response.id);
+            if dragging {
+                self.dragging = Some(tab.clone());
+            }
+            let over_side = ctx.pointer_interact_pos().or_else(|| ctx.pointer_hover_pos()).is_some_and(|p| ["activity-bar", "side-bar"].iter().any(|k| self.ed.ui_rects.get(*k).is_some_and(|r| r.contains(p))));
+            if response.drag_stopped() && over_side {
+                self.to_side = Some(tab.clone());
+            }
+        }
         let r = response.rect;
         let painter = response.ctx.layer_painter(response.layer_id);
         let focused = self.focused_tab.as_ref() == Some(tab);

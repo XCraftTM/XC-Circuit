@@ -139,18 +139,21 @@ impl CircuitApp {
             tops.push(ui.menu_button(t!("View"), |ui| {
                 ui.label(RichText::new(t!("SIDE BAR")).size(10.5).color(theme.text_muted));
                 for view in SideView::ALL {
-                    if kit::radio(ui, &theme, self.ed.prefs.side_view == Some(view), view.name()).clicked() {
+                    if kit::radio(ui, &theme, self.ed.prefs.side_view == Some(view) && self.ed.prefs.side_tab.is_none(), view.name()).clicked() {
+                        self.ed.prefs.side_tab = None;
                         self.ed.prefs.side_view = Some(view);
                     }
                 }
-                if kit::radio(ui, &theme, self.ed.prefs.side_view.is_none(), t!("Hidden")).clicked() {
+                if kit::radio(ui, &theme, self.ed.prefs.side_view.is_none() && self.ed.prefs.side_tab.is_none(), t!("Hidden")).clicked() {
+                    self.ed.prefs.side_tab = None;
                     self.ed.prefs.side_view = None;
                 }
                 ui.separator();
                 ui.label(RichText::new(t!("PANELS")).size(10.5).color(theme.text_muted));
                 for (tab, name) in Tab::PANELS {
                     let name = crate::i18n::t(name);
-                    let mut open = self.dock.find_tab(&tab).is_some();
+                    let in_side = tab.side_key().is_some_and(|k| self.ed.prefs.side_tab.as_deref() == Some(k.as_str()));
+                    let mut open = self.dock.find_tab(&tab).is_some() || in_side;
                     if kit::checkbox(ui, &theme, &mut open, name).clicked() {
                         self.toggle_panel(tab);
                     }
