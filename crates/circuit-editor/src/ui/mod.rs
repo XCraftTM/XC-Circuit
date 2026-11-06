@@ -2,6 +2,7 @@
 
 pub mod chips;
 pub mod dialog;
+pub mod dock;
 pub mod fonts;
 pub mod inputs;
 pub mod kit;

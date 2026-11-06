@@ -4,68 +4,10 @@
 //! Inspector, a plugin's panel …) onto the bar and it becomes an icon there.
 
 use super::*;
-use egui_dock::{NodePath, Split};
 
 /// An activity bar icon being dragged (its key).
 #[derive(Clone)]
 pub(super) struct ActivityDrag(pub(super) String);
-
-/// Where an icon dropped on the main area goes: next to an area's tabs, or
-/// into a new area split off one side of it.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(super) struct DockDrop {
-    pub(super) path: NodePath,
-    pub(super) split: Option<Split>,
-    /// What it would take up, for the preview.
-    pub(super) rect: egui::Rect,
-}
-
-/// The dock area under `pos`, and where in it: its tab bar or its middle
-/// joins its tabs, near an edge splits it on that side (as a dragged tab does).
-pub(super) fn dock_drop_at(dock: &DockState<Tab>, pos: egui::Pos2) -> Option<DockDrop> {
-    // Windows are drawn over the main area, and come after it.
-    let (path, leaf) = dock.iter_leaves().filter(|(_, l)| l.rect.contains(pos)).last()?;
-    let body = leaf.viewport;
-    let join = DockDrop { path, split: None, rect: leaf.rect };
-    if !body.contains(pos) || body.width() < 2.0 || body.height() < 2.0 {
-        return Some(join);
-    }
-    let x = (pos.x - body.left()) / body.width();
-    let y = (pos.y - body.top()) / body.height();
-    // The edge it's nearest to, in parts of the area; the middle half joins.
-    let (near, split) = [(x, Split::Left), (1.0 - x, Split::Right), (y, Split::Above), (1.0 - y, Split::Below)].into_iter().min_by(|a, b| a.0.total_cmp(&b.0))?;
-    if near >= 0.25 {
-        return Some(join);
-    }
-    let c = body.center();
-    let rect = match split {
-        Split::Left => egui::Rect::from_min_max(body.min, egui::pos2(c.x, body.max.y)),
-        Split::Right => egui::Rect::from_min_max(egui::pos2(c.x, body.min.y), body.max),
-        Split::Above => egui::Rect::from_min_max(body.min, egui::pos2(body.max.x, c.y)),
-        Split::Below => egui::Rect::from_min_max(egui::pos2(body.min.x, c.y), body.max),
-    };
-    Some(DockDrop { path, split: Some(split), rect })
-}
-
-/// Puts a tab into the dock where a drop says, or (without one, or when the
-/// area is gone) where its kind opens, and brings it to the front.
-pub(super) fn dock_tab_at(dock: &mut DockState<Tab>, tab: Tab, at: Option<DockDrop>) {
-    match at {
-        Some(DockDrop { path, split: None, .. }) if dock.leaf(path).is_ok() => {
-            if let Ok(leaf) = dock.leaf_mut(path) {
-                leaf.append_tab(tab.clone());
-            }
-        }
-        Some(DockDrop { path, split: Some(split), .. }) if dock.leaf(path).is_ok() => {
-            dock[path.surface].split(path.node, split, 0.5, Node::leaf_with(vec![tab.clone()]));
-        }
-        _ => return place_panel(dock, tab),
-    }
-    if let Some(path) = dock.find_tab(&tab) {
-        let _ = dock.set_active_tab(path);
-        dock.set_focused_node_and_surface(path.node_path());
-    }
-}
 
 /// Puts `key` into the activity bar's list before `before` (at the end
 /// without), taking it from where it was.
@@ -116,7 +58,7 @@ impl CircuitApp {
         let ctx = ui.ctx().clone();
         let icon_drag = egui::DragAndDrop::payload::<ActivityDrag>(&ctx).map(|d| d.0.clone());
         // A tab from the main area that can come here, being dragged.
-        let tab_drag = dock::dragging_tab(&ctx).filter(|t| t.side_key().is_some_and(|k| !self.ed.prefs.activity.contains(&k)));
+        let tab_drag = self.dock.dragged().filter(|t| t.side_key().is_some_and(|k| !self.ed.prefs.activity.contains(&k))).cloned();
         let mut slots = Vec::new();
         let mut out = None;
         for key in self.ed.prefs.activity.clone() {
@@ -158,7 +100,7 @@ impl CircuitApp {
         }
         self.activity_slots = slots;
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
-            if self.activity_item(ui, "settings", t!("Settings (Ctrl+,)"), self.dock.find_tab(&Tab::Settings).is_some()) {
+            if self.activity_item(ui, "settings", t!("Settings (Ctrl+,)"), self.dock.contains(&Tab::Settings)) {
                 self.toggle_settings();
             }
         });
@@ -194,51 +136,43 @@ impl CircuitApp {
         let Some(pos) = ctx.pointer_latest_pos() else { return };
         let over = |name: &str| self.ed.ui_rects.get(name).is_some_and(|r| r.contains(pos));
         let over_bar = over("activity-bar");
-        let target = if over_bar || over("side-bar") { None } else { dock_drop_at(&self.dock, pos) };
+        let target = if over_bar || over("side-bar") { None } else { self.dock.target_at(pos, None, ctx.layer_id_at(pos)) };
         if ctx.input(|i| i.pointer.any_released()) {
             egui::DragAndDrop::clear_payload(ctx);
             if over_bar {
                 let before = icon_after(&self.activity_slots, pos.y).map(str::to_string);
                 put_in_activity(&mut self.ed.prefs.activity, &key, before.as_deref());
-            } else if let Some(target) = target {
-                self.move_to_main(&key, Some(target));
+            } else if let Some(drop) = target {
+                self.move_to_main(&key, Some(drop.target));
             }
             return;
         }
         ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
         let t = self.ed.theme.clone();
-        if let Some(target) = target {
-            let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("activity-drop")));
-            painter.rect_filled(target.rect, 4.0, crate::ui::theme::with_alpha(t.accent, 40));
-            painter.rect_stroke(target.rect, 4.0, egui::Stroke::new(1.5, t.accent), egui::StrokeKind::Inside);
+        if let Some(drop) = &target {
+            crate::ui::dock::paint_drop(ctx, &t, drop);
         }
         // The icon and its name next to the pointer, as a dragged tab looks.
         if let Some(tab) = self.activity_tab(&key) {
-            let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("activity-ghost")));
-            let font = egui::TextStyle::Button.resolve(&ctx.global_style());
-            let galley = painter.layout_no_wrap(self.panel_name(&tab), font, t.text);
-            let rect = egui::Rect::from_min_size(pos + egui::vec2(12.0, 8.0), egui::vec2(galley.size().x + 42.0, 28.0));
-            painter.rect_filled(rect, 4.0, t.panel);
-            painter.rect_stroke(rect, 4.0, egui::Stroke::new(1.0, t.accent), egui::StrokeKind::Inside);
-            if let Some(path) = self.ed.reg.icons.get(tab.icon()) {
-                dock::paint_icon(ctx, &painter, path, egui::Rect::from_center_size(egui::pos2(rect.left() + 17.0, rect.center().y), egui::vec2(14.0, 14.0)), t.text);
-            }
-            painter.galley(egui::pos2(rect.left() + 32.0, rect.center().y - galley.size().y / 2.0), galley, t.text);
+            crate::ui::dock::paint_ghost(ctx, &t, self.ed.reg.icons.get(tab.icon()).map(|p| p.as_path()), &self.panel_name(&tab), pos);
         }
         ctx.request_repaint();
     }
 
     /// Takes an icon out of the activity bar and makes it a tab in the main
     /// area: where it was dropped, or (without) where its kind opens.
-    pub(super) fn move_to_main(&mut self, key: &str, at: Option<DockDrop>) {
+    pub(super) fn move_to_main(&mut self, key: &str, at: Option<crate::ui::dock::Target<Tab>>) {
         self.ed.prefs.activity.retain(|k| k != key);
         if self.ed.prefs.side_shown.as_deref() == Some(key) {
             self.ed.prefs.side_shown = None;
         }
         if let Some(tab) = Tab::from_side_key(key)
-            && self.dock.find_tab(&tab).is_none()
+            && !self.dock.contains(&tab)
         {
-            dock_tab_at(&mut self.dock, tab, at);
+            match at {
+                Some(target) => self.dock.put(tab, &target),
+                None => place_panel(&mut self.dock, tab),
+            }
         }
     }
 
@@ -262,13 +196,13 @@ impl CircuitApp {
         }
         for key in &self.ed.prefs.activity {
             if let Some(tab) = Tab::from_side_key(key)
-                && self.dock.find_tab(&tab).is_some()
+                && self.dock.contains(&tab)
             {
                 close_tabs(&mut self.dock, |t| *t == tab);
             }
         }
         for view in SideView::ALL {
-            if !self.ed.prefs.activity.iter().any(|k| k == view.key()) && self.dock.find_tab(&Tab::Side(view)).is_none() {
+            if !self.ed.prefs.activity.iter().any(|k| k == view.key()) && !self.dock.contains(&Tab::Side(view)) {
                 self.ed.prefs.activity.push(view.key().into());
             }
         }
@@ -278,7 +212,7 @@ impl CircuitApp {
     pub(super) fn panel_open(&self, tab: &Tab) -> bool {
         match tab.side_key() {
             Some(key) if self.ed.prefs.activity.contains(&key) => self.ed.prefs.side_shown.as_deref() == Some(key.as_str()),
-            _ => self.dock.find_tab(tab).is_some(),
+            _ => self.dock.contains(tab),
         }
     }
 
@@ -290,12 +224,9 @@ impl CircuitApp {
             self.ed.prefs.side_shown = Some(key);
             return;
         }
-        match self.dock.find_tab(&tab) {
-            Some(path) => {
-                let _ = self.dock.set_active_tab(path);
-                self.dock.set_focused_node_and_surface(path.node_path());
-            }
-            None => place_panel(&mut self.dock, tab),
+        match self.dock.contains(&tab) {
+            true => self.dock.focus(&tab),
+            false => place_panel(&mut self.dock, tab),
         }
     }
 

@@ -179,45 +179,6 @@ impl Theme {
             }
         });
     }
-
-    pub fn dock_style(&self, style: &egui::Style) -> egui_dock::Style {
-        let mut s = egui_dock::Style::from_egui(style);
-        s.main_surface_border_stroke = Stroke::NONE;
-        s.tab_bar.bg_fill = self.frame;
-        s.tab_bar.hline_color = self.line;
-        s.tab_bar.height = if self.touch { 42.0 } else { 32.0 };
-        s.separator.color_idle = self.line;
-        s.separator.color_hovered = self.accent;
-        s.separator.color_dragged = self.accent;
-        s.separator.width = 1.0;
-        s.tab.tab_body.bg_fill = self.panel;
-        s.tab.tab_body.stroke = Stroke::NONE;
-        s.tab.tab_body.inner_margin = Margin::ZERO;
-        s.tab.active.bg_fill = self.panel;
-        s.tab.active.text_color = self.text;
-        // No outlines: the tab the keyboard is in gets a thin accent line on
-        // top instead (drawn by the tab viewer).
-        s.tab.active.outline_color = Color32::TRANSPARENT;
-        s.tab.focused.bg_fill = self.panel;
-        s.tab.focused.text_color = self.text;
-        s.tab.focused.outline_color = Color32::TRANSPARENT;
-        s.tab.inactive.bg_fill = self.frame;
-        s.tab.inactive.text_color = self.text_muted;
-        s.tab.inactive.outline_color = Color32::TRANSPARENT;
-        s.tab.hovered.bg_fill = self.panel_header;
-        s.tab.hovered.text_color = self.text;
-        s.tab.hline_below_active_tab_name = true;
-        s.tab.active_with_kb_focus = s.tab.active.clone();
-        s.tab.focused_with_kb_focus = s.tab.focused.clone();
-        s.tab.inactive_with_kb_focus = s.tab.inactive.clone();
-        s.buttons.close_tab_color = self.text_muted;
-        s.buttons.close_tab_active_color = self.text;
-        s.buttons.close_tab_bg_fill = self.panel_header;
-        s.overlay.selection_color = with_alpha(self.accent, 70);
-        s.overlay.button_color = self.panel_header;
-        s.overlay.button_border_stroke = Stroke::new(1.0, self.node_border);
-        s
-    }
 }
 
 /// The normal (not touch) sizes. Also used inside places with a fixed size in

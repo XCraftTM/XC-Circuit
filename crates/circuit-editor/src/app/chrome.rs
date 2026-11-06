@@ -71,7 +71,7 @@ impl CircuitApp {
 
     /// The activity bar's gear: opens Settings, or closes it when it is the tab in view.
     pub(super) fn toggle_settings(&mut self) {
-        let focused = self.dock.find_active_focused().is_some_and(|(_, t)| *t == Tab::Settings);
+        let focused = self.dock.focused() == Some(&Tab::Settings);
         if focused {
             close_tabs(&mut self.dock, |t| *t == Tab::Settings);
         } else {
@@ -173,7 +173,7 @@ impl CircuitApp {
         let fresh = crate::editor::prefs::Prefs::default();
         self.ed.prefs.activity = fresh.activity;
         self.ed.prefs.side_shown = fresh.side_shown;
-        let canvases: Vec<Tab> = self.dock.iter_all_tabs().map(|(_, t)| t.clone()).filter(|t| matches!(t, Tab::Canvas(_))).collect();
+        let canvases: Vec<Tab> = self.dock.tabs().filter(|t| matches!(t, Tab::Canvas(_))).cloned().collect();
         self.dock = default_layout();
         for t in canvases {
             if let Tab::Canvas(k) = t {
@@ -191,7 +191,7 @@ impl CircuitApp {
             self.ed.prefs.side_shown = (!shown).then_some(key);
             return;
         }
-        if self.dock.find_tab(&tab).is_some() {
+        if self.dock.contains(&tab) {
             close_tabs(&mut self.dock, |t| *t == tab);
             return;
         }
@@ -220,10 +220,10 @@ impl CircuitApp {
             (Tab::WorkspaceImport, self.ed.ws_import.is_some(), egui::vec2(660.0, 680.0)),
         ];
         for (tab, open, size) in wanted {
-            match (open, self.dock.find_tab(&tab)) {
-                (true, None) => open_floating(&mut self.dock, ctx, tab, size),
-                (false, Some(path)) => {
-                    self.dock.remove_tab(path);
+            match (open, self.dock.contains(&tab)) {
+                (true, false) => open_floating(&mut self.dock, ctx, tab, size),
+                (false, true) => {
+                    self.dock.remove(&tab);
                 }
                 _ => {}
             }

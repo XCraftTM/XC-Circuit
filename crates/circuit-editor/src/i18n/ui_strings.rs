@@ -123,6 +123,7 @@ pub const UI_STRINGS: &[&str] = &[
     "Start",
     "Export workspaces",
     "Import workspaces",
+    "Move to the activity bar",
     "Problems  {count}",
     "Search",
     "Tour",

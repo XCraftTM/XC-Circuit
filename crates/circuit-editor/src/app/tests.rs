@@ -1,7 +1,13 @@
 use super::*;
+use crate::editor::prefs::SideView;
+use crate::ui::dock::Target;
 
-fn leaves(dock: &DockState<Tab>) -> Vec<Vec<Tab>> {
-    dock.main_surface().iter().filter_map(|n| n.tabs().map(|t| t.to_vec())).collect()
+fn leaves(dock: &Dock<Tab>) -> Vec<Vec<Tab>> {
+    dock.main.iter().flat_map(|m| m.leaves()).map(|l| l.tabs.clone()).collect()
+}
+
+fn whole(dock: &Dock<Tab>) -> bool {
+    dock.main.as_ref().is_some_and(|m| m.whole())
 }
 
 #[test]
@@ -18,23 +24,25 @@ fn panels_open_next_to_their_kind() {
     assert_eq!(leaves(&dock).len(), 1);
     place_panel(&mut dock, Tab::Problems);
     assert_eq!(leaves(&dock).len(), 2);
-    assert!(tree_ok(dock.main_surface()));
+    assert!(whole(&dock));
 
     // Workspaces dragged out of the activity bar gets a column on the left,
     // and panels opened after that stay out of it.
-    place_panel(&mut dock, Tab::Side(crate::editor::prefs::SideView::Workspaces));
+    place_panel(&mut dock, Tab::Side(SideView::Workspaces));
     close_tabs(&mut dock, |t| t.side() == Side::Bottom);
     place_panel(&mut dock, Tab::Console);
-    assert!(tree_ok(dock.main_surface()));
-    let root = NodeIndex::root();
-    assert!(matches!(&dock.main_surface()[root.left()], Node::Leaf(l) if l.tabs() == [Tab::Side(crate::editor::prefs::SideView::Workspaces)]), "the column is still the left half");
+    assert!(whole(&dock));
+    let Some(Node::Split(s)) = &dock.main else { panic!("a split") };
+    assert!(matches!(&*s.first, Node::Leaf(l) if l.tabs == [Tab::Side(SideView::Workspaces)]), "the column is still the left half");
+    assert_eq!(dock.focused(), Some(&Tab::Console), "what opens is the tab the user is in");
 }
 
 /// Workspaces, Stored Data and Plugins start in the activity bar, not the dock.
 #[test]
 fn the_default_layout_leaves_the_side_bar_s_views_to_the_activity_bar() {
     let dock = default_layout();
-    assert!(dock.find_tab_from(|t| matches!(t, Tab::Side(_))).is_none());
+    assert!(dock.find(|t| matches!(t, Tab::Side(_))).is_none());
+    assert_eq!(leaves(&dock), [vec![Tab::Inspector], vec![Tab::Console, Tab::Problems]]);
     let prefs = crate::editor::prefs::Prefs::default();
     assert_eq!(prefs.activity, ["workspaces", "stored-data", "plugins"]);
     assert_eq!(prefs.side_shown.as_deref(), Some("workspaces"));
@@ -77,85 +85,65 @@ fn activity_bar_icons_go_where_they_are_dropped() {
     assert_eq!(icon_after(&slots, 120.0), None, "below the middle of the last: at the end");
 }
 
-/// An icon dropped on the main area joins the tabs of the area under it, or
-/// (near an edge) gets a new area split off that side.
+/// An icon dropped on the main area becomes a tab where it was let go.
 #[test]
 fn an_icon_dropped_on_the_main_area_becomes_a_tab_there() {
-    use super::activity::{dock_drop_at, dock_tab_at};
-    use crate::editor::prefs::SideView;
-    use egui_dock::Split;
-    let mut dock = DockState::new(vec![Tab::Canvas("main".into())]);
-    dock.main_surface_mut().split_right(NodeIndex::root(), 0.75, vec![Tab::Inspector]);
-    // Where the areas are once drawn: the canvas 0..300, the Inspector 300..400,
-    // each with a 24 high tab bar.
-    for (_, leaf) in dock.iter_leaves_mut() {
-        let x = if leaf.tabs.contains(&Tab::Inspector) { 300.0 } else { 0.0 };
-        let w = if x == 0.0 { 300.0 } else { 100.0 };
-        leaf.rect = egui::Rect::from_min_size(egui::pos2(x, 0.0), egui::vec2(w, 200.0));
-        leaf.viewport = egui::Rect::from_min_max(egui::pos2(x, 24.0), egui::pos2(x + w, 200.0));
-    }
-    let at = |x: f32, y: f32| dock_drop_at(&dock, egui::pos2(x, y));
-    assert_eq!(at(150.0, 10.0).and_then(|d| d.split), None, "on the tab bar: joins");
-    assert_eq!(at(150.0, 110.0).and_then(|d| d.split), None, "the middle: joins");
-    assert_eq!(at(10.0, 110.0).and_then(|d| d.split), Some(Split::Left));
-    assert_eq!(at(150.0, 195.0).and_then(|d| d.split), Some(Split::Below));
-    assert!(at(500.0, 100.0).is_none(), "outside the dock");
-    let join = at(350.0, 110.0);
-    let below = at(150.0, 195.0);
-
-    dock_tab_at(&mut dock, Tab::Side(SideView::Workspaces), join);
-    let leaf = leaves(&dock).into_iter().find(|l| l.contains(&Tab::Inspector)).unwrap();
-    assert!(leaf.contains(&Tab::Side(SideView::Workspaces)), "next to the Inspector: {leaf:?}");
-
-    dock_tab_at(&mut dock, Tab::Console, below);
-    assert!(tree_ok(dock.main_surface()));
-    assert_eq!(leaves(&dock).len(), 3, "a new area");
-    assert!(leaves(&dock).contains(&vec![Tab::Console]));
-
-    // The area it was dropped on isn't one any more (it's a split now): where its kind opens.
-    let gone = below.map(|d| super::activity::DockDrop { path: egui_dock::NodePath { surface: d.path.surface, node: NodeIndex::root() }, ..d });
-    dock_tab_at(&mut dock, Tab::Problems, gone);
-    assert!(dock.find_tab(&Tab::Problems).is_some());
-    assert!(tree_ok(dock.main_surface()));
+    let mut dock = Dock::new(vec![Tab::Canvas("main".into())]);
+    dock.main.as_mut().unwrap().split(Edge::Right, 0.75, vec![Tab::Inspector]);
+    dock.put(Tab::Side(SideView::Workspaces), &Target::Join(Tab::Inspector));
+    assert_eq!(leaves(&dock)[1], [Tab::Inspector, Tab::Side(SideView::Workspaces)], "next to the Inspector");
+    dock.put(Tab::Console, &Target::Split(Tab::Canvas("main".into()), Edge::Bottom));
+    assert_eq!(leaves(&dock), [vec![Tab::Canvas("main".into())], vec![Tab::Console], vec![Tab::Inspector, Tab::Side(SideView::Workspaces)]]);
+    // The area it was dropped on is gone meanwhile: it still gets a place.
+    dock.put(Tab::Problems, &Target::Join(Tab::Backups));
+    assert!(dock.contains(&Tab::Problems));
+    assert!(whole(&dock));
 }
 
 #[test]
-fn closing_every_bottom_tab_keeps_the_layout_whole() {
-    // The bottom area's neighbour is a split (Workspaces | Inspector), the
-    // case where retain_tabs breaks the tree.
+fn a_saved_layout_without_tabs_in_an_area_is_tidied() {
     let mut dock = default_layout();
-    close_tabs(&mut dock, |t| t.side() == Side::Bottom);
-    assert!(tree_ok(dock.main_surface()));
-    let mut broken = default_layout();
-    broken.retain_tabs(|t| t.side() != Side::Bottom);
-    if !tree_ok(broken.main_surface()) {
-        assert!(repair_layout(&mut broken), "a broken layout is rebuilt");
-        assert!(tree_ok(broken.main_surface()));
-        let open: Vec<Tab> = broken.iter_all_tabs().map(|(_, t)| t.clone()).collect();
-        assert!(open.contains(&Tab::Inspector));
-        assert!(!open.contains(&Tab::Console), "with the same tabs open");
-    }
     assert!(!repair_layout(&mut dock), "a whole layout is left alone");
+    for leaf in dock.main.as_mut().unwrap().leaves_mut() {
+        if leaf.tabs.contains(&Tab::Console) {
+            leaf.tabs.clear();
+        }
+    }
+    assert!(repair_layout(&mut dock), "an empty area goes");
+    assert_eq!(leaves(&dock), [vec![Tab::Inspector]]);
 }
 
 #[test]
 fn a_new_project_s_canvas_opens_where_the_old_ones_were() {
     // Inspector on the right, the full height; the Console only under the canvas.
-    let mut dock = DockState::new(vec![Tab::Canvas("old".into()), Tab::Canvas("other".into())]);
-    let surface = dock.main_surface_mut();
-    let [canvas, _] = surface.split_right(NodeIndex::root(), 0.8, vec![Tab::Inspector]);
-    surface.split_below(canvas, 0.7, vec![Tab::Console]);
-    let canvas_rect_index = |dock: &DockState<Tab>| dock.find_tab_from(|t| matches!(t, Tab::Canvas(_))).map(|p| p.node_path().node);
+    let mut dock = Dock::new(vec![Tab::Canvas("old".into()), Tab::Canvas("other".into())]);
+    let main = dock.main.as_mut().unwrap();
+    main.split(Edge::Right, 0.8, vec![Tab::Inspector]);
+    main.at_mut(&[false]).unwrap().split(Edge::Bottom, 0.7, vec![Tab::Console]);
+    let canvas_area = |dock: &Dock<Tab>| leaves(dock).iter().position(|l| l.iter().any(|t| matches!(t, Tab::Canvas(_))));
 
-    let before = canvas_rect_index(&dock);
+    let before = canvas_area(&dock);
     clear_canvases(&mut dock);
-    assert!(dock.find_tab_from(|t| matches!(t, Tab::Canvas(_))).is_none());
-    assert!(tree_ok(dock.main_surface()), "the canvas area stays, with a Start tab");
+    assert!(dock.find(|t| matches!(t, Tab::Canvas(_))).is_none());
+    assert_eq!(leaves(&dock).len(), 3, "the canvas area stays, with a Start tab");
     open_canvas(&mut dock, "new".into());
-    assert_eq!(canvas_rect_index(&dock), before, "in the old canvas area");
+    assert_eq!(canvas_area(&dock), before, "in the old canvas area");
     close_tabs(&mut dock, |t| matches!(t, Tab::Start));
-    assert_eq!(canvas_rect_index(&dock), before);
-    assert_eq!(dock.iter_all_tabs().count(), 3, "new canvas, Inspector, Console");
+    assert_eq!(canvas_area(&dock), before);
+    assert_eq!(dock.tabs().count(), 3, "new canvas, Inspector, Console");
+}
+
+/// The panels next to the canvases keep their size when the window grows.
+#[test]
+fn panels_keep_their_size_when_the_window_grows() {
+    let mut dock = Dock::new(vec![Tab::Canvas("main".into())]);
+    let main = dock.main.as_mut().unwrap();
+    main.split(Edge::Right, 0.8, vec![Tab::Inspector]);
+    let Node::Split(s) = main else { panic!() };
+    s.rect = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(1000.0, 600.0));
+    keep_panel_sizes(main, egui::vec2(500.0, 0.0));
+    let Node::Split(s) = main else { panic!() };
+    assert!((s.fraction * 1500.0 - 1300.0).abs() < 0.5, "the Inspector stays 200 wide: {}", s.fraction);
 }
 
 #[test]

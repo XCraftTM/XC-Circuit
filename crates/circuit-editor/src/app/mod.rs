@@ -12,9 +12,8 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 use circuit_core::Project;
-use eframe::egui::{self, Frame, Id, Margin, RichText, ViewportCommand, WidgetText};
-use egui_dock::tab_viewer::OnCloseResponse;
-use egui_dock::{DockArea, DockState, Node, NodeIndex, TabViewer, Tree};
+use eframe::egui::{self, Frame, Margin, RichText, ViewportCommand};
+use crate::ui::dock::{Dir, Dock, DockViewer, Edge, Node};
 use serde::{Deserialize, Serialize};
 
 use crate::bot::{BotState, BotUi};
@@ -86,11 +85,6 @@ impl Tab {
         }
     }
 
-    /// The editors that open in their own floating window.
-    fn floats(&self) -> bool {
-        matches!(self, Tab::EmbedBuilder | Tab::LayoutBuilder | Tab::CanvasBuilder | Tab::SlashCommands | Tab::BotSettings | Tab::Export | Tab::Plugins | Tab::WorkspaceExport | Tab::WorkspaceImport)
-    }
-
     const PANELS: [(Tab, &'static str); 3] = [(Tab::Inspector, n("Inspector")), (Tab::Console, n("Console")), (Tab::Problems, n("Problems"))];
 
     /// The key of a tab that can be an icon in the activity bar: Workspaces,
@@ -123,7 +117,9 @@ impl Tab {
     }
 }
 
+/// The layout as egui_dock saved it, read once (see [`crate::ui::dock::legacy`]).
 const KEY_DOCK: &str = "dock";
+const KEY_LAYOUT: &str = "layout";
 const KEY_THEME: &str = "theme";
 const KEY_PROJECT: &str = "project";
 const KEY_SYSTEM_TITLEBAR: &str = "system_titlebar";
@@ -135,7 +131,7 @@ const KEY_NATIVE_STORAGE: &str = "native_storage";
 
 pub struct CircuitApp {
     ed: Editor,
-    dock: DockState<Tab>,
+    dock: Dock<Tab>,
     title: String,
     show_about: bool,
     /// File › New Project: the starter to begin from (0 = empty), while choosing.
@@ -184,10 +180,10 @@ pub struct CircuitApp {
     setup: Option<crate::pages::setup::Setup>,
     /// The guided tour, while it runs, and the layout to put back afterwards.
     tour: Option<crate::pages::tour::Tour>,
-    dock_before_tour: Option<DockState<Tab>>,
+    dock_before_tour: Option<Dock<Tab>>,
     /// The panels and tabs while no project is open (only the start page
     /// shows then); back when a project opens.
-    dock_before_start: Option<DockState<Tab>>,
+    dock_before_start: Option<Dock<Tab>>,
 }
 
 impl CircuitApp {
@@ -197,7 +193,9 @@ impl CircuitApp {
         let (plugin_dirs, bundled_root) = find_plugin_dirs();
         let theme_id: Option<String> = cc.storage.and_then(|s| eframe::get_value(s, KEY_THEME));
         let last_project: Option<PathBuf> = cc.storage.and_then(|s| eframe::get_value(s, KEY_PROJECT));
-        let saved_dock: Option<DockState<Tab>> = cc.storage.and_then(|s| eframe::get_value(s, KEY_DOCK));
+        let saved_dock: Option<Dock<Tab>> = cc.storage.and_then(|s| {
+            eframe::get_value(s, KEY_LAYOUT).or_else(|| eframe::get_value::<crate::ui::dock::legacy::DockState<Tab>>(s, KEY_DOCK).map(|d| d.convert()))
+        });
         let prefs: crate::editor::prefs::Prefs = cc.storage.and_then(|s| eframe::get_value(s, KEY_PREFS)).unwrap_or_else(|| crate::editor::prefs::Prefs {
             // Settings saved before there was a Settings page.
             system_titlebar: cc.storage.and_then(|s| eframe::get_value(s, KEY_SYSTEM_TITLEBAR)).unwrap_or(false),
@@ -488,13 +486,10 @@ impl eframe::App for CircuitApp {
             }
         } else {
         egui::CentralPanel::default().frame(Frame::new().fill(theme.frame)).show(ui, |ui| {
-            let style = theme.dock_style(ui.style());
             let running = self.bot.state != BotState::Stopped;
             self.sync_dialog_tabs(ui.ctx());
-            let focused_tab = self.dock.find_active_focused().map(|(_, t)| t.clone());
             let has_example = self.ed.examples_dir.as_ref().is_some_and(|e| e.join("DemoBot").is_dir());
             let mut viewer = Viewer {
-                focused_tab,
                 bot: &mut self.bot,
                 bundled_plugins: self.bundled_plugins.as_deref(),
                 plugins: &mut self.plugins,
@@ -509,35 +504,25 @@ impl eframe::App for CircuitApp {
                 start: &mut self.start,
                 has_example,
                 start_pick: None,
-                tab_font: egui::TextStyle::Button.resolve(ui.style()),
                 stored: &mut self.stored,
                 side_ask: None,
                 to_side: None,
-                dragging: None,
             };
             let size = ui.available_size();
             if let Some(before) = self.dock_size
                 && before != size
                 && before.min_elem() > 100.0
                 && size.min_elem() > 100.0
+                && let Some(main) = &mut self.dock.main
             {
-                keep_panel_sizes(self.dock.main_surface_mut(), NodeIndex::root(), size - before);
+                keep_panel_sizes(main, size - before);
             }
             self.dock_size = Some(size);
-            DockArea::new(&mut self.dock)
-                .style(style)
-                .show_add_buttons(false)
-                .show_leaf_close_all_buttons(false)
-                .show_leaf_collapse_buttons(false)
-                .show_inside(ui, &mut viewer);
+            self.dock.show(ui, &theme, &mut viewer);
             let asks = std::mem::take(&mut viewer.asks);
             let start_pick = viewer.start_pick.take();
             let side_ask = viewer.side_ask.take();
             let to_side = viewer.to_side.take();
-            if let Some(tab) = viewer.dragging.take() {
-                let frame = ui.ctx().cumulative_frame_nr();
-                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new(dock::DRAGGING_TAB), (tab, frame)));
-            }
             if let Some(ask) = side_ask {
                 self.plugins_side_ask(ask, ui.ctx());
             }
@@ -629,7 +614,7 @@ impl eframe::App for CircuitApp {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         // Mid-tour, keep the user's own layout and project.
         let dock = self.dock_before_tour.as_ref().filter(|_| self.tour.is_some()).or(self.dock_before_start.as_ref()).unwrap_or(&self.dock);
-        eframe::set_value(storage, KEY_DOCK, dock);
+        eframe::set_value(storage, KEY_LAYOUT, dock);
         eframe::set_value(storage, KEY_THEME, &self.ed.theme.id);
         eframe::set_value(storage, KEY_NATIVE_ALLOW, &self.native.allow);
         eframe::set_value(storage, KEY_PREFS, &self.ed.prefs);

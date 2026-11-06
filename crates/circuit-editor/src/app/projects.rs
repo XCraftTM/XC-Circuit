@@ -102,13 +102,13 @@ impl CircuitApp {
     pub(super) fn swap_start_page(&mut self) {
         let showing = self.dock_before_start.is_some();
         if self.ed.project.is_none() && !showing && self.tour.is_none() {
-            let start = DockState::new(vec![Tab::Start]);
+            let start = Dock::new(vec![Tab::Start]);
             self.dock_before_start = Some(std::mem::replace(&mut self.dock, start));
         } else if self.ed.project.is_some() && showing {
             let mut dock = self.dock_before_start.take().unwrap_or_else(default_layout);
             // Where its canvases were, a placeholder keeps the place for the new ones.
             clear_canvases(&mut dock);
-            if dock.main_surface().is_empty() {
+            if dock.is_empty() {
                 dock = default_layout();
             }
             self.dock = dock;
@@ -118,7 +118,7 @@ impl CircuitApp {
 
     /// Once a canvas is in its place, the placeholder that kept it goes.
     pub(super) fn drop_placeholder(&mut self) {
-        if self.dock_before_start.is_none() && self.dock.find_tab_from(|t| matches!(t, Tab::Canvas(_))).is_some() {
+        if self.dock_before_start.is_none() && self.dock.find(|t| matches!(t, Tab::Canvas(_))).is_some() {
             close_tabs(&mut self.dock, |t| matches!(t, Tab::Start));
         }
     }

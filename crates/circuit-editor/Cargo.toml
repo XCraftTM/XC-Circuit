@@ -24,7 +24,6 @@ xc-circuit-plugin = { path = "../xc-circuit-plugin" }
 notify = "8"
 dirs.workspace = true
 eframe.workspace = true
-egui_dock.workspace = true
 egui_extras.workspace = true
 image.workspace = true
 indexmap.workspace = true
@@ -50,3 +49,4 @@ winresource = "0.1"
 
 [dev-dependencies]
 toml.workspace = true
+ron = "0.12"

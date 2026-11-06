@@ -5,11 +5,9 @@ use super::*;
 impl CircuitApp {
     /// Opens the Plugins tab, or focuses it.
     pub(super) fn open_plugins(&mut self) {
-        match self.dock.find_tab(&Tab::Plugins) {
-            Some(path) => {
-                let _ = self.dock.set_active_tab(path);
-            }
-            None => self.plugins = Some(crate::plugins::manager::Draft::new(&self.native)),
+        match self.dock.contains(&Tab::Plugins) {
+            true => self.dock.focus(&Tab::Plugins),
+            false => self.plugins = Some(crate::plugins::manager::Draft::new(&self.native)),
         }
     }
 

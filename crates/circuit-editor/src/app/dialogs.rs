@@ -204,7 +204,7 @@ impl CircuitApp {
     /// Undo, clipboard and selection shortcuts, unless a text box has focus.
     pub(super) fn edit_shortcuts(&mut self, ctx: &egui::Context) {
         // The settings and data tabs undo changes to them; others a workspace.
-        self.ed.undo_project = self.dock.find_active_focused().is_some_and(|(_, t)| matches!(t, Tab::SlashCommands | Tab::BotSettings));
+        self.ed.undo_project = self.dock.focused().is_some_and(|t| matches!(t, Tab::SlashCommands | Tab::BotSettings));
         if ctx.text_edit_focused() || self.ed.picker.is_some() {
             return;
         }
