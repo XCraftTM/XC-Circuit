@@ -91,7 +91,10 @@ async function exercise(db) {
   assert.strictEqual((await db.select("xc_test_users")).length, 3);
 
   // Names are checked; values never become SQL (or MongoDB operators).
-  await assert.rejects(() => db.select("xc_test_users; DROP TABLE xc_test_users"), /can't be a/);
+  // (In MongoDB any text is a collection name and harmless; only $ starts an operator.)
+  if (db.sql) await assert.rejects(() => db.select("xc_test_users; DROP TABLE xc_test_users"), /can't be a/);
+  else await assert.rejects(() => db.select("$where"), /can't be a/);
+  await assert.rejects(() => db.select("xc_test_users", [{ column: db.sql ? "name; --" : "$where", op: "=", value: 1 }]), /can't be a/);
   const evil = "x' OR '1'='1";
   assert.deepStrictEqual(await db.select("xc_test_users", [{ column: "name", op: "=", value: evil }]), [], `${kind}: a quote in a value is just a quote`);
   assert.deepStrictEqual(await db.select("xc_test_users", [{ column: "name", op: "=", value: { $ne: null } }]), [], `${kind}: an object value isn't an operator`);
