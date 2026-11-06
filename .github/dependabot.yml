@@ -18,6 +18,22 @@ updates:
         patterns: ["egui", "egui_*", "eframe", "epaint", "emath", "ecolor"]
       rust:
         update-types: [minor, patch]
+    # egui 0.37 waits for egui_dock to support it (anhosh/egui_dock#354).
+    # egui_dock's own updates still come: when its new version needs egui
+    # 0.37, that pull request is the sign to remove these lines.
+    ignore:
+      - dependency-name: "egui"
+        versions: [">= 0.37"]
+      - dependency-name: "eframe"
+        versions: [">= 0.37"]
+      - dependency-name: "egui_extras"
+        versions: [">= 0.37"]
+      - dependency-name: "epaint"
+        versions: [">= 0.37"]
+      - dependency-name: "emath"
+        versions: [">= 0.37"]
+      - dependency-name: "ecolor"
+        versions: [">= 0.37"]
 
   # The website (VitePress).
   - package-ecosystem: npm
