@@ -61,8 +61,8 @@ module.exports = {
   },
   async run({ fields: f, ctx }) {
     const music = ctx.discord.music;
-    const query = String(f.query || "").trim();
-    if (!query) throw new Error("Say what to play");
+    if (!String(f.query || "").trim()) throw new Error("Say what to play");
+    const query = music.query(f.query);
     const voice = f.channel ?? f.member?.voice?.channel ?? null;
     if (!voice?.isVoiceBased?.()) throw new Error(f.member ? "The member isn't in a voice channel" : "Connect a voice channel, or a member who is in one");
     const player = await music.get();

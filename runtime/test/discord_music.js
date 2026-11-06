@@ -111,6 +111,24 @@ const music = {
   info: trackInfo,
 };
 
+// What a music search may look for: words and web addresses, files only in
+// the bot's files folder. Never a path on its computer.
+{
+  const { musicQuery } = require("../../plugins/xc.discord/runtime/discord.js");
+  const os = require("os");
+  const fsx = require("fs");
+  const data = fsx.mkdtempSync(path.join(os.tmpdir(), "xc-music-"));
+  fsx.mkdirSync(path.join(data, "files"));
+  fsx.writeFileSync(path.join(data, "files", "song.mp3"), "");
+  music.query = (q) => musicQuery(data, q);
+  assert.strictEqual(musicQuery(data, " never gonna give you up "), "never gonna give you up");
+  assert.strictEqual(musicQuery(data, "https://youtu.be/dQw4w9WgXcQ"), "https://youtu.be/dQw4w9WgXcQ");
+  assert.strictEqual(musicQuery(data, "song.mp3"), path.join(data, "files", "song.mp3"), "a file the bot keeps, by its name");
+  for (const q of ["C:\\Windows\\win.ini", "c:/Windows/win.ini", "/etc/passwd", "\\\\server\\share\\a.mp3", "~/music.mp3", "./a.mp3", "../files/song.mp3", "file:///etc/passwd", __filename]) {
+    assert.throws(() => musicQuery(data, q), /not files on the bot's computer/, q);
+  }
+}
+
 async function run(rel, fields) {
   const block = load(rel);
   const defaults = Object.fromEntries(Object.entries(block.fields).map(([k, f]) => [k, f.default ?? null]));

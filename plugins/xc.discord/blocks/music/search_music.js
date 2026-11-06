@@ -52,8 +52,8 @@ module.exports = {
   },
   async run({ fields: f, ctx }) {
     const music = ctx.discord.music;
-    const query = String(f.query || "").trim();
-    if (!query) return { results: [], choices: [], first: null, count: 0 };
+    if (!String(f.query || "").trim()) return { results: [], choices: [], first: null, count: 0 };
+    const query = music.query(f.query);
     const player = await music.get();
     const result = await player.search(query, { searchEngine: music.engine(f.source) });
     const results = result.tracks.slice(0, Math.max(1, Math.min(25, Number(f.limit) || 10))).map(music.info);

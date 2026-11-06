@@ -104,6 +104,7 @@ function explainError(err, def, values) {
   return `${what} Give its role ${needed.length > 1 ? "them" : "it"} in Server Settings › Roles (or in the channel's permissions), and keep its role above the roles of the members it changes.`;
 }
 module.exports.explainError = explainError;
+module.exports.musicQuery = musicQuery;
 module.exports.neededPermissions = neededPermissions;
 
 /**
@@ -112,6 +113,30 @@ module.exports.neededPermissions = neededPermissions;
  * used). Music Player Ready chooses the sources and defaults; credentials come
  * from Bot › Settings › Music.
  */
+/**
+ * What a search may look for: web addresses and words, and files only in
+ * the bot's files folder (data/files, where the File blocks work). A path
+ * anywhere else would let whoever types the query make the bot play (and
+ * find out about) files on its computer.
+ */
+function musicQuery(dataDir, text) {
+  const q = String(text ?? "").trim();
+  const path = require("path");
+  const fs = require("fs");
+  // C:\…, \\server\…, /…, ~/…, ./…, ../…, file:…
+  const looksLikePath = /^(file:|[a-zA-Z]:[\\/]|[\\/]|~|\.\.?([\\/]|$))/.test(q);
+  const web = /^[a-z][a-z0-9+.-]*:\/\//i.test(q);
+  if (looksLikePath || (!web && fs.existsSync(q))) {
+    throw new Error("Music plays web addresses and searches, not files on the bot's computer. For a file in the bot's files folder (data/files), give just its name, such as song.mp3.");
+  }
+  // A file the bot keeps, by its name in data/files.
+  const root = path.join(dataDir, "files");
+  const inFiles = path.resolve(root, q);
+  const inside = inFiles.startsWith(root + path.sep);
+  if (!web && q && inside && fs.existsSync(inFiles) && fs.statSync(inFiles).isFile()) return inFiles;
+  return q;
+}
+
 function createMusic(rt, client) {
   let options = {};
   let ready = null;
@@ -153,6 +178,10 @@ function createMusic(rt, client) {
       const q = await music.queue(server);
       if (!q) throw new Error("Nothing is playing on this server");
       return q;
+    },
+    /** What a search may look for: see musicQuery. */
+    query(text) {
+      return musicQuery(rt.opts.dataDir || process.cwd(), text);
     },
     /** The search engine for a source name (youtube, spotify …), or auto. */
     engine(source) {
