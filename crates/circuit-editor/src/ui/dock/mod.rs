@@ -324,18 +324,22 @@ impl<T: Clone + PartialEq> Dock<T> {
     }
 
     /// Whether `tab` is in front in its area.
-    #[cfg(test)]
     pub fn is_active(&self, tab: &T) -> bool {
         self.nodes().any(|n| n.leaves().iter().any(|l| l.active_tab() == Some(tab)))
     }
 
-    /// Brings a tab to the front of its area.
+    /// Brings a tab to the front of its area. In the area the user is in,
+    /// it becomes the tab they're in.
     pub fn activate(&mut self, tab: &T) {
+        let focused = self.focused.clone();
         if let Some(leaf) = self.leaf_with(tab)
             && let Some(i) = leaf.tabs.iter().position(|t| t == tab)
         {
             leaf.active = i;
             leaf.reveal = true;
+            if focused.is_some_and(|f| leaf.tabs.contains(&f)) {
+                self.focused = Some(tab.clone());
+            }
         }
     }
 
@@ -347,9 +351,10 @@ impl<T: Clone + PartialEq> Dock<T> {
         }
     }
 
-    /// The tab the user is in: the one last clicked into, while it's there.
+    /// The tab the user is in: the one last clicked into, while it's there
+    /// and in front (not behind another tab of its area).
     pub fn focused(&self) -> Option<&T> {
-        self.focused.as_ref().filter(|t| self.contains(t))
+        self.focused.as_ref().filter(|t| self.is_active(t))
     }
 
     /// The tab being dragged.
@@ -646,6 +651,22 @@ mod tests {
         assert!(dock.is_empty());
         dock.push_to_first("start");
         assert_eq!(tabs(&dock), ["start"]);
+    }
+
+    /// A tab put behind another one isn't the one the user is in any more:
+    /// the one brought to the front in its area is.
+    #[test]
+    fn focus_follows_the_tab_in_front() {
+        let mut dock = Dock::new(vec!["settings", "canvas"]);
+        dock.main.as_mut().unwrap().split(Edge::Right, 0.8, vec!["inspector"]);
+        dock.focus(&"settings");
+        dock.activate(&"canvas");
+        assert_eq!(dock.focused(), Some(&"canvas"), "same area: the focus moves along");
+        dock.focus(&"settings");
+        dock.activate(&"inspector");
+        assert_eq!(dock.focused(), Some(&"settings"), "another area: it stays");
+        dock.leaf_with(&"canvas").unwrap().active = 1;
+        assert_eq!(dock.focused(), None, "behind another tab: not the one the user is in");
     }
 
     #[test]

@@ -357,5 +357,5 @@ pub(super) fn open_center(dock: &mut Dock<Tab>, tab: Tab) {
             None => dock.push_to_first(tab.clone()),
         },
     }
-    dock.activate(&tab);
+    dock.focus(&tab);
 }
