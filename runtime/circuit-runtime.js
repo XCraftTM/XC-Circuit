@@ -1167,6 +1167,8 @@ class Databases {
   constructor(rt) {
     this.rt = rt;
     this.open = new Map(); // id -> Database
+    this.givenOpen = []; // databases given on blocks, the least recently used first
+    this.givenCount = 0;
   }
 
   /** The connections in Bot › Settings › Databases. */
@@ -1216,27 +1218,27 @@ class Databases {
       url: text(spec.url),
     };
     if (!s.host && !s.url) throw new Error("The block gives no host and no connection URL for its database.");
-    const key = "given:" + require("crypto").createHash("sha256").update(JSON.stringify(s)).digest("hex");
-    let db = this.open.get(key);
-    if (db) {
-      this.open.delete(key); // to the end: used most recently
+    // The same details: the same connection. Compared as they are (no key
+    // made from them: a password is never hashed or written anywhere).
+    const same = (d) => Object.keys(s).every((k) => d.spec[k] === s[k]);
+    const at = this.givenOpen.findIndex(same);
+    let db;
+    if (at >= 0) {
+      [db] = this.givenOpen.splice(at, 1); // to the end: used most recently
     } else {
-      const given = [...this.open.keys()].filter((k) => k.startsWith("given:"));
-      for (const old of given.slice(0, Math.max(0, given.length - MAX_GIVEN + 1))) {
-        const d = this.open.get(old);
-        this.open.delete(old);
-        d.close().catch(() => {});
-      }
+      while (this.givenOpen.length >= MAX_GIVEN) this.givenOpen.shift().close().catch(() => {});
       // Its name in messages: never the password or the URL (which can hold it).
-      db = new Database({ ...s, id: key, name: s.host ? `${s.host}${s.port ? `:${s.port}` : ""}` : "the given database", given: true }, this.rt);
+      const name = s.host ? `${s.host}${s.port ? `:${s.port}` : ""}` : "the given database";
+      db = new Database({ ...s, id: `given-${++this.givenCount}`, name, given: true }, this.rt);
     }
-    this.open.set(key, db);
+    this.givenOpen.push(db);
     return db;
   }
 
   async closeAll() {
-    const all = [...this.open.values()];
+    const all = [...this.open.values(), ...this.givenOpen];
     this.open.clear();
+    this.givenOpen = [];
     await Promise.allSettled(all.map((d) => d.close()));
   }
 }

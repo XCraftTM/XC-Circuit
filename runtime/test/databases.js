@@ -274,7 +274,8 @@ async function given() {
   assert.ok(!viaUrl.name.includes("hunter2") && !viaUrl.name.includes("mysql://"), viaUrl.name);
   // At most MAX_GIVEN stay open: the least recently used goes.
   for (let i = 0; i < 12; i++) rt.databases.get({ kind: "mariadb", host: `h${i}.example.com` });
-  assert.strictEqual([...rt.databases.open.keys()].filter((k) => k.startsWith("given:")).length, 8);
+  assert.strictEqual(rt.databases.givenOpen.length, 8);
+  assert.ok(!rt.databases.givenOpen.some((d) => d.spec.host === "h0.example.com"), "the least recently used closed");
   // A block set to Given here hands ctx.db the connection, not an id.
   let handed;
   const ctx = { db: (w) => ((handed = w), { select: async () => [] }) };
