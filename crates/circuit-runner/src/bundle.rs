@@ -169,7 +169,7 @@ mod tests {
         ws.nodes.insert("c".into(), Node { block: "core.build_canvas@1".into(), ..Default::default() });
         let engine = circuit_plugins::BlockEngine::new().unwrap();
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
-        let reg = Registry::load(&[root.clone()], &engine);
+        let reg = Registry::load(std::slice::from_ref(&root), &engine);
         assert!(reg.problems.is_empty(), "{:?}", reg.problems);
         let bundle = build_bundle(&project, &reg, None).unwrap();
         let assets = bundle.value["blocks"]["core.build_canvas"]["assets"].as_object().unwrap();
