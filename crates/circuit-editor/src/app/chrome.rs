@@ -3,56 +3,28 @@
 use super::*;
 
 impl CircuitApp {
-    /// The activity bar: an icon per side bar view. Clicking one shows that view
-    /// in the side bar; clicking the one shown folds the side bar away.
+    /// The activity bar: an icon each for Workspaces, Stored Data and Plugins,
+    /// which are dock tabs. Clicking one brings its tab to the front (opening
+    /// it on the left when it's closed); clicking the one in front closes it.
     pub(super) fn activity(&mut self, ui: &mut egui::Ui) {
         let t = self.ed.theme.clone();
         let line = ui.max_rect();
         ui.painter().vline(line.right() - 0.5, line.y_range(), egui::Stroke::new(1.0, t.line));
-        self.ed.ui_rects.insert("activity-bar".into(), line);
         ui.spacing_mut().item_spacing.y = 2.0;
         for view in SideView::ALL {
-            let shown = self.ed.prefs.side_view == Some(view) && self.ed.prefs.side_tab.is_none();
-            if self.activity_item(ui, view.icon(), view.name(), shown) {
-                self.ed.prefs.side_tab = None;
-                self.ed.prefs.side_view = if shown { None } else { Some(view) };
-            }
-        }
-        // Panels moved into the side bar: an icon each, like the views above.
-        let mut back: Option<String> = None;
-        for key in self.ed.prefs.side_tabs.clone() {
-            let Some(tab) = Tab::from_side_key(&key) else { continue };
-            let shown = self.ed.prefs.side_tab.as_deref() == Some(key.as_str());
-            let name = self.panel_name(&tab);
-            let resp = self.activity_item_response(ui, tab.icon(), &name, shown);
-            if resp.clicked() {
-                self.ed.prefs.side_tab = if shown { None } else { Some(key.clone()) };
-                if shown {
-                    self.ed.prefs.side_view = None;
+            let tab = Tab::Side(view);
+            let path = self.dock.find_tab(&tab);
+            let in_front = path.is_some_and(|p| self.dock.leaf(p.node_path()).is_ok_and(|l| l.active == p.tab));
+            if self.activity_item(ui, view.icon(), view.name(), in_front) {
+                match path {
+                    Some(_) if in_front => close_tabs(&mut self.dock, |t| *t == tab),
+                    Some(p) => {
+                        let _ = self.dock.set_active_tab(p);
+                        self.dock.set_focused_node_and_surface(p.node_path());
+                    }
+                    None => place_panel(&mut self.dock, tab),
                 }
             }
-            resp.context_menu(|ui| {
-                if crate::ui::kit::menu_item(ui, t!("Move back to the main area"), None, true).clicked() {
-                    back = Some(key.clone());
-                    ui.close();
-                }
-            });
-        }
-        if let Some(key) = back {
-            self.move_to_main(&key);
-        }
-        // A panel's tab dragged over here: show that the bar takes it.
-        if let Some(tab) = super::dock::dragging_tab(ui.ctx())
-            && !self.ed.prefs.side_tabs.contains(&tab.side_key().unwrap_or_default())
-        {
-            let (slot, _) = ui.allocate_exact_size(egui::vec2(ACTIVITY_W, 40.0), egui::Sense::hover());
-            let box_ = slot.shrink2(egui::vec2(8.0, 4.0));
-            ui.painter().rect_stroke(box_, 6.0, egui::Stroke::new(1.5, t.accent), egui::StrokeKind::Inside);
-            if let Some(path) = self.ed.reg.icons.get(tab.icon()) {
-                egui::Image::from_uri(crate::editor::file_uri(path)).tint(t.accent).paint_at(ui, egui::Rect::from_center_size(slot.center(), egui::vec2(18.0, 18.0)));
-            }
-            ui.painter().rect_filled(line, 0.0, crate::ui::theme::with_alpha(t.accent, 18));
-            ui.ctx().request_repaint();
         }
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
             if self.activity_item(ui, "settings", t!("Settings (Ctrl+,)"), self.dock.find_tab(&Tab::Settings).is_some()) {
@@ -61,76 +33,22 @@ impl CircuitApp {
         });
     }
 
-    /// The side bar: the view picked in the activity bar (or a panel moved
-    /// into it), under its name.
-    pub(super) fn side_bar(&mut self, ui: &mut egui::Ui, view: SideView, tab: Option<Tab>, problems: &[panels::ProblemItem]) {
-        let t = self.ed.theme.clone();
-        let line = ui.max_rect();
-        ui.painter().vline(line.right() - 0.5, line.y_range(), egui::Stroke::new(1.0, t.line));
-        let heading = match &tab {
-            Some(tab) => self.panel_name(tab),
-            None => view.name().to_string(),
-        };
-        ui.horizontal(|ui| {
-            ui.set_min_height(34.0);
-            ui.add_space(14.0);
-            ui.label(RichText::new(heading.to_uppercase()).size(11.0).strong().color(t.text_muted));
-        });
-        self.ed.ui_rects.insert("side-bar".into(), ui.max_rect());
-        // The view draws in a box of the side bar's size: whatever it holds, the
-        // side bar keeps the width it was given (or dragged to).
-        let area = ui.available_rect_before_wrap();
-        let mut view_ui = ui.new_child(egui::UiBuilder::new().max_rect(area).layout(egui::Layout::top_down(egui::Align::Min)));
-        view_ui.set_clip_rect(area.intersect(ui.clip_rect()));
-        ui.allocate_rect(area, egui::Sense::hover());
-        let ui = &mut view_ui;
-        if let Some(tab) = tab {
-            let running = self.bot.state != BotState::Stopped;
-            match tab {
-                Tab::Inspector => panels::inspector(ui, &mut self.ed),
-                Tab::Console => panels::console(ui, &mut self.ed),
-                Tab::Problems => panels::problems(ui, &mut self.ed, problems.to_vec()),
-                Tab::Plugin(plugin, panel) => self.native.panel_ui(ui, &mut self.ed, &plugin, &panel, running),
-                _ => {}
+    /// What the Plugins tab's buttons asked for.
+    pub(super) fn plugins_side_ask(&mut self, ask: crate::plugins::manager::SideAsk, ctx: &egui::Context) {
+        match ask {
+            crate::plugins::manager::SideAsk::Manage => self.open_plugins(),
+            crate::plugins::manager::SideAsk::Reload => self.reload_plugins(ctx),
+            crate::plugins::manager::SideAsk::Install => self.pick_plugin_zip(ctx),
+            crate::plugins::manager::SideAsk::OpenFolder => {
+                let dir = crate::bot::app_data_dir().join("plugins");
+                let _ = std::fs::create_dir_all(&dir);
+                let _ = open::that(dir);
             }
-            return;
-        }
-        match view {
-            SideView::Workspaces => {
-                // The Problems panel's entries, counted per workspace.
-                let mut counts = std::collections::HashMap::new();
-                for (_, _, at) in self.problems_found.iter().flat_map(|(_, p)| p) {
-                    if let Some((ws, _)) = at {
-                        *counts.entry(ws.clone()).or_insert(0) += 1;
-                    }
-                }
-                crate::pages::sidebar::panel(ui, &mut self.ed, &counts);
-            }
-            SideView::StoredData => {
-                let running = self.bot.state != BotState::Stopped;
-                crate::pages::stored::panel(ui, &mut self.ed, &mut self.stored, running);
-            }
-            SideView::Plugins => match crate::plugins::manager::side(ui, &t, &self.ed, &self.native) {
-                Some(crate::plugins::manager::SideAsk::Manage) => self.open_plugins(),
-                Some(crate::plugins::manager::SideAsk::Reload) => self.reload_plugins(ui.ctx()),
-                Some(crate::plugins::manager::SideAsk::Install) => self.pick_plugin_zip(ui.ctx()),
-                Some(crate::plugins::manager::SideAsk::OpenFolder) => {
-                    let dir = crate::bot::app_data_dir().join("plugins");
-                    let _ = std::fs::create_dir_all(&dir);
-                    let _ = open::that(dir);
-                }
-                None => {}
-            },
         }
     }
 
     /// One activity bar icon. Returns true when clicked.
     pub(super) fn activity_item(&self, ui: &mut egui::Ui, icon: &str, tip: &str, active: bool) -> bool {
-        self.activity_item_response(ui, icon, tip, active).clicked()
-    }
-
-    /// [`Self::activity_item`], with its response (for a context menu).
-    pub(super) fn activity_item_response(&self, ui: &mut egui::Ui, icon: &str, tip: &str, active: bool) -> egui::Response {
         let t = &self.ed.theme;
         let (rect, resp) = ui.allocate_exact_size(egui::vec2(ACTIVITY_W, 40.0), egui::Sense::click());
         let resp = resp.on_hover_text(tip).on_hover_cursor(egui::CursorIcon::PointingHand);
@@ -141,38 +59,7 @@ impl CircuitApp {
         if let Some(path) = self.ed.reg.icons.get(icon) {
             egui::Image::from_uri(crate::editor::file_uri(path)).tint(color).paint_at(ui, egui::Rect::from_center_size(rect.center(), egui::vec2(20.0, 20.0)));
         }
-        resp
-    }
-
-    /// A panel's name, as its tab shows it.
-    pub(super) fn panel_name(&self, tab: &Tab) -> String {
-        match tab {
-            Tab::Plugin(plugin, panel) => self.native.panel_title(plugin, panel).unwrap_or_else(|| panel.clone()),
-            other => Tab::PANELS.iter().find(|(t, _)| t == other).map(|(_, n)| crate::i18n::t(n).to_string()).unwrap_or_default(),
-        }
-    }
-
-    /// Moves a panel out of the main area into the side bar, and shows it there.
-    pub(super) fn move_to_side(&mut self, tab: Tab) {
-        let Some(key) = tab.side_key() else { return };
-        close_tabs(&mut self.dock, |t| *t == tab);
-        if !self.ed.prefs.side_tabs.contains(&key) {
-            self.ed.prefs.side_tabs.push(key.clone());
-        }
-        self.ed.prefs.side_tab = Some(key);
-    }
-
-    /// Puts a panel from the side bar back into the main area.
-    pub(super) fn move_to_main(&mut self, key: &str) {
-        self.ed.prefs.side_tabs.retain(|k| k != key);
-        if self.ed.prefs.side_tab.as_deref() == Some(key) {
-            self.ed.prefs.side_tab = None;
-        }
-        if let Some(tab) = Tab::from_side_key(key)
-            && self.dock.find_tab(&tab).is_none()
-        {
-            place_panel(&mut self.dock, tab);
-        }
+        resp.clicked()
     }
 
     /// Starts the guided tour on a fresh practice project, with a reduced layout.
@@ -343,14 +230,6 @@ impl CircuitApp {
     }
 
     pub(super) fn toggle_panel(&mut self, tab: Tab) {
-        // A panel in the side bar is shown or hidden there.
-        if let Some(key) = tab.side_key()
-            && self.ed.prefs.side_tabs.contains(&key)
-        {
-            let shown = self.ed.prefs.side_tab.as_deref() == Some(key.as_str());
-            self.ed.prefs.side_tab = if shown { None } else { Some(key) };
-            return;
-        }
         if self.dock.find_tab(&tab).is_some() {
             close_tabs(&mut self.dock, |t| *t == tab);
             return;

@@ -11,14 +11,38 @@ fn panels_open_next_to_their_kind() {
     place_panel(&mut dock, Tab::Problems);
     let bottom = leaves(&dock).into_iter().find(|l| l.contains(&Tab::Console)).unwrap();
     assert!(bottom.contains(&Tab::Problems), "it joins Console: {bottom:?}");
-    assert_eq!(leaves(&dock).len(), 2, "no new area");
+    assert_eq!(leaves(&dock).len(), 3, "no new area (the column on the left, Inspector, the bottom)");
 
-    // With the whole bottom group closed, it gets a new area below.
+    // With the whole bottom group closed, it gets a new area below, under
+    // the main area: the column on the left keeps the whole height.
     close_tabs(&mut dock, |t| t.side() == Side::Bottom);
-    assert_eq!(leaves(&dock).len(), 1);
-    place_panel(&mut dock, Tab::Problems);
     assert_eq!(leaves(&dock).len(), 2);
+    place_panel(&mut dock, Tab::Problems);
+    assert_eq!(leaves(&dock).len(), 3);
     assert!(tree_ok(dock.main_surface()));
+    let root = NodeIndex::root();
+    assert!(matches!(&dock.main_surface()[root.left()], Node::Leaf(l) if l.tabs().iter().all(|t| matches!(t, Tab::Side(_)))), "the column is still the left half");
+}
+
+/// Workspaces, Stored Data and Plugins are tabs in a column on the left; a
+/// layout saved before gets that column, with the view it showed in front.
+#[test]
+fn the_side_bar_is_a_column_of_tabs() {
+    use crate::editor::prefs::SideView;
+    let dock = default_layout();
+    let left = &dock.main_surface()[NodeIndex::root().left()];
+    let Node::Leaf(leaf) = left else { panic!("a column on the left") };
+    assert_eq!(leaf.tabs(), [Tab::Side(SideView::Workspaces), Tab::Side(SideView::StoredData), Tab::Side(SideView::Plugins)]);
+    assert_eq!(leaf.active.0, 0, "Workspaces in front");
+
+    let mut old = DockState::new(vec![Tab::Console, Tab::Problems]);
+    old.main_surface_mut().split_above(NodeIndex::root(), 0.76, vec![Tab::Inspector]);
+    add_side_column(&mut old, SideView::StoredData);
+    let path = old.find_tab(&Tab::Side(SideView::StoredData)).unwrap();
+    assert_eq!(old.leaf(path.node_path()).unwrap().active, path.tab, "the view it showed is in front");
+    assert!(tree_ok(old.main_surface()));
+    add_side_column(&mut old, SideView::Workspaces);
+    assert_eq!(old.iter_all_tabs().filter(|(_, t)| matches!(t, Tab::Side(_))).count(), 3, "not twice");
 }
 
 #[test]
@@ -106,17 +130,4 @@ fn every_tab_has_an_icon() {
     for tab in tabs {
         assert!(ed.reg.icons.contains_key(tab.icon()), "{tab:?}: no icon {}", tab.icon());
     }
-}
-
-/// Panels (and only panels) can move into the side bar, under keys that come back as the same tab.
-#[test]
-fn panels_have_side_bar_keys() {
-    for tab in [Tab::Inspector, Tab::Console, Tab::Problems, Tab::Plugin("xc.stats".into(), "stats".into())] {
-        let key = tab.side_key().expect("a panel");
-        assert_eq!(Tab::from_side_key(&key), Some(tab));
-    }
-    for tab in [Tab::Canvas("main".into()), Tab::Settings, Tab::BotSettings, Tab::Start] {
-        assert!(tab.side_key().is_none(), "{tab:?} stays in the main area");
-    }
-    assert_eq!(Tab::from_side_key("nothing"), None);
 }

@@ -21,7 +21,6 @@ pub enum Cmd {
     SelectAll,
     TogglePanel(crate::app::Tab),
     /// Shows a side bar view, or folds the side bar away.
-    SideView(Option<crate::editor::prefs::SideView>),
     Theme(String),
     ResetLayout,
     Run,

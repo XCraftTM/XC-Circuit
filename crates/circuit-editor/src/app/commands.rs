@@ -54,12 +54,9 @@ impl CircuitApp {
             items.push(Item::new(t!("Edit"), t!("Select all"), Cmd::SelectAll).shortcut(self.key_label(Hotkey::SelectAll)));
         }
         for view in SideView::ALL {
-            if self.ed.prefs.side_view != Some(view) {
-                items.push(Item::new(t!("View"), tf!("Show {name} in the side bar", name = view.name()), Cmd::SideView(Some(view))));
-            }
-        }
-        if self.ed.prefs.side_view.is_some() {
-            items.push(Item::new(t!("View"), t!("Hide the side bar"), Cmd::SideView(None)));
+            let tab = Tab::Side(view);
+            let label = if self.dock.find_tab(&tab).is_some() { tf!("Close {name}", name = view.name()) } else { tf!("Show {name}", name = view.name()) };
+            items.push(Item::new(t!("View"), label, Cmd::TogglePanel(tab)));
         }
         for (tab, name) in Tab::PANELS {
             let label = if self.dock.find_tab(&tab).is_some() { tf!("Close {name} panel", name = crate::i18n::t(name)) } else { tf!("Show {name} panel", name = crate::i18n::t(name)) };
@@ -126,10 +123,6 @@ impl CircuitApp {
             Cmd::Delete => self.ed.delete_selection(),
             Cmd::SelectAll => self.ed.select_all(),
             Cmd::TogglePanel(tab) => self.toggle_panel(tab),
-            Cmd::SideView(view) => {
-                self.ed.prefs.side_tab = None;
-                self.ed.prefs.side_view = view;
-            }
             Cmd::Theme(id) => {
                 self.ed.set_theme(&id);
                 self.ed.theme.apply(ctx);

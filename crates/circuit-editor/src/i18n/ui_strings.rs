@@ -2,7 +2,6 @@
 //! templates and checks. Generated: run the tests with XC_UPDATE_STRINGS=1.
 
 pub const UI_STRINGS: &[&str] = &[
-    "Move back to the main area",
     "Settings (Ctrl+,)",
     "Bot stopped",
     "Bot starting",
@@ -45,7 +44,6 @@ pub const UI_STRINGS: &[&str] = &[
     "Edit",
     "Select all",
     "View",
-    "Hide the side bar",
     "Theme",
     "Reset layout",
     "About XC™ Circuit",
@@ -55,7 +53,8 @@ pub const UI_STRINGS: &[&str] = &[
     "Manage Plugins…",
     "Workspace",
     "Block",
-    "Show {name} in the side bar",
+    "Close {name}",
+    "Show {name}",
     "Close {name} panel",
     "Show {name} panel",
     "XC Circuit stopped unexpectedly",
@@ -139,7 +138,6 @@ pub const UI_STRINGS: &[&str] = &[
     "Duplicate",
     "Delete",
     "SIDE BAR",
-    "Hidden",
     "PANELS",
     "THEME",
     "Show activity bar",

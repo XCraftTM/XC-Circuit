@@ -62,11 +62,15 @@ pub enum Tab {
     WorkspaceImport,
     /// The start page, while no project is open.
     Start,
+    /// What used to be the side bar (Workspaces, Stored Data, Plugins): tabs
+    /// like the others, in a column on the left to start with.
+    Side(SideView),
 }
 
 /// Where a tab belongs in the window.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Side {
+    Left,
     Right,
     Bottom,
     Center,
@@ -75,6 +79,7 @@ enum Side {
 impl Tab {
     fn side(&self) -> Side {
         match self {
+            Tab::Side(_) => Side::Left,
             Tab::Inspector | Tab::Plugin(..) => Side::Right,
             Tab::Console | Tab::Problems => Side::Bottom,
             _ => Side::Center,
@@ -87,31 +92,6 @@ impl Tab {
     }
 
     const PANELS: [(Tab, &'static str); 3] = [(Tab::Inspector, n("Inspector")), (Tab::Console, n("Console")), (Tab::Problems, n("Problems"))];
-
-    /// The key of a tab that can move into the side bar: the panels and
-    /// plugins' panels (not workspaces, builders or pages).
-    pub(super) fn side_key(&self) -> Option<String> {
-        Some(match self {
-            Tab::Inspector => "inspector".into(),
-            Tab::Console => "console".into(),
-            Tab::Problems => "problems".into(),
-            Tab::Plugin(plugin, panel) => format!("plugin:{plugin}:{panel}"),
-            _ => return None,
-        })
-    }
-
-    /// The tab a side bar key names.
-    pub(super) fn from_side_key(key: &str) -> Option<Tab> {
-        Some(match key {
-            "inspector" => Tab::Inspector,
-            "console" => Tab::Console,
-            "problems" => Tab::Problems,
-            _ => {
-                let (plugin, panel) = key.strip_prefix("plugin:")?.split_once(':')?;
-                Tab::Plugin(plugin.into(), panel.into())
-            }
-        })
-    }
 }
 
 const KEY_DOCK: &str = "dock";
@@ -254,6 +234,12 @@ impl CircuitApp {
                     ed.log(Level::Warn, t!("The panel layout was damaged, so it was put back together."));
                 }
                 close_tabs(&mut d, |t| matches!(t, Tab::Canvas(k) if !keys.contains(k)));
+                // Saved before the side bar was part of the dock: its views become tabs on the left.
+                if d.find_tab_from(|t| matches!(t, Tab::Side(_))).is_none()
+                    && let Some(view) = ed.prefs.side_view.take()
+                {
+                    add_side_column(&mut d, view);
+                }
                 d
             }
             None => default_layout(),
@@ -439,9 +425,6 @@ impl eframe::App for CircuitApp {
         if self.problems_found.as_ref().is_none_or(|(k, _)| *k != key) {
             self.problems_found = Some((key, panels::collect_problems(&self.ed)));
         }
-        let mut problems = self.problems_found.as_ref().map(|(_, p)| p.clone()).unwrap_or_default();
-        problems.extend(self.native.problems());
-        self.problem_count = problems.len();
         if self.ed.prefs.activity_bar && self.setup.is_none() && self.tour.is_none() && self.ed.project.is_some() {
             egui::Panel::left("activity")
                 .exact_size(ACTIVITY_W)
@@ -449,25 +432,9 @@ impl eframe::App for CircuitApp {
                 .frame(Frame::new().fill(theme.frame).inner_margin(Margin::symmetric(0, 6)))
                 .show(ui, |ui| self.activity(ui));
         }
-        // A panel moved into the side bar shows there, else the side bar's view.
-        let side_tab = self.ed.prefs.side_tab.as_deref().and_then(Tab::from_side_key);
-        if self.setup.is_none() && self.tour.is_none() && self.ed.project.is_some() && (side_tab.is_some() || self.ed.prefs.side_view.is_some()) {
-            let view = self.ed.prefs.side_view.unwrap_or(SideView::Workspaces);
-            egui::Panel::left("side-bar")
-                .resizable(true)
-                .default_size(270.0)
-                .size_range(200.0..=560.0)
-                .frame(Frame::new().fill(theme.panel))
-                .show(ui, |ui| self.side_bar(ui, view, side_tab, &problems));
-        }
-        // A panel in the side bar is never also in the main area (a saved layout may still have it).
-        for key in self.ed.prefs.side_tabs.clone() {
-            if let Some(tab) = Tab::from_side_key(&key)
-                && self.dock.find_tab(&tab).is_some()
-            {
-                close_tabs(&mut self.dock, |t| *t == tab);
-            }
-        }
+        let mut problems = self.problems_found.as_ref().map(|(_, p)| p.clone()).unwrap_or_default();
+        problems.extend(self.native.problems());
+        self.problem_count = problems.len();
         // Filled, so the dock's rounded panel corners show the frame color and not
         // whatever is behind the window's content.
         if let Some(mut setup) = self.setup.take() {
@@ -506,8 +473,8 @@ impl eframe::App for CircuitApp {
                 has_example,
                 start_pick: None,
                 tab_font: egui::TextStyle::Button.resolve(ui.style()),
-                to_side: None,
-                dragging: None,
+                stored: &mut self.stored,
+                side_ask: None,
             };
             let size = ui.available_size();
             if let Some(before) = self.dock_size
@@ -526,13 +493,9 @@ impl eframe::App for CircuitApp {
                 .show_inside(ui, &mut viewer);
             let asks = std::mem::take(&mut viewer.asks);
             let start_pick = viewer.start_pick.take();
-            let to_side = viewer.to_side.take();
-            if let Some(tab) = viewer.dragging.take() {
-                let frame = ui.ctx().cumulative_frame_nr();
-                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new(dock::DRAGGING_TAB), (tab, frame)));
-            }
-            if let Some(tab) = to_side {
-                self.move_to_side(tab);
+            let side_ask = viewer.side_ask.take();
+            if let Some(ask) = side_ask {
+                self.plugins_side_ask(ask, ui.ctx());
             }
             if repair_layout(&mut self.dock) {
                 self.ed.log(Level::Warn, t!("The panel layout was damaged, so it was put back together."));
