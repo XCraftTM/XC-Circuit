@@ -23,6 +23,8 @@ const COPIED_FOR: Duration = Duration::from_millis(1500);
 /// The widest a page's settings get.
 const CONTENT_MAX: f32 = 620.0;
 
+/// What a setting is, by its `type`: the elements plugins build their pages
+/// from (see docs/api/settings.md). `note` and `link` only show something.
 #[derive(Clone, Debug, PartialEq)]
 enum Kind {
     Text,
@@ -30,6 +32,20 @@ enum Kind {
     Select(Vec<(String, String)>),
     Boolean,
     Number { min: Option<f64>, max: Option<f64> },
+    /// Several lines of text (`rows`).
+    Textarea { rows: usize },
+    /// A colour, kept as #RRGGBB.
+    Color,
+    /// A number on a slider, between `min` and `max`.
+    Slider { min: f64, max: f64, step: Option<f64>, suffix: String },
+    /// A list of texts, kept as a JSON list.
+    List,
+    /// A file or (`pick = "folder"`) a folder, with Browse….
+    Path { folder: bool },
+    /// A box of text: `tone` info, warning or success.
+    Note { tone: String },
+    /// A button that opens a web page (`url`, `button`).
+    Link { url: String, button: String },
 }
 
 /// One setting being edited.
@@ -53,6 +69,8 @@ struct SettingField {
     value: String,
     /// A boolean's value.
     on: bool,
+    /// A list's texts.
+    items: Vec<String>,
     /// What the project has, or else the default: saving leaves an
     /// unchanged default out of the project.
     default: Option<Value>,
@@ -106,6 +124,16 @@ impl SettingField {
                 Some(Value::Array(list)) => list.iter().filter_map(Value::as_str).map(|v| (v.to_string(), tr(v))).collect(),
                 _ => Vec::new(),
             }),
+            "textarea" => Kind::Textarea { rows: number("rows").map_or(4, |r| r.clamp(2.0, 20.0) as usize) },
+            "color" => Kind::Color,
+            "slider" => {
+                let min = number("min").unwrap_or(0.0);
+                Kind::Slider { min, max: number("max").unwrap_or(100.0).max(min), step: number("step"), suffix: text("suffix").unwrap_or_default() }
+            }
+            "list" => Kind::List,
+            "path" => Kind::Path { folder: s.text("pick") == Some("folder") },
+            "note" => Kind::Note { tone: text("tone").unwrap_or_else(|| "info".into()) },
+            "link" => Kind::Link { url: text("url").unwrap_or_default(), button: text("button").map(|b| tr(&b)).unwrap_or_else(|| t!("Open").into()) },
             _ => Kind::Text,
         };
         let mut bad = None;
@@ -125,11 +153,17 @@ impl SettingField {
             _ => String::new(),
         };
         let on = current.is_some_and(|v| v.as_bool() == Some(true) || v.as_str() == Some("true"));
+        let items = match current {
+            Some(Value::Array(list)) => list.iter().map(|v| v.as_str().map(str::to_string).unwrap_or_else(|| v.to_string())).collect(),
+            _ => Vec::new(),
+        };
+        // A note needs no name; everything else shows its key without one.
+        let is_note = matches!(kind, Kind::Note { .. });
         let field = SettingField {
             key: s.key.clone(),
             page: s.page.clone(),
             group: s.group.as_deref().map(tr),
-            label: text("label").map(|l| tr(&l)).unwrap_or_else(|| s.key.clone()),
+            label: text("label").map(|l| tr(&l)).unwrap_or_else(|| if is_note { String::new() } else { s.key.clone() }),
             description: text("description").map(|d| tr(&d)),
             placeholder: text("placeholder").map(|p| tr(&p)).unwrap_or_default(),
             masked: kind == Kind::Secret || s.spec.get("sensitive").and_then(Value::as_bool).unwrap_or(false),
@@ -139,6 +173,7 @@ impl SettingField {
             pattern_hint: text("patternHint").map(|h| tr(&h)),
             value,
             on,
+            items,
             default,
             saved: saved_secret,
             reveal: false,
@@ -152,7 +187,9 @@ impl SettingField {
     fn problem(&self) -> Option<String> {
         match &self.kind {
             Kind::Number { min, max } => number_problem(&self.value, *min, *max),
-            Kind::Text | Kind::Secret => pattern_problem(self.pattern.as_ref(), self.pattern_hint.as_deref(), &self.value),
+            Kind::Slider { min, max, .. } => number_problem(&self.value, Some(*min), Some(*max)),
+            Kind::Text | Kind::Secret | Kind::Textarea { .. } | Kind::Path { .. } => pattern_problem(self.pattern.as_ref(), self.pattern_hint.as_deref(), &self.value),
+            Kind::Color if !self.value.trim().is_empty() && crate::ui::theme::hex_color(self.value.trim()).is_none() => Some(t!("A colour such as #00D8F0.").to_string()),
             _ => None,
         }
     }
@@ -162,7 +199,8 @@ impl SettingField {
         self.required
             && match self.kind {
                 Kind::Secret => self.value.trim().is_empty() && (!self.saved || self.remove),
-                Kind::Boolean => false,
+                Kind::Boolean | Kind::Note { .. } | Kind::Link { .. } => false,
+                Kind::List => self.items.iter().all(|i| i.trim().is_empty()),
                 _ => self.value.trim().is_empty(),
             }
     }
@@ -170,9 +208,12 @@ impl SettingField {
     /// The value to keep in the project; None to leave it out.
     fn project_value(&self) -> Option<Value> {
         match &self.kind {
-            Kind::Secret => None,
+            Kind::Secret | Kind::Note { .. } | Kind::Link { .. } => None,
             Kind::Boolean => Some(Value::Bool(self.on)),
-            Kind::Number { .. } => {
+            Kind::List => Some(Value::Array(self.items.iter().map(|i| i.trim()).filter(|i| !i.is_empty()).map(|i| Value::String(i.into())).collect())),
+            // Several lines keep their spaces inside; only the ends are trimmed.
+            Kind::Textarea { .. } => Some(Value::String(self.value.trim_end().to_string())),
+            Kind::Number { .. } | Kind::Slider { .. } => {
                 let n: f64 = self.value.trim().parse().ok()?;
                 Some(if n.fract() == 0.0 && n.abs() < 9e15 { Value::from(n as i64) } else { Value::from(n) })
             }
@@ -556,6 +597,93 @@ fn setting_ui(ui: &mut Ui, ed: &Editor, theme: &Theme, f: &mut SettingField, roo
                 ui.add_space(6.0);
             }
         }
+        Kind::Textarea { rows } => card(ui, theme, |ui| {
+            title(ui, theme, &label, &description);
+            ui.add(crate::ui::inputs::TextArea::new(("bot-setting", f.key.as_str()), &mut f.value).hint(f.placeholder.clone()).rows(rows));
+            problem(ui, theme, f.problem());
+        }),
+        Kind::Color => {
+            row(ui, theme, &label, &description, |ui| {
+                let mut c = crate::ui::theme::hex_color(f.value.trim()).unwrap_or(egui::Color32::WHITE);
+                if crate::builders::color::color_button(ui, Id::new(("bot-setting", f.key.as_str())), &mut c, theme, Some(120.0)) {
+                    f.value = crate::builders::color::to_hex(c);
+                }
+            });
+        }
+        Kind::Slider { min, max, step, suffix } => {
+            row(ui, theme, &label, &description, |ui| {
+                // The slider, and its number to type, side by side.
+                // In a line of their own: the row lays its controls out from the right.
+                crate::ui::widgets::line(ui, |ui| {
+                    let mut v = f.value.trim().parse::<f64>().unwrap_or(min).clamp(min, max);
+                    let mut slider = egui::Slider::new(&mut v, min..=max).show_value(false);
+                    if let Some(s) = step {
+                        slider = slider.step_by(s);
+                    }
+                    let slid = ui.add(slider).changed();
+                    let number = egui::DragValue::new(&mut v).range(min..=max).suffix(suffix).speed(step.unwrap_or(1.0));
+                    if ui.add(number).changed() || slid {
+                        f.value = if v.fract() == 0.0 { format!("{}", v as i64) } else { format!("{v}") };
+                    }
+                });
+            });
+        }
+        Kind::List => card(ui, theme, |ui| {
+            title(ui, theme, &label, &description);
+            let width = ui.available_width().min(460.0);
+            let SettingField { items, placeholder, key, .. } = f;
+            // A row just added gets the cursor.
+            let focus_id = Id::new(("bot-setting-list-new", key.as_str()));
+            let focus: Option<usize> = ui.data_mut(|d| d.remove_temp(focus_id));
+            let mut remove = None;
+            for (i, item) in items.iter_mut().enumerate() {
+                crate::ui::widgets::line(ui, |ui| {
+                    ui.spacing_mut().item_spacing.x = 6.0;
+                    let input = ui.allocate_ui(vec2(width - 46.0, 34.0), |ui| dialog::text_input(ui, item, placeholder, false)).inner;
+                    if focus == Some(i) {
+                        input.request_focus();
+                    }
+                    if dialog::icon_button(ui, theme, ed.reg.icons.get("trash").map(|p| p.as_path()), "×", t!("Remove")).clicked() {
+                        remove = Some(i);
+                    }
+                });
+            }
+            if let Some(i) = remove {
+                items.remove(i);
+            }
+            if dialog::button(ui, theme, t!("+ Add")).clicked() {
+                items.push(String::new());
+                ui.data_mut(|d| d.insert_temp(focus_id, items.len() - 1));
+            }
+        }),
+        Kind::Path { folder } => card(ui, theme, |ui| {
+            title(ui, theme, &label, &description);
+            let width = ui.available_width().min(460.0);
+            let mut browse = false;
+            ui.allocate_ui(vec2(width, 34.0), |ui| {
+                crate::ui::widgets::field_with_button(ui, |ui| {
+                    dialog::text_input(ui, &mut f.value, &f.placeholder, false);
+                }, |ui| browse = dialog::secondary_button(ui, theme, t!("Browse…")).clicked());
+            });
+            if browse {
+                let picker = rfd::FileDialog::new();
+                if let Some(path) = if folder { picker.pick_folder() } else { picker.pick_file() } {
+                    f.value = path.display().to_string();
+                }
+            }
+            problem(ui, theme, f.problem());
+        }),
+        Kind::Note { tone } => note(ui, ed, theme, &tone, &f.label, &description),
+        Kind::Link { url, button } => {
+            row(ui, theme, &label, &description, |ui| {
+                // Only web pages: a plugin's link opens nothing else.
+                let web = url.starts_with("https://") || url.starts_with("http://");
+                let b = ui.add_enabled_ui(web, |ui| dialog::button(ui, theme, button.as_str())).inner;
+                if b.on_hover_text(&url).clicked() {
+                    ui.ctx().open_url(egui::OpenUrl::new_tab(&url));
+                }
+            });
+        }
         Kind::Text | Kind::Secret => card(ui, theme, |ui| {
             ui.label(RichText::new(&label).size(13.5).color(theme.text));
             if !description.is_empty() {
@@ -592,6 +720,53 @@ fn setting_ui(ui: &mut Ui, ed: &Editor, theme: &Theme, f: &mut SettingField, roo
             ui.label(RichText::new(tf!("Kept in {store}, never in project files.", store = store)).size(11.5).color(theme.text_muted));
         }),
     }
+}
+
+/// A setting's name and description, above its control.
+fn title(ui: &mut Ui, theme: &Theme, label: &str, description: &str) {
+    ui.label(RichText::new(label).size(13.5).color(theme.text));
+    if !description.is_empty() {
+        ui.label(RichText::new(description).size(11.5).color(theme.text_muted));
+    }
+    ui.add_space(5.0);
+}
+
+/// What's wrong with a value, under it.
+fn problem(ui: &mut Ui, theme: &Theme, problem: Option<String>) {
+    if let Some(p) = problem {
+        ui.add_space(2.0);
+        ui.label(RichText::new(p).size(11.5).color(theme.error));
+    }
+}
+
+/// A box of text in a colour for its `tone`: info, warning or success.
+fn note(ui: &mut Ui, ed: &Editor, theme: &Theme, tone: &str, title: &str, text: &str) {
+    use crate::ui::theme::with_alpha;
+    let (color, icon) = match tone {
+        "warning" => (theme.warning, "alert"),
+        "success" => (theme.action, "check"),
+        _ => (theme.accent, "info"),
+    };
+    Frame::new().fill(with_alpha(color, 22)).stroke(Stroke::new(1.0, with_alpha(color, 90))).corner_radius(8).inner_margin(Margin::symmetric(14, 11)).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.horizontal_top(|ui| {
+            ui.spacing_mut().item_spacing.x = 10.0;
+            let (r, _) = ui.allocate_exact_size(vec2(18.0, 18.0), egui::Sense::hover());
+            if let Some(path) = ed.reg.icons.get(icon) {
+                egui::Image::from_uri(crate::editor::file_uri(path)).tint(color).paint_at(ui, r);
+            }
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 2.0;
+                if !title.is_empty() {
+                    ui.label(RichText::new(title).size(13.5).strong().color(theme.text));
+                }
+                if !text.is_empty() {
+                    ui.label(RichText::new(text).size(12.5).color(theme.text));
+                }
+            });
+        });
+    });
+    ui.add_space(8.0);
 }
 
 /// A hidden text with buttons to show it and to copy it (or the saved one) without showing it.
@@ -721,6 +896,45 @@ mod tests {
         assert!(f.missing() && f.masked && f.project_value().is_none());
         let f = SettingField::new(&setting(serde_json::json!({ "type": "secret", "required": true })), None, true).0;
         assert!(!f.missing(), "saved already");
+    }
+
+    /// The elements plugins build pages from: what each keeps, what counts
+    /// as missing, and that notes and links have no value.
+    #[test]
+    fn elements_read_and_save_their_values() {
+        let setting = |spec: Value| Setting { key: "k".into(), spec, page: "p".into(), group: None, plugin: "t".into() };
+        let field = |spec: Value, stored: Option<Value>| SettingField::new(&setting(spec), stored.as_ref(), false).0;
+        use serde_json::json;
+
+        let mut f = field(json!({ "type": "list", "default": ["a"], "required": true }), None);
+        assert_eq!(f.items, ["a"]);
+        f.items = vec![" b ".into(), "".into(), "c".into()];
+        assert_eq!(f.project_value(), Some(json!(["b", "c"])), "trimmed, empty rows left out");
+        f.items = vec!["  ".into()];
+        assert!(f.missing());
+
+        let mut f = field(json!({ "type": "color", "default": "#00D8F0" }), None);
+        assert_eq!((f.problem(), f.project_value()), (None, Some(json!("#00D8F0"))));
+        f.value = "teal".into();
+        assert!(f.problem().is_some());
+
+        let mut f = field(json!({ "type": "slider", "min": 50, "max": 1000, "default": 100 }), None);
+        assert_eq!(f.kind, Kind::Slider { min: 50.0, max: 1000.0, step: None, suffix: String::new() });
+        assert_eq!(f.project_value(), Some(json!(100)));
+        f.value = "5000".into();
+        assert!(f.problem().is_some(), "past max");
+
+        let f = field(json!({ "type": "textarea", "rows": 3 }), Some(json!("line one\n  line two  \n")));
+        assert_eq!((f.kind.clone(), f.project_value()), (Kind::Textarea { rows: 3 }, Some(json!("line one\n  line two"))));
+
+        assert_eq!(field(json!({ "type": "path", "pick": "folder" }), None).kind, Kind::Path { folder: true });
+
+        for spec in [json!({ "type": "note", "tone": "warning", "description": "Careful" }), json!({ "type": "link", "url": "https://example.com", "required": true })] {
+            let f = field(spec, None);
+            assert!(f.project_value().is_none() && !f.missing(), "{:?}", f.kind);
+        }
+        let note = field(json!({ "type": "note" }), None);
+        assert!(note.label.is_empty(), "a note's title is optional, not its key");
     }
 
     /// The tab draws every page of the Discord mode without growing past

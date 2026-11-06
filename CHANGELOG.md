@@ -27,6 +27,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **Stored values can live in a database** instead of store.json: Bot › Settings › Databases › Keep stored values in. The first time, store.json's values are copied over.
 - **New templates** for Discord and Fluxer: Verify with a captcha, Reminders, New-post alerts and Minecraft server status.
 - **Servers and databases given on the block**: SSH Command, Server Usage, RCON Command, Docker and the database blocks can connect to a server the block is given, such as one from a slash command's options, instead of the one in Bot › Settings. The password can only be connected, never typed into the block, so it isn't saved in the project. Each kind has its own switch in Bot › Settings, off until you allow it.
+- **More elements for plugins' Bot › Settings pages**: notes (info, warning, success), links that open a web page, multi-line texts, colours, sliders, lists of texts and files or folders with Browse…, drawn with the app's own controls. The DemoBot example has a page that uses them all.
 - **Plugins can add pages to Bot › Settings** (`contributes.botSettings`), with switches, choice lists and numbers besides texts and secrets. Settings reach the bot with their default until you change them.
 
 ## 0.1.2

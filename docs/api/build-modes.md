@@ -85,7 +85,7 @@ The fields of Bot › Settings, by key. Runtime libraries and blocks read them w
 
 | Key | Description |
 | --- | --- |
-| `type` | `"text"` (the default), `"secret"`, `"select"`, `"boolean"` or `"number"`. A secret is kept in the credential store, never in the project, and read with `rt.secret(key)`; the key `token` is the bot token. |
+| `type` | `"text"` (the default), `"secret"`, `"select"`, `"boolean"`, `"number"`, or one of the [elements](#elements) below. A secret is kept in the credential store, never in the project, and read with `rt.secret(key)`; the key `token` is the bot token. |
 | `page` | The `id` of the page it's on. |
 | `group` | With `page`: a heading on the page. Without `page`: the page itself, the one whose `id` is the group's name in lower case with dashes (`Slash commands` is `slash-commands`); a page is made for it when there's none. Without both, the setting is on *General*. |
 | `label` | Its name. |
@@ -97,11 +97,38 @@ The fields of Bot › Settings, by key. Runtime libraries and blocks read them w
 | `patternHint` | What to say when it doesn't. |
 | `sensitive` | `true` hides a text setting behind the eye button, like a secret. |
 | `choices` | For `select`: the values and what the list shows, `{ json = "JSON file", sqlite = "SQLite" }`, in that order. |
-| `min`, `max` | For `number`: the smallest and largest value. |
+| `min`, `max` | For `number` and `slider`: the smallest and largest value. |
 
 Texts, secrets and numbers are boxes with the name above them; switches (`boolean`) and lists (`select`) sit on the right of their name. A page whose required setting has no value shows how many in the list; one with a value that doesn't fit shows that in red, and Save waits until it's fixed. An unchanged default isn't written into the project.
 
 Secrets other than the token reach an exported bot through `.env` as `XC_SECRET_<KEY>` (`XC_SECRET_SPOTIFYCLIENTSECRET`).
+
+### Elements
+
+Besides texts, secrets, choices, switches and numbers, a page can hold these. XC Circuit draws them with its own controls, so a plugin's page looks like the rest of the app, in every theme.
+
+| `type` | What it is | Its own keys | The value a bot gets |
+| --- | --- | --- | --- |
+| `textarea` | Several lines of text | `rows` (2 to 20, default 4) | Text |
+| `color` | A colour picker | — | `"#RRGGBB"` |
+| `slider` | A slider with the number beside it | `min` (0), `max` (100), `step`, `suffix` (`" XP"`) | A number |
+| `list` | A list of texts, with + Add and a remove button on each | `placeholder` for each | A list of texts, `[]` when empty |
+| `path` | A file (or, with `pick = "folder"`, a folder) on this computer, with Browse… | `pick` | Text |
+| `note` | A box of text, no value | `tone`: `"info"` (default), `"warning"` or `"success"`; `label` is its title (optional) | — |
+| `link` | A button that opens a web page, no value | `url` (`https://` only), `button` (default *Open*) | — |
+
+```toml
+[settings]
+lvlAbout  = { type = "note", page = "levels", description = "Members earn XP for each message." }
+lvlXp     = { type = "slider", page = "levels", label = "XP for a level", min = 50, max = 1000, step = 50, default = 100, suffix = " XP" }
+lvlColor  = { type = "color", page = "levels", label = "Rank card colour", default = "#00D8F0" }
+lvlText   = { type = "textarea", page = "levels", label = "Level-up message", rows = 3, default = "GG ${user}!" }
+lvlNoXp   = { type = "list", page = "levels", label = "Channels without XP", placeholder = "Channel id", default = [] }
+lvlImage  = { type = "path", page = "levels", label = "Card background" }
+lvlDocs   = { type = "link", page = "levels", label = "How levels work", url = "https://example.com/levels", button = "Read" }
+```
+
+The DemoBot example has a page like this: `plugins/demo.custom/settings/levels.toml`.
 
 ## Plugin settings
 

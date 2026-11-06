@@ -9,6 +9,8 @@ circuit = "^1.0"
 
 [contributes]
 blocks = ["blocks/**/*.{js,ts}"]
+# Bot › Settings › Levels: an example page.
+botSettings = ["settings/*.toml"]
 
 # Editor code: a Project Notes panel, a command and a TODO check.
 [editor]

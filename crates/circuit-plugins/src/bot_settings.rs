@@ -59,7 +59,9 @@ impl Setting {
         self.spec.get(key).and_then(Value::as_str)
     }
 
-    /// `text` (the default), `secret`, `select`, `boolean` or `number`.
+    /// `text` (the default), `secret`, `select`, `boolean`, `number`,
+    /// `textarea`, `color`, `slider`, `list`, `path`; `note` and `link` show
+    /// something and have no value.
     pub fn kind(&self) -> &str {
         self.text("type").unwrap_or("text")
     }
@@ -87,7 +89,8 @@ impl BotSettings {
 
     /// The values a bot gets for settings that weren't changed: their `default`.
     pub fn defaults(&self) -> IndexMap<String, Value> {
-        self.settings.iter().filter(|s| !s.is_secret()).filter_map(|s| Some((s.key.clone(), s.spec.get("default")?.clone()))).collect()
+        // Secrets come from the keyring; notes and links only show something.
+        self.settings.iter().filter(|s| !s.is_secret() && !matches!(s.kind(), "note" | "link")).filter_map(|s| Some((s.key.clone(), s.spec.get("default")?.clone()))).collect()
     }
 }
 

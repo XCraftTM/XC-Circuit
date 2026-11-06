@@ -1,0 +1,21 @@
+# Bot › Settings › Levels: a page from this project's own plugin, made of the
+# elements any plugin can use (docs: Build modes › Elements). Blocks read the
+# values with ctx.runtime.setting("demoLevelXp") and so on.
+
+[[pages]]
+id = "demo-levels"
+name = "Levels"
+icon = "star"
+description = "How members level up in DemoBot."
+order = 70
+
+[settings]
+demoAbout      = { type = "note", page = "demo-levels", label = "An example page", description = "It comes from plugins/demo.custom/settings/levels.toml in this project. Plugins build pages like it from notes, switches, sliders, colours, lists and more." }
+demoLevelXp    = { type = "slider", page = "demo-levels", group = "Levels", label = "XP for a level", description = "How much XP each level takes.", min = 50, max = 1000, step = 50, default = 100, suffix = " XP" }
+demoCardColor  = { type = "color", page = "demo-levels", group = "Levels", label = "Rank card colour", description = "The bar and the outline of the avatar.", default = "#00D8F0" }
+demoLevelUp    = { type = "textarea", page = "demo-levels", group = "Levels", label = "Level-up message", rows = 3, default = "GG ${user}, you reached level ${level}! 🎉" }
+demoNoXp       = { type = "list", page = "demo-levels", group = "Where XP counts", label = "Channels without XP", description = "Messages here earn nothing (channel ids).", placeholder = "Channel id", default = [] }
+demoCardImage  = { type = "path", page = "demo-levels", group = "Where XP counts", label = "Rank card background", description = "A picture on this computer, or leave it empty.", placeholder = 'C:\Pictures\card.png' }
+demoAnnounce   = { type = "boolean", page = "demo-levels", group = "Where XP counts", label = "Announce level-ups", default = true }
+demoWarn       = { type = "note", tone = "warning", page = "demo-levels", group = "Where XP counts", description = "Members who leave keep their XP: delete it with Delete Stored Value if you need to." }
+demoDocs       = { type = "link", page = "demo-levels", group = "More", label = "Making pages like this", description = "Every element and its options.", url = "https://xcrafttm.github.io/XC-Circuit/api/build-modes#elements", button = "Open the guide" }
