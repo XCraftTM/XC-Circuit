@@ -5,7 +5,10 @@ const MODES = { replace: "Replace the file", append: "Add to its end" };
 function place(ctx, p) {
   const path = require("path");
   const root = path.join(ctx.runtime.dataDir, "files");
-  const full = path.resolve(root, String(p ?? "").trim().replace(/^[/\\]+/, ""));
+  const raw = String(p ?? "").trim();
+  // A whole path on any system (/home/…, C:\…) is refused, not read as one inside the folder.
+  if (path.posix.isAbsolute(raw) || path.win32.isAbsolute(raw)) throw new Error(`"${p}" is a path on the computer: use one inside the bot's files folder, such as notes/today.txt`);
+  const full = path.resolve(root, raw);
   if (full !== root && !full.startsWith(root + path.sep)) throw new Error(`"${p}" is outside the bot's files folder: use a path such as notes/today.txt`);
   return full;
 }
