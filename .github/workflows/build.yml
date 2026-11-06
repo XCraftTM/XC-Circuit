@@ -72,12 +72,15 @@ jobs:
         with:
           python-version: "3.12"
 
+      # A version tag's commit was already tested by the Checks (on Linux,
+      # Windows and Linux ARM64), so a release build skips this; the release
+      # waits for those Checks instead. A build started by hand still tests.
       - name: Tests
-        if: matrix.test
+        if: matrix.test && !startsWith(github.ref, 'refs/tags/')
         run: cargo test --workspace
 
       - name: Runtime tests
-        if: matrix.test
+        if: matrix.test && !startsWith(github.ref, 'refs/tags/')
         shell: bash
         run: |
           node runtime/test/smoke.js
@@ -178,8 +181,30 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v7
+      # The tests ran in the Checks for this commit (pushed to main before
+      # the tag); no release unless they passed. They usually finish before
+      # the builds do.
+      - name: Checks passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 60); do
+            run=$(gh run list --repo "${{ github.repository }}" --workflow checks.yml --commit "$GITHUB_SHA" --event push --limit 1 --json status,conclusion,url --jq '.[0] // empty')
+            if [ -z "$run" ]; then
+              echo "No Checks for $GITHUB_SHA: push the commit to main before tagging it."; exit 1
+            fi
+            status=$(echo "$run" | jq -r .status); conclusion=$(echo "$run" | jq -r .conclusion)
+            if [ "$status" = "completed" ]; then
+              echo "Checks: $conclusion ($(echo "$run" | jq -r .url))"
+              [ "$conclusion" = "success" ] && exit 0
+              echo "The Checks for this commit didn't pass (if they were cancelled by a newer push, run them again for this commit)."; exit 1
+            fi
+            sleep 30
+          done
+          echo "The Checks didn't finish in 30 minutes."; exit 1
       - uses: actions/download-artifact@v8
         with:
           path: dist

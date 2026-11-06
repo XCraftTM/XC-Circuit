@@ -1,5 +1,7 @@
 # Tests every pull request (Dependabot's too) and every push to main, so a
-# change that breaks something shows a red ✗ before it's merged.
+# change that breaks something shows a red ✗ before it's merged. On Linux,
+# Windows and Linux ARM64: a version tag's release build doesn't test again,
+# it waits for these instead (see build.yml).
 name: Checks
 
 on:
@@ -17,12 +19,17 @@ concurrency:
 
 jobs:
   app:
-    name: Tests and Clippy
-    runs-on: ubuntu-22.04
+    name: Tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest, ubuntu-22.04-arm]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
 
       - name: Linux packages
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libdbus-1-dev libasound2-dev pkg-config
@@ -40,19 +47,24 @@ jobs:
       - name: Tests
         run: cargo test --workspace
 
+      # Clippy and the plugin versions are the same everywhere: once is enough.
       - name: Clippy
+        if: matrix.os == 'ubuntu-22.04'
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - uses: actions/setup-python@v7
+        if: matrix.os == 'ubuntu-22.04'
         with:
           python-version: "3.12"
 
       # A plugin whose files changed needs a higher version, or apps won't
       # notice the update (see tools/plugin_updates.py).
       - name: Plugin versions
+        if: matrix.os == 'ubuntu-22.04'
         run: python tools/plugin_updates.py check
 
       - name: Runtime tests
+        shell: bash
         run: |
           node runtime/test/smoke.js
           node runtime/test/library.js
