@@ -1784,6 +1784,121 @@ async function testDatabase(depsRoot, dataDir) {
   }
 }
 
+/**
+ * XC Circuit's Stored Data, reading and changing a database: one request
+ * (XC_DB_REQUEST, with the connection as `spec`) and one answer, the last
+ * line printed: { ok: true, ... } or { ok: false, error }.
+ */
+async function browseDatabase(depsRoot, dataDir) {
+  const req = JSON.parse(process.env.XC_DB_REQUEST || "{}");
+  const rt = {
+    opts: { dataDir },
+    require: Module.createRequire(path.join(depsRoot, "package.json")),
+    secret: (name) => process.env[`XC_SECRET_${String(name).toUpperCase()}`],
+  };
+  let db;
+  try {
+    db = new Database({ id: "browse", ...req.spec }, rt);
+    const answer = await browse(db, req);
+    console.log(JSON.stringify({ ok: true, ...answer }, browsable));
+  } catch (e) {
+    console.log(JSON.stringify({ ok: false, error: e && e.message ? e.message : String(e) }));
+  } finally {
+    if (db) await Promise.race([db.close().catch(() => {}), new Promise((r) => setTimeout(r, 2000))]);
+    process.exit(0);
+  }
+}
+
+/** Values as Stored Data shows them: big numbers as text, binary data as its size. */
+function browsable(key, value) {
+  if (typeof value === "bigint") return value.toString();
+  if (value && value.type === "Buffer" && Array.isArray(value.data)) return `(binary, ${value.data.length} bytes)`;
+  if (value instanceof Uint8Array) return `(binary, ${value.length} bytes)`;
+  return value;
+}
+
+/** What a row is known by: its key columns' values as conditions. Never none, so one row changes, not all. */
+function keyConditions(key) {
+  const conds = Object.entries(key || {}).map(([column, value]) => ({ column, op: "=", value }));
+  if (!conds.length) throw new Error("This table has no primary key, so a row can't be told apart from the others: change it with your database's own tools.");
+  return conds;
+}
+
+async function browse(db, req) {
+  switch (req.op) {
+    case "store":
+      await db.prepareStore();
+      return { values: (await db.loadStore()).map((r) => ({ bucket: r.bucket, name: r.name, value: r.value })) };
+    case "store-set":
+      await db.prepareStore();
+      await db.writeStore(String(req.bucket), String(req.name), req.value ?? null);
+      return {};
+    case "store-delete":
+      await db.prepareStore();
+      for (const name of req.names || [req.name]) await db.writeStore(String(req.bucket), String(name), undefined);
+      return {};
+    case "tables":
+      return { tables: (await db.describe()).tables };
+    case "rows":
+      return tableRows(db, String(req.table), req.offset, req.limit);
+    case "row-insert":
+      return { row: (await db.insert(String(req.table), req.values || {})).row };
+    case "row-update":
+      return { changed: await db.update(String(req.table), req.values || {}, keyConditions(req.key)) };
+    case "row-delete":
+      return { changed: await db.remove(String(req.table), keyConditions(req.key)) };
+    default:
+      throw new Error(`"${req.op}" isn't something Stored Data asks.`);
+  }
+}
+
+/** A page of a table's rows, its columns, the columns that tell rows apart (its primary key), and how many rows it has. */
+async function tableRows(db, table, offset, limit) {
+  const n = Math.min(Math.max(Math.floor(Number(limit) || 50), 1), 500);
+  const skip = Math.max(Math.floor(Number(offset) || 0), 0);
+  if (!db.sql) {
+    const rows = await db.select(table, [], { limit: n, offset: skip });
+    const total = await db.mongo(() => db.db.collection(mongoName(table)).countDocuments());
+    return { table, offset: skip, columns: [...new Set(["_id", ...rows.flatMap((r) => Object.keys(r))])], key: ["_id"], rows, total };
+  }
+  const t = db.ident(table);
+  let columns = [];
+  let key = [];
+  switch (db.kind) {
+    case "sqlite": {
+      const info = (await db.run(`PRAGMA table_info(${t})`)).rows;
+      columns = info.map((c) => c.name);
+      key = info.filter((c) => Number(c.pk) > 0).sort((a, b) => a.pk - b.pk).map((c) => c.name);
+      break;
+    }
+    case "mariadb": {
+      const info = (await db.run(`SHOW COLUMNS FROM ${t}`)).rows;
+      columns = info.map((c) => c.Field);
+      key = info.filter((c) => c.Key === "PRI").map((c) => c.Field);
+      break;
+    }
+    case "postgres": {
+      const [schema, name] = table.includes(".") ? table.split(".") : [null, table];
+      const params = schema ? [name, schema] : [name];
+      columns = (await db.run(`SELECT column_name FROM information_schema.columns WHERE table_name = $1 AND table_schema = ${schema ? "$2" : "current_schema()"} ORDER BY ordinal_position`, params)).rows.map((r) => r.column_name);
+      key = (await db.run("SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) WHERE i.indrelid = $1::regclass AND i.indisprimary", [t])).rows.map((r) => r.attname);
+      break;
+    }
+  }
+  if (!columns.length) throw new Error(`${db.name} has no table called ${table}.`);
+  let rows;
+  // A SQLite table without a primary key still has a rowid to tell rows apart.
+  if (db.kind === "sqlite" && !key.length) {
+    rows = (await db.run(`SELECT rowid AS rowid, * FROM ${t}${db.limit(n, skip)}`)).rows;
+    key = ["rowid"];
+    columns = ["rowid", ...columns.filter((c) => c !== "rowid")];
+  } else {
+    rows = await db.select(table, [], { limit: n, offset: skip, order: key[0] });
+  }
+  const total = Number(Object.values((await db.run(`SELECT COUNT(*) AS n FROM ${t}`)).rows[0] || {})[0] || 0);
+  return { table, offset: skip, columns, key, rows, total };
+}
+
 // ─── One-time timers (Schedule, On Scheduled) ────────────────────────────────
 // Kept in the stored data (bucket ns:xc.timers), so they survive restarts and
 // live in a database when stored values do. Each runs once, then is gone.
@@ -2250,6 +2365,10 @@ function cli() {
   };
   if (args.includes("--db-test")) {
     testDatabase(path.resolve(arg("--deps") || process.cwd()), path.resolve(arg("--data") || path.join(process.cwd(), "data")));
+    return;
+  }
+  if (args.includes("--db-browse")) {
+    browseDatabase(path.resolve(arg("--deps") || process.cwd()), path.resolve(arg("--data") || path.join(process.cwd(), "data")));
     return;
   }
   const bundlePath = arg("--bundle");

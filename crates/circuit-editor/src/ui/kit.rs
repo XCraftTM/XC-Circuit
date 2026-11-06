@@ -126,6 +126,25 @@ pub fn icon_button(ui: &mut Ui, theme: &Theme, icon: Option<&Path>, fallback: &s
     resp.on_hover_text(tip)
 }
 
+/// A small icon button without a frame, for what can be done to a row of a
+/// list (edit, delete). `fallback` is shown when the icon is missing.
+pub fn row_icon(ui: &mut Ui, theme: &Theme, icon: Option<&Path>, fallback: &str, tip: &str) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(24.0, 24.0), Sense::click());
+    let enabled = ui.is_enabled();
+    if resp.hovered() && enabled {
+        ui.painter().rect_filled(rect, 5.0, mix(theme.panel, theme.text, 0.1));
+        ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+    }
+    let ink = if !enabled { with_alpha(theme.text_muted, 110) } else if resp.hovered() { theme.text } else { theme.text_muted };
+    match icon {
+        Some(path) => egui::Image::from_uri(file_uri(path)).tint(ink).paint_at(ui, rect.shrink(5.0)),
+        None => {
+            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, fallback, FontId::proportional(13.0), ink);
+        }
+    }
+    resp.on_hover_text(tip)
+}
+
 pub fn secondary_button(ui: &mut Ui, theme: &Theme, text: &str) -> Response {
     styled_button(ui, theme, egui::Button::new(RichText::new(text).color(theme.text)).corner_radius(7).min_size(vec2(84.0, ui.spacing().interact_size.y.max(32.0))), theme.panel, Stroke::new(1.0, theme.node_border))
 }

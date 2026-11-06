@@ -162,7 +162,6 @@ pub struct CircuitApp {
     /// The app's own plugins folder.
     bundled_plugins: Option<PathBuf>,
     /// The Plugins tab's unsaved changes, while it is open.
-    plugins_open: bool,
     settings: crate::pages::settings::SettingsView,
     restore: crate::pages::restore::RestoreView,
     /// When unsaved changes were last copied for crash recovery.
@@ -229,6 +228,13 @@ impl CircuitApp {
         let examples_dir = bundled_root.as_ref().map(|r| r.join("examples"));
         ed.examples_dir = examples_dir.clone();
         let bundled_plugins = bundled_root.map(|r| r.join("plugins"));
+        if let Some(dir) = &bundled_plugins {
+            ed.bundled_plugins = ed.reg.plugins.iter().filter(|p| p.dir.starts_with(dir)).map(|p| p.manifest.id.clone()).collect();
+        }
+        // Plugins turned off: loaded again without them.
+        if !ed.prefs.disabled_plugins.is_empty() {
+            ed.reload_plugins();
+        }
         // The last project; the example on the very first start; nothing (the
         // start page) when the last one was closed.
         let closed = last_project.as_ref().is_some_and(|p| p.as_os_str().is_empty());
@@ -261,7 +267,8 @@ impl CircuitApp {
                 if repair_layout(&mut d) {
                     ed.log(Level::Warn, t!("The panel layout was damaged, so it was put back together."));
                 }
-                close_tabs(&mut d, |t| matches!(t, Tab::Canvas(k) if !keys.contains(k)));
+                // Workspaces that are gone, and the Plugins tab from before it was the side bar's view.
+                close_tabs(&mut d, |t| matches!(t, Tab::Canvas(k) if !keys.contains(k)) || *t == Tab::Plugins);
                 d
             }
             None => default_layout(),
@@ -304,7 +311,6 @@ impl CircuitApp {
             palette: None,
             plugin_host,
             bundled_plugins,
-            plugins_open: false,
             setup,
             tour: None,
             dock_before_tour: None,
@@ -418,7 +424,7 @@ impl eframe::App for CircuitApp {
         }
 
         let title = match &self.ed.project {
-            Some(p) => format!("{}{} — XC™ Circuit", if self.ed.unsaved() { "● " } else { "" }, p.meta.name),
+            Some(p) => format!("{}{} — XC™ Circuit", if self.ed.unsaved() { "• " } else { "" }, p.meta.name),
             None => "XC™ Circuit".into(),
         };
         if title != self.title {
@@ -486,7 +492,6 @@ impl eframe::App for CircuitApp {
             let has_example = self.ed.examples_dir.as_ref().is_some_and(|e| e.join("DemoBot").is_dir());
             let mut viewer = Viewer {
                 bot: &mut self.bot,
-                plugins_open: &mut self.plugins_open,
                 ed: &mut self.ed,
                 problem_count: self.problem_count,
                 problems,

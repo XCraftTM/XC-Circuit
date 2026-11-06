@@ -95,7 +95,8 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                         }
                         if matches!(f.pin, PinMode::Auto | PinMode::Pin) && source.is_none() {
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                let text = if pinned { t!("● pin") } else { t!("○ pin") };
+                                // The chip shows whether it's on; the fonts have no filled circle.
+                                let text = t!("pin");
                                 let color = if pinned { theme.pin_color(&f.ty, reg) } else { theme.text_muted };
                                 if kit::filter_chip(ui, &theme, text, color, pinned).on_hover_text(t!("Switch between typing a value and connecting a pin")).clicked() {
                                     toggle = Some(key.clone());
@@ -168,7 +169,8 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                 for (k, o) in &shape.outputs {
                     ui.horizontal(|ui| {
                         let color = theme.pin_color(&o.ty, reg);
-                        ui.label(RichText::new("●").color(color));
+                        let (dot, _) = ui.allocate_exact_size(egui::vec2(10.0, 14.0), egui::Sense::hover());
+                        ui.painter().circle_filled(dot.center(), 4.0, color);
                         let l = ui.label(o.label(k));
                         if let Some(d) = &o.description {
                             l.on_hover_text(d);

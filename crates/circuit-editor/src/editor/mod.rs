@@ -69,6 +69,9 @@ pub struct Editor {
     pub reg: Registry,
     pub engine: BlockEngine,
     pub plugin_dirs: Vec<PathBuf>,
+    /// The ids of the plugins that come with the app: they can't be turned
+    /// off or removed.
+    pub bundled_plugins: Vec<String>,
     /// The bundled `examples` folder (DemoBot and the starters), when found.
     pub examples_dir: Option<PathBuf>,
     pub theme: Theme,
@@ -142,6 +145,7 @@ impl Editor {
             reg,
             engine,
             plugin_dirs,
+            bundled_plugins: Vec::new(),
             theme: Theme::fallback(),
             project: None,
             edited: false,
@@ -250,7 +254,9 @@ impl Editor {
             Ok(engine) => self.engine = engine,
             Err(e) => return self.log(Level::Error, format!("could not restart the block sandbox: {e:#}")),
         }
-        self.reg = Registry::load(&dirs, &self.engine);
+        // The app's own plugins load even if a preference says otherwise.
+        let off: Vec<String> = self.prefs.disabled_plugins.iter().filter(|id| !self.bundled_plugins.contains(id)).cloned().collect();
+        self.reg = Registry::load_except(&dirs, &self.engine, &off);
         self.apply_language();
         self.shapes.clear();
         let theme = self.theme.id.clone();

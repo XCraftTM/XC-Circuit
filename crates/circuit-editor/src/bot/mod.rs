@@ -1,7 +1,7 @@
 //! Running the bot from the editor, its Settings dialog and Export.
 
 pub mod profile;
-mod databases;
+pub(crate) mod databases;
 mod settings;
 
 pub use settings::SettingsDraft;

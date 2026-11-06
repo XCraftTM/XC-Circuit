@@ -14,7 +14,6 @@ use anyhow::Result;
 use indexmap::IndexMap;
 use serde_json::Value;
 
-use crate::RUNTIME_SOURCE;
 use crate::node::{check_node, ensure_packages, quiet};
 use crate::protocol::{BotEvent, parse_line};
 
@@ -160,8 +159,7 @@ fn prepare_and_spawn(cfg: &SessionConfig, send: &dyn Fn(Msg), stopping: &dyn Fn(
 
     fs::create_dir_all(&cfg.run_dir)?;
     fs::create_dir_all(&cfg.data_dir)?;
-    let runtime = cfg.run_dir.join("circuit-runtime.js");
-    fs::write(&runtime, RUNTIME_SOURCE)?;
+    let runtime = crate::write_runtime(&cfg.run_dir)?;
     let bundle = cfg.run_dir.join("bundle.json");
     fs::write(&bundle, serde_json::to_string(&cfg.bundle)?)?;
 

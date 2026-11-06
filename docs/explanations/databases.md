@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS levels (user_id VARCHAR(20) PRIMARY KEY, xp INTEGER D
 
 **Keep stored values in** (on the same page) moves Set Stored Value, Get Stored Value, Increase, Leaderboard and the rest into a database, in a table `xc_store` the bot makes. The blocks don't change.
 
-The first time, the bot copies what's in `store.json` into the database (when its table is still empty); `store.json` stays as it was. The Stored Data view only shows `store.json`, so it says where the values are instead. Backups of stored data are for `store.json` only: back up a database with its own tools.
+The first time, the bot copies what's in `store.json` into the database (when its table is still empty); `store.json` stays as it was. The Stored Data view shows and changes the values there, and each database's tables too. Backups of stored data are for `store.json` only: back up a database with its own tools.
 
 ## Exported bots
 

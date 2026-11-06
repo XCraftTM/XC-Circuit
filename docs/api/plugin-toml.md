@@ -79,7 +79,7 @@ Runtime libraries are named by the build mode that uses them ([`runtimeLibs`](./
 | --- | --- |
 | `script` | The editor script, relative to the plugin folder: `editor.js` or `editor.ts`. Default `editor.js`. See [Editor plugins](./editor). |
 
-A `[native]` section (a compiled Rust library) is no longer loaded: XC Circuit runs editor code written in JavaScript only. Such a plugin's blocks and settings still load, and Plugins › Manage Plugins says its native part isn't supported.
+A `[native]` section (a compiled Rust library) is no longer loaded: XC Circuit runs editor code written in JavaScript only. Such a plugin's blocks and settings still load, and the Plugins view says its native part isn't supported.
 
 ## Where plugins are loaded from
 

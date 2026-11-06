@@ -3,11 +3,33 @@
 use super::*;
 
 impl CircuitApp {
-    /// Opens the Plugins tab, or focuses it.
+    /// Shows the Plugins view (in the side bar, or its tab).
     pub(super) fn open_plugins(&mut self) {
-        match self.dock.contains(&Tab::Plugins) {
-            true => self.dock.focus(&Tab::Plugins),
-            false => self.plugins_open = true,
+        self.show_panel(Tab::Side(SideView::Plugins));
+    }
+
+    /// Removes a plugin: its folder is deleted. Never one that comes with the
+    /// app, nor one outside the plugin folders.
+    pub(super) fn remove_plugin(&mut self, id: &str, ctx: &egui::Context) {
+        if self.ed.bundled_plugins.iter().any(|b| b == id) {
+            return;
+        }
+        let Some(lp) = self.ed.reg.plugins.iter().chain(&self.ed.reg.disabled).find(|p| p.manifest.id == id).cloned() else { return };
+        let mut folders = self.ed.plugin_dirs.clone();
+        if let Some(p) = &self.ed.project {
+            folders.push(p.root.join("plugins"));
+        }
+        if !folders.iter().any(|f| lp.dir.parent() == Some(f.as_path())) {
+            self.ed.log(Level::Warn, format!("{} isn't in a plugin folder, so it wasn't removed.", lp.manifest.name));
+            return;
+        }
+        match std::fs::remove_dir_all(&lp.dir) {
+            Ok(()) => {
+                self.ed.prefs.disabled_plugins.retain(|p| p != id);
+                self.ed.log(Level::Success, tf!("Removed {name}", name = lp.manifest.name));
+                self.reload_plugins(ctx);
+            }
+            Err(e) => self.ed.log(Level::Error, format!("Couldn't remove {}: {e}", lp.manifest.name)),
         }
     }
 

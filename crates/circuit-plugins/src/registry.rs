@@ -30,6 +30,8 @@ pub struct Problem {
 #[derive(Default)]
 pub struct Registry {
     pub plugins: Vec<LoadedPlugin>,
+    /// Plugins found but turned off: not loaded, listed so they can be turned on again.
+    pub disabled: Vec<LoadedPlugin>,
     pub blocks: IndexMap<String, BlockDef>,
     pub types: IndexMap<String, PinTypeDef>,
     /// Class catalogs: class name → members, shared with text boxes.
@@ -55,6 +57,11 @@ pub struct Registry {
 impl Registry {
     /// Loads every plugin found directly inside the given folders.
     pub fn load(dirs: &[PathBuf], engine: &BlockEngine) -> Registry {
+        Self::load_except(dirs, engine, &[])
+    }
+
+    /// [`Self::load`], leaving out the plugins with these ids (turned off).
+    pub fn load_except(dirs: &[PathBuf], engine: &BlockEngine, disabled: &[String]) -> Registry {
         let mut reg = Registry::default();
         let mut found = Vec::new();
         for dir in dirs {
@@ -81,6 +88,8 @@ impl Registry {
             }
         }
 
+        let (off, best): (Vec<_>, Vec<_>) = best.into_iter().partition(|p| disabled.contains(&p.manifest.id));
+        reg.disabled = off;
         for plugin in order_by_dependencies(best, &mut reg) {
             reg.load_plugin(&plugin, engine);
             reg.plugins.push(plugin);
@@ -429,6 +438,18 @@ version = \"{version}\"
         assert!(reg.block("discord.send_message@3").is_some());
         assert!(reg.mode("discord-bot").is_some());
         assert!(reg.theme("graphite").is_some());
+    }
+
+    /// A plugin turned off isn't loaded (its blocks aren't there) but is still listed.
+    #[test]
+    fn plugins_turned_off_are_listed_not_loaded() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+        let engine = BlockEngine::new().unwrap();
+        let reg = Registry::load_except(&[root], &engine, &["xc.server".to_string()]);
+        assert!(reg.plugins.iter().all(|p| p.manifest.id != "xc.server"));
+        assert_eq!(reg.disabled.iter().map(|p| p.manifest.id.as_str()).collect::<Vec<_>>(), ["xc.server"]);
+        assert!(!reg.blocks.keys().any(|k| k.starts_with("server.")), "its blocks aren't loaded");
+        assert!(reg.block("discord.send_message@3").is_some(), "the others are");
     }
 
     /// Every bundled block sits in one of the Discord mode's categories (not

@@ -5,8 +5,6 @@ use super::*;
 pub(super) struct Viewer<'a> {
     pub(super) ed: &'a mut Editor,
     pub(super) bot: &'a mut BotUi,
-    /// Whether the Plugins tab is open.
-    pub(super) plugins_open: &'a mut bool,
     pub(super) running: bool,
     pub(super) problem_count: usize,
     pub(super) problems: Vec<panels::ProblemItem>,
@@ -111,7 +109,6 @@ impl DockViewer<Tab> for Viewer<'_> {
             Tab::SlashCommands => self.ed.slash_edit = None,
             Tab::BotSettings => self.bot.settings = None,
             Tab::Export => self.bot.export = None,
-            Tab::Plugins => *self.plugins_open = false,
             Tab::WorkspaceExport => self.ed.ws_export = None,
             Tab::WorkspaceImport => self.ed.ws_import = None,
             Tab::Side(view) => self.closed_side.push(*view),
@@ -162,12 +159,8 @@ impl DockViewer<Tab> for Viewer<'_> {
             Tab::Export => self.bot.export_tab(ui, self.ed),
             Tab::WorkspaceExport => crate::editor::exchange::export_tab(ui, self.ed),
             Tab::WorkspaceImport => crate::editor::exchange::import_tab(ui, self.ed),
-            Tab::Plugins => {
-                let theme = self.ed.theme.clone();
-                if let Some(ask) = crate::plugins::manager::tab(ui, &theme, self.ed, self.plugin_host) {
-                    self.side_ask = Some(ask);
-                }
-            }
+            // Only in layouts saved when plugins had a tab of their own: closed on load.
+            Tab::Plugins => {}
         }
     }
 }

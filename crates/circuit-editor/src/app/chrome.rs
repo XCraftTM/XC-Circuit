@@ -6,7 +6,14 @@ impl CircuitApp {
     /// What the Plugins tab's buttons asked for.
     pub(super) fn plugins_side_ask(&mut self, ask: crate::plugins::manager::SideAsk, ctx: &egui::Context) {
         match ask {
-            crate::plugins::manager::SideAsk::Manage => self.open_plugins(),
+            crate::plugins::manager::SideAsk::Enable(id, on) => {
+                self.ed.prefs.disabled_plugins.retain(|p| *p != id);
+                if !on {
+                    self.ed.prefs.disabled_plugins.push(id);
+                }
+                self.reload_plugins(ctx);
+            }
+            crate::plugins::manager::SideAsk::Remove(id) => self.remove_plugin(&id, ctx),
             crate::plugins::manager::SideAsk::Reload => self.reload_plugins(ctx),
             crate::plugins::manager::SideAsk::Install => self.pick_plugin_zip(ctx),
             crate::plugins::manager::SideAsk::OpenFolder => {
@@ -214,7 +221,6 @@ impl CircuitApp {
             (Tab::SlashCommands, self.ed.slash_edit.is_some(), egui::vec2(1320.0, 720.0)),
             (Tab::BotSettings, self.bot.settings.is_some(), egui::vec2(820.0, 620.0)),
             (Tab::Export, self.bot.export.is_some(), egui::vec2(560.0, 620.0)),
-            (Tab::Plugins, self.plugins_open, egui::vec2(580.0, 560.0)),
             (Tab::WorkspaceExport, self.ed.ws_export.is_some(), egui::vec2(660.0, 680.0)),
             (Tab::WorkspaceImport, self.ed.ws_import.is_some(), egui::vec2(660.0, 680.0)),
         ];

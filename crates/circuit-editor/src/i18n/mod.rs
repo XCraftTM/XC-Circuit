@@ -290,6 +290,33 @@ mod tests {
         }
     }
 
+    /// Every character of the interface's texts, English and German, has a
+    /// glyph in the fonts the app installs: none shows as an empty box.
+    #[test]
+    fn every_text_can_be_drawn() {
+        use eframe::egui;
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/xc.core/locales/de.toml");
+        let de: LocaleDef = toml::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let ctx = egui::Context::default();
+        crate::ui::fonts::install(&ctx);
+        let mut out = ctx.run_ui(egui::RawInput::default(), |_| {});
+        out.textures_delta.clear();
+        // Plus symbols the app draws as text without translating them (the unsaved mark in the title).
+        let texts = UI_STRINGS.iter().map(|s| s.to_string()).chain(de.strings.values().cloned()).chain(["• ".to_string()]);
+        let mut missing = std::collections::BTreeMap::<char, String>::new();
+        for text in texts {
+            for c in text.chars().filter(|c| !c.is_control() && !c.is_whitespace()) {
+                if !ctx.fonts_mut(|f| f.has_glyph(&egui::FontId::proportional(14.0), c)) {
+                    missing.entry(c).or_insert(text.clone());
+                }
+            }
+        }
+        let list: Vec<String> = missing.iter().map(|(c, t)| format!("{c:?} (U+{:04X}) in {t:?}", *c as u32)).collect();
+        assert!(missing.is_empty(), "no glyph for:
+{}", list.join("
+"));
+    }
+
     #[test]
     fn german_translates_everything() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/xc.core/locales/de.toml");
