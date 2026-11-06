@@ -444,7 +444,7 @@ impl NativeHost {
             ui.label(egui::RichText::new(t!("See Plugins › Manage Plugins.")).weak());
             return;
         };
-        let id = egui::Id::new(("plugin-panel", plugin, panel, inst.generation));
+        let id = egui::Id::unique(("plugin-panel", plugin, panel, inst.generation));
         self.call(i, ed, bot_running, |o, h| ui.push_id(id, |ui| o.panel_ui(panel, ui, h)).inner);
     }
 

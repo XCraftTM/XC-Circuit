@@ -284,7 +284,7 @@ fn select_width() -> f32 {
 
 /// The icon set, as the app last published it (for a note's icon).
 fn icon_set(ui: &egui::Ui) -> std::collections::HashMap<String, PathBuf> {
-    ui.ctx().data(|d| d.get_temp(egui::Id::new(crate::ui::kit::KIT_ICONS))).unwrap_or_default()
+    ui.ctx().data(|d| d.get_temp(egui::Id::unique(crate::ui::kit::KIT_ICONS))).unwrap_or_default()
 }
 
 pub struct ScriptPlugin {
@@ -800,7 +800,7 @@ impl PluginObject for ScriptPlugin {
             let mut events = Vec::new();
             let mut moved: Option<egui::Pos2> = None;
             let mut clicked = false;
-            egui::Area::new(egui::Id::new(("xc-overlay", &name, &o.id))).order(egui::Order::Foreground).fixed_pos(at).show(ctx, |ui| {
+            egui::Area::new(egui::Id::unique(("xc-overlay", &name, &o.id))).order(egui::Order::Foreground).fixed_pos(at).show(ctx, |ui| {
                 let (rect, bg) = ui.allocate_exact_size(size, egui::Sense::click_and_drag());
                 if o.frame {
                     let v = ui.visuals();
@@ -872,7 +872,7 @@ fn draw(ui: &mut egui::Ui, theme: &crate::ui::theme::Theme, items: &mut [Item], 
     use crate::ui::kit;
     for (i, item) in items.iter_mut().enumerate() {
         path.push(i);
-        let id = ui.id().with(("xc-script-item", path.as_slice()));
+        let id = ui.scope_id().with(("xc-script-item", path.as_slice()));
         match item {
             Item::Heading { text } => {
                 ui.label(RichText::new(text.as_str()).size(15.0).strong().color(theme.text));
@@ -925,7 +925,7 @@ fn draw(ui: &mut egui::Ui, theme: &crate::ui::theme::Theme, items: &mut [Item], 
                 }
             }
             Item::Input { value, on, hint, multiline, key } => {
-                let id = key.as_ref().map_or(id, |k| ui.id().with(("xc-script-input", k.as_str())));
+                let id = key.as_ref().map_or(id, |k| ui.scope_id().with(("xc-script-input", k.as_str())));
                 let r = ui
                     .add_enabled_ui(on.is_some(), |ui| {
                         if *multiline {

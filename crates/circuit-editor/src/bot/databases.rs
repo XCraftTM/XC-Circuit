@@ -360,7 +360,7 @@ impl DatabasesDraft {
         let none = t!("None").to_string();
         let shown = name_of(&self.default).unwrap_or_else(|| none.clone());
         kit::setting_row(ui, theme, t!("Default database"), t!("What the database blocks use when their Database is Default."), |ui| {
-            crate::ui::kit::dropdown(ui, Id::new("db-default"), 200.0, shown, |ui| {
+            crate::ui::kit::dropdown(ui, Id::unique("db-default"), 200.0, shown, |ui| {
                 if kit::option(ui, self.default.is_empty(), &none).clicked() {
                     self.default.clear();
                 }
@@ -379,7 +379,7 @@ impl DatabasesDraft {
             t!("Keep stored values in"),
             t!("Where Set Stored Value, Get Stored Value and the other stored-data blocks keep their data (in the table xc_store). The first time a database is used, what's in store.json is copied there; store.json stays as it was."),
             |ui| {
-                crate::ui::kit::dropdown(ui, Id::new("db-store-in"), 200.0, shown, |ui| {
+                crate::ui::kit::dropdown(ui, Id::unique("db-store-in"), 200.0, shown, |ui| {
                     if kit::option(ui, self.store_in == "json", &json_name).clicked() {
                         self.store_in = "json".into();
                     }
@@ -418,7 +418,7 @@ fn connection_ui(ui: &mut Ui, ed: &Editor, theme: &Theme, c: &mut Connection, pr
             ui.spacing_mut().item_spacing.x = 8.0;
             ui.allocate_ui(vec2((width - 260.0).clamp(120.0, 300.0), 34.0), |ui| kit::text_input(ui, &mut c.name, t!("Name"), false));
             let kind = KINDS.iter().find(|(k, _)| *k == c.kind).map(|(_, n)| *n).unwrap_or("?");
-            crate::ui::kit::dropdown(ui, Id::new(("db-kind", c.id.as_str())), 170.0, kind, |ui| {
+            crate::ui::kit::dropdown(ui, Id::unique(("db-kind", c.id.as_str())), 170.0, kind, |ui| {
                 for (k, name) in KINDS {
                     if kit::option(ui, c.kind == k, name).clicked() && c.kind != k {
                         c.kind = k.into();

@@ -100,13 +100,13 @@ pub fn color_button(ui: &mut Ui, id: Id, color: &mut Color32, theme: &Theme, wid
 
 /// Colors picked recently, kept between sessions.
 fn recent(ctx: &egui::Context) -> Vec<[u8; 3]> {
-    ctx.data_mut(|d| d.get_persisted::<Vec<[u8; 3]>>(Id::new("xc-recent-colors")).unwrap_or_default())
+    ctx.data_mut(|d| d.get_persisted::<Vec<[u8; 3]>>(Id::unique("xc-recent-colors")).unwrap_or_default())
 }
 
 fn remember(ctx: &egui::Context, c: Color32) {
     let rgb = [c.r(), c.g(), c.b()];
     ctx.data_mut(|d| {
-        let list = d.get_persisted_mut_or_default::<Vec<[u8; 3]>>(Id::new("xc-recent-colors"));
+        let list = d.get_persisted_mut_or_default::<Vec<[u8; 3]>>(Id::unique("xc-recent-colors"));
         list.retain(|x| *x != rgb);
         list.insert(0, rgb);
         list.truncate(RECENT_MAX);
@@ -171,7 +171,7 @@ fn panel(ctx: &egui::Context, id: Id, button: Rect, state: &mut Open, theme: &Th
                     ui.spacing_mut().item_spacing.x = 4.0;
                     let (sw, _) = ui.allocate_exact_size(vec2(h, h), Sense::hover());
                     ui.painter().rect(sw, 5.0, current, Stroke::new(1.0, theme.line), StrokeKind::Inside);
-                    let hex = ui.add_sized([66.0, h], egui::TextEdit::singleline(&mut state.hex).font(egui::TextStyle::Monospace).char_limit(7).vertical_align(egui::Align::Center));
+                    let hex = ui.add_sized([66.0, h], egui::TextEdit::singleline(&mut state.hex).font(egui::TextStyle::Monospace).char_limit(7).align(egui::Align2::LEFT_CENTER));
                     if hex.changed()
                         && let Some(c) = parse_hex(&state.hex)
                     {
@@ -287,7 +287,7 @@ mod tests {
             let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(600.0, 600.0))), events, ..Default::default() };
             let mut out = ctx.run_ui(raw, |ui| {
                 height.set(crate::ui::kit::control_height(ui));
-                color_button(ui, Id::new("c"), color, &theme, Some(120.0));
+                color_button(ui, Id::unique("c"), color, &theme, Some(120.0));
             });
             out.textures_delta.clear();
         };
@@ -301,7 +301,7 @@ mod tests {
         run(vec![], &mut color);
         run(click(pos2(20.0, 10.0)), &mut color);
         run(vec![], &mut color);
-        assert!(ctx.data(|d| d.get_temp::<Open>(Id::new("c").with("open"))).is_some(), "clicking the swatch opens the picker");
+        assert!(ctx.data(|d| d.get_temp::<Open>(Id::unique("c").with("open"))).is_some(), "clicking the swatch opens the picker");
 
         // Near the bottom of the square everything is close to black, whatever the hue.
         let near_bottom_left = pos2(14.0, height.get() + 4.0 + 10.0 + SQUARE_H - 4.0);
@@ -310,7 +310,7 @@ mod tests {
 
         run(vec![egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }], &mut color);
         run(vec![], &mut color);
-        assert!(ctx.data(|d| d.get_temp::<Open>(Id::new("c").with("open"))).is_none(), "Escape closes it");
+        assert!(ctx.data(|d| d.get_temp::<Open>(Id::unique("c").with("open"))).is_none(), "Escape closes it");
         assert_eq!(recent(&ctx).first(), Some(&[color.r(), color.g(), color.b()]), "the picked color is remembered");
     }
 

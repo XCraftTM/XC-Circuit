@@ -272,7 +272,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     let ctx = ui.ctx().clone();
     let pointer = ctx.input(|i| i.pointer.hover_pos());
     let parent_layer = ui.layer_id();
-    let layer = LayerId::new(parent_layer.order, ui.id().with(("canvas", ws_key)));
+    let layer = LayerId::new(parent_layer.order, ui.scope_id().with(("canvas", ws_key)));
     let over_canvas = pointer.is_some_and(|p| {
         outer.contains(p) && ctx.layer_id_at(p).is_none_or(|l| l == layer || l == parent_layer)
     });
@@ -300,7 +300,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     crate::ui::theme::compact(cui.style_mut());
     cui.set_clip_rect(visible);
     // Registered before any block, so blocks and pins sit on top of it.
-    let bg = cui.interact(visible, cui.id().with("background"), Sense::click_and_drag());
+    let bg = cui.interact(visible, cui.scope_id().with("background"), Sense::click_and_drag());
     let pointer_scene = pointer.map(|p| to_global.inverse() * p);
     if over_canvas {
         view.pointer = pointer_scene;
@@ -377,7 +377,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             painter.text(r.left_bottom() + vec2(14.0, -16.0), Align2::LEFT_CENTER, format!("Caught: {err}"), FontId::proportional(11.5), theme.error);
         }
 
-        let band = cui.interact(layout.header, cui.id().with(("zone", &zid)), Sense::click_and_drag());
+        let band = cui.interact(layout.header, cui.scope_id().with(("zone", &zid)), Sense::click_and_drag());
         if band.hovered() {
             ctx.set_cursor_icon(CursorIcon::Grab);
         }
@@ -396,7 +396,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         // screen at every zoom.
         let side = if theme.touch { zone_button } else { zone_button.min(layout.header.height() * view.zoom - 2.0).max(18.0) } / view.zoom;
         let gr = Rect::from_center_size(layout.header.right_center() - vec2(side / 2.0 + 6.0 / view.zoom, 0.0), Vec2::splat(side));
-        let gear = cui.interact(gr, cui.id().with(("zone-settings", &zid)), Sense::click()).on_hover_cursor(CursorIcon::PointingHand);
+        let gear = cui.interact(gr, cui.scope_id().with(("zone-settings", &zid)), Sense::click()).on_hover_cursor(CursorIcon::PointingHand);
         let fill = if gear.hovered() { mix(theme.panel, theme.accent, 0.25) } else { theme.panel };
         painter.rect(gr, 6.0 / view.zoom, fill, Stroke::new(1.0 / view.zoom, with_alpha(theme.accent, 120)), StrokeKind::Inside);
         if let Some(path) = reg.icons.get("settings") {
@@ -429,7 +429,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         });
 
         for spot in layout.pins.iter() {
-            let resp = cui.interact(Rect::from_center_size(spot.pos, Vec2::splat(pin_hit)), cui.id().with(("zpin", &zid, &spot.pin)), Sense::click_and_drag());
+            let resp = cui.interact(Rect::from_center_size(spot.pos, Vec2::splat(pin_hit)), cui.scope_id().with(("zpin", &zid, &spot.pin)), Sense::click_and_drag());
             if resp.drag_started() {
                 start_drag = Some(PinEnd { node: zid.clone(), pin: spot.pin.clone(), dir: Dir::Out, ty: spot.ty.clone(), picked_up: None });
             }
@@ -478,7 +478,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         let is_action = pin_at(&link.from.node, &link.from.pin, Dir::Out).is_some_and(|p| p.ty.is_action());
         if !is_action {
             let last = wire_values.get(&(ws_key.to_string(), link.from.node.clone(), link.from.pin.clone()));
-            egui::Tooltip::always_open(ctx.clone(), parent_layer, cui.id().with("wire-value"), egui::PopupAnchor::Pointer).show(|ui| {
+            egui::Tooltip::always_open(ctx.clone(), parent_layer, cui.scope_id().with("wire-value"), egui::PopupAnchor::Pointer).show(|ui| {
                 ui.set_max_width(360.0);
                 match last {
                     Some((value, at)) => {
@@ -566,7 +566,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         painter.rect_filled(layout.header.shrink(if is_selected { 2.0 } else { 1.0 }), CornerRadius { nw: r8, ne: r8, sw: 0, se: 0 }, theme.node_header);
         painter.hline(layout.header.x_range(), layout.header.bottom(), Stroke::new(1.0, theme.node_border));
 
-        let body = cui.interact(layout.rect, cui.id().with(("body", id)), Sense::click_and_drag());
+        let body = cui.interact(layout.rect, cui.scope_id().with(("body", id)), Sense::click_and_drag());
 
         let Some(def) = def else {
             painter.text(layout.header.left_center() + vec2(14.0, 0.0), Align2::LEFT_CENTER, t!("Missing block"), FontId::proportional(13.0), theme.error);
@@ -618,7 +618,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                 }
             };
             if let Some(spot) = layout.pins.iter().find(|p| p.pin == *tip_key && p.dir == tip_dir) {
-                cui.interact(tip_rect, cui.id().with(("row-tip", id, tip_key, tip_dir)), Sense::hover()).on_hover_ui(|ui| pin_tooltip(ui, spot, reg, theme));
+                cui.interact(tip_rect, cui.scope_id().with(("row-tip", id, tip_key, tip_dir)), Sense::hover()).on_hover_ui(|ui| pin_tooltip(ui, spot, reg, theme));
             }
             match row {
                 RowKind::Flow(f) => {
@@ -688,7 +688,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     } else if widgets::is_plain_text(f) {
                         // Free text: a box under the label, as tall as it was last resized to.
                         let bx = Rect::from_min_max(pos2(r.left() + 14.0, r.top() + ROW_H - 4.0), pos2(r.right() - 14.0, r.bottom() - 8.0));
-                        let edit_id = cui.id().with(("field", id, key));
+                        let edit_id = cui.scope_id().with(("field", id, key));
                         let focused = ctx.memory(|m| m.has_focus(edit_id));
                         painter.rect(bx, 6.0, theme.field, Stroke::new(1.0, if focused { theme.accent } else { theme.node_border }), StrokeKind::Inside);
                         let inner = bx.shrink2(vec2(8.0, 5.0));
@@ -732,7 +732,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                         // the whole block. A double-click puts both back.
                         let side = if theme.touch { 24.0 } else { 14.0 };
                         let grip = Rect::from_min_size(bx.right_bottom() - vec2(side + 2.0, side + 2.0), vec2(side, side));
-                        let g = cui.interact(grip, cui.id().with(("text-grip", id, key)), Sense::click_and_drag()).on_hover_cursor(CursorIcon::ResizeNwSe);
+                        let g = cui.interact(grip, cui.scope_id().with(("text-grip", id, key)), Sense::click_and_drag()).on_hover_cursor(CursorIcon::ResizeNwSe);
                         let c = if g.hovered() || g.dragged() { theme.accent } else { theme.text_muted };
                         for i in 1..=3 {
                             let o = i as f32 * side / 4.0;
@@ -759,7 +759,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     } else if widgets::is_inline_editable(f) {
                         let wr = Rect::from_min_max(pos2(r.left() + 16.0 + label_w + 6.0, r.top() + 3.0), pos2(r.right() - 12.0, r.bottom() - 3.0));
                         let mut value = ws.nodes[id].values.get(key).cloned().or_else(|| f.default.clone()).unwrap_or(Value::Null);
-                        let wid = cui.id().with(("field", id, key));
+                        let wid = cui.scope_id().with(("field", id, key));
                         // Drawn top-aligned in a box as tall as the control was last time,
                         // centered on the row (egui centers a row's items on its first line,
                         // not on the room given). A fixed id: number boxes keep their editing
@@ -797,7 +797,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         }
 
         // Header interaction: the only place a block can be dragged.
-        let head = cui.interact(layout.header, cui.id().with(("head", id)), Sense::click_and_drag());
+        let head = cui.interact(layout.header, cui.scope_id().with(("head", id)), Sense::click_and_drag());
         if head.hovered() {
             ctx.set_cursor_icon(CursorIcon::Grab);
         }
@@ -862,7 +862,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             let candidate = drag.as_ref().map(|d| drag_compat(d, id, spot, reg, flow.as_ref()));
             draw_pin(&painter, spot, connected, candidate, theme, reg);
 
-            let resp = cui.interact(Rect::from_center_size(spot.pos, Vec2::splat(pin_hit)), cui.id().with(("pin", id, &spot.pin, spot.dir)), Sense::click_and_drag());
+            let resp = cui.interact(Rect::from_center_size(spot.pos, Vec2::splat(pin_hit)), cui.scope_id().with(("pin", id, &spot.pin, spot.dir)), Sense::click_and_drag());
             if resp.hovered() {
                 ctx.set_cursor_icon(CursorIcon::Crosshair);
             }
@@ -1022,7 +1022,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     // each zone's settings. Everything here works with a finger too. Each
     // group gets its own small Ui: a layer only takes the clicks inside the
     // rectangles it uses, so the blocks below stay clickable.
-    let tools_layer = LayerId::new(parent_layer.order, ui.id().with(("canvas-tools", ws_key)));
+    let tools_layer = LayerId::new(parent_layer.order, ui.scope_id().with(("canvas-tools", ws_key)));
     ctx.set_sublayer(parent_layer, tools_layer);
     let mut tools = |rect: Rect, layout: egui::Layout| {
         let mut t = ui.new_child(UiBuilder::new().layer_id(tools_layer).max_rect(rect).layout(layout));

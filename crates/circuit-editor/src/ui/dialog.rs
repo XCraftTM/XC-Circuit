@@ -34,7 +34,7 @@ pub fn show(ctx: &egui::Context, theme: &Theme, spec: Spec, mut content: impl Fn
         .stroke(Stroke::new(1.0, theme.node_border))
         .corner_radius(12)
         .shadow(egui::Shadow { offset: [0, 18], blur: 48, spread: 0, color: Color32::from_black_alpha(140) });
-    let response = egui::Modal::new(Id::new(spec.id)).frame(card).backdrop_color(Color32::from_black_alpha(150)).show(ctx, |ui| card_contents(ui, theme, &spec, &mut close, &mut content));
+    let response = egui::Modal::new(Id::unique(spec.id)).frame(card).backdrop_color(Color32::from_black_alpha(150)).show(ctx, |ui| card_contents(ui, theme, &spec, &mut close, &mut content));
     close || response.should_close()
 }
 
@@ -50,12 +50,12 @@ const BODY_BOTTOM: &str = "dialog-body-bottom";
 /// boxes with it, so they grow and shrink with the tab.
 pub fn remaining_height(ui: &Ui, min: f32) -> f32 {
     let top = ui.cursor().top();
-    let bottom = ui.ctx().data(|d| d.get_temp::<f32>(Id::new(BODY_BOTTOM))).unwrap_or(top + min);
+    let bottom = ui.ctx().data(|d| d.get_temp::<f32>(Id::unique(BODY_BOTTOM))).unwrap_or(top + min);
     (bottom - top).max(min)
 }
 
 pub fn tab(ui: &mut Ui, theme: &Theme, spec: Spec, mut content: impl FnMut(&mut Ui, Part)) {
-    let id = Id::new(("dialog-tab", spec.id));
+    let id = Id::unique(("dialog-tab", spec.id));
     egui::Panel::bottom(id.with("footer"))
         .resizable(false)
         .frame(Frame::new().fill(theme.panel_header).stroke(Stroke::new(1.0, theme.line)).inner_margin(Margin::symmetric(16, 12)))
@@ -68,7 +68,7 @@ pub fn tab(ui: &mut Ui, theme: &Theme, spec: Spec, mut content: impl FnMut(&mut 
     egui::CentralPanel::default().frame(Frame::new().fill(theme.panel)).show(ui, |ui| {
         // The body's bottom margin is 18.
         let bottom = ui.max_rect().bottom() - 18.0;
-        ui.ctx().data_mut(|d| d.insert_temp(Id::new(BODY_BOTTOM), bottom));
+        ui.ctx().data_mut(|d| d.insert_temp(Id::unique(BODY_BOTTOM), bottom));
         egui::ScrollArea::both().id_salt(id.with("body")).auto_shrink([false, false]).show(ui, |ui| {
             // The body is as wide as it was designed for, centred when there is
             // room; in a narrow panel it narrows, and scrolls sideways past that.

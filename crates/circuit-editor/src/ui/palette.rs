@@ -194,7 +194,7 @@ pub fn show(ctx: &egui::Context, theme: &Theme, state: &mut Palette, items: &[It
     let screen = ctx.content_rect();
     // Opens over the title bar's search box.
     let pos = egui::pos2(screen.center().x - width / 2.0, screen.top() + 4.0);
-    let area = egui::Area::new(egui::Id::new("command-palette")).order(Order::Foreground).fixed_pos(pos).show(ctx, |ui| {
+    let area = egui::Area::new(egui::Id::unique("command-palette")).order(Order::Foreground).fixed_pos(pos).show(ctx, |ui| {
         Frame::new()
             .fill(theme.panel)
             .stroke(Stroke::new(1.0, theme.node_border))

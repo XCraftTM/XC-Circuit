@@ -16,7 +16,7 @@ fn maximized(ctx: &egui::Context) -> bool {
 /// Makes the empty parts of `rect` move the window. Call before adding the
 /// title bar's own widgets so they stay clickable.
 pub fn drag_region(ui: &mut egui::Ui, rect: Rect) {
-    let resp = ui.interact(rect, ui.id().with("title-drag"), Sense::click_and_drag());
+    let resp = ui.interact(rect, ui.scope_id().with("title-drag"), Sense::click_and_drag());
     if resp.double_clicked() {
         let max = maximized(ui.ctx());
         ui.ctx().send_viewport_cmd(ViewportCommand::Maximized(!max));
@@ -30,7 +30,7 @@ pub const SEARCH_W: f32 = 380.0;
 /// The search box in the middle of the title bar. Clicking it opens the
 /// command palette, which appears on top of it.
 pub fn search_box(ui: &mut egui::Ui, rect: Rect, theme: &Theme, label: &str, shortcut: &str) -> bool {
-    let resp = ui.interact(rect, ui.id().with("title-search"), Sense::click()).on_hover_text(t!("Search commands, workspaces and blocks"));
+    let resp = ui.interact(rect, ui.scope_id().with("title-search"), Sense::click()).on_hover_text(t!("Search commands, workspaces and blocks"));
     let fill = if resp.hovered() { mix(theme.field, theme.text, 0.06) } else { theme.field };
     let p = ui.painter();
     p.rect(rect, 6.0, fill, Stroke::new(1.0, theme.line), egui::StrokeKind::Inside);
@@ -123,7 +123,7 @@ pub fn frame_edges(ctx: &egui::Context, theme: &Theme) {
         return;
     }
     let screen = ctx.content_rect();
-    let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("window-border")));
+    let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::unique("window-border")));
     painter.rect_stroke(screen, 0.0, Stroke::new(1.0, theme.line), egui::StrokeKind::Inside);
 
     let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) else { return };

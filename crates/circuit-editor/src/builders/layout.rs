@@ -410,7 +410,7 @@ fn form(ui: &mut Ui, theme: &Theme, edit: &mut LayoutEdit) {
     ui.add_space(8.0);
     if let Some(jt) = &mut edit.json {
         let help = t!("The message as Discord's JSON. Edit it, or paste a Components V2 message or a list of components (from the Discord docs or a message designer); it applies as soon as it is valid.");
-        if let Some(v) = json_view::editor(ui, theme, ui.id().with("layout-json"), jt, help) {
+        if let Some(v) = json_view::editor(ui, theme, ui.scope_id().with("layout-json"), jt, help) {
             match from_json(&v) {
                 Ok(l) => edit.draft = l,
                 Err(e) => jt.error = Some(e),
@@ -430,8 +430,8 @@ fn form(ui: &mut Ui, theme: &Theme, edit: &mut LayoutEdit) {
     ui.add_space(6.0);
     // A fixed id, so the boxes in the form keep theirs (and the one being
     // typed in keeps focus) when a problem line above appears or goes.
-    let form_id = ui.id().with("layout-form-scope");
-    ui.scope_builder(egui::UiBuilder::new().id(form_id), |ui| {
+    let form_id = ui.scope_id().with("layout-form-scope");
+    ui.scope_builder(egui::UiBuilder::new().scope_id(form_id), |ui| {
         ScrollArea::vertical().id_salt("layout-form").max_height(dialog::remaining_height(ui, 300.0)).auto_shrink([false, false]).show(ui, |ui| {
             ui.set_width(ui.available_width() - 12.0);
             let next = count(components(&edit.draft)) + 1;
@@ -456,7 +456,7 @@ fn list_editor(ui: &mut Ui, theme: &Theme, list: &mut Vec<Value>, top: bool, nex
         list.remove(i);
     }
     let resp = kit::button(ui, theme, if top { t!("+ Add to the message") } else { t!("+ Add to the container") });
-    egui::Popup::menu(&resp).id(ui.id().with("add-menu")).show(|ui| {
+    egui::Popup::menu(&resp).id(ui.scope_id().with("add-menu")).show(|ui| {
         ui.set_min_width(260.0);
         for (what, label) in ADDABLE {
             if what == "container" && !top {
@@ -527,7 +527,7 @@ fn body(ui: &mut Ui, theme: &Theme, c: &mut Value, next: usize) {
                 ui.label(RichText::new(t!("Next to the text")).color(theme.text));
                 let is_button = c.get("accessory").is_some_and(|a| ty(a) == kind::BUTTON);
                 let current = if is_button { t!("A button") } else { t!("A picture") };
-                crate::ui::kit::dropdown(ui, ui.id().with("accessory"), 140.0, current, |ui| {
+                crate::ui::kit::dropdown(ui, ui.scope_id().with("accessory"), 140.0, current, |ui| {
                     if kit::option(ui, !is_button, t!("A picture")).clicked() && is_button {
                         c["accessory"] = json!({ "type": kind::THUMBNAIL, "media": { "url": "${avatar}" } });
                     }
@@ -560,7 +560,7 @@ fn body(ui: &mut Ui, theme: &Theme, c: &mut Value, next: usize) {
                 }
                 if let Some(n) = c.get("accent_color").and_then(Value::as_u64) {
                     let mut color = Color32::from_rgb((n >> 16) as u8, (n >> 8) as u8, n as u8);
-                    if crate::builders::color::color_button(ui, ui.id().with("accent"), &mut color, theme, None) {
+                    if crate::builders::color::color_button(ui, ui.scope_id().with("accent"), &mut color, theme, None) {
                         c["accent_color"] = json!(((color.r() as u32) << 16) | ((color.g() as u32) << 8) | color.b() as u32);
                     }
                 }
@@ -610,7 +610,7 @@ fn body(ui: &mut Ui, theme: &Theme, c: &mut Value, next: usize) {
                 ui.label(RichText::new(t!("Space")).color(theme.text));
                 let mut spacing = c.get("spacing").and_then(Value::as_u64).unwrap_or(1);
                 let labels = [t!("Small"), t!("Large")];
-                crate::ui::kit::dropdown(ui, ui.id().with("spacing"), 110.0, labels[(spacing == 2) as usize], |ui| {
+                crate::ui::kit::dropdown(ui, ui.scope_id().with("spacing"), 110.0, labels[(spacing == 2) as usize], |ui| {
                     ui.selectable_value(&mut spacing, 1, labels[0]);
                     ui.selectable_value(&mut spacing, 2, labels[1]);
                 });
@@ -683,7 +683,7 @@ fn set_text(v: &mut Value, key: &str, text: String) {
 
 fn text_area(ui: &mut Ui, v: &mut Value, key: &str, hint: &str) {
     let mut text = text_of(v, key).to_string();
-    if ui.add(crate::ui::kit::TextArea::new(ui.id().with(key), &mut text).hint(hint).rows(3)).changed() {
+    if ui.add(crate::ui::kit::TextArea::new(ui.scope_id().with(key), &mut text).hint(hint).rows(3)).changed() {
         v[key] = json!(text);
     }
 }
@@ -718,7 +718,7 @@ fn button_editor(ui: &mut Ui, theme: &Theme, b: &mut Value) {
         label_column(ui, egui::Label::new(RichText::new(t!("Style")).size(12.5)));
         let current = BUTTON_STYLES.iter().find(|s| s.0 == style).map(|s| crate::i18n::t(s.1)).unwrap_or(t!("Blurple"));
         let mut picked = style;
-        crate::ui::kit::dropdown(ui, ui.id().with("style"), 210.0, current, |ui| {
+        crate::ui::kit::dropdown(ui, ui.scope_id().with("style"), 210.0, current, |ui| {
             for (s, l) in BUTTON_STYLES {
                 ui.selectable_value(&mut picked, s, crate::i18n::t(l));
             }
@@ -801,7 +801,7 @@ fn select_editor(ui: &mut Ui, theme: &Theme, sel: &mut Value) {
         label_column(ui, egui::Label::new(RichText::new(t!("Choose from")).size(12.5)));
         let label = SELECT_KINDS.iter().find(|k| k.0 == current).map(|k| crate::i18n::t(k.1)).unwrap_or_default();
         let mut picked = current;
-        crate::ui::kit::dropdown(ui, ui.id().with("select-kind"), 180.0, label, |ui| {
+        crate::ui::kit::dropdown(ui, ui.scope_id().with("select-kind"), 180.0, label, |ui| {
             for (k, l) in SELECT_KINDS {
                 ui.selectable_value(&mut picked, k, crate::i18n::t(l));
             }
@@ -869,7 +869,7 @@ fn select_editor(ui: &mut Ui, theme: &Theme, sel: &mut Value) {
                     label_column(ui, egui::Label::new(RichText::new(t!("Channel kinds")).size(12.5)));
                     let types = list_mut(sel, "channel_types");
                     let mut picked: Vec<u64> = types.iter().filter_map(Value::as_u64).collect();
-                    if crate::ui::kit::multi_select(ui, theme, ui.id().with("channel-kinds"), 220.0, &CHANNEL_TYPES, &mut picked, t!("Every kind")) {
+                    if crate::ui::kit::multi_select(ui, theme, ui.scope_id().with("channel-kinds"), 220.0, &CHANNEL_TYPES, &mut picked, t!("Every kind")) {
                         *types = picked.into_iter().map(|n| json!(n)).collect();
                     }
                 });

@@ -108,7 +108,7 @@ impl Theme {
 
     pub fn apply(&self, ctx: &egui::Context) {
         // For code that only has a ui (plugins' panels): kit::theme_of.
-        ctx.data_mut(|d| d.insert_temp(egui::Id::new(KIT_THEME), self.clone()));
+        ctx.data_mut(|d| d.insert_temp(egui::Id::unique(KIT_THEME), self.clone()));
         let mut v = if self.dark { Visuals::dark() } else { Visuals::light() };
         v.interact_cursor = Some(egui::CursorIcon::PointingHand);
         let radius = CornerRadius::same(6);

@@ -11,7 +11,9 @@ publish.workspace = true
 [dependencies]
 # These must be exactly the egui features the editor builds with, so a plugin
 # built on its own lays out egui's types the same way the editor does.
-egui = { version = "0.36", default-features = false, features = ["bytemuck", "default_fonts", "persistence", "ron", "serde"] }
+# monochrome_emoji_fonts: the symbol and emoji fonts egui bundled up to 0.36
+# (⚠, ✓, ▶ …); from 0.37 on they come only with this feature.
+egui = { version = "0.37", default-features = false, features = ["bytemuck", "default_fonts", "monochrome_emoji_fonts", "persistence", "ron", "serde"] }
 
 [build-dependencies]
 toml.workspace = true

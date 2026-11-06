@@ -89,7 +89,7 @@ pub fn ui(ui: &mut Ui, ed: &mut Editor, native: &NativeHost, view: &mut Settings
         let mut bar_ui = ui.new_child(egui::UiBuilder::new().max_rect(inside).layout(Layout::left_to_right(Align::Center)));
         let shown = Section::ALL.iter().find(|(s, ..)| *s == view.section).map(|(_, n, _)| crate::i18n::t(n)).unwrap_or("");
         let mut picked = None;
-        kit::dropdown(&mut bar_ui, egui::Id::new("settings-pages"), inside.width().min(320.0), shown, |ui| {
+        kit::dropdown(&mut bar_ui, egui::Id::unique("settings-pages"), inside.width().min(320.0), shown, |ui| {
             for (section, name, _) in Section::ALL {
                 if kit::option(ui, view.section == section, crate::i18n::t(name)).clicked() {
                     picked = Some(section);
@@ -151,7 +151,7 @@ pub fn language_select(ui: &mut Ui, ed: &mut Editor) {
     let languages = crate::i18n::languages(&ed.reg);
     let current = languages.iter().find(|(code, _)| *code == ed.prefs.language).map_or_else(|| ed.prefs.language.clone(), |(_, name)| name.clone());
     let mut picked = None;
-    crate::ui::kit::dropdown(ui, egui::Id::new("settings-language"), 180.0, current, |ui| {
+    crate::ui::kit::dropdown(ui, egui::Id::unique("settings-language"), 180.0, current, |ui| {
         for (code, name) in &languages {
             if kit::option(ui, ed.prefs.language == *code, name).clicked() {
                 picked = Some(code.clone());
@@ -192,7 +192,7 @@ fn appearance(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsVi
         }
         // Every change while dragging in the picker restyles the whole app.
         let mut c = ed.theme.accent;
-        if crate::builders::color::color_button(ui, egui::Id::new("settings-accent"), &mut c, theme, Some(116.0)) {
+        if crate::builders::color::color_button(ui, egui::Id::unique("settings-accent"), &mut c, theme, Some(116.0)) {
             ed.prefs.accent = Some(crate::builders::color::to_hex(c));
             ed.restyle();
             ed.theme.apply(&ctx);

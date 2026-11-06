@@ -62,7 +62,7 @@ pub(super) fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, 
         }
 
         // The title band moves the note.
-        let band = cui.interact(header, cui.id().with(("note", &nid)), Sense::click_and_drag());
+        let band = cui.interact(header, cui.scope_id().with(("note", &nid)), Sense::click_and_drag());
         if band.hovered() {
             ctx.set_cursor_icon(CursorIcon::Grab);
         }
@@ -123,7 +123,7 @@ pub(super) fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, 
 
         // The edit button, on the right of the title.
         let pr = Rect::from_center_size(pos2(header.right() - 8.0 / zoom - button / 2.0, header.top() + 10.0 + line / 2.0), Vec2::splat(button));
-        let pencil = cui.interact(pr, cui.id().with(("note-edit", &nid)), Sense::click()).on_hover_cursor(CursorIcon::PointingHand);
+        let pencil = cui.interact(pr, cui.scope_id().with(("note-edit", &nid)), Sense::click()).on_hover_cursor(CursorIcon::PointingHand);
         let fill = if pencil.hovered() { mix(theme.panel, color, 0.25) } else { theme.panel };
         painter.rect(pr, 6.0 / zoom, fill, Stroke::new(1.0 / zoom, with_alpha(color, 120)), StrokeKind::Inside);
         if let Some(path) = reg.icons.get("pencil") {
@@ -188,7 +188,7 @@ pub(super) fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, 
             ((true, false, false, true), Rect::from_center_size(r.left_bottom(), Vec2::splat(2.0 * c)), CursorIcon::ResizeNeSw),
         ];
         for (i, ((l, rt, t, b), hr, cursor)) in handles.into_iter().enumerate() {
-            let h = cui.interact(hr, cui.id().with(("note-size", &nid, i)), Sense::drag());
+            let h = cui.interact(hr, cui.scope_id().with(("note-size", &nid, i)), Sense::drag());
             if h.hovered() || h.dragged() {
                 ctx.set_cursor_icon(cursor);
             }

@@ -368,7 +368,7 @@ impl BotUi {
         let (mut save, mut close, mut cancel) = (false, false, false);
         let mut test = None;
 
-        egui::Panel::bottom(Id::new("bot-settings-footer"))
+        egui::Panel::bottom(Id::unique("bot-settings-footer"))
             .resizable(false)
             .frame(Frame::new().fill(theme.panel_header).stroke(Stroke::new(1.0, theme.line)).inner_margin(Margin::symmetric(16, 12)))
             .show(ui, |ui| {
@@ -407,7 +407,7 @@ impl BotUi {
                 };
                 let shown = draft.pages.iter().find(|p| p.id == draft.page).map(label).unwrap_or_default();
                 let mut picked = None;
-                kit::dropdown(&mut bar_ui, egui::Id::new("bot-settings-pages"), inside.width().min(320.0), shown, |ui| {
+                kit::dropdown(&mut bar_ui, egui::Id::unique("bot-settings-pages"), inside.width().min(320.0), shown, |ui| {
                     for p in &draft.pages {
                         if kit::option(ui, draft.page == p.id, label(p)).clicked() {
                             picked = Some(p.id.clone());

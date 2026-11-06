@@ -86,7 +86,7 @@ pub struct TextArea<'a> {
 
 impl<'a> TextArea<'a> {
     pub fn new(id_salt: impl std::hash::Hash + std::fmt::Debug, value: &'a mut String) -> Self {
-        TextArea { id_salt: Id::new(id_salt), value, hint: String::new(), rows: 4 }
+        TextArea { id_salt: Id::unique(id_salt), value, hint: String::new(), rows: 4 }
     }
 
     pub fn hint(mut self, hint: impl Into<String>) -> Self {

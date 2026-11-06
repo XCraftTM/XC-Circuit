@@ -206,7 +206,7 @@ pub fn done_label(ui: &mut Ui, text: impl Into<egui::RichText>, color: Color32) 
 /// the right instead of filling the row.
 pub fn line<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
     let h = crate::ui::inputs::input_height(ui).max(ui.spacing().interact_size.y);
-    let id = ui.id().with(("kit-line", ui.next_auto_id()));
+    let id = ui.scope_id().with(("kit-line", ui.next_auto_id()));
     let full = ui.available_size_before_wrap().x;
     let width = ui.data(|d| d.get_temp::<f32>(id)).map_or(full, |w| w.min(full));
     let r = ui.allocate_ui_with_layout(egui::vec2(width, h), egui::Layout::left_to_right(egui::Align::Center), |ui| {
@@ -346,7 +346,7 @@ pub fn setting_row(ui: &mut Ui, theme: &Theme, title: &str, description: &str, c
         // The control's width as drawn last time: the text takes the rest. When
         // that leaves too little for the text, the control goes under it, so
         // a row is never wider than the page.
-        let measured = ui.id().with(("settings-control", title));
+        let measured = ui.scope_id().with(("settings-control", title));
         let control_w: f32 = ui.data(|d| d.get_temp(measured)).unwrap_or(0.0);
         let stacked = inner - control_w - 16.0 < 180.0;
         let text = |ui: &mut Ui| {
@@ -462,7 +462,7 @@ pub const KIT_ICONS: &str = "xc-kit-icons";
 
 /// The theme in use, for code that has only a `ui` (plugins' panels).
 pub fn theme_of(ui: &Ui) -> Theme {
-    ui.ctx().data(|d| d.get_temp::<Theme>(egui::Id::new(crate::ui::theme::KIT_THEME))).unwrap_or_else(Theme::fallback)
+    ui.ctx().data(|d| d.get_temp::<Theme>(egui::Id::unique(crate::ui::theme::KIT_THEME))).unwrap_or_else(Theme::fallback)
 }
 
 // ── Sizes ────────────────────────────────────────────────────────────────
@@ -681,7 +681,7 @@ pub fn option(ui: &mut Ui, selected: bool, text: impl Into<egui::WidgetText>) ->
 pub fn select<V: AsRef<str>, L: AsRef<str>>(ui: &mut Ui, id: impl std::hash::Hash + std::fmt::Debug, width: f32, value: &mut String, choices: &[(V, L)]) -> bool {
     let shown = choices.iter().find(|(v, _)| v.as_ref() == value.as_str()).or(choices.first()).map(|(_, l)| l.as_ref().to_string()).unwrap_or_default();
     let mut changed = false;
-    dropdown(ui, egui::Id::new(id), width, shown, |ui| {
+    dropdown(ui, egui::Id::unique(id), width, shown, |ui| {
         for (v, l) in choices {
             if option(ui, value.as_str() == v.as_ref(), l.as_ref()).clicked() {
                 *value = v.as_ref().to_string();
@@ -697,7 +697,7 @@ pub fn select<V: AsRef<str>, L: AsRef<str>>(ui: &mut Ui, id: impl std::hash::Has
 /// A colour as #RRGGBB text, with the app's picker. True when it changed.
 pub fn color(ui: &mut Ui, theme: &Theme, id: impl std::hash::Hash + std::fmt::Debug, hex: &mut String) -> bool {
     let mut c = crate::ui::theme::hex_color(hex.trim()).unwrap_or(Color32::WHITE);
-    if crate::builders::color::color_button(ui, egui::Id::new(id), &mut c, theme, Some(120.0)) {
+    if crate::builders::color::color_button(ui, egui::Id::unique(id), &mut c, theme, Some(120.0)) {
         *hex = crate::builders::color::to_hex(c);
         return true;
     }
@@ -725,7 +725,7 @@ pub fn path(ui: &mut Ui, theme: &Theme, value: &mut String, hint: &str, folder: 
 /// (the new row gets the cursor). True when it changed.
 #[allow(clippy::too_many_arguments)]
 pub fn text_list(ui: &mut Ui, theme: &Theme, icons: &std::collections::HashMap<String, std::path::PathBuf>, id: impl std::hash::Hash + std::fmt::Debug, items: &mut Vec<String>, placeholder: &str, width: f32) -> bool {
-    let focus_id = egui::Id::new(("kit-list-new", egui::Id::new(id)));
+    let focus_id = egui::Id::unique(("kit-list-new", egui::Id::unique(id)));
     let focus: Option<usize> = ui.data_mut(|d| d.remove_temp(focus_id));
     let mut remove = None;
     let mut changed = false;

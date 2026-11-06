@@ -749,7 +749,7 @@ fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], tra
                     command = shown
                 );
                 let shown_now = shown.clone();
-                if let Some(v) = json_view::editor(ui, theme, ui.id().with("slash-json"), jt, &help) {
+                if let Some(v) = json_view::editor(ui, theme, ui.scope_id().with("slash-json"), jt, &help) {
                     let mut jt_after = jt.clone();
                     match apply_json(edit, &shown_now, &v) {
                         Ok(first) => edit.json = Some((first, jt_after)),
@@ -785,7 +785,7 @@ fn command_form(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, root: &str) {
             kit::text_input(ui, &mut cmd.description, t!("Shows your rank"), false)
         });
     });
-    locales::section(ui, theme, ui.id().with(("cmd-locales", i)), &mut cmd.locales, true);
+    locales::section(ui, theme, ui.scope_id().with(("cmd-locales", i)), &mut cmd.locales, true);
     ui.add_space(6.0);
 
     if holds_settings {
@@ -839,7 +839,7 @@ fn pick_row(ui: &mut Ui, theme: &Theme, label: &str, options: &[(&str, u64, &'st
         ui.set_min_height(crate::ui::kit::input_height(ui));
         ui.label(RichText::new(label).color(theme.text));
         let options: Vec<(String, &'static str)> = options.iter().map(|(k, _, l)| (k.to_string(), *l)).collect();
-        crate::ui::kit::multi_select(ui, theme, ui.id().with(label), 260.0, &options, list, none);
+        crate::ui::kit::multi_select(ui, theme, ui.scope_id().with(label), 260.0, &options, list, none);
     });
 }
 
@@ -853,7 +853,7 @@ fn permissions_dropdown(ui: &mut Ui, theme: &Theme, list: &mut Vec<String>) {
     };
     ui.scope(|ui| {
         ui.spacing_mut().interact_size.y = crate::ui::kit::input_height(ui);
-        egui::ComboBox::from_id_salt(ui.id().with("permissions")).width(240.0).selected_text(summary).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show_ui(ui, |ui| {
+        egui::ComboBox::from_id_salt(ui.scope_id().with("permissions")).width(240.0).selected_text(summary).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show_ui(ui, |ui| {
             if kit::option(ui, list.is_empty(), t!("Everyone")).clicked() {
                 list.clear();
             }
@@ -887,7 +887,7 @@ fn option_card(ui: &mut Ui, theme: &Theme, o: &mut SlashOption, i: usize, count:
             ui.set_min_height(h);
             ui.allocate_ui(vec2(160.0, h), |ui| kit::text_input(ui, &mut o.name, "name", false));
             let current = KINDS.iter().find(|k| k.0 == o.kind).map(|k| crate::i18n::t(k.1)).unwrap_or(t!("Text"));
-            crate::ui::kit::dropdown(ui, ui.id().with("kind"), 130.0, current, |ui| {
+            crate::ui::kit::dropdown(ui, ui.scope_id().with("kind"), 130.0, current, |ui| {
                 for (k, l, _) in KINDS {
                     ui.selectable_value(&mut o.kind, k.to_string(), crate::i18n::t(l));
                 }
@@ -938,7 +938,7 @@ fn option_card(ui: &mut Ui, theme: &Theme, o: &mut SlashOption, i: usize, count:
         if (texty || numeric) && !o.autocomplete {
             choices(ui, theme, o, numeric);
         }
-        locales::section(ui, theme, ui.id().with("locales"), &mut o.locales, true);
+        locales::section(ui, theme, ui.scope_id().with("locales"), &mut o.locales, true);
     });
     ui.add_space(8.0);
 }
@@ -960,9 +960,9 @@ fn choices(ui: &mut Ui, theme: &Theme, o: &mut SlashOption, numeric: bool) {
             }
             let label = if ch.locales.is_empty() { t!("Translations").to_string() } else { tf!("Translations · {count}", count = ch.locales.len()) };
             let resp = kit::button(ui, theme, label);
-            egui::Popup::menu(&resp).id(ui.id().with(("choice-locales", i))).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+            egui::Popup::menu(&resp).id(ui.scope_id().with(("choice-locales", i))).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
                 ui.set_width(460.0);
-                locales::editor(ui, theme, ui.id().with(("choice-rows", i)), &mut ch.locales, false);
+                locales::editor(ui, theme, ui.scope_id().with(("choice-rows", i)), &mut ch.locales, false);
             });
             if kit::danger_button(ui, theme, "×").on_hover_text(t!("Remove this choice")).clicked() {
                 remove = Some(i);

@@ -11,29 +11,13 @@ updates:
       day: monday
     open-pull-requests-limit: 5
     groups:
-      # egui, eframe, egui_extras and egui_dock only work in matching
-      # versions, so they come together. Such an update can wait until
-      # egui_dock supports the new egui.
+      # egui, eframe and egui_extras only work in matching versions, so they
+      # come together. (Native plugins are built with the editor's egui, so
+      # the plugin crate's egui comes with them.)
       egui:
         patterns: ["egui", "egui_*", "eframe", "epaint", "emath", "ecolor"]
       rust:
         update-types: [minor, patch]
-    # egui 0.37 waits for egui_dock to support it (anhosh/egui_dock#354).
-    # egui_dock's own updates still come: when its new version needs egui
-    # 0.37, that pull request is the sign to remove these lines.
-    ignore:
-      - dependency-name: "egui"
-        versions: [">= 0.37"]
-      - dependency-name: "eframe"
-        versions: [">= 0.37"]
-      - dependency-name: "egui_extras"
-        versions: [">= 0.37"]
-      - dependency-name: "epaint"
-        versions: [">= 0.37"]
-      - dependency-name: "emath"
-        versions: [">= 0.37"]
-      - dependency-name: "ecolor"
-        versions: [">= 0.37"]
 
   # The website (VitePress).
   - package-ecosystem: npm

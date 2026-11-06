@@ -128,7 +128,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                         }
                     } else {
                         let mut value = ws.nodes[&node_id].values.get(key).cloned().or_else(|| f.default.clone()).unwrap_or(Value::Null);
-                        let id = ui.id().with(("inspector", &node_id, key));
+                        let id = ui.scope_id().with(("inspector", &node_id, key));
                         if widgets::value_editor(ui, id, f, &mut value, ui.available_width(), true, &theme) {
                             ws.nodes.get_mut(&node_id).unwrap().values.insert(key.clone(), value);
                             *edited = true;
@@ -210,7 +210,7 @@ fn level_look(level: Level, theme: &crate::ui::theme::Theme) -> (&'static str, C
 
 pub fn console(ui: &mut Ui, ed: &mut Editor) {
     let theme = ed.theme.clone();
-    let key = egui::Id::new(CONSOLE_LEVEL_KEY);
+    let key = egui::Id::unique(CONSOLE_LEVEL_KEY);
     let level: Option<Level> = ui.ctx().data_mut(|d| d.get_persisted::<u8>(key)).and_then(|n| match n {
         1 => Some(Level::Info),
         2 => Some(Level::Success),

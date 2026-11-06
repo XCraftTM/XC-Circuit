@@ -219,26 +219,26 @@ const ROWS: usize = 9;
 /// Where the list of values was drawn last (screen), for tests.
 #[cfg(test)]
 pub fn open_list_rect(ctx: &egui::Context) -> Option<egui::Rect> {
-    ctx.data(|d| d.get_temp::<egui::Rect>(Id::new(OPEN_LIST)))
+    ctx.data(|d| d.get_temp::<egui::Rect>(Id::unique(OPEN_LIST)))
 }
 
 /// The values text boxes offer from now on, until set to `None`.
 pub fn set_scope(ctx: &egui::Context, scope: Option<Arc<Scope>>) {
     ctx.data_mut(|d| match scope {
         Some(v) => {
-            d.insert_temp(Id::new(SCOPE), v);
+            d.insert_temp(Id::unique(SCOPE), v);
         }
-        None => d.remove::<Arc<Scope>>(Id::new(SCOPE)),
+        None => d.remove::<Arc<Scope>>(Id::unique(SCOPE)),
     });
 }
 
 fn scope(ctx: &egui::Context) -> Option<Arc<Scope>> {
-    ctx.data(|d| d.get_temp::<Arc<Scope>>(Id::new(SCOPE)))
+    ctx.data(|d| d.get_temp::<Arc<Scope>>(Id::unique(SCOPE)))
 }
 
 /// Puts `{token}` where the text cursor was in the text box used last.
 pub fn insert(ctx: &egui::Context, token: &str) {
-    ctx.data_mut(|d| d.insert_temp(Id::new(PENDING), token.to_string()));
+    ctx.data_mut(|d| d.insert_temp(Id::unique(PENDING), token.to_string()));
 }
 
 /// Whether text box `id` has its values menu open, so the values stay in
@@ -249,7 +249,7 @@ pub fn menu_open(ctx: &egui::Context, id: Id) -> bool {
 
 /// Whether a text box was used yet, so [`insert`] has somewhere to go.
 pub fn has_target(ctx: &egui::Context) -> bool {
-    ctx.data(|d| d.get_temp::<Id>(Id::new(LAST_TEXT)).is_some())
+    ctx.data(|d| d.get_temp::<Id>(Id::unique(LAST_TEXT)).is_some())
 }
 
 /// The right-click menu: a submenu per block, and in it a submenu per value
@@ -535,11 +535,11 @@ pub fn after(ui: &mut Ui, resp: &egui::Response, text: &mut String) -> bool {
         return true;
     }
     if resp.has_focus() {
-        ctx.data_mut(|d| d.insert_temp(Id::new(LAST_TEXT), id));
+        ctx.data_mut(|d| d.insert_temp(Id::unique(LAST_TEXT), id));
     }
     // A value clicked in a list goes where this box's cursor was.
-    if ctx.data(|d| d.get_temp::<Id>(Id::new(LAST_TEXT))) == Some(id)
-        && let Some(token) = ctx.data_mut(|d| d.remove_temp::<String>(Id::new(PENDING)))
+    if ctx.data(|d| d.get_temp::<Id>(Id::unique(LAST_TEXT))) == Some(id)
+        && let Some(token) = ctx.data_mut(|d| d.remove_temp::<String>(Id::unique(PENDING)))
     {
         put_at_cursor(&ctx, id, text, &token);
         return true;
@@ -728,7 +728,7 @@ pub fn after(ui: &mut Ui, resp: &egui::Response, text: &mut String) -> bool {
     });
     ctx.data_mut(|d| {
         d.insert_temp(list_id, area.response.rect);
-        d.insert_temp(Id::new(OPEN_LIST), area.response.rect);
+        d.insert_temp(Id::unique(OPEN_LIST), area.response.rect);
     });
     if let Some(token) = insert {
         put(&ctx, id, text, start, at, &token);

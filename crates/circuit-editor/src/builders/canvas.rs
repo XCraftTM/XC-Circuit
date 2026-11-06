@@ -648,7 +648,7 @@ fn left_panel(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit, icons: &Icons) 
     let d = &mut edit.draft;
     kit::section(ui, theme, t!("Start from"));
     let mut start = None;
-    crate::ui::kit::dropdown(ui, Id::new("canvas-start"), 220.0, t!("Choose a design…"), |ui| {
+    crate::ui::kit::dropdown(ui, Id::unique("canvas-start"), 220.0, t!("Choose a design…"), |ui| {
         for (i, (name, _)) in starters().iter().enumerate() {
             if kit::option(ui, false, crate::i18n::t(name)).clicked() {
                 start = Some(i);
@@ -667,7 +667,7 @@ fn left_panel(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit, icons: &Icons) 
         ui.label("×");
         kit::Number::new(&mut d.height).range(16.0..=4096.0).suffix(" px").width(64.0).show(ui, theme);
     });
-    crate::ui::kit::dropdown(ui, Id::new("canvas-sizes"), 220.0, t!("Common sizes"), |ui| {
+    crate::ui::kit::dropdown(ui, Id::unique("canvas-sizes"), 220.0, t!("Common sizes"), |ui| {
         for (name, w, h) in SIZES {
             if kit::option(ui, d.width == w && d.height == h, crate::i18n::t(name)).clicked() {
                 (d.width, d.height) = (w, h);
@@ -678,7 +678,7 @@ fn left_panel(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit, icons: &Icons) 
     crate::ui::kit::line(ui, |ui| {
         let mut clear = d.background.trim().is_empty();
         if !clear {
-            colour_edit(ui, theme, Id::new("canvas-bg"), &mut d.background);
+            colour_edit(ui, theme, Id::unique("canvas-bg"), &mut d.background);
         }
         if kit::checkbox(ui, theme, &mut clear, t!("See-through")).changed() {
             d.background = if clear { String::new() } else { "#2B2D31".into() };
@@ -943,7 +943,7 @@ fn properties(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit) {
     kit::checkbox(ui, theme, &mut l.locked, t!("Locked: not moved by dragging in the picture"));
     ui.add_space(6.0);
 
-    let id = |k: &str| Id::new(("canvas-prop", i, k.to_string()));
+    let id = |k: &str| Id::unique(("canvas-prop", i, k.to_string()));
     match l.kind.as_str() {
         "text" => {
             label(ui, theme, t!("Text"));

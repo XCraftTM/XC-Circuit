@@ -213,7 +213,7 @@ fn more_button(ui: &mut Ui, theme: &Theme, icons: &Icons, row: Rect, id: Id) -> 
 
 /// The name editor shown in place of a row's label.
 fn rename_box(ui: &mut Ui, area: Rect, state: &mut Renaming) -> Option<bool> {
-    let id = Id::new("sidebar-rename");
+    let id = Id::unique("sidebar-rename");
     let resp = ui.put(area, egui::TextEdit::singleline(&mut state.text).id(id).margin(egui::Margin::symmetric(4, 2)));
     if state.fresh {
         resp.request_focus();
@@ -241,9 +241,9 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
         return;
     };
     let ctx = ui.ctx().clone();
-    let collapsed: Vec<String> = ctx.data_mut(|d| d.get_persisted::<Vec<String>>(Id::new(COLLAPSED_KEY)).unwrap_or_default());
+    let collapsed: Vec<String> = ctx.data_mut(|d| d.get_persisted::<Vec<String>>(Id::unique(COLLAPSED_KEY)).unwrap_or_default());
     let is_open = |key: &str| !collapsed.iter().any(|c| c == key);
-    let mut renaming: Option<Renaming> = ctx.data(|d| d.get_temp(Id::new("sidebar-renaming")));
+    let mut renaming: Option<Renaming> = ctx.data(|d| d.get_temp(Id::unique("sidebar-renaming")));
     let mut todo: Vec<Do> = Vec::new();
 
     // Folders in their saved order, plus any a workspace names that the list lacks.
@@ -279,11 +279,11 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
         ui.add_space(4.0);
 
         // The project: collapses everything; dropping a workspace here takes it out of its folder.
-        let (resp, _) = row(ui, &theme, &icons, Id::new("sidebar-project"), 0, Some(is_open(PROJECT_ROW)), None, &project.meta.name, false, true, 54.0, false);
+        let (resp, _) = row(ui, &theme, &icons, Id::unique("sidebar-project"), 0, Some(is_open(PROJECT_ROW)), None, &project.meta.name, false, true, 54.0, false);
         let buttons = resp.rect;
-        if row_button(ui, &theme, &icons, Rect::from_center_size(pos2(buttons.right() - 16.0, buttons.center().y), vec2(22.0, 22.0)), Id::new("sidebar-new-folder"), "folder-plus", t!("New folder")).clicked() {
+        if row_button(ui, &theme, &icons, Rect::from_center_size(pos2(buttons.right() - 16.0, buttons.center().y), vec2(22.0, 22.0)), Id::unique("sidebar-new-folder"), "folder-plus", t!("New folder")).clicked() {
             todo.push(Do::NewFolder);
-        } else if row_button(ui, &theme, &icons, Rect::from_center_size(pos2(buttons.right() - 40.0, buttons.center().y), vec2(22.0, 22.0)), Id::new("sidebar-new-ws"), "plus", t!("New workspace")).clicked() {
+        } else if row_button(ui, &theme, &icons, Rect::from_center_size(pos2(buttons.right() - 40.0, buttons.center().y), vec2(22.0, 22.0)), Id::unique("sidebar-new-ws"), "plus", t!("New workspace")).clicked() {
             todo.push(Do::NewWorkspace(None));
         } else if resp.clicked() {
             todo.push(Do::Toggle(PROJECT_ROW.into()));
@@ -327,7 +327,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                 };
                 let label = if editing { "" } else { ws.name.as_str() };
                 let room = 32.0 + marks.width();
-                let (resp, label_area) = row(ui, &theme, &icons, Id::new(("sidebar-ws", key)), depth, None, Some("workspace"), label, active.as_deref() == Some(key.as_str()), false, room, ws.disabled);
+                let (resp, label_area) = row(ui, &theme, &icons, Id::unique(("sidebar-ws", key)), depth, None, Some("workspace"), label, active.as_deref() == Some(key.as_str()), false, room, ws.disabled);
                 if !editing {
                     marks.paint(ui, &theme, resp.rect.right() - 34.0, resp.rect.center().y);
                 }
@@ -378,7 +378,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                 {
                     todo.push(Do::Place((*dragged).clone(), ws.folder.clone(), key.clone(), drops_before(ui, resp.rect)));
                 }
-                let more = more_button(ui, &theme, &icons, resp.rect, Id::new(("sidebar-ws-more", key)));
+                let more = more_button(ui, &theme, &icons, resp.rect, Id::unique(("sidebar-ws-more", key)));
                 if resp.double_clicked() {
                     todo.push(Do::StartRename(target.clone(), ws.name.clone()));
                 } else if resp.clicked() {
@@ -452,7 +452,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                 let open = is_open(folder);
                 let inside: Vec<&String> = project.workspaces.iter().filter(|(_, w)| w.folder.as_ref() == Some(folder)).map(|(k, _)| k).collect();
                 let folder_problems: usize = inside.iter().map(|k| problems.get(*k).copied().unwrap_or(0)).sum();
-                let (resp, label_area) = row(ui, &theme, &icons, Id::new(("sidebar-folder", folder)), 1, Some(open), Some("folder"), if editing { "" } else { folder }, false, false, 60.0, false);
+                let (resp, label_area) = row(ui, &theme, &icons, Id::unique(("sidebar-folder", folder)), 1, Some(open), Some("folder"), if editing { "" } else { folder }, false, false, 60.0, false);
                 if !editing {
                     // How many workspaces it holds, and (closed) their problems.
                     let y = resp.rect.center().y;
@@ -469,7 +469,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                         None => {}
                     }
                 } else {
-                    let more = more_button(ui, &theme, &icons, resp.rect, Id::new(("sidebar-folder-more", folder)));
+                    let more = more_button(ui, &theme, &icons, resp.rect, Id::unique(("sidebar-folder-more", folder)));
                     if resp.double_clicked() {
                         todo.push(Do::StartRename(target.clone(), folder.clone()));
                     } else if resp.clicked() {
@@ -551,19 +551,19 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
             ui.painter().hline(line.x_range(), line.top(), Stroke::new(1.0, theme.line));
             ui.add_space(4.0);
             let open = is_open(SLASH_ROW);
-            let (resp, area) = row(ui, &theme, &icons, Id::new("sidebar-slash"), 0, Some(open), None, t!("Slash commands"), false, true, 30.0, false);
+            let (resp, area) = row(ui, &theme, &icons, Id::unique("sidebar-slash"), 0, Some(open), None, t!("Slash commands"), false, true, 30.0, false);
             ui.painter().text(pos2(area.right() - 4.0, area.center().y), Align2::RIGHT_CENTER, commands.len().to_string(), FontId::proportional(11.5), theme.text_muted);
             if resp.clicked() {
                 todo.push(Do::Toggle(SLASH_ROW.into()));
             }
             if open {
                 for name in &commands {
-                    let (resp, _) = row(ui, &theme, &icons, Id::new(("sidebar-cmd", name)), 1, None, Some("slash"), name, false, false, 0.0, false);
+                    let (resp, _) = row(ui, &theme, &icons, Id::unique(("sidebar-cmd", name)), 1, None, Some("slash"), name, false, false, 0.0, false);
                     if resp.on_hover_text(t!("Edit in the Slash Command Builder")).clicked() {
                         todo.push(Do::SlashCommands);
                     }
                 }
-                let (resp, _) = row(ui, &theme, &icons, Id::new("sidebar-cmd-new"), 1, None, Some("plus"), t!("Edit commands…"), false, false, 0.0, false);
+                let (resp, _) = row(ui, &theme, &icons, Id::unique("sidebar-cmd-new"), 1, None, Some("plus"), t!("Edit commands…"), false, false, 0.0, false);
                 if resp.clicked() {
                     todo.push(Do::SlashCommands);
                 }
@@ -575,9 +575,9 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
     apply(ed, &ctx, todo, &mut renaming);
     ctx.data_mut(|d| match renaming {
         Some(r) => {
-            d.insert_temp(Id::new("sidebar-renaming"), r);
+            d.insert_temp(Id::unique("sidebar-renaming"), r);
         }
-        None => d.remove::<Renaming>(Id::new("sidebar-renaming")),
+        None => d.remove::<Renaming>(Id::unique("sidebar-renaming")),
     });
 }
 
@@ -721,7 +721,7 @@ fn apply(ed: &mut Editor, ctx: &egui::Context, todo: Vec<Do>, renaming: &mut Opt
                 ed.edited = true;
             }
             Do::Toggle(key) => ctx.data_mut(|d| {
-                let list = d.get_persisted_mut_or_default::<Vec<String>>(Id::new(COLLAPSED_KEY));
+                let list = d.get_persisted_mut_or_default::<Vec<String>>(Id::unique(COLLAPSED_KEY));
                 match list.iter().position(|c| *c == key) {
                     Some(i) => {
                         list.remove(i);
@@ -742,7 +742,7 @@ fn ws_name(key: &str, ed: &Editor) -> String {
 }
 
 fn uncollapse(ctx: &egui::Context, key: &str) {
-    ctx.data_mut(|d| d.get_persisted_mut_or_default::<Vec<String>>(Id::new(COLLAPSED_KEY)).retain(|c| c != key));
+    ctx.data_mut(|d| d.get_persisted_mut_or_default::<Vec<String>>(Id::unique(COLLAPSED_KEY)).retain(|c| c != key));
 }
 
 #[cfg(test)]
@@ -861,7 +861,7 @@ mod tests {
 
         // Collapsing Events hides Boot; a new folder is added and named in place.
         click(&ctx, &mut ed, row_at(4));
-        let collapsed: Vec<String> = ctx.data_mut(|d| d.get_persisted::<Vec<String>>(Id::new(COLLAPSED_KEY)).unwrap_or_default());
+        let collapsed: Vec<String> = ctx.data_mut(|d| d.get_persisted::<Vec<String>>(Id::unique(COLLAPSED_KEY)).unwrap_or_default());
         assert!(collapsed.contains(&"Events".to_string()));
         click(&ctx, &mut ed, pos2(260.0 - 16.0, row_at(0).y));
         assert_eq!(ed.project.as_ref().unwrap().meta.folders, ["Commands", "Events", "New folder"]);

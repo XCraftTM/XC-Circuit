@@ -398,7 +398,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor, tour: &mut Tour, bot_running: 
 
     // Dim everything else. Paint only: clicks still reach the app.
     let dim = Color32::from_black_alpha(120);
-    let under = ctx.layer_painter(egui::LayerId::new(Order::Middle, egui::Id::new("tour-dim")));
+    let under = ctx.layer_painter(egui::LayerId::new(Order::Middle, egui::Id::unique("tour-dim")));
     match focus {
         Some(t) => {
             let t = t.expand(4.0);
@@ -418,7 +418,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor, tour: &mut Tour, bot_running: 
     // Glows and the hand go over everything, the picker too.
     let time = ctx.input(|i| i.time);
     let pulse = (time * 3.0).sin() as f32 * 0.5 + 0.5;
-    let over = ctx.layer_painter(egui::LayerId::new(Order::Tooltip, egui::Id::new("tour-glow")));
+    let over = ctx.layer_painter(egui::LayerId::new(Order::Tooltip, egui::Id::unique("tour-glow")));
     for g in &glows {
         paint_glow(&over, *g, theme.accent, pulse);
     }
@@ -430,7 +430,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor, tour: &mut Tour, bot_running: 
     }
 
     // The card: next to the picker while it's open, else next to what glows, else the step's area.
-    let card_id = egui::Id::new("tour-card");
+    let card_id = egui::Id::unique("tour-card");
     let card_w = 340.0;
     let size = ctx.memory(|m| m.area_rect(card_id)).map(|r| r.size()).unwrap_or(vec2(card_w, 240.0));
     let beside = picker.or_else(|| glows.iter().map(glow_rect).chain(guide.keep_clear.iter().copied()).reduce(|a, b| a.union(b))).or(focus);

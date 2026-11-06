@@ -333,7 +333,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
                         ui.add_space(8.0);
                         if let Some(jt) = &mut edit.json {
                             let help = t!("The embed as Discord's JSON. Edit it, or paste an embed or a whole message (from an embed generator, say); it applies as soon as it is valid. \"timestamp\": \"now\" shows when it's sent.");
-                            if let Some(v) = json_view::editor(ui, &theme, ui.id().with("embed-json"), jt, help) {
+                            if let Some(v) = json_view::editor(ui, &theme, ui.scope_id().with("embed-json"), jt, help) {
                                 match EmbedData::from_discord(&v) {
                                     Ok(e) => edit.draft = e,
                                     Err(e) => jt.error = Some(e),
@@ -391,7 +391,7 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
     kit::section(ui, theme, t!("Color"));
     ui.horizontal(|ui| {
         let mut c = hex_color(&e.color).unwrap_or(Color32::from_rgb(0, 0xD8, 0xF0));
-        if crate::builders::color::color_button(ui, ui.id().with("embed-color"), &mut c, theme, None) {
+        if crate::builders::color::color_button(ui, ui.scope_id().with("embed-color"), &mut c, theme, None) {
             e.color = crate::builders::color::to_hex(c);
         }
         for preset in ["#00D8F0", "#3DFF6E", "#5865F2", "#FEE75C", "#ED4245", "#EB459E"] {
@@ -483,10 +483,10 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
     ui.horizontal(|ui| {
         ui.set_min_height(crate::ui::kit::input_height(ui));
         // None, when it's sent, or a set time (kept in `time`).
-        let set_id = ui.id().with("set-time");
+        let set_id = ui.scope_id().with("set-time");
         let mut kind = if !e.time.is_empty() || ui.memory(|m| m.data.get_temp::<bool>(set_id).unwrap_or(false)) { 2 } else if e.timestamp { 1 } else { 0 };
         let labels = [t!("None"), t!("When it's sent"), t!("A set time")];
-        crate::ui::kit::dropdown(ui, ui.id().with("timestamp"), 160.0, labels[kind], |ui| {
+        crate::ui::kit::dropdown(ui, ui.scope_id().with("timestamp"), 160.0, labels[kind], |ui| {
             for (i, l) in labels.iter().enumerate() {
                 ui.selectable_value(&mut kind, i, *l);
             }

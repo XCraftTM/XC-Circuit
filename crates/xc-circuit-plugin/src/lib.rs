@@ -348,7 +348,7 @@ mod tests {
     #[test]
     fn fingerprint_lists_versions() {
         let fp = fingerprint();
-        assert!(fp.contains("deps=") && fp.contains("egui@0.36"), "{fp}");
+        assert!(fp.contains("deps=") && fp.contains("egui@0.37"), "{fp}");
         assert!(fp.contains("rustc=rustc "), "{fp}");
         assert_eq!(compare_fingerprints(&fp, &fp), None);
     }

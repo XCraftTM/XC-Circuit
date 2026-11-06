@@ -63,7 +63,7 @@ pub fn paint_icon(ctx: &egui::Context, painter: &egui::Painter, path: &Path, rec
 
 /// Something being dragged, next to the pointer: an icon and a name, as a tab looks.
 pub fn paint_ghost(ctx: &egui::Context, theme: &Theme, icon: Option<&Path>, title: &str, pos: Pos2) {
-    let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, Id::new("dock-ghost")));
+    let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, Id::unique("dock-ghost")));
     let font = egui::TextStyle::Button.resolve(&ctx.global_style());
     let galley = painter.layout_no_wrap(title.to_string(), font, theme.text);
     let mut rect = Rect::from_min_size(pos + vec2(12.0, 8.0), vec2(galley.size().x + 42.0, 28.0));
@@ -81,7 +81,7 @@ pub fn paint_ghost(ctx: &egui::Context, theme: &Theme, icon: Option<&Path>, titl
 
 /// Where a drop would go: the part it would take up lit, or a line where it would go.
 pub fn paint_drop<T>(ctx: &egui::Context, theme: &Theme, drop: &Drop<T>) {
-    let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, Id::new("dock-drop")));
+    let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, Id::unique("dock-drop")));
     if drop.line {
         painter.rect_filled(drop.preview, 1.0, theme.accent);
     } else {
@@ -113,7 +113,7 @@ impl<T: Clone + PartialEq + Hash + std::fmt::Debug> Dock<T> {
         for w in &mut self.windows {
             let frame = egui::Frame::new().fill(theme.panel).stroke(Stroke::new(1.0, theme.line)).corner_radius(8).shadow(ctx.global_style().visuals.popup_shadow);
             let mut window = egui::Window::new("dock-window")
-                .id(Id::new(("dock-window", w.id)))
+                .id(Id::unique(("dock-window", w.id)))
                 .title_bar(false)
                 .collapsible(false)
                 .resizable(true)
@@ -226,7 +226,7 @@ fn node_ui<T: Clone + PartialEq + Hash + std::fmt::Debug, V: DockViewer<T>>(ui: 
     // over it, so pressing on it claims the drag before that content can.
     let grab = if across { line.expand2(vec2(GRAB, 0.0)) } else { line.expand2(vec2(0.0, GRAB)) };
     let cursor = if across { egui::CursorIcon::ResizeHorizontal } else { egui::CursorIcon::ResizeVertical };
-    let id = Id::new(("dock-separator", window, path.as_slice()));
+    let id = Id::unique(("dock-separator", window, path.as_slice()));
     let ctx = ui.ctx().clone();
     let pointer = ctx.pointer_latest_pos().filter(|p| grab.contains(*p) && ui.clip_rect().contains(*p));
     // Not under a window or a menu (in a window: that window on top).
@@ -272,7 +272,7 @@ fn leaf_ui<T: Clone + PartialEq + Hash + std::fmt::Debug, V: DockViewer<T>>(ui: 
     painter.hline(bar.x_range(), bar.bottom() - 0.5, Stroke::new(1.0, t.line));
     // A window moves by the empty part of its tab bar (the tabs come after, on top).
     if let Some(id) = window {
-        let moved = ui.interact(bar, Id::new(("dock-window-bar", id, leaf.tabs.first())), Sense::drag());
+        let moved = ui.interact(bar, Id::unique(("dock-window-bar", id, leaf.tabs.first())), Sense::drag());
         if moved.dragged() {
             p.moves.push((id, moved.drag_delta()));
         }
@@ -312,7 +312,7 @@ fn leaf_ui<T: Clone + PartialEq + Hash + std::fmt::Debug, V: DockViewer<T>>(ui: 
         if visible.width() <= 0.0 {
             continue;
         }
-        let id = Id::new(("dock-tab", tab));
+        let id = Id::unique(("dock-tab", tab));
         let resp = ui.interact(visible, id, Sense::click_and_drag());
         let close = closeable[i].then(|| {
             let c = Rect::from_center_size(pos2(r.right() - 17.0, r.center().y), vec2(18.0, 18.0));

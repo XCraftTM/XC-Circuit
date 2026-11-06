@@ -162,7 +162,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
 
     let searching = !picker.query.trim().is_empty();
     // None shows every kind.
-    let kind_filter: Option<BlockKind> = ctx.data_mut(|d| d.get_persisted::<u8>(egui::Id::new(KIND_KEY))).and_then(|k| match k {
+    let kind_filter: Option<BlockKind> = ctx.data_mut(|d| d.get_persisted::<u8>(egui::Id::unique(KIND_KEY))).and_then(|k| match k {
         1 => Some(BlockKind::Event),
         2 => Some(BlockKind::Action),
         3 => Some(BlockKind::Value),
@@ -209,7 +209,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
     }
     let favorite_ids = ed.prefs.favorite_blocks.clone();
     // Closed categories hide their blocks, except while searching.
-    let collapsed: Vec<String> = ctx.data_mut(|d| d.get_persisted::<Vec<String>>(egui::Id::new(COLLAPSED_KEY)).unwrap_or_default());
+    let collapsed: Vec<String> = ctx.data_mut(|d| d.get_persisted::<Vec<String>>(egui::Id::unique(COLLAPSED_KEY)).unwrap_or_default());
     let category_of = |d: &BlockDef| d.category.clone().unwrap_or_default();
     let cat_at = |i: usize| sections[i].map(str::to_string).unwrap_or_else(|| category_of(list[i].0));
     let shown: Vec<usize> = (0..list.len()).filter(|&i| searching || !collapsed.contains(&cat_at(i))).collect();
@@ -244,7 +244,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
     pos.x = pos.x.min(screen.right() - size.x - 8.0);
     pos.y = pos.y.min(screen.bottom() - size.y - 8.0);
 
-    let area = egui::Area::new(egui::Id::new("block-picker")).order(Order::Foreground).fixed_pos(pos).show(ctx, |ui| {
+    let area = egui::Area::new(egui::Id::unique("block-picker")).order(Order::Foreground).fixed_pos(pos).show(ctx, |ui| {
         Frame::new()
             .fill(theme.panel)
             .stroke(Stroke::new(1.0, theme.node_border))
@@ -353,7 +353,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                                 let starred = favorite_ids.contains(&def.id);
                                 let chip = if starred || resp.hovered() || selected {
                                     let sr = egui::Rect::from_center_size(egui::pos2(chip.left() - 14.0, rect.center().y), vec2(20.0, 20.0));
-                                    let sresp = ui.interact(sr, ui.id().with(("star", i)), egui::Sense::click());
+                                    let sresp = ui.interact(sr, ui.scope_id().with(("star", i)), egui::Sense::click());
                                     let tint = if starred { theme.warning } else if sresp.hovered() { theme.text } else { with_alpha(theme.text_muted, 140) };
                                     if let Some(path) = ed.reg.icons.get(if starred { "star-filled" } else { "star" }) {
                                         egui::Image::from_uri(crate::editor::file_uri(path)).tint(tint).paint_at(ui, sr.shrink(3.0));
@@ -441,7 +441,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
             Some(BlockKind::Action) => 2,
             Some(BlockKind::Value) => 3,
         };
-        ctx.data_mut(|d| d.insert_persisted(egui::Id::new(KIND_KEY), stored));
+        ctx.data_mut(|d| d.insert_persisted(egui::Id::unique(KIND_KEY), stored));
         if let Some(p) = ed.picker.as_mut() {
             p.highlighted = 0;
         }
@@ -457,7 +457,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
     if let Some(fold) = fold {
         let cats: Vec<String> = (0..list.len()).map(cat_at).collect();
         ctx.data_mut(|d| {
-            let closed = d.get_persisted_mut_or_default::<Vec<String>>(egui::Id::new(COLLAPSED_KEY));
+            let closed = d.get_persisted_mut_or_default::<Vec<String>>(egui::Id::unique(COLLAPSED_KEY));
             match fold {
                 Fold::One(cat) if closed.contains(&cat) => closed.retain(|c| *c != cat),
                 Fold::One(cat) => closed.push(cat),
