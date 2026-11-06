@@ -219,6 +219,53 @@ enum Item {
     Row {
         items: Vec<Item>,
     },
+    /// A switch with its text.
+    Toggle {
+        text: String,
+        value: bool,
+        on: Option<usize>,
+    },
+    /// A dropdown: (value, what it shows).
+    Select {
+        value: String,
+        choices: Vec<(String, String)>,
+        on: Option<usize>,
+        #[serde(default = "select_width")]
+        width: f32,
+    },
+    /// A number to type or drag.
+    Number {
+        value: f64,
+        on: Option<usize>,
+        min: Option<f64>,
+        max: Option<f64>,
+        step: Option<f64>,
+        #[serde(default)]
+        suffix: String,
+    },
+    /// A slider with its number.
+    Slider {
+        value: f64,
+        min: f64,
+        max: f64,
+        on: Option<usize>,
+        step: Option<f64>,
+        #[serde(default)]
+        suffix: String,
+    },
+    /// A colour, as #RRGGBB.
+    Color {
+        value: String,
+        on: Option<usize>,
+    },
+    /// A box of text: info, warning or success.
+    Note {
+        text: String,
+        #[serde(default)]
+        title: String,
+        #[serde(default)]
+        tone: String,
+    },
     Section {
         text: String,
         items: Vec<Item>,
@@ -229,6 +276,15 @@ enum Item {
 
 fn yes() -> bool {
     true
+}
+
+fn select_width() -> f32 {
+    200.0
+}
+
+/// The icon set, as the app last published it (for a note's icon).
+fn icon_set(ui: &egui::Ui) -> std::collections::HashMap<String, PathBuf> {
+    ui.ctx().data(|d| d.get_temp(egui::Id::new(crate::ui::kit::KIT_ICONS))).unwrap_or_default()
 }
 
 pub struct ScriptPlugin {
@@ -617,7 +673,8 @@ impl PluginObject for ScriptPlugin {
                     ui.label(RichText::new(t!("Fix the script and save it: the plugin reloads by itself.")).weak());
                     ui.add_space(10.0);
                 }
-                draw(ui, &mut view.items, &self.root, &mut Vec::new(), &mut events);
+                let theme = crate::ui::kit::theme_of(ui);
+                draw(ui, &theme, &mut view.items, &self.root, &mut Vec::new(), &mut events);
             });
         });
         if !events.is_empty() {
@@ -754,7 +811,8 @@ impl PluginObject for ScriptPlugin {
                 if let Some(e) = &view.error {
                     child.add(egui::Label::new(RichText::new(format!("{name}: {e}")).small().color(child.visuals().error_fg_color)).wrap());
                 }
-                draw(&mut child, &mut view.items, &root, &mut Vec::new(), &mut events);
+                let theme = crate::ui::kit::theme_of(&child);
+                draw(&mut child, &theme, &mut view.items, &root, &mut Vec::new(), &mut events);
                 if o.draggable && bg.hovered() {
                     ui.ctx().set_cursor_icon(if bg.dragged() { egui::CursorIcon::Grabbing } else { egui::CursorIcon::Grab });
                 }
@@ -809,19 +867,18 @@ fn stat(ui: &mut egui::Ui, label: &str, value: &str) {
 }
 
 /// Draws a panel's items. Clicks and edits land in `events` as (handler, value).
-fn draw(ui: &mut egui::Ui, items: &mut [Item], root: &Path, path: &mut Vec<usize>, events: &mut Vec<(usize, Value)>) {
+/// Drawn with the UI kit, so a plugin's panel looks like the rest of the app.
+fn draw(ui: &mut egui::Ui, theme: &crate::ui::theme::Theme, items: &mut [Item], root: &Path, path: &mut Vec<usize>, events: &mut Vec<(usize, Value)>) {
+    use crate::ui::kit;
     for (i, item) in items.iter_mut().enumerate() {
         path.push(i);
         let id = ui.id().with(("xc-script-item", path.as_slice()));
         match item {
             Item::Heading { text } => {
-                ui.label(RichText::new(text.as_str()).size(15.0).strong());
+                ui.label(RichText::new(text.as_str()).size(15.0).strong().color(theme.text));
             }
             Item::Text { text, muted, mono, bold, size, color: c } => {
-                let mut rt = RichText::new(text.as_str()).size(size.unwrap_or(12.5));
-                if *muted {
-                    rt = rt.weak();
-                }
+                let mut rt = RichText::new(text.as_str()).size(size.unwrap_or(12.5)).color(if *muted { theme.text_muted } else { theme.text });
                 if *mono {
                     rt = rt.monospace();
                 }
@@ -839,11 +896,7 @@ fn draw(ui: &mut egui::Ui, items: &mut [Item], root: &Path, path: &mut Vec<usize
             }
             Item::Space { size } => ui.add_space(size.clamp(0.0, 200.0)),
             Item::Button { text, on, primary, tooltip } => {
-                let mut b = egui::Button::new(text.as_str());
-                if *primary {
-                    b = b.fill(ui.visuals().selection.bg_fill);
-                }
-                let mut r = ui.add_enabled(on.is_some(), b);
+                let mut r = ui.add_enabled_ui(on.is_some(), |ui| if *primary { kit::primary_button(ui, theme, text.as_str()) } else { kit::button(ui, theme, text.as_str()) }).inner;
                 if let Some(t) = tooltip {
                     r = r.on_hover_text(t.as_str());
                 }
@@ -865,7 +918,7 @@ fn draw(ui: &mut egui::Ui, items: &mut [Item], root: &Path, path: &mut Vec<usize
                 }
             }
             Item::Checkbox { text, value, on } => {
-                if ui.add_enabled(on.is_some(), egui::Checkbox::new(value, text.as_str())).changed()
+                if ui.add_enabled_ui(on.is_some(), |ui| kit::checkbox(ui, theme, value, text.as_str())).inner.changed()
                     && let Some(h) = on
                 {
                     events.push((*h, json!(*value)));
@@ -873,8 +926,15 @@ fn draw(ui: &mut egui::Ui, items: &mut [Item], root: &Path, path: &mut Vec<usize
             }
             Item::Input { value, on, hint, multiline, key } => {
                 let id = key.as_ref().map_or(id, |k| ui.id().with(("xc-script-input", k.as_str())));
-                let edit = if *multiline { egui::TextEdit::multiline(value).desired_rows(4) } else { egui::TextEdit::singleline(value) };
-                let r = ui.add_enabled(on.is_some(), edit.id(id).hint_text(hint.as_str()).desired_width(f32::INFINITY));
+                let r = ui
+                    .add_enabled_ui(on.is_some(), |ui| {
+                        if *multiline {
+                            ui.add(kit::TextArea::new(id, value).hint(hint.as_str()).rows(4))
+                        } else {
+                            ui.push_id(id, |ui| ui.add(kit::TextLine::new(value).hint(hint.as_str()))).inner
+                        }
+                    })
+                    .inner;
                 if r.changed()
                     && let Some(h) = on
                 {
@@ -908,14 +968,59 @@ fn draw(ui: &mut egui::Ui, items: &mut [Item], root: &Path, path: &mut Vec<usize
                     if items.iter().all(|i| matches!(i, Item::Stat { .. })) {
                         ui.spacing_mut().item_spacing.x = 22.0;
                     }
-                    draw(ui, items, root, path, events);
+                    draw(ui, theme, items, root, path, events);
                 });
+            }
+            Item::Toggle { text, value, on } => {
+                let changed = kit::line(ui, |ui| {
+                    let c = ui.add_enabled_ui(on.is_some(), |ui| kit::toggle(ui, value, theme)).inner.changed();
+                    ui.label(RichText::new(text.as_str()).color(theme.text));
+                    c
+                });
+                if changed && let Some(h) = on {
+                    events.push((*h, json!(*value)));
+                }
+            }
+            Item::Select { value, choices, on, width } => {
+                if ui.add_enabled_ui(on.is_some(), |ui| kit::select(ui, id, *width, value, choices)).inner
+                    && let Some(h) = on
+                {
+                    events.push((*h, json!(value)));
+                }
+            }
+            Item::Number { value, on, min, max, step, suffix } => {
+                let mut n = kit::Number::new(value).suffix(suffix.as_str()).speed(step.unwrap_or(1.0));
+                if min.is_some() || max.is_some() {
+                    n = n.range(min.unwrap_or(f64::MIN)..=max.unwrap_or(f64::MAX));
+                }
+                let r = ui.add_enabled_ui(on.is_some(), |ui| n.show(ui, theme)).inner;
+                if r.changed() && let Some(h) = on {
+                    events.push((*h, json!(*value)));
+                }
+            }
+            Item::Slider { value, min, max, on, step, suffix } => {
+                let mut s = kit::Slider::new(value, *min..=(*max).max(*min)).suffix(suffix.as_str());
+                if let Some(st) = step {
+                    s = s.step(*st);
+                }
+                if ui.add_enabled_ui(on.is_some(), |ui| s.show(ui, theme)).inner && let Some(h) = on {
+                    events.push((*h, json!(*value)));
+                }
+            }
+            Item::Color { value, on } => {
+                if ui.add_enabled_ui(on.is_some(), |ui| kit::color(ui, theme, id, value)).inner && let Some(h) = on {
+                    events.push((*h, json!(value)));
+                }
+            }
+            Item::Note { text, title, tone } => {
+                let icons = icon_set(ui);
+                kit::note(ui, &icons, theme, tone, title, text);
             }
             Item::Section { text, items, open } => {
                 // Unindented: egui's indent guide reads as a broken line here.
                 egui::CollapsingHeader::new(RichText::new(text.as_str()).strong()).id_salt(id).default_open(*open).show_unindented(ui, |ui| {
                     ui.add_space(2.0);
-                    draw(ui, items, root, path, events);
+                    draw(ui, theme, items, root, path, events);
                     ui.add_space(6.0);
                 });
             }
@@ -1168,6 +1273,40 @@ mod tests {
         assert!(text.contains("Log: TODO say hi") && text.contains("Ideas, plans"), "{text}");
         p.run_command("demo.log_selection", &mut h).unwrap();
         assert_eq!(h.log.last().unwrap().1, r##"#b Log: {"message":"TODO say hi"}"##);
+    }
+
+    #[test]
+    fn panels_get_the_kit_elements() {
+        // Every kit element a panel can hold builds and draws without an error.
+        let script = "xc.panel({ id: 'p', title: 'P', render(ui) {
+            ui.toggle('On', true, () => {});
+            ui.select('b', { a: 'A', b: 'B' }, () => {});
+            ui.select('x', ['x', ['y', 'Why']], () => {}, { width: 120 });
+            ui.number(5, () => {}, { min: 0, max: 10, step: 0.5, suffix: ' px' });
+            ui.slider(50, 0, 100, () => {}, { suffix: ' %' });
+            ui.color('#00D8F0', () => {});
+            ui.note('Careful', { tone: 'warning', title: 'Heads up' });
+            ui.checkbox('Check', false, () => {});
+            ui.button('Go', () => {}, { primary: true });
+            ui.input('text', () => {}, { placeholder: 'Type' });
+        } });";
+        let dir = plugin_dir(&[("editor.js", script)]);
+        let mut p = load("P", &dir, "editor.js").0.unwrap();
+        let mut h = host();
+        let ctx = egui::Context::default();
+        ctx.run_ui(egui::RawInput::default(), |ui| p.panel_ui("p", ui, &mut h).unwrap()).textures_delta.clear();
+        let view = &p.views["p"];
+        assert!(view.error.is_none(), "{:?}", view.error);
+        let kinds: Vec<&str> = view.items.iter().map(|i| match i {
+            Item::Toggle { .. } => "toggle",
+            Item::Select { choices, .. } if choices.len() == 2 => "select",
+            Item::Number { min: Some(_), .. } => "number",
+            Item::Slider { .. } => "slider",
+            Item::Color { .. } => "color",
+            Item::Note { tone, .. } if tone == "warning" => "note",
+            _ => "other",
+        }).collect();
+        assert_eq!(kinds, ["toggle", "select", "select", "number", "slider", "color", "note", "other", "other", "other"]);
     }
 
     #[test]

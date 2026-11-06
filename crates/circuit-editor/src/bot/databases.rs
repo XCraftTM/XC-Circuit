@@ -11,9 +11,8 @@ use circuit_runner::secrets;
 use eframe::egui::{self, Align, Id, Layout, RichText, Ui, vec2};
 use serde_json::{Map, Value, json};
 
+use crate::ui::kit;
 use crate::editor::Editor;
-use crate::pages::settings::{group, row};
-use crate::ui::dialog;
 use crate::ui::theme::Theme;
 
 /// The page's id among Bot › Settings' pages.
@@ -326,7 +325,7 @@ impl DatabasesDraft {
     pub fn ui(&mut self, ui: &mut Ui, ed: &Editor, theme: &Theme) -> Option<Ask> {
         self.poll();
         let mut ask = None;
-        group(ui, theme, t!("Connections"));
+        kit::group(ui, theme, t!("Connections"));
         if self.list.is_empty() {
             ui.label(RichText::new(t!("No database yet. Add one, then use it with Get Rows, Insert Row, Update Rows, Delete Rows and SQL Query.")).size(12.5).color(theme.text_muted));
             ui.add_space(8.0);
@@ -351,22 +350,22 @@ impl DatabasesDraft {
                 self.store_in = "json".into();
             }
         }
-        if dialog::button(ui, theme, t!("+ Add database")).clicked() {
+        if kit::button(ui, theme, t!("+ Add database")).clicked() {
             self.add();
         }
 
-        group(ui, theme, t!("Defaults"));
+        kit::group(ui, theme, t!("Defaults"));
         let choices: Vec<(String, String)> = self.list.iter().map(|c| (c.id.clone(), c.name.clone())).collect();
         let name_of = |id: &str| choices.iter().find(|(x, _)| x == id).map(|(_, n)| n.clone());
         let none = t!("None").to_string();
         let shown = name_of(&self.default).unwrap_or_else(|| none.clone());
-        row(ui, theme, t!("Default database"), t!("What the database blocks use when their Database is Default."), |ui| {
-            crate::ui::widgets::dropdown(ui, Id::new("db-default"), 200.0, shown, |ui| {
-                if ui.selectable_label(self.default.is_empty(), &none).clicked() {
+        kit::setting_row(ui, theme, t!("Default database"), t!("What the database blocks use when their Database is Default."), |ui| {
+            crate::ui::kit::dropdown(ui, Id::new("db-default"), 200.0, shown, |ui| {
+                if kit::option(ui, self.default.is_empty(), &none).clicked() {
                     self.default.clear();
                 }
                 for (id, name) in &choices {
-                    if ui.selectable_label(self.default == *id, name).clicked() {
+                    if kit::option(ui, self.default == *id, name).clicked() {
                         self.default = id.clone();
                     }
                 }
@@ -374,18 +373,18 @@ impl DatabasesDraft {
         });
         let json_name = t!("JSON file (store.json)").to_string();
         let shown = name_of(&self.store_in).unwrap_or_else(|| json_name.clone());
-        row(
+        kit::setting_row(
             ui,
             theme,
             t!("Keep stored values in"),
             t!("Where Set Stored Value, Get Stored Value and the other stored-data blocks keep their data (in the table xc_store). The first time a database is used, what's in store.json is copied there; store.json stays as it was."),
             |ui| {
-                crate::ui::widgets::dropdown(ui, Id::new("db-store-in"), 200.0, shown, |ui| {
-                    if ui.selectable_label(self.store_in == "json", &json_name).clicked() {
+                crate::ui::kit::dropdown(ui, Id::new("db-store-in"), 200.0, shown, |ui| {
+                    if kit::option(ui, self.store_in == "json", &json_name).clicked() {
                         self.store_in = "json".into();
                     }
                     for (id, name) in &choices {
-                        if ui.selectable_label(self.store_in == *id, name).clicked() {
+                        if kit::option(ui, self.store_in == *id, name).clicked() {
                             self.store_in = id.clone();
                         }
                     }
@@ -415,20 +414,20 @@ fn connection_ui(ui: &mut Ui, ed: &Editor, theme: &Theme, c: &mut Connection, pr
         ui.spacing_mut().item_spacing.y = 6.0;
         let width = ui.available_width();
         // Name, kind and remove.
-        crate::ui::widgets::line(ui, |ui| {
+        crate::ui::kit::line(ui, |ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
-            ui.allocate_ui(vec2((width - 260.0).clamp(120.0, 300.0), 34.0), |ui| dialog::text_input(ui, &mut c.name, t!("Name"), false));
+            ui.allocate_ui(vec2((width - 260.0).clamp(120.0, 300.0), 34.0), |ui| kit::text_input(ui, &mut c.name, t!("Name"), false));
             let kind = KINDS.iter().find(|(k, _)| *k == c.kind).map(|(_, n)| *n).unwrap_or("?");
-            crate::ui::widgets::dropdown(ui, Id::new(("db-kind", c.id.as_str())), 170.0, kind, |ui| {
+            crate::ui::kit::dropdown(ui, Id::new(("db-kind", c.id.as_str())), 170.0, kind, |ui| {
                 for (k, name) in KINDS {
-                    if ui.selectable_label(c.kind == k, name).clicked() && c.kind != k {
+                    if kit::option(ui, c.kind == k, name).clicked() && c.kind != k {
                         c.kind = k.into();
                         c.test = None;
                     }
                 }
             });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if dialog::icon_button(ui, theme, icon("trash"), "×", t!("Remove this database")).clicked() {
+                if kit::icon_button(ui, theme, icon("trash"), "×", t!("Remove this database")).clicked() {
                     action = Some(Action::Remove);
                 }
             });
@@ -439,31 +438,31 @@ fn connection_ui(ui: &mut Ui, ed: &Editor, theme: &Theme, c: &mut Connection, pr
         let field = |ui: &mut Ui, label: &str, value: &mut String, hint: &str, w: f32| {
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 2.0;
-                ui.label(RichText::new(label).size(11.5).color(theme.text_muted));
-                ui.allocate_ui(vec2(w, 34.0), |ui| dialog::text_input(ui, value, hint, false));
+                kit::hint(ui, theme, label);
+                ui.allocate_ui(vec2(w, 34.0), |ui| kit::text_input(ui, value, hint, false));
             });
         };
         let inner = width.min(520.0);
         if c.kind == "sqlite" {
             field(ui, t!("File"), &mut c.file, "bot.sqlite", inner);
-            ui.label(RichText::new(t!("In the bot's data folder, or a full path. Made when it's first used.")).size(11.5).color(theme.text_muted));
+            kit::hint(ui, theme, t!("In the bot's data folder, or a full path. Made when it's first used."));
         } else {
-            crate::ui::widgets::line(ui, |ui| {
+            crate::ui::kit::line(ui, |ui| {
                 field(ui, t!("Host"), &mut c.host, "localhost", inner - 110.0);
                 field(ui, t!("Port"), &mut c.port, default_port(&c.kind), 96.0);
             });
-            crate::ui::widgets::line(ui, |ui| {
+            crate::ui::kit::line(ui, |ui| {
                 field(ui, t!("User"), &mut c.user, "", (inner - 8.0) / 2.0);
                 ui.vertical(|ui| {
                     ui.spacing_mut().item_spacing.y = 2.0;
-                    ui.label(RichText::new(t!("Password")).size(11.5).color(theme.text_muted));
+                    kit::hint(ui, theme, t!("Password"));
                     secret_ui(ui, ed, theme, &mut c.password, (inner - 8.0) / 2.0, ("db-pw", &c.id));
                 });
             });
             field(ui, t!("Database name"), &mut c.database, if c.kind == "postgres" { "postgres" } else { "" }, inner);
             if c.kind != "mongodb" {
-                crate::ui::widgets::line(ui, |ui| {
-                    crate::ui::widgets::toggle(ui, &mut c.ssl, theme);
+                crate::ui::kit::line(ui, |ui| {
+                    crate::ui::kit::toggle(ui, &mut c.ssl, theme);
                     ui.label(RichText::new(t!("Use SSL/TLS (for databases on the internet)")).size(12.5).color(theme.text));
                 });
             }
@@ -472,14 +471,14 @@ fn connection_ui(ui: &mut Ui, ed: &Editor, theme: &Theme, c: &mut Connection, pr
                 "mongodb" => "mongodb+srv://… (MongoDB Atlas)",
                 _ => "mysql://user:password@host:3306/name",
             };
-            ui.label(RichText::new(tf!("Or a connection URL, used instead of the boxes above: {example}", example = example)).size(11.5).color(theme.text_muted));
+            kit::hint(ui, theme, tf!("Or a connection URL, used instead of the boxes above: {example}", example = example));
             secret_ui(ui, ed, theme, &mut c.url, inner, ("db-url", &c.id));
         }
         // Test, and what it found.
         ui.add_space(2.0);
         ui.horizontal_wrapped(|ui| {
             let running = matches!(c.test, Some(Test::Running(_)));
-            if ui.add_enabled_ui(!running, |ui| dialog::button(ui, theme, t!("Test connection"))).inner.clicked() {
+            if ui.add_enabled_ui(!running, |ui| kit::button(ui, theme, t!("Test connection"))).inner.clicked() {
                 action = Some(Action::Test);
             }
             match &c.test {
@@ -488,7 +487,7 @@ fn connection_ui(ui: &mut Ui, ed: &Editor, theme: &Theme, c: &mut Connection, pr
                     ui.label(RichText::new(t!("Connecting … (the first time, its npm package is installed)")).size(12.0).color(theme.text_muted));
                 }
                 Some(Test::Done(Ok(r))) if r.ok => {
-                    crate::ui::widgets::done_label(ui, RichText::new(found(r)).size(12.0), theme.action);
+                    crate::ui::kit::done_label(ui, RichText::new(found(r)).size(12.0), theme.action);
                 }
                 Some(Test::Done(Ok(r))) => {
                     ui.label(RichText::new(r.error.clone().unwrap_or_default()).size(12.0).color(theme.error));
@@ -521,15 +520,15 @@ fn found(r: &TestResult) -> String {
 fn secret_ui(ui: &mut Ui, ed: &Editor, theme: &Theme, s: &mut Secret, width: f32, id: (&str, &str)) {
     let icon = |name: &str| ed.reg.icons.get(name).map(|p| p.as_path());
     ui.push_id(id, |ui| {
-        crate::ui::widgets::line(ui, |ui| {
+        crate::ui::kit::line(ui, |ui| {
             ui.spacing_mut().item_spacing.x = 6.0;
             let hint = if s.saved && !s.remove { t!("•••••••• saved · type to replace") } else { "" };
-            ui.allocate_ui(vec2((width - 80.0).max(80.0), 34.0), |ui| dialog::text_input(ui, &mut s.value, hint, !s.reveal));
+            ui.allocate_ui(vec2((width - 80.0).max(80.0), 34.0), |ui| kit::text_input(ui, &mut s.value, hint, !s.reveal));
             let (eye, tip) = if s.reveal { (icon("eye-off"), t!("Hide")) } else { (icon("eye"), t!("Show what you typed")) };
-            if dialog::icon_button(ui, theme, eye, if s.reveal { t!("Hide") } else { "Show" }, tip).clicked() {
+            if kit::icon_button(ui, theme, eye, if s.reveal { t!("Hide") } else { "Show" }, tip).clicked() {
                 s.reveal = !s.reveal;
             }
-            if s.saved && dialog::icon_button(ui, theme, icon(if s.remove { "check" } else { "x" }), "×", if s.remove { t!("Keep it") } else { t!("Remove saved value") }).clicked() {
+            if s.saved && kit::icon_button(ui, theme, icon(if s.remove { "check" } else { "x" }), "×", if s.remove { t!("Keep it") } else { t!("Remove saved value") }).clicked() {
                 s.remove = !s.remove;
             }
         });

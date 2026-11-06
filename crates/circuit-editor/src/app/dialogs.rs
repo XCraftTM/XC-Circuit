@@ -1,5 +1,6 @@
 //! Dialogs over the editor: crash reports, recovering unsaved changes, updates, shortcuts, the new project chooser and the rest.
 
+use crate::ui::kit;
 use super::*;
 
 impl CircuitApp {
@@ -24,9 +25,9 @@ impl CircuitApp {
                     ui.label(RichText::new(t!("Report on GitHub opens a bug report with this filled in; you can read and change everything before sending it. Please attach the crash log too.")).size(12.0).color(theme.text_muted));
                 }
                 dialog::Part::Footer => {
-                    report = dialog::primary_button(ui, &theme, t!("Report on GitHub")).clicked();
-                    open_log = dialog::secondary_button(ui, &theme, t!("Show crash log")).clicked();
-                    later = dialog::secondary_button(ui, &theme, t!("Not now")).clicked();
+                    report = kit::primary_button(ui, &theme, t!("Report on GitHub")).clicked();
+                    open_log = kit::secondary_button(ui, &theme, t!("Show crash log")).clicked();
+                    later = kit::secondary_button(ui, &theme, t!("Not now")).clicked();
                 }
             },
         );
@@ -78,8 +79,8 @@ impl CircuitApp {
                     ui.label(RichText::new(t!("Bring them back as unsaved changes, then save to keep them.")).size(12.5).color(theme.text_muted));
                 }
                 dialog::Part::Footer => {
-                    restore = dialog::primary_button(ui, theme, t!("Bring them back")).clicked();
-                    discard = dialog::secondary_button(ui, theme, t!("Discard")).clicked();
+                    restore = kit::primary_button(ui, theme, t!("Bring them back")).clicked();
+                    discard = kit::secondary_button(ui, theme, t!("Discard")).clicked();
                 }
             },
         );
@@ -126,8 +127,8 @@ impl CircuitApp {
                 }
                 dialog::Part::Footer => {
                     let label = if installing { t!("Updating…") } else { t!("Update") };
-                    update = ui.add_enabled_ui(!installing, |ui| dialog::primary_button(ui, &theme, label)).inner.clicked();
-                    later = dialog::secondary_button(ui, &theme, t!("Later")).clicked();
+                    update = ui.add_enabled_ui(!installing, |ui| kit::primary_button(ui, &theme, label)).inner.clicked();
+                    later = kit::secondary_button(ui, &theme, t!("Later")).clicked();
                 }
             },
         );
@@ -159,7 +160,7 @@ impl CircuitApp {
             },
             |ui, part| match part {
                 dialog::Part::Body => {
-                    dialog::section(ui, &theme, t!("What's new"));
+                    kit::section(ui, &theme, t!("What's new"));
                     egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
                         if r.notes.trim().is_empty() {
                             ui.label(RichText::new(t!("The release has no notes.")).size(12.5).color(theme.text_muted));
@@ -175,12 +176,12 @@ impl CircuitApp {
                             None => t!("Update and restart").to_string(),
                         };
                         let tip = tf!("Downloads {size} MB and installs it when XC Circuit closes, then opens it again. You're asked about unsaved changes first.", size = (a.size as f64 / 1e6).round());
-                        update = ui.add_enabled_ui(progress.is_none(), |ui| dialog::primary_button(ui, &theme, &label)).inner.on_hover_text(tip).clicked();
+                        update = ui.add_enabled_ui(progress.is_none(), |ui| kit::primary_button(ui, &theme, &label)).inner.on_hover_text(tip).clicked();
                     } else {
-                        download = dialog::primary_button(ui, &theme, t!("Download")).on_hover_text(&r.url).clicked();
+                        download = kit::primary_button(ui, &theme, t!("Download")).on_hover_text(&r.url).clicked();
                     }
-                    later = dialog::secondary_button(ui, &theme, t!("Later")).clicked();
-                    skip = dialog::secondary_button(ui, &theme, t!("Skip this version")).on_hover_text(t!("Not mentioned at start any more; Help › Check for Updates still finds it")).clicked();
+                    later = kit::secondary_button(ui, &theme, t!("Later")).clicked();
+                    skip = kit::secondary_button(ui, &theme, t!("Skip this version")).on_hover_text(t!("Not mentioned at start any more; Help › Check for Updates still finds it")).clicked();
                 }
             },
         );
@@ -299,7 +300,7 @@ impl CircuitApp {
                             ui.add_space(10.0);
                             ui.label(RichText::new(t!("Build bots by connecting blocks.")).size(13.5).color(theme.text));
                             ui.add_space(4.0);
-                            ui.label(RichText::new(&info).size(11.5).color(theme.text_muted));
+                            kit::hint(ui, &theme, &info);
                             ui.add_space(12.0);
                             ui.label(RichText::new(tf!("Made by {name}", name = CREATOR)).size(13.0).color(theme.text));
                             ui.add_space(4.0);
@@ -314,10 +315,10 @@ impl CircuitApp {
                                 }
                             });
                             ui.add_space(10.0);
-                            ui.label(RichText::new(t!("Designed and directed by XCraftTM, built with AI assistance (Claude).")).size(11.5).color(theme.text_muted));
+                            kit::hint(ui, &theme, t!("Designed and directed by XCraftTM, built with AI assistance (Claude)."));
                             ui.hyperlink_to(RichText::new(t!("How XC Circuit is made")).size(11.5).color(theme.accent), "https://xcrafttm.github.io/XC-Circuit/made-with-ai");
                             ui.add_space(6.0);
-                            ui.label(RichText::new(t!("Copyright © 2026 XCraftTM. All rights reserved.")).size(11.5).color(theme.text_muted));
+                            kit::hint(ui, &theme, t!("Copyright © 2026 XCraftTM. All rights reserved."));
                             ui.horizontal(|ui| {
                                 let licence = t!("Licence");
                                 let notices = t!("Third-party licences");
@@ -333,7 +334,7 @@ impl CircuitApp {
                             ui.add_space(6.0);
                         });
                     }
-                    dialog::Part::Footer => ok = dialog::primary_button(ui, &theme, t!("Close")).clicked(),
+                    dialog::Part::Footer => ok = kit::primary_button(ui, &theme, t!("Close")).clicked(),
                 },
             );
             if ok || close {
@@ -358,9 +359,9 @@ impl CircuitApp {
                         }
                     }
                     dialog::Part::Footer => {
-                        save = dialog::primary_button(ui, &theme, t!("Save and close")).clicked();
-                        discard = dialog::secondary_button(ui, &theme, t!("Don't save")).clicked();
-                        cancel = dialog::secondary_button(ui, &theme, t!("Cancel")).clicked();
+                        save = kit::primary_button(ui, &theme, t!("Save and close")).clicked();
+                        discard = kit::secondary_button(ui, &theme, t!("Don't save")).clicked();
+                        cancel = kit::secondary_button(ui, &theme, t!("Cancel")).clicked();
                     }
                 },
             );

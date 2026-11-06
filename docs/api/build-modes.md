@@ -105,7 +105,7 @@ Secrets other than the token reach an exported bot through `.env` as `XC_SECRET_
 
 ### Elements
 
-Besides texts, secrets, choices, switches and numbers, a page can hold these. XC Circuit draws them with its own controls, so a plugin's page looks like the rest of the app, in every theme.
+Besides texts, secrets, choices, switches and numbers, a page can hold these. XC Circuit draws them with its UI kit, the same buttons, fields, sliders and colours its own pages use, so a plugin's page looks and behaves like the rest of the app, in every theme.
 
 | `type` | What it is | Its own keys | The value a bot gets |
 | --- | --- | --- | --- |

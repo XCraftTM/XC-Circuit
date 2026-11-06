@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use eframe::egui::{self, RichText, Ui, vec2};
 use serde::{Deserialize, Serialize};
 
-use crate::ui::dialog;
+use crate::ui::kit;
 use crate::i18n::n;
 use crate::ui::theme::Theme;
 
@@ -69,16 +69,16 @@ pub fn editor(ui: &mut Ui, theme: &Theme, id: egui::Id, map: &mut BTreeMap<Strin
     let mut rows: Vec<(String, Localized)> = map.clone().into_iter().collect();
     let mut changed = false;
     let mut remove = None;
-    let h = crate::ui::inputs::input_height(ui);
+    let h = crate::ui::kit::input_height(ui);
     let width = ui.available_width();
     for (i, (code, text)) in rows.iter_mut().enumerate() {
         ui.horizontal(|ui| {
             ui.set_min_height(h);
             let taken: Vec<String> = map.keys().filter(|k| *k != code).cloned().collect();
-            crate::ui::widgets::dropdown(ui, id.with(("locale", i)), 180.0, locale_label(code), |ui| {
+            crate::ui::kit::dropdown(ui, id.with(("locale", i)), 180.0, locale_label(code), |ui| {
                 egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
                     for (c, _) in DISCORD_LOCALES.iter().filter(|(c, _)| !taken.iter().any(|t| t == c)) {
-                        if ui.selectable_label(code == c, locale_label(c)).clicked() && code != c {
+                        if kit::option(ui, code == c, locale_label(c)).clicked() && code != c {
                             *code = c.to_string();
                             changed = true;
                         }
@@ -87,11 +87,11 @@ pub fn editor(ui: &mut Ui, theme: &Theme, id: egui::Id, map: &mut BTreeMap<Strin
             });
             let rest = (width - 180.0 - 110.0).max(160.0);
             let name_w = if description { (rest * 0.4).floor() } else { rest };
-            changed |= ui.add(crate::ui::inputs::TextLine::new(&mut text.name).hint(t!("Name")).width(name_w)).changed();
+            changed |= ui.add(crate::ui::kit::TextLine::new(&mut text.name).hint(t!("Name")).width(name_w)).changed();
             if description {
-                changed |= ui.add(crate::ui::inputs::TextLine::new(&mut text.description).hint(t!("Description")).width(rest - name_w - 8.0)).changed();
+                changed |= ui.add(crate::ui::kit::TextLine::new(&mut text.description).hint(t!("Description")).width(rest - name_w - 8.0)).changed();
             }
-            if dialog::danger_button(ui, theme, t!("Remove")).clicked() {
+            if kit::danger_button(ui, theme, t!("Remove")).clicked() {
                 remove = Some(i);
             }
         });
@@ -103,13 +103,13 @@ pub fn editor(ui: &mut Ui, theme: &Theme, id: egui::Id, map: &mut BTreeMap<Strin
     let free = DISCORD_LOCALES.iter().map(|(c, _)| *c).find(|c| !rows.iter().any(|(r, _)| r == c));
     ui.horizontal(|ui| {
         if let Some(code) = free
-            && dialog::button(ui, theme, t!("+ Add language")).clicked()
+            && kit::button(ui, theme, t!("+ Add language")).clicked()
         {
             rows.push((code.to_string(), Localized::default()));
             changed = true;
         }
         if rows.is_empty() {
-            ui.label(RichText::new(t!("People whose Discord is set to another language see these instead.")).size(11.5).color(theme.text_muted));
+            kit::hint(ui, theme, t!("People whose Discord is set to another language see these instead."));
         }
     });
     ui.add_space(4.0);

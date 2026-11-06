@@ -11,6 +11,7 @@ use std::path::Path;
 use eframe::egui::{self, Color32, CornerRadius, FontId, Frame, Margin, RichText, ScrollArea, Stroke, Ui, vec2};
 use serde_json::{Value, json};
 
+use crate::ui::kit;
 use crate::ui::dialog::{self, Part};
 use crate::editor::Editor;
 use crate::i18n::n;
@@ -358,11 +359,11 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
                     ui.allocate_ui_with_layout(vec2(620.0, h), egui::Layout::top_down(egui::Align::Min), |ui| form(ui, &theme, edit));
                     ui.add_space(16.0);
                     ui.vertical(|ui| {
-                        dialog::section(ui, &theme, t!("Preview"));
+                        kit::section(ui, &theme, t!("Preview"));
                         let h = (dialog::remaining_height(ui, 300.0) * 0.55).max(200.0);
                         ScrollArea::vertical().id_salt("layout-preview").max_height(h).auto_shrink([false, true]).show(ui, |ui| preview(ui, &theme, &edit.draft, bot.as_ref()));
                         ui.add_space(10.0);
-                        dialog::section(ui, &theme, t!("Values from earlier blocks"));
+                        kit::section(ui, &theme, t!("Values from earlier blocks"));
                         ScrollArea::vertical().id_salt("layout-values").max_height(dialog::remaining_height(ui, 140.0)).auto_shrink([false, true]).show(ui, |ui| crate::editor::values::list(ui, &theme, &values));
                     });
                 });
@@ -370,12 +371,12 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
             Part::Footer => {
                 let broken = edit.json.as_ref().is_some_and(|j| j.error.is_some());
                 ui.add_enabled_ui(!broken, |ui| {
-                    if dialog::primary_button(ui, &theme, t!("Apply and close")).clicked() {
+                    if kit::primary_button(ui, &theme, t!("Apply and close")).clicked() {
                         (apply, close) = (true, true);
                     }
-                    apply |= dialog::secondary_button(ui, &theme, t!("Apply")).on_hover_text(t!("Put it on the block and keep editing")).clicked();
+                    apply |= kit::secondary_button(ui, &theme, t!("Apply")).on_hover_text(t!("Put it on the block and keep editing")).clicked();
                 });
-                cancel = dialog::secondary_button(ui, &theme, t!("Cancel")).clicked();
+                cancel = kit::secondary_button(ui, &theme, t!("Cancel")).clicked();
                 if broken {
                     ui.label(RichText::new(t!("Fix the JSON first")).size(12.0).color(theme.warning));
                 }
@@ -454,14 +455,14 @@ fn list_editor(ui: &mut Ui, theme: &Theme, list: &mut Vec<Value>, top: bool, nex
     if let Some(i) = remove {
         list.remove(i);
     }
-    let resp = dialog::button(ui, theme, if top { t!("+ Add to the message") } else { t!("+ Add to the container") });
+    let resp = kit::button(ui, theme, if top { t!("+ Add to the message") } else { t!("+ Add to the container") });
     egui::Popup::menu(&resp).id(ui.id().with("add-menu")).show(|ui| {
         ui.set_min_width(260.0);
         for (what, label) in ADDABLE {
             if what == "container" && !top {
                 continue;
             }
-            if ui.button(crate::i18n::t(label)).clicked() {
+            if kit::menu_item(ui, crate::i18n::t(label), None, true).clicked() {
                 list.push(new_component(what, next));
             }
         }
@@ -475,16 +476,16 @@ fn card(ui: &mut Ui, theme: &Theme, title: &str, i: usize, len: usize, remove: &
     Frame::new().fill(fill).stroke(Stroke::new(1.0, theme.line)).corner_radius(9).inner_margin(Margin::same(10)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.horizontal(|ui| {
-            ui.set_min_height(crate::ui::inputs::input_height(ui));
+            ui.set_min_height(crate::ui::kit::input_height(ui));
             ui.label(RichText::new(title).strong().color(theme.text));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if dialog::danger_button(ui, theme, t!("Remove")).clicked() {
+                if kit::danger_button(ui, theme, t!("Remove")).clicked() {
                     *remove = Some(i);
                 }
-                if ui.add_enabled_ui(i + 1 < len, |ui| dialog::button(ui, theme, t!("Down"))).inner.clicked() {
+                if ui.add_enabled_ui(i + 1 < len, |ui| kit::button(ui, theme, t!("Down"))).inner.clicked() {
                     *swap = Some((i, i + 1));
                 }
-                if ui.add_enabled_ui(i > 0, |ui| dialog::button(ui, theme, t!("Up"))).inner.clicked() {
+                if ui.add_enabled_ui(i > 0, |ui| kit::button(ui, theme, t!("Up"))).inner.clicked() {
                     *swap = Some((i, i - 1));
                 }
             });
@@ -508,7 +509,7 @@ fn body(ui: &mut Ui, theme: &Theme, c: &mut Value, next: usize) {
                     ui.horizontal_top(|ui| {
                         let w = ui.available_width() - if many { 46.0 } else { 0.0 };
                         ui.allocate_ui(vec2(w, 10.0), |ui| text_area(ui, t, "content", t!("Text")));
-                        if many && dialog::danger_button(ui, theme, "×").on_hover_text(t!("Remove this text")).clicked() {
+                        if many && kit::danger_button(ui, theme, "×").on_hover_text(t!("Remove this text")).clicked() {
                             remove = Some(i);
                         }
                     });
@@ -517,20 +518,20 @@ fn body(ui: &mut Ui, theme: &Theme, c: &mut Value, next: usize) {
             if let Some(i) = remove {
                 texts.remove(i);
             }
-            if texts.len() < 3 && dialog::button(ui, theme, t!("+ Add text")).clicked() {
+            if texts.len() < 3 && kit::button(ui, theme, t!("+ Add text")).clicked() {
                 texts.push(json!({ "type": kind::TEXT, "content": "More text" }));
             }
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                ui.set_min_height(crate::ui::inputs::input_height(ui));
+                ui.set_min_height(crate::ui::kit::input_height(ui));
                 ui.label(RichText::new(t!("Next to the text")).color(theme.text));
                 let is_button = c.get("accessory").is_some_and(|a| ty(a) == kind::BUTTON);
                 let current = if is_button { t!("A button") } else { t!("A picture") };
-                crate::ui::widgets::dropdown(ui, ui.id().with("accessory"), 140.0, current, |ui| {
-                    if ui.selectable_label(!is_button, t!("A picture")).clicked() && is_button {
+                crate::ui::kit::dropdown(ui, ui.id().with("accessory"), 140.0, current, |ui| {
+                    if kit::option(ui, !is_button, t!("A picture")).clicked() && is_button {
                         c["accessory"] = json!({ "type": kind::THUMBNAIL, "media": { "url": "${avatar}" } });
                     }
-                    if ui.selectable_label(is_button, t!("A button")).clicked() && !is_button {
+                    if kit::option(ui, is_button, t!("A button")).clicked() && !is_button {
                         c["accessory"] = new_button(next);
                     }
                 });
@@ -547,10 +548,10 @@ fn body(ui: &mut Ui, theme: &Theme, c: &mut Value, next: usize) {
         }
         kind::CONTAINER => {
             ui.horizontal(|ui| {
-                ui.set_min_height(crate::ui::inputs::input_height(ui));
+                ui.set_min_height(crate::ui::kit::input_height(ui));
                 let mut on = c.get("accent_color").is_some_and(|v| !v.is_null());
                 ui.label(RichText::new(t!("Accent color")).color(theme.text));
-                if crate::ui::widgets::toggle(ui, &mut on, theme).changed() {
+                if crate::ui::kit::toggle(ui, &mut on, theme).changed() {
                     if on {
                         c["accent_color"] = json!(0x00D8F0);
                     } else if let Some(m) = c.as_object_mut() {
@@ -577,7 +578,7 @@ fn body(ui: &mut Ui, theme: &Theme, c: &mut Value, next: usize) {
                     Frame::new().stroke(Stroke::new(1.0, theme.line)).corner_radius(7).inner_margin(8).show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         media_editor(ui, theme, item, true);
-                        if dialog::danger_button(ui, theme, t!("Remove picture")).clicked() {
+                        if kit::danger_button(ui, theme, t!("Remove picture")).clicked() {
                             remove = Some(i);
                         }
                     });
@@ -587,7 +588,7 @@ fn body(ui: &mut Ui, theme: &Theme, c: &mut Value, next: usize) {
             if let Some(i) = remove {
                 items.remove(i);
             }
-            if items.len() < 10 && dialog::button(ui, theme, t!("+ Add picture")).clicked() {
+            if items.len() < 10 && kit::button(ui, theme, t!("+ Add picture")).clicked() {
                 items.push(json!({ "media": { "url": "https://" } }));
             }
         }
@@ -595,21 +596,21 @@ fn body(ui: &mut Ui, theme: &Theme, c: &mut Value, next: usize) {
             let file = object_mut(c, "file");
             line(ui, file, "url", t!("attachment://report.pdf, a web address or a file path"), t!("File"));
             ui.horizontal(|ui| flag(ui, theme, c, "spoiler", t!("Spoiler")));
-            ui.label(RichText::new(t!("Web addresses and file paths are attached when the message is sent.")).size(11.5).color(theme.text_muted));
+            kit::hint(ui, theme, t!("Web addresses and file paths are attached when the message is sent."));
         }
         kind::SEPARATOR => {
             ui.horizontal(|ui| {
-                ui.set_min_height(crate::ui::inputs::input_height(ui));
+                ui.set_min_height(crate::ui::kit::input_height(ui));
                 let mut divider = c.get("divider").and_then(Value::as_bool).unwrap_or(true);
                 ui.label(RichText::new(t!("Line")).color(theme.text));
-                if crate::ui::widgets::toggle(ui, &mut divider, theme).changed() {
+                if crate::ui::kit::toggle(ui, &mut divider, theme).changed() {
                     c["divider"] = json!(divider);
                 }
                 ui.add_space(12.0);
                 ui.label(RichText::new(t!("Space")).color(theme.text));
                 let mut spacing = c.get("spacing").and_then(Value::as_u64).unwrap_or(1);
                 let labels = [t!("Small"), t!("Large")];
-                crate::ui::widgets::dropdown(ui, ui.id().with("spacing"), 110.0, labels[(spacing == 2) as usize], |ui| {
+                crate::ui::kit::dropdown(ui, ui.id().with("spacing"), 110.0, labels[(spacing == 2) as usize], |ui| {
                     ui.selectable_value(&mut spacing, 1, labels[0]);
                     ui.selectable_value(&mut spacing, 2, labels[1]);
                 });
@@ -628,7 +629,7 @@ fn body(ui: &mut Ui, theme: &Theme, c: &mut Value, next: usize) {
                     Frame::new().stroke(Stroke::new(1.0, theme.line)).corner_radius(7).inner_margin(8).show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         button_editor(ui, theme, b);
-                        if dialog::danger_button(ui, theme, t!("Remove button")).clicked() {
+                        if kit::danger_button(ui, theme, t!("Remove button")).clicked() {
                             remove = Some(i);
                         }
                     });
@@ -638,7 +639,7 @@ fn body(ui: &mut Ui, theme: &Theme, c: &mut Value, next: usize) {
             if let Some(i) = remove {
                 children.remove(i);
             }
-            if children.len() < 5 && dialog::button(ui, theme, t!("+ Add button")).clicked() {
+            if children.len() < 5 && kit::button(ui, theme, t!("+ Add button")).clicked() {
                 children.push(new_button(next + children.len()));
             }
         }
@@ -650,7 +651,7 @@ fn body(ui: &mut Ui, theme: &Theme, c: &mut Value, next: usize) {
 
 /// The name in front of a row's control, in a column of its own.
 fn label_column(ui: &mut Ui, label: egui::Label) {
-    let h = crate::ui::inputs::input_height(ui);
+    let h = crate::ui::kit::input_height(ui);
     ui.allocate_ui_with_layout(vec2(110.0, h), egui::Layout::left_to_right(egui::Align::Center), |ui| {
         ui.set_min_width(110.0);
         ui.add(label.truncate());
@@ -660,11 +661,11 @@ fn label_column(ui: &mut Ui, label: egui::Label) {
 /// A text box for a string under `key`; an empty one removes the key.
 fn line(ui: &mut Ui, v: &mut Value, key: &str, hint: &str, label: &str) {
     ui.horizontal(|ui| {
-        ui.set_min_height(crate::ui::inputs::input_height(ui));
+        ui.set_min_height(crate::ui::kit::input_height(ui));
         label_column(ui, egui::Label::new(RichText::new(label).size(12.5)));
         let mut text = text_of(v, key).to_string();
         let w = ui.available_width();
-        if ui.add(crate::ui::inputs::TextLine::new(&mut text).hint(hint).width(w)).changed() {
+        if ui.add(crate::ui::kit::TextLine::new(&mut text).hint(hint).width(w)).changed() {
             set_text(v, key, text);
         }
     });
@@ -682,7 +683,7 @@ fn set_text(v: &mut Value, key: &str, text: String) {
 
 fn text_area(ui: &mut Ui, v: &mut Value, key: &str, hint: &str) {
     let mut text = text_of(v, key).to_string();
-    if ui.add(crate::ui::inputs::TextArea::new(ui.id().with(key), &mut text).hint(hint).rows(3)).changed() {
+    if ui.add(crate::ui::kit::TextArea::new(ui.id().with(key), &mut text).hint(hint).rows(3)).changed() {
         v[key] = json!(text);
     }
 }
@@ -691,7 +692,7 @@ fn text_area(ui: &mut Ui, v: &mut Value, key: &str, hint: &str) {
 fn flag(ui: &mut Ui, theme: &Theme, v: &mut Value, key: &str, label: &str) {
     let mut on = v.get(key).and_then(Value::as_bool).unwrap_or(false);
     ui.label(RichText::new(label).color(theme.text));
-    if crate::ui::widgets::toggle(ui, &mut on, theme).changed() {
+    if crate::ui::kit::toggle(ui, &mut on, theme).changed() {
         if on {
             v[key] = json!(true);
         } else if let Some(m) = v.as_object_mut() {
@@ -713,11 +714,11 @@ fn media_editor(ui: &mut Ui, theme: &Theme, v: &mut Value, spoiler: bool) {
 fn button_editor(ui: &mut Ui, theme: &Theme, b: &mut Value) {
     let style = b.get("style").and_then(Value::as_u64).unwrap_or(1);
     ui.horizontal(|ui| {
-        ui.set_min_height(crate::ui::inputs::input_height(ui));
+        ui.set_min_height(crate::ui::kit::input_height(ui));
         label_column(ui, egui::Label::new(RichText::new(t!("Style")).size(12.5)));
         let current = BUTTON_STYLES.iter().find(|s| s.0 == style).map(|s| crate::i18n::t(s.1)).unwrap_or(t!("Blurple"));
         let mut picked = style;
-        crate::ui::widgets::dropdown(ui, ui.id().with("style"), 210.0, current, |ui| {
+        crate::ui::kit::dropdown(ui, ui.id().with("style"), 210.0, current, |ui| {
             for (s, l) in BUTTON_STYLES {
                 ui.selectable_value(&mut picked, s, crate::i18n::t(l));
             }
@@ -765,11 +766,11 @@ fn picked_style(b: &Value) -> u64 {
 
 fn emoji_line(ui: &mut Ui, v: &mut Value) {
     ui.horizontal(|ui| {
-        ui.set_min_height(crate::ui::inputs::input_height(ui));
+        ui.set_min_height(crate::ui::kit::input_height(ui));
         label_column(ui, egui::Label::new(RichText::new(t!("Emoji")).size(12.5)));
         let mut text = emoji_text(v.get("emoji"));
         let w = ui.available_width();
-        if ui.add(crate::ui::inputs::TextLine::new(&mut text).hint("👍 or <:name:id>").width(w)).changed() {
+        if ui.add(crate::ui::kit::TextLine::new(&mut text).hint("👍 or <:name:id>").width(w)).changed() {
             match parse_emoji(&text) {
                 Some(e) => v["emoji"] = e,
                 None => {
@@ -783,7 +784,7 @@ fn emoji_line(ui: &mut Ui, v: &mut Value) {
 fn number(ui: &mut Ui, v: &mut Value, key: &str, label: &str) {
     let mut text = v.get(key).and_then(Value::as_u64).map(|n| n.to_string()).unwrap_or_default();
     ui.label(RichText::new(label).size(12.5));
-    if ui.add(crate::ui::inputs::TextLine::new(&mut text).hint("1").width(60.0)).changed() {
+    if ui.add(crate::ui::kit::TextLine::new(&mut text).hint("1").width(60.0)).changed() {
         match text.trim().parse::<u64>() {
             Ok(n) => v[key] = json!(n),
             Err(_) => {
@@ -796,11 +797,11 @@ fn number(ui: &mut Ui, v: &mut Value, key: &str, label: &str) {
 fn select_editor(ui: &mut Ui, theme: &Theme, sel: &mut Value) {
     let current = ty(sel);
     ui.horizontal(|ui| {
-        ui.set_min_height(crate::ui::inputs::input_height(ui));
+        ui.set_min_height(crate::ui::kit::input_height(ui));
         label_column(ui, egui::Label::new(RichText::new(t!("Choose from")).size(12.5)));
         let label = SELECT_KINDS.iter().find(|k| k.0 == current).map(|k| crate::i18n::t(k.1)).unwrap_or_default();
         let mut picked = current;
-        crate::ui::widgets::dropdown(ui, ui.id().with("select-kind"), 180.0, label, |ui| {
+        crate::ui::kit::dropdown(ui, ui.id().with("select-kind"), 180.0, label, |ui| {
             for (k, l) in SELECT_KINDS {
                 ui.selectable_value(&mut picked, k, crate::i18n::t(l));
             }
@@ -824,7 +825,7 @@ fn select_editor(ui: &mut Ui, theme: &Theme, sel: &mut Value) {
     line(ui, sel, "custom_id", t!("Select Menu Used matches this"), t!("Custom id"));
     line(ui, sel, "placeholder", t!("Shown before anything is picked"), t!("Placeholder"));
     ui.horizontal(|ui| {
-        ui.set_min_height(crate::ui::inputs::input_height(ui));
+        ui.set_min_height(crate::ui::kit::input_height(ui));
         label_column(ui, egui::Label::new(RichText::new(t!("How many")).size(12.5)));
         number(ui, sel, "min_values", t!("At least"));
         number(ui, sel, "max_values", t!("At most"));
@@ -844,7 +845,7 @@ fn select_editor(ui: &mut Ui, theme: &Theme, sel: &mut Value) {
                         ui.horizontal(|ui| {
                             flag(ui, theme, o, "default", t!("Picked at first"));
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if dialog::danger_button(ui, theme, t!("Remove option")).clicked() {
+                                if kit::danger_button(ui, theme, t!("Remove option")).clicked() {
                                     remove = Some(i);
                                 }
                             });
@@ -856,7 +857,7 @@ fn select_editor(ui: &mut Ui, theme: &Theme, sel: &mut Value) {
             if let Some(i) = remove {
                 options.remove(i);
             }
-            if options.len() < 25 && dialog::button(ui, theme, t!("+ Add option")).clicked() {
+            if options.len() < 25 && kit::button(ui, theme, t!("+ Add option")).clicked() {
                 let n = options.len() + 1;
                 options.push(json!({ "label": format!("Option {n}"), "value": format!("option{n}") }));
             }
@@ -864,11 +865,11 @@ fn select_editor(ui: &mut Ui, theme: &Theme, sel: &mut Value) {
         t => {
             if t == 8 {
                 ui.horizontal(|ui| {
-                    ui.set_min_height(crate::ui::inputs::input_height(ui));
+                    ui.set_min_height(crate::ui::kit::input_height(ui));
                     label_column(ui, egui::Label::new(RichText::new(t!("Channel kinds")).size(12.5)));
                     let types = list_mut(sel, "channel_types");
                     let mut picked: Vec<u64> = types.iter().filter_map(Value::as_u64).collect();
-                    if crate::ui::widgets::multi_select(ui, ui.id().with("channel-kinds"), 220.0, &CHANNEL_TYPES, &mut picked, t!("Every kind")) {
+                    if crate::ui::kit::multi_select(ui, theme, ui.id().with("channel-kinds"), 220.0, &CHANNEL_TYPES, &mut picked, t!("Every kind")) {
                         *types = picked.into_iter().map(|n| json!(n)).collect();
                     }
                 });
@@ -882,10 +883,10 @@ fn select_editor(ui: &mut Ui, theme: &Theme, sel: &mut Value) {
                 };
                 let mut ids = list_of(sel, "default_values").iter().map(|d| text_of(d, "id").to_string()).collect::<Vec<_>>().join(", ");
                 ui.horizontal(|ui| {
-                    ui.set_min_height(crate::ui::inputs::input_height(ui));
+                    ui.set_min_height(crate::ui::kit::input_height(ui));
                     label_column(ui, egui::Label::new(RichText::new(t!("Picked at first")).size(12.5)));
                     let w = ui.available_width();
-                    if ui.add(crate::ui::inputs::TextLine::new(&mut ids).hint(t!("Ids, separated by commas")).width(w)).changed() {
+                    if ui.add(crate::ui::kit::TextLine::new(&mut ids).hint(t!("Ids, separated by commas")).width(w)).changed() {
                         let list: Vec<Value> = ids.split(',').map(str::trim).filter(|s| !s.is_empty()).map(|id| json!({ "id": id, "type": what })).collect();
                         if list.is_empty() {
                             sel.as_object_mut().unwrap().remove("default_values");

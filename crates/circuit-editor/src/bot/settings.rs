@@ -11,9 +11,9 @@ use serde_json::Value;
 
 use super::BotUi;
 use super::databases::{self, DatabasesDraft};
+use crate::ui::kit;
 use crate::editor::{Editor, Level};
-use crate::pages::settings::{NAV_W, group, nav_item, row};
-use crate::ui::dialog;
+use crate::pages::settings::NAV_W;
 use crate::ui::theme::Theme;
 
 /// The page of privileged intents, shown for build modes that have them.
@@ -375,14 +375,14 @@ impl BotUi {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     ui.spacing_mut().item_spacing.x = 8.0;
                     ui.add_enabled_ui(problems == 0, |ui| {
-                        if dialog::primary_button(ui, &theme, t!("Save and close")).clicked() {
+                        if kit::primary_button(ui, &theme, t!("Save and close")).clicked() {
                             (save, close) = (true, true);
                         }
-                        if dialog::secondary_button(ui, &theme, t!("Save")).clicked() {
+                        if kit::secondary_button(ui, &theme, t!("Save")).clicked() {
                             save = true;
                         }
                     });
-                    cancel = dialog::secondary_button(ui, &theme, t!("Cancel")).clicked();
+                    cancel = kit::secondary_button(ui, &theme, t!("Cancel")).clicked();
                     if problems > 0 {
                         ui.label(RichText::new(tf!("{count} to fix", count = problems)).size(12.0).color(theme.warning));
                     }
@@ -413,7 +413,7 @@ impl BotUi {
                     None
                 };
                 let icon = p.icon.as_deref().and_then(|i| ed.reg.icons.get(i)).map(|p| p.as_path());
-                let resp = nav_item(&mut nav_ui, &theme, icon, &p.name, draft.page == p.id, badge);
+                let resp = kit::nav_item(&mut nav_ui, &theme, icon, &p.name, draft.page == p.id, badge);
                 let resp = if bad > 0 {
                     resp.on_hover_text(tf!("{count} to fix", count = bad))
                 } else if missing > 0 {
@@ -456,7 +456,7 @@ impl BotUi {
                     let shown = draft.page.clone();
                     for f in draft.fields.iter_mut().filter(|f| f.page == shown) {
                         if f.group.is_some() && f.group != heading {
-                            group(ui, &theme, f.group.as_deref().unwrap_or_default());
+                            kit::group(ui, &theme, f.group.as_deref().unwrap_or_default());
                         }
                         heading = f.group.clone();
                         setting_ui(ui, ed, &theme, f, root.as_deref());
@@ -543,27 +543,17 @@ fn intents_page(ui: &mut Ui, theme: &Theme, intents: &[(String, Vec<String>)], p
     ui.label(RichText::new(text).size(12.5).color(theme.text_muted));
     ui.add_space(8.0);
     for (intent, blocks) in intents {
-        card(ui, theme, |ui| {
+        kit::setting_card(ui, theme, |ui| {
             ui.label(RichText::new(intent).size(13.5).color(theme.text));
-            ui.label(RichText::new(tf!("for {blocks}", blocks = blocks.join(", "))).size(11.5).color(theme.text_muted));
+            kit::hint(ui, theme, tf!("for {blocks}", blocks = blocks.join(", ")));
         });
     }
     if let Some(page) = portal {
         ui.add_space(4.0);
-        if dialog::button(ui, theme, t!("Open the developer portal")).on_hover_text(page).clicked() {
+        if kit::button(ui, theme, t!("Open the developer portal")).on_hover_text(page).clicked() {
             let _ = open::that(page);
         }
     }
-}
-
-/// A setting's box: its name, description and control stacked.
-fn card(ui: &mut Ui, theme: &Theme, add: impl FnOnce(&mut Ui)) {
-    Frame::new().fill(theme.panel_header).stroke(Stroke::new(1.0, theme.line)).corner_radius(8).inner_margin(Margin::symmetric(16, 12)).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        ui.spacing_mut().item_spacing.y = 3.0;
-        add(ui);
-    });
-    ui.add_space(8.0);
 }
 
 /// One setting, drawn by its kind: texts and secrets in a box with the
@@ -572,127 +562,77 @@ fn setting_ui(ui: &mut Ui, ed: &Editor, theme: &Theme, f: &mut SettingField, roo
     let label = if f.required { format!("{} *", f.label) } else { f.label.clone() };
     let description = f.description.clone().unwrap_or_default();
     match f.kind.clone() {
-        Kind::Boolean => row(ui, theme, &label, &description, |ui| {
-            crate::ui::widgets::toggle(ui, &mut f.on, theme);
+        Kind::Boolean => kit::setting_row(ui, theme, &label, &description, |ui| {
+            crate::ui::kit::toggle(ui, &mut f.on, theme);
         }),
         Kind::Select(choices) => {
-            let shown = choices.iter().find(|(v, _)| *v == f.value).map(|(_, l)| l.clone()).unwrap_or_else(|| if f.value.is_empty() { f.placeholder.clone() } else { f.value.clone() });
-            row(ui, theme, &label, &description, |ui| {
-                crate::ui::widgets::dropdown(ui, Id::new(("bot-setting", f.key.as_str())), 200.0, shown, |ui| {
-                    for (value, name) in &choices {
-                        if ui.selectable_label(f.value == *value, name).clicked() {
-                            f.value = value.clone();
-                        }
-                    }
-                });
+            kit::setting_row(ui, theme, &label, &description, |ui| {
+                kit::select(ui, ("bot-setting", f.key.as_str()), 200.0, &mut f.value, &choices);
             });
         }
         Kind::Number { .. } => {
-            row(ui, theme, &label, &description, |ui| {
-                ui.allocate_ui(vec2(120.0, 34.0), |ui| dialog::text_input(ui, &mut f.value, &f.placeholder, false));
+            kit::setting_row(ui, theme, &label, &description, |ui| {
+                ui.allocate_ui(vec2(120.0, kit::control_height(ui)), |ui| kit::text_input(ui, &mut f.value, &f.placeholder, false));
             });
             if let Some(p) = f.problem() {
                 ui.add_space(-4.0);
-                ui.label(RichText::new(p).size(11.5).color(theme.error));
+                kit::problem_text(ui, theme, Some(p));
                 ui.add_space(6.0);
             }
         }
-        Kind::Textarea { rows } => card(ui, theme, |ui| {
-            title(ui, theme, &label, &description);
-            ui.add(crate::ui::inputs::TextArea::new(("bot-setting", f.key.as_str()), &mut f.value).hint(f.placeholder.clone()).rows(rows));
-            problem(ui, theme, f.problem());
+        Kind::Textarea { rows } => kit::setting_card(ui, theme, |ui| {
+            kit::setting_title(ui, theme, &label, &description);
+            ui.add(crate::ui::kit::TextArea::new(("bot-setting", f.key.as_str()), &mut f.value).hint(f.placeholder.clone()).rows(rows));
+            kit::problem_text(ui, theme, f.problem());
         }),
         Kind::Color => {
-            row(ui, theme, &label, &description, |ui| {
-                let mut c = crate::ui::theme::hex_color(f.value.trim()).unwrap_or(egui::Color32::WHITE);
-                if crate::builders::color::color_button(ui, Id::new(("bot-setting", f.key.as_str())), &mut c, theme, Some(120.0)) {
-                    f.value = crate::builders::color::to_hex(c);
-                }
+            kit::setting_row(ui, theme, &label, &description, |ui| {
+                kit::color(ui, theme, ("bot-setting", f.key.as_str()), &mut f.value);
             });
         }
         Kind::Slider { min, max, step, suffix } => {
-            row(ui, theme, &label, &description, |ui| {
-                // The slider, and its number to type, side by side.
-                // In a line of their own: the row lays its controls out from the right.
-                crate::ui::widgets::line(ui, |ui| {
-                    let mut v = f.value.trim().parse::<f64>().unwrap_or(min).clamp(min, max);
-                    let mut slider = egui::Slider::new(&mut v, min..=max).show_value(false);
-                    if let Some(s) = step {
-                        slider = slider.step_by(s);
-                    }
-                    let slid = ui.add(slider).changed();
-                    let number = egui::DragValue::new(&mut v).range(min..=max).suffix(suffix).speed(step.unwrap_or(1.0));
-                    if ui.add(number).changed() || slid {
-                        f.value = if v.fract() == 0.0 { format!("{}", v as i64) } else { format!("{v}") };
-                    }
-                });
+            kit::setting_row(ui, theme, &label, &description, |ui| {
+                let mut v = f.value.trim().parse::<f64>().unwrap_or(min).clamp(min, max);
+                let mut slider = kit::Slider::new(&mut v, min..=max).suffix(suffix);
+                if let Some(s) = step {
+                    slider = slider.step(s);
+                }
+                if slider.show(ui, theme) {
+                    f.value = if v.fract() == 0.0 { format!("{}", v as i64) } else { format!("{v}") };
+                }
             });
         }
-        Kind::List => card(ui, theme, |ui| {
-            title(ui, theme, &label, &description);
+        Kind::List => kit::setting_card(ui, theme, |ui| {
+            kit::setting_title(ui, theme, &label, &description);
             let width = ui.available_width().min(460.0);
-            let SettingField { items, placeholder, key, .. } = f;
-            // A row just added gets the cursor.
-            let focus_id = Id::new(("bot-setting-list-new", key.as_str()));
-            let focus: Option<usize> = ui.data_mut(|d| d.remove_temp(focus_id));
-            let mut remove = None;
-            for (i, item) in items.iter_mut().enumerate() {
-                crate::ui::widgets::line(ui, |ui| {
-                    ui.spacing_mut().item_spacing.x = 6.0;
-                    let input = ui.allocate_ui(vec2(width - 46.0, 34.0), |ui| dialog::text_input(ui, item, placeholder, false)).inner;
-                    if focus == Some(i) {
-                        input.request_focus();
-                    }
-                    if dialog::icon_button(ui, theme, ed.reg.icons.get("trash").map(|p| p.as_path()), "×", t!("Remove")).clicked() {
-                        remove = Some(i);
-                    }
-                });
-            }
-            if let Some(i) = remove {
-                items.remove(i);
-            }
-            if dialog::button(ui, theme, t!("+ Add")).clicked() {
-                items.push(String::new());
-                ui.data_mut(|d| d.insert_temp(focus_id, items.len() - 1));
-            }
+            kit::text_list(ui, theme, &ed.reg.icons, ("bot-setting", f.key.as_str()), &mut f.items, &f.placeholder, width);
         }),
-        Kind::Path { folder } => card(ui, theme, |ui| {
-            title(ui, theme, &label, &description);
+        Kind::Path { folder } => kit::setting_card(ui, theme, |ui| {
+            kit::setting_title(ui, theme, &label, &description);
             let width = ui.available_width().min(460.0);
-            let mut browse = false;
-            ui.allocate_ui(vec2(width, 34.0), |ui| {
-                crate::ui::widgets::field_with_button(ui, |ui| {
-                    dialog::text_input(ui, &mut f.value, &f.placeholder, false);
-                }, |ui| browse = dialog::secondary_button(ui, theme, t!("Browse…")).clicked());
-            });
-            if browse {
-                let picker = rfd::FileDialog::new();
-                if let Some(path) = if folder { picker.pick_folder() } else { picker.pick_file() } {
-                    f.value = path.display().to_string();
-                }
-            }
-            problem(ui, theme, f.problem());
+            kit::path(ui, theme, &mut f.value, &f.placeholder, folder, width);
+            kit::problem_text(ui, theme, f.problem());
         }),
-        Kind::Note { tone } => note(ui, ed, theme, &tone, &f.label, &description),
+        Kind::Note { tone } => kit::note(ui, &ed.reg.icons, theme, &tone, &f.label, &description),
         Kind::Link { url, button } => {
-            row(ui, theme, &label, &description, |ui| {
+            kit::setting_row(ui, theme, &label, &description, |ui| {
                 // Only web pages: a plugin's link opens nothing else.
                 let web = url.starts_with("https://") || url.starts_with("http://");
-                let b = ui.add_enabled_ui(web, |ui| dialog::button(ui, theme, button.as_str())).inner;
+                let b = ui.add_enabled_ui(web, |ui| kit::button(ui, theme, button.as_str())).inner;
                 if b.on_hover_text(&url).clicked() {
                     ui.ctx().open_url(egui::OpenUrl::new_tab(&url));
                 }
             });
         }
-        Kind::Text | Kind::Secret => card(ui, theme, |ui| {
+        Kind::Text | Kind::Secret => kit::setting_card(ui, theme, |ui| {
             ui.label(RichText::new(&label).size(13.5).color(theme.text));
             if !description.is_empty() {
-                ui.label(RichText::new(&description).size(11.5).color(theme.text_muted));
+                kit::hint(ui, theme, &description);
             }
             ui.add_space(5.0);
             let width = ui.available_width().min(460.0);
             if !f.masked {
-                ui.allocate_ui(vec2(width, 34.0), |ui| dialog::text_input(ui, &mut f.value, &f.placeholder, false));
+                ui.allocate_ui(vec2(width, 34.0), |ui| kit::text_input(ui, &mut f.value, &f.placeholder, false));
             } else {
                 secret_input(ui, ed, theme, f, root, width);
             }
@@ -706,67 +646,20 @@ fn setting_ui(ui: &mut Ui, ed: &Editor, theme: &Theme, f: &mut SettingField, roo
             ui.add_space(4.0);
             ui.horizontal(|ui| {
                 if f.remove {
-                    dialog::pill(ui, t!("Will be removed"), theme.error);
+                    kit::pill(ui, t!("Will be removed"), theme.error);
                 } else if f.saved {
-                    dialog::pill(ui, t!("Saved"), theme.action);
+                    kit::pill(ui, t!("Saved"), theme.action);
                 } else {
-                    dialog::pill(ui, t!("Not set"), if f.required { theme.warning } else { theme.text_muted });
+                    kit::pill(ui, t!("Not set"), if f.required { theme.warning } else { theme.text_muted });
                 }
-                if f.saved && dialog::button(ui, theme, if f.remove { t!("Keep it") } else { t!("Remove saved value") }).clicked() {
+                if f.saved && kit::button(ui, theme, if f.remove { t!("Keep it") } else { t!("Remove saved value") }).clicked() {
                     f.remove = !f.remove;
                 }
             });
             let store = if cfg!(windows) { t!("Windows Credential Manager") } else { t!("the system keyring") };
-            ui.label(RichText::new(tf!("Kept in {store}, never in project files.", store = store)).size(11.5).color(theme.text_muted));
+            kit::hint(ui, theme, tf!("Kept in {store}, never in project files.", store = store));
         }),
     }
-}
-
-/// A setting's name and description, above its control.
-fn title(ui: &mut Ui, theme: &Theme, label: &str, description: &str) {
-    ui.label(RichText::new(label).size(13.5).color(theme.text));
-    if !description.is_empty() {
-        ui.label(RichText::new(description).size(11.5).color(theme.text_muted));
-    }
-    ui.add_space(5.0);
-}
-
-/// What's wrong with a value, under it.
-fn problem(ui: &mut Ui, theme: &Theme, problem: Option<String>) {
-    if let Some(p) = problem {
-        ui.add_space(2.0);
-        ui.label(RichText::new(p).size(11.5).color(theme.error));
-    }
-}
-
-/// A box of text in a colour for its `tone`: info, warning or success.
-fn note(ui: &mut Ui, ed: &Editor, theme: &Theme, tone: &str, title: &str, text: &str) {
-    use crate::ui::theme::with_alpha;
-    let (color, icon) = match tone {
-        "warning" => (theme.warning, "alert"),
-        "success" => (theme.action, "check"),
-        _ => (theme.accent, "info"),
-    };
-    Frame::new().fill(with_alpha(color, 22)).stroke(Stroke::new(1.0, with_alpha(color, 90))).corner_radius(8).inner_margin(Margin::symmetric(14, 11)).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        ui.horizontal_top(|ui| {
-            ui.spacing_mut().item_spacing.x = 10.0;
-            let (r, _) = ui.allocate_exact_size(vec2(18.0, 18.0), egui::Sense::hover());
-            if let Some(path) = ed.reg.icons.get(icon) {
-                egui::Image::from_uri(crate::editor::file_uri(path)).tint(color).paint_at(ui, r);
-            }
-            ui.vertical(|ui| {
-                ui.spacing_mut().item_spacing.y = 2.0;
-                if !title.is_empty() {
-                    ui.label(RichText::new(title).size(13.5).strong().color(theme.text));
-                }
-                if !text.is_empty() {
-                    ui.label(RichText::new(text).size(12.5).color(theme.text));
-                }
-            });
-        });
-    });
-    ui.add_space(8.0);
 }
 
 /// A hidden text with buttons to show it and to copy it (or the saved one) without showing it.
@@ -776,17 +669,17 @@ fn secret_input(ui: &mut Ui, ed: &Editor, theme: &Theme, f: &mut SettingField, r
         ui.spacing_mut().item_spacing.x = 6.0;
         let hint = if f.saved && !f.remove { t!("•••••••• saved · type to replace") } else { f.placeholder.as_str() };
         ui.allocate_ui(vec2(width - 80.0, 34.0), |ui| {
-            dialog::text_input(ui, &mut f.value, hint, !f.reveal);
+            kit::text_input(ui, &mut f.value, hint, !f.reveal);
         });
         let (eye, tip) = if f.reveal { (icon("eye-off"), t!("Hide")) } else { (icon("eye"), t!("Show what you typed")) };
-        if dialog::icon_button(ui, theme, eye, if f.reveal { t!("Hide") } else { "Show" }, tip).clicked() {
+        if kit::icon_button(ui, theme, eye, if f.reveal { t!("Hide") } else { "Show" }, tip).clicked() {
             f.reveal = !f.reveal;
         }
         let saved_value = || if f.kind == Kind::Secret && f.saved { root.and_then(|r| secrets::get(r, &f.key)) } else { None };
         let can_copy = !f.value.is_empty() || (f.saved && !f.remove);
         let copied = f.copied.is_some_and(|t| t.elapsed() < COPIED_FOR);
         let (copy, tip) = if copied { (icon("check"), t!("Copied")) } else { (icon("copy"), t!("Copy without showing it")) };
-        if ui.add_enabled_ui(can_copy, |ui| dialog::icon_button(ui, theme, copy, "Copy", tip)).inner.clicked() {
+        if ui.add_enabled_ui(can_copy, |ui| kit::icon_button(ui, theme, copy, "Copy", tip)).inner.clicked() {
             let value = if f.value.is_empty() { saved_value() } else { Some(f.value.trim().to_string()) };
             if let Some(v) = value {
                 ui.ctx().copy_text(v);

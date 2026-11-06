@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use circuit_plugins::Registry;
 use eframe::egui::{self, Align, Color32, CursorIcon, Layout, RichText, Sense, Stroke, Ui, vec2};
 
-use crate::ui::dialog;
+use crate::ui::kit;
 use crate::ui::theme::{Theme, with_alpha};
 
 /// What was picked on the page.
@@ -79,10 +79,10 @@ pub fn show(ui: &mut Ui, theme: &Theme, state: &mut StartPage, recent: &[String]
                     ui.vertical(|ui| {
                         ui.set_width(220.0);
                         ui.spacing_mut().item_spacing.y = 8.0;
-                        dialog::section(ui, theme, t!("Start"));
+                        kit::section(ui, theme, t!("Start"));
                         let wide = |ui: &mut Ui, primary: bool, text: &str| {
-                            ui.allocate_ui_with_layout(vec2(220.0, crate::ui::inputs::input_height(ui)), Layout::top_down_justified(Align::Min), |ui| {
-                                if primary { dialog::primary_button(ui, theme, text) } else { dialog::secondary_button(ui, theme, text) }
+                            ui.allocate_ui_with_layout(vec2(220.0, crate::ui::kit::input_height(ui)), Layout::top_down_justified(Align::Min), |ui| {
+                                if primary { kit::primary_button(ui, theme, text) } else { kit::secondary_button(ui, theme, text) }
                             })
                             .inner
                         };
@@ -100,7 +100,7 @@ pub fn show(ui: &mut Ui, theme: &Theme, state: &mut StartPage, recent: &[String]
                     // What was open lately.
                     ui.vertical(|ui| {
                         ui.set_width(ui.available_width());
-                        dialog::section(ui, theme, t!("Recent projects"));
+                        kit::section(ui, theme, t!("Recent projects"));
                         if state.entries.is_empty() {
                             ui.add_space(6.0);
                             ui.label(RichText::new(t!("Projects you open show up here.")).size(12.5).color(theme.text_muted));

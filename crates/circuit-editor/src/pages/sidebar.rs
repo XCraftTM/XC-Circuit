@@ -10,6 +10,7 @@ use circuit_core::Workspace;
 use eframe::egui::{self, Align2, Color32, CursorIcon, FontId, Id, Key, Rect, Response, RichText, ScrollArea, Sense, Stroke, Ui, pos2, vec2};
 use serde_json::Value;
 
+use crate::ui::kit;
 use crate::editor::{Action, Editor, file_uri};
 use crate::ui::theme::{Theme, with_alpha};
 
@@ -75,10 +76,7 @@ impl Icons {
 /// A menu entry with its icon.
 fn item(ui: &mut Ui, theme: &Theme, icons: &Icons, icon: &str, text: impl Into<egui::WidgetText>, danger: bool) -> Response {
     let tint = if danger { theme.error } else { theme.text_muted };
-    match icons.paths.get(icon) {
-        Some(p) => ui.add(egui::Button::image_and_text(egui::Image::from_uri(file_uri(p)).fit_to_exact_size(vec2(14.0, 14.0)).tint(tint), text)),
-        None => ui.button(text),
-    }
+    kit::menu_icon_item(ui, icons.paths.get(icon).map(|p| p.as_path()), tint, text)
 }
 
 /// A small rounded label drawn right-aligned at `right`; gives where it starts.
@@ -373,12 +371,12 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                     }
                     let folder_icon = icons.paths.get("folder").map(|p| egui::Image::from_uri(file_uri(p)).fit_to_exact_size(vec2(14.0, 14.0)).tint(theme.text_muted));
                     let moves = |ui: &mut Ui| {
-                        if ws.folder.is_some() && ui.button(t!("No folder")).clicked() {
+                        if ws.folder.is_some() && kit::menu_item(ui, t!("No folder"), None, true).clicked() {
                             todo.push(Do::Move(key.clone(), None));
                             ui.close();
                         }
                         for f in &folders {
-                            if ws.folder.as_ref() != Some(f) && ui.button(f).clicked() {
+                            if ws.folder.as_ref() != Some(f) && kit::menu_item(ui, f, None, true).clicked() {
                                 todo.push(Do::Move(key.clone(), Some(f.clone())));
                                 ui.close();
                             }

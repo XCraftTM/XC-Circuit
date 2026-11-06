@@ -8,6 +8,7 @@ use circuit_core::Project;
 use circuit_plugins::Registry;
 use eframe::egui::{self, CursorIcon, Margin, RichText, Sense, Stroke, Ui, vec2};
 
+use crate::ui::kit;
 use crate::i18n::n;
 use crate::ui::dialog;
 use crate::editor::file_uri;
@@ -140,11 +141,11 @@ pub fn show(ctx: &egui::Context, theme: &Theme, state: &mut NewProject, reg: &Re
             }
             dialog::Part::Footer => {
                 ui.add_enabled_ui(target.is_ok(), |ui| {
-                    if dialog::primary_button(ui, theme, t!("Create")).clicked() {
+                    if kit::primary_button(ui, theme, t!("Create")).clicked() {
                         outcome = create(state, templates, &target);
                     }
                 });
-                if dialog::secondary_button(ui, theme, t!("Cancel")).clicked() {
+                if kit::secondary_button(ui, theme, t!("Cancel")).clicked() {
                     outcome = Some(Outcome::Cancel);
                 }
             }
@@ -170,7 +171,7 @@ fn sidebar(ui: &mut Ui, theme: &Theme, state: &mut NewProject, reg: &Registry) -
         ui.set_width(width);
         let top = ui.cursor().top();
         ui.spacing_mut().item_spacing.y = 2.0;
-        dialog::section(ui, theme, t!("Type"));
+        kit::section(ui, theme, t!("Type"));
         for mode in &reg.modes {
             let on = state.mode == mode.id;
             let (rect, resp) = ui.allocate_exact_size(vec2(width, 32.0), Sense::click());
@@ -204,12 +205,12 @@ fn form(ui: &mut Ui, theme: &Theme, state: &mut NewProject, reg: &Registry, temp
         ui.label(RichText::new(crate::i18n::tr(&mode.description)).size(12.0).color(theme.text_muted));
         ui.add_space(8.0);
     }
-    dialog::field(ui, theme, t!("Name"), None, |ui| dialog::text_input(ui, &mut state.name, "", false));
-    dialog::field(ui, theme, t!("Location"), None, |ui| {
+    kit::field(ui, theme, t!("Name"), None, |ui| kit::text_input(ui, &mut state.name, "", false));
+    kit::field(ui, theme, t!("Location"), None, |ui| {
         let mut browse = false;
-        crate::ui::widgets::field_with_button(ui, |ui| {
-            dialog::text_input(ui, &mut state.location, "", false);
-        }, |ui| browse = dialog::secondary_button(ui, theme, t!("Browse…")).clicked());
+        crate::ui::kit::field_with_button(ui, |ui| {
+            kit::text_input(ui, &mut state.location, "", false);
+        }, |ui| browse = kit::secondary_button(ui, theme, t!("Browse…")).clicked());
         if browse {
             let mut picker = rfd::FileDialog::new().set_title(t!("Where the project goes"));
             if Path::new(&state.location).is_dir() {
@@ -221,12 +222,12 @@ fn form(ui: &mut Ui, theme: &Theme, state: &mut NewProject, reg: &Registry, temp
         }
     });
     match target {
-        Ok(dir) => ui.label(RichText::new(tf!("Created in {path}", path = dir.display())).size(11.5).color(theme.text_muted)),
+        Ok(dir) => kit::hint(ui, theme, tf!("Created in {path}", path = dir.display())),
         Err(why) => ui.label(RichText::new(why).size(11.5).color(theme.warning)),
     };
     ui.add_space(10.0);
 
-    dialog::section(ui, theme, t!("Start from"));
+    kit::section(ui, theme, t!("Start from"));
     // Cards in groups: Empty project first, then each category's templates.
     // `picked` counts as before: 0 is empty, then this kind's templates in name order.
     let mine: Vec<(usize, &Template)> = templates.iter().filter(|t| t.mode == state.mode).enumerate().map(|(i, t)| (i + 1, t)).collect();

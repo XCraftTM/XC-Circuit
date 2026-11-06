@@ -3,6 +3,7 @@
 
 use eframe::egui::{self, Frame, Margin, RichText};
 
+use crate::ui::kit;
 use crate::ui::dialog::{self, Part};
 use crate::editor::Editor;
 use crate::plugins::native::{Kind, NativeHost, Status, status_text};
@@ -37,9 +38,9 @@ pub fn tab(ui: &mut egui::Ui, theme: &Theme, ed: &Editor, native: &NativeHost, d
         dialog::Spec { id: "plugins", title: t!("Plugins"), subtitle: Some(t!("What's loaded, and which native plugins may run")), icon: None, width: 560.0 },
         |ui, part| match part {
             Part::Body => {
-                dialog::toggle_row(ui, theme, &mut draft.allow, t!("Allow native plugins"), t!("Native plugins are compiled Rust code. They run with the same access to your computer as XC Circuit, and a broken one can crash the app. Only turn this on for plugins you trust."));
+                kit::toggle_row(ui, theme, &mut draft.allow, t!("Allow native plugins"), t!("Native plugins are compiled Rust code. They run with the same access to your computer as XC Circuit, and a broken one can crash the app. Only turn this on for plugins you trust."));
                 ui.add_space(10.0);
-                dialog::section(ui, theme, t!("Installed"));
+                kit::section(ui, theme, t!("Installed"));
                 for lp in &ed.reg.plugins {
                     let m = &lp.manifest;
                     let np = native.plugins.iter().find(|p| p.id == m.id);
@@ -51,24 +52,24 @@ pub fn tab(ui: &mut egui::Ui, theme: &Theme, ed: &Editor, native: &NativeHost, d
                             ui.label(RichText::new(format!("v{} · {}", m.version, m.author)).size(11.0).color(theme.text_muted));
                             let script = np.is_some_and(|p| p.kind == Kind::Script);
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| match np.map(|p| &p.status) {
-                                None => dialog::pill(ui, t!("Blocks & config"), theme.text_muted),
-                                Some(Status::Loaded) if script => dialog::pill(ui, t!("Script · running"), theme.action),
-                                Some(_) if script => dialog::pill(ui, t!("Script · error"), theme.error),
-                                Some(Status::Loaded) => dialog::pill(ui, t!("Native · running"), theme.action),
+                                None => kit::pill(ui, t!("Blocks & config"), theme.text_muted),
+                                Some(Status::Loaded) if script => kit::pill(ui, t!("Script · running"), theme.action),
+                                Some(_) if script => kit::pill(ui, t!("Script · error"), theme.error),
+                                Some(Status::Loaded) => kit::pill(ui, t!("Native · running"), theme.action),
                                 Some(Status::NeedsApproval) if approved => {
-                                    if dialog::secondary_button(ui, theme, t!("Undo")).clicked() {
+                                    if kit::secondary_button(ui, theme, t!("Undo")).clicked() {
                                         draft.trust.retain(|id| *id != m.id);
                                     }
-                                    dialog::pill(ui, t!("Allowed on save"), theme.action);
+                                    kit::pill(ui, t!("Allowed on save"), theme.action);
                                 }
                                 Some(Status::NeedsApproval) => {
-                                    if dialog::primary_button(ui, theme, t!("Allow")).on_hover_text(lp.dir.display().to_string()).clicked() {
+                                    if kit::primary_button(ui, theme, t!("Allow")).on_hover_text(lp.dir.display().to_string()).clicked() {
                                         draft.trust.push(m.id.clone());
                                     }
-                                    dialog::pill(ui, "Native", theme.warning);
+                                    kit::pill(ui, "Native", theme.warning);
                                 }
-                                Some(Status::Off) => dialog::pill(ui, t!("Native · off"), theme.text_muted),
-                                Some(_) => dialog::pill(ui, t!("Native · not running"), theme.error),
+                                Some(Status::Off) => kit::pill(ui, t!("Native · off"), theme.text_muted),
+                                Some(_) => kit::pill(ui, t!("Native · not running"), theme.error),
                             });
                         });
                         if !m.description.is_empty() {
@@ -88,13 +89,13 @@ pub fn tab(ui: &mut egui::Ui, theme: &Theme, ed: &Editor, native: &NativeHost, d
                 }
             }
             Part::Footer => {
-                if dialog::primary_button(ui, theme, t!("Save and close")).clicked() {
+                if kit::primary_button(ui, theme, t!("Save and close")).clicked() {
                     ask = Some(Ask::Save(true));
                 }
-                if dialog::secondary_button(ui, theme, t!("Save")).clicked() {
+                if kit::secondary_button(ui, theme, t!("Save")).clicked() {
                     ask = Some(Ask::Save(false));
                 }
-                if dialog::secondary_button(ui, theme, t!("Cancel")).clicked() {
+                if kit::secondary_button(ui, theme, t!("Cancel")).clicked() {
                     ask = Some(Ask::Cancel);
                 }
                 if changed {
@@ -122,16 +123,16 @@ pub fn side(ui: &mut egui::Ui, theme: &Theme, ed: &Editor, native: &NativeHost) 
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         Frame::new().inner_margin(Margin::symmetric(12, 4)).show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
-                if dialog::button(ui, theme, t!("Manage…")).on_hover_text(t!("Allow native plugins")).clicked() {
+                if kit::button(ui, theme, t!("Manage…")).on_hover_text(t!("Allow native plugins")).clicked() {
                     ask = Some(SideAsk::Manage);
                 }
-                if dialog::button(ui, theme, t!("Install…")).on_hover_text(t!("Install a plugin from a .zip file (or drop the file on the window)")).clicked() {
+                if kit::button(ui, theme, t!("Install…")).on_hover_text(t!("Install a plugin from a .zip file (or drop the file on the window)")).clicked() {
                     ask = Some(SideAsk::Install);
                 }
-                if dialog::button(ui, theme, t!("Reload")).on_hover_text(t!("Load plugin files again")).clicked() {
+                if kit::button(ui, theme, t!("Reload")).on_hover_text(t!("Load plugin files again")).clicked() {
                     ask = Some(SideAsk::Reload);
                 }
-                if dialog::button(ui, theme, t!("Open folder")).on_hover_text(t!("Your own plugins go here")).clicked() {
+                if kit::button(ui, theme, t!("Open folder")).on_hover_text(t!("Your own plugins go here")).clicked() {
                     ask = Some(SideAsk::OpenFolder);
                 }
             });
@@ -153,7 +154,7 @@ pub fn side(ui: &mut egui::Ui, theme: &Theme, ed: &Editor, native: &NativeHost) 
                 ui.label(RichText::new(format!("v{} · {}", m.version, m.author)).size(11.0).color(theme.text_muted));
                 ui.label(RichText::new(status).size(11.0).color(color));
                 if !m.description.is_empty() {
-                    ui.label(RichText::new(&m.description).size(11.5).color(theme.text_muted));
+                    kit::hint(ui, theme, &m.description);
                 }
                 ui.add_space(4.0);
                 ui.separator();

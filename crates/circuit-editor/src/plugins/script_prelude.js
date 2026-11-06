@@ -192,6 +192,19 @@
       progress: (fraction, label) => add({ t: "progress", value: Number(fraction) || 0, text: text(label) }),
       image: (file, o = {}) => add({ t: "image", file: text(file), width: typeof o.width === "number" ? o.width : null, height: typeof o.height === "number" ? o.height : null, tint: o.tint ? String(o.tint) : null }),
       row: (fn) => add({ t: "row", items: nested(fn) }),
+      toggle: (label, on, onChange) => add({ t: "toggle", text: text(label), value: !!on, on: handler(onChange) }),
+      select: (value, choices, onChange, o = {}) =>
+        add({
+          t: "select",
+          value: text(value),
+          choices: Array.isArray(choices) ? choices.map((c) => (Array.isArray(c) ? [text(c[0]), text(c[1] ?? c[0])] : [text(c), text(c)])) : Object.entries(choices || {}).map(([v, l]) => [text(v), text(l)]),
+          on: handler(onChange),
+          width: typeof o.width === "number" ? o.width : 200,
+        }),
+      number: (value, onChange, o = {}) => add({ t: "number", value: Number(value) || 0, on: handler(onChange), min: typeof o.min === "number" ? o.min : null, max: typeof o.max === "number" ? o.max : null, step: typeof o.step === "number" ? o.step : null, suffix: text(o.suffix) }),
+      slider: (value, min, max, onChange, o = {}) => add({ t: "slider", value: Number(value) || 0, min: Number(min) || 0, max: Number(max) || 0, on: handler(onChange), step: typeof o.step === "number" ? o.step : null, suffix: text(o.suffix) }),
+      color: (value, onChange) => add({ t: "color", value: text(value), on: handler(onChange) }),
+      note: (t, o = {}) => add({ t: "note", text: text(t), title: text(o.title), tone: text(o.tone) }),
       section: (title, fn, o = {}) => add({ t: "section", text: text(title), items: nested(fn), open: o.open !== false }),
     };
     return Object.freeze(ui);

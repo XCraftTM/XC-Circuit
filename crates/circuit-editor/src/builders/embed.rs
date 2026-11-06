@@ -6,6 +6,7 @@ use eframe::egui::{self, Color32, FontId, Painter, Pos2, Rect, RichText, ScrollA
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
+use crate::ui::kit;
 use crate::ui::dialog::{self, Part};
 use crate::editor::Editor;
 use crate::builders::json_view::{self, JsonText};
@@ -347,10 +348,10 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
                     });
                     ui.add_space(14.0);
                     ui.vertical(|ui| {
-                        dialog::section(ui, &theme, t!("Preview"));
+                        kit::section(ui, &theme, t!("Preview"));
                         preview_message(ui, &theme, &edit.draft, bot.as_ref());
                         ui.add_space(10.0);
-                        dialog::section(ui, &theme, t!("Values from earlier blocks"));
+                        kit::section(ui, &theme, t!("Values from earlier blocks"));
                         ScrollArea::vertical().id_salt("embed-values").max_height(dialog::remaining_height(ui, 140.0)).auto_shrink([false, true]).show(ui, |ui| crate::editor::values::list(ui, &theme, &values));
                     });
                 });
@@ -358,12 +359,12 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
             Part::Footer => {
                 let broken = edit.json.as_ref().is_some_and(|j| j.error.is_some());
                 ui.add_enabled_ui(!broken, |ui| {
-                    if dialog::primary_button(ui, &theme, t!("Apply and close")).clicked() {
+                    if kit::primary_button(ui, &theme, t!("Apply and close")).clicked() {
                         (apply, close) = (true, true);
                     }
-                    apply |= dialog::secondary_button(ui, &theme, t!("Apply")).on_hover_text(t!("Put it on the block and keep editing")).clicked();
+                    apply |= kit::secondary_button(ui, &theme, t!("Apply")).on_hover_text(t!("Put it on the block and keep editing")).clicked();
                 });
-                cancel = dialog::secondary_button(ui, &theme, t!("Cancel")).clicked();
+                cancel = kit::secondary_button(ui, &theme, t!("Cancel")).clicked();
                 if broken {
                     ui.label(RichText::new(t!("Fix the JSON first")).size(12.0).color(theme.warning));
                 }
@@ -387,7 +388,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
 }
 
 fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
-    dialog::section(ui, theme, t!("Color"));
+    kit::section(ui, theme, t!("Color"));
     ui.horizontal(|ui| {
         let mut c = hex_color(&e.color).unwrap_or(Color32::from_rgb(0, 0xD8, 0xF0));
         if crate::builders::color::color_button(ui, ui.id().with("embed-color"), &mut c, theme, None) {
@@ -407,22 +408,22 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
     });
     ui.add_space(10.0);
 
-    dialog::section(ui, theme, t!("Author"));
+    kit::section(ui, theme, t!("Author"));
     let author = e.author.get_or_insert_with(NameIcon::default);
     two(ui, theme, (t!("Name"), &mut author.name, "${user}"), (t!("Icon URL"), &mut author.icon, "https://…"));
-    dialog::field(ui, theme, t!("Name link"), None, |ui| dialog::text_input(ui, &mut author.url, "https://…", false));
+    kit::field(ui, theme, t!("Name link"), None, |ui| kit::text_input(ui, &mut author.url, "https://…", false));
     if author.name.is_empty() && author.icon.is_empty() && author.url.is_empty() {
         e.author = None;
     }
 
-    dialog::section(ui, theme, t!("Body"));
-    dialog::field(ui, theme, t!("Title"), None, |ui| dialog::text_input(ui, &mut e.title, t!("Rank of ${user}"), false));
-    dialog::field(ui, theme, t!("Title link"), None, |ui| dialog::text_input(ui, &mut e.url, "https://…", false));
-    dialog::field(ui, theme, t!("Description"), Some(t!("Markdown works: **bold**, *italic*, `code`. Drag the corner to make the box taller.")), |ui| {
-        ui.add(crate::ui::inputs::TextArea::new("embed-description", &mut e.description).hint(t!("You have **${xp} XP**…")).rows(5))
+    kit::section(ui, theme, t!("Body"));
+    kit::field(ui, theme, t!("Title"), None, |ui| kit::text_input(ui, &mut e.title, t!("Rank of ${user}"), false));
+    kit::field(ui, theme, t!("Title link"), None, |ui| kit::text_input(ui, &mut e.url, "https://…", false));
+    kit::field(ui, theme, t!("Description"), Some(t!("Markdown works: **bold**, *italic*, `code`. Drag the corner to make the box taller.")), |ui| {
+        ui.add(crate::ui::kit::TextArea::new("embed-description", &mut e.description).hint(t!("You have **${xp} XP**…")).rows(5))
     });
 
-    dialog::section(ui, theme, &format!("Fields · {} of 25", e.fields.len()));
+    kit::section(ui, theme, &format!("Fields · {} of 25", e.fields.len()));
     let mut remove = None;
     let mut swap = None;
     let count = e.fields.len();
@@ -434,23 +435,23 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
         egui::Frame::new().fill(theme.panel_header).stroke(Stroke::new(1.0, theme.line)).corner_radius(8).inner_margin(10).show(ui, |ui| {
             ui.set_width(inner_w);
             ui.horizontal(|ui| {
-                ui.add(crate::ui::inputs::TextLine::new(&mut f.name).hint(t!("Name")).width(name_w));
-                ui.add(crate::ui::inputs::TextLine::new(&mut f.value).hint(t!("Value")).width(inner_w - name_w - 8.0));
+                ui.add(crate::ui::kit::TextLine::new(&mut f.name).hint(t!("Name")).width(name_w));
+                ui.add(crate::ui::kit::TextLine::new(&mut f.value).hint(t!("Value")).width(inner_w - name_w - 8.0));
             });
             ui.add_space(4.0);
             // The switch and buttons below, so the texts get the whole width.
             ui.horizontal(|ui| {
-                ui.set_min_height(crate::ui::inputs::input_height(ui));
+                ui.set_min_height(crate::ui::kit::input_height(ui));
                 ui.label(RichText::new(t!("Inline")).size(12.0).color(theme.text_muted));
-                crate::ui::widgets::toggle(ui, &mut f.inline, theme).on_hover_text(t!("Inline: share a row with other inline fields"));
+                crate::ui::kit::toggle(ui, &mut f.inline, theme).on_hover_text(t!("Inline: share a row with other inline fields"));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if dialog::danger_button(ui, theme, t!("Remove")).clicked() {
+                    if kit::danger_button(ui, theme, t!("Remove")).clicked() {
                         remove = Some(i);
                     }
-                    if ui.add_enabled_ui(i + 1 < count, |ui| dialog::button(ui, theme, t!("Down"))).inner.clicked() {
+                    if ui.add_enabled_ui(i + 1 < count, |ui| kit::button(ui, theme, t!("Down"))).inner.clicked() {
                         swap = Some((i, i + 1));
                     }
-                    if ui.add_enabled_ui(i > 0, |ui| dialog::button(ui, theme, t!("Up"))).inner.clicked() {
+                    if ui.add_enabled_ui(i > 0, |ui| kit::button(ui, theme, t!("Up"))).inner.clicked() {
                         swap = Some((i, i - 1));
                     }
                 });
@@ -464,28 +465,28 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
     if let Some(i) = remove {
         e.fields.remove(i);
     }
-    if e.fields.len() < 25 && dialog::secondary_button(ui, theme, t!("+ Add field")).clicked() {
+    if e.fields.len() < 25 && kit::secondary_button(ui, theme, t!("+ Add field")).clicked() {
         e.fields.push(EmbedField { inline: true, ..Default::default() });
     }
     ui.add_space(12.0);
 
-    dialog::section(ui, theme, t!("Images"));
+    kit::section(ui, theme, t!("Images"));
     two(ui, theme, (t!("Image URL"), &mut e.image, "https://…"), (t!("Thumbnail URL"), &mut e.thumbnail, "https://… or ${avatar}"));
 
-    dialog::section(ui, theme, t!("Footer"));
+    kit::section(ui, theme, t!("Footer"));
     let footer = e.footer.get_or_insert_with(FooterData::default);
     two(ui, theme, (t!("Text"), &mut footer.text, "DemoBot"), (t!("Icon URL"), &mut footer.icon, "https://…"));
     if footer.text.is_empty() && footer.icon.is_empty() {
         e.footer = None;
     }
-    dialog::section(ui, theme, t!("Timestamp"));
+    kit::section(ui, theme, t!("Timestamp"));
     ui.horizontal(|ui| {
-        ui.set_min_height(crate::ui::inputs::input_height(ui));
+        ui.set_min_height(crate::ui::kit::input_height(ui));
         // None, when it's sent, or a set time (kept in `time`).
         let set_id = ui.id().with("set-time");
         let mut kind = if !e.time.is_empty() || ui.memory(|m| m.data.get_temp::<bool>(set_id).unwrap_or(false)) { 2 } else if e.timestamp { 1 } else { 0 };
         let labels = [t!("None"), t!("When it's sent"), t!("A set time")];
-        crate::ui::widgets::dropdown(ui, ui.id().with("timestamp"), 160.0, labels[kind], |ui| {
+        crate::ui::kit::dropdown(ui, ui.id().with("timestamp"), 160.0, labels[kind], |ui| {
             for (i, l) in labels.iter().enumerate() {
                 ui.selectable_value(&mut kind, i, *l);
             }
@@ -497,16 +498,16 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
         ui.memory_mut(|m| m.data.insert_temp(set_id, kind == 2));
         if kind == 2 {
             let w = ui.available_width();
-            ui.add(crate::ui::inputs::TextLine::new(&mut e.time).hint("2026-12-24T18:00:00Z or ${date}").width(w));
+            ui.add(crate::ui::kit::TextLine::new(&mut e.time).hint("2026-12-24T18:00:00Z or ${date}").width(w));
         }
     });
-    ui.label(RichText::new(t!("Shown next to the footer, in each reader's own time zone.")).size(11.5).color(theme.text_muted));
+    kit::hint(ui, theme, t!("Shown next to the footer, in each reader's own time zone."));
 }
 
 fn two(ui: &mut Ui, theme: &Theme, a: (&str, &mut String, &str), b: (&str, &mut String, &str)) {
     ui.columns(2, |cols| {
-        dialog::field(&mut cols[0], theme, a.0, None, |ui| dialog::text_input(ui, a.1, a.2, false));
-        dialog::field(&mut cols[1], theme, b.0, None, |ui| dialog::text_input(ui, b.1, b.2, false));
+        kit::field(&mut cols[0], theme, a.0, None, |ui| kit::text_input(ui, a.1, a.2, false));
+        kit::field(&mut cols[1], theme, b.0, None, |ui| kit::text_input(ui, b.1, b.2, false));
     });
 }
 

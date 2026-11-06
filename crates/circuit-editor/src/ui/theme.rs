@@ -7,6 +7,9 @@ use circuit_plugins::theme::parse_hex;
 use circuit_plugins::{Registry, ThemeDef};
 use eframe::egui::{self, Color32, CornerRadius, Margin, Shadow, Stroke, Visuals};
 
+/// Where `apply` leaves the theme in egui's memory.
+pub(crate) const KIT_THEME: &str = "xc-kit-theme";
+
 #[derive(Clone, Debug)]
 pub struct Theme {
     pub id: String,
@@ -104,6 +107,8 @@ impl Theme {
     }
 
     pub fn apply(&self, ctx: &egui::Context) {
+        // For code that only has a ui (plugins' panels): kit::theme_of.
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new(KIT_THEME), self.clone()));
         let mut v = if self.dark { Visuals::dark() } else { Visuals::light() };
         v.interact_cursor = Some(egui::CursorIcon::PointingHand);
         let radius = CornerRadius::same(6);

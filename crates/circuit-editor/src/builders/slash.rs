@@ -7,6 +7,7 @@ use eframe::egui::{self, Color32, Frame, Margin, RichText, ScrollArea, Stroke, U
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
+use crate::ui::kit;
 use crate::ui::dialog::{self, Part};
 use crate::editor::{Editor, Level};
 use crate::i18n::n;
@@ -624,14 +625,14 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
             Part::Body => body(ui, &theme, edit, &issues, trash.as_deref(), eye.as_deref()),
             Part::Footer => {
                 ui.add_enabled_ui(issues.is_empty() && !json_broken, |ui| {
-                    if dialog::primary_button(ui, &theme, t!("Save and close")).clicked() {
+                    if kit::primary_button(ui, &theme, t!("Save and close")).clicked() {
                         (save, close) = (true, true);
                     }
-                    if dialog::secondary_button(ui, &theme, t!("Save")).clicked() {
+                    if kit::secondary_button(ui, &theme, t!("Save")).clicked() {
                         save = true;
                     }
                 });
-                cancel = dialog::secondary_button(ui, &theme, t!("Cancel")).clicked();
+                cancel = kit::secondary_button(ui, &theme, t!("Cancel")).clicked();
                 if json_broken {
                     ui.label(RichText::new(t!("Fix the JSON first")).size(12.0).color(theme.warning));
                 } else if !issues.is_empty() {
@@ -678,7 +679,7 @@ fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], tra
         // Command list.
         let h = dialog::remaining_height(ui, 420.0);
         ui.allocate_ui_with_layout(vec2(230.0, h), egui::Layout::top_down(egui::Align::Min), |ui| {
-            dialog::section(ui, theme, t!("Commands"));
+            kit::section(ui, theme, t!("Commands"));
             let mut remove = None;
             for (i, c) in edit.commands.iter().enumerate() {
                 let selected = i == edit.selected;
@@ -689,7 +690,7 @@ fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], tra
                     if ui.add_sized([180.0, 34.0], egui::Button::selectable(selected, text)).clicked() {
                         edit.selected = i;
                     }
-                    if dialog::icon_button(ui, theme, trash, "×", t!("Delete this command")).clicked() {
+                    if kit::icon_button(ui, theme, trash, "×", t!("Delete this command")).clicked() {
                         remove = Some(i);
                     }
                 });
@@ -699,7 +700,7 @@ fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], tra
                 edit.selected = edit.selected.min(edit.commands.len().saturating_sub(1));
             }
             ui.add_space(8.0);
-            if dialog::secondary_button(ui, theme, t!("+ New command")).clicked() {
+            if kit::secondary_button(ui, theme, t!("+ New command")).clicked() {
                 edit.commands.push(SlashCommand {
                     name: format!("command{}", edit.commands.len() + 1),
                     description: t!("Describe what it does").into(),
@@ -777,31 +778,31 @@ fn command_form(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, root: &str) {
     let header = is_header(&edit.commands, &edit.commands[i].name);
     let holds_settings = settings_holder(&edit.commands, root) == Some(i);
     let cmd = &mut edit.commands[i];
-    dialog::section(ui, theme, t!("Command"));
+    kit::section(ui, theme, t!("Command"));
     ui.columns(2, |cols| {
-        dialog::field(&mut cols[0], theme, t!("Name"), Some(t!("What people type after /. Two words make a subcommand: ticket open")), |ui| dialog::text_input(ui, &mut cmd.name, "rank", false));
-        dialog::field(&mut cols[1], theme, t!("Description"), Some(t!("Shown in Discord's command list (up to 100 characters)")), |ui| {
-            dialog::text_input(ui, &mut cmd.description, t!("Shows your rank"), false)
+        kit::field(&mut cols[0], theme, t!("Name"), Some(t!("What people type after /. Two words make a subcommand: ticket open")), |ui| kit::text_input(ui, &mut cmd.name, "rank", false));
+        kit::field(&mut cols[1], theme, t!("Description"), Some(t!("Shown in Discord's command list (up to 100 characters)")), |ui| {
+            kit::text_input(ui, &mut cmd.description, t!("Shows your rank"), false)
         });
     });
     locales::section(ui, theme, ui.id().with(("cmd-locales", i)), &mut cmd.locales, true);
     ui.add_space(6.0);
 
     if holds_settings {
-        dialog::section(ui, theme, t!("Who and where"));
+        kit::section(ui, theme, t!("Who and where"));
         ui.horizontal(|ui| {
-            ui.set_min_height(crate::ui::inputs::input_height(ui));
+            ui.set_min_height(crate::ui::kit::input_height(ui));
             ui.label(RichText::new(t!("Who can use it")).color(theme.text));
-            permissions_dropdown(ui, &mut cmd.permissions);
+            permissions_dropdown(ui, theme, &mut cmd.permissions);
             ui.add_space(16.0);
             ui.label(RichText::new(t!("Age-restricted")).color(theme.text));
-            crate::ui::widgets::toggle(ui, &mut cmd.nsfw, theme).on_hover_text(t!("Only usable in age-restricted (NSFW) channels."));
+            crate::ui::kit::toggle(ui, &mut cmd.nsfw, theme).on_hover_text(t!("Only usable in age-restricted (NSFW) channels."));
         });
-        ui.label(RichText::new(t!("People without all of these permissions don't see the command. Server admins can change it in Server Settings › Integrations.")).size(11.5).color(theme.text_muted));
+        kit::hint(ui, theme, t!("People without all of these permissions don't see the command. Server admins can change it in Server Settings › Integrations."));
         ui.add_space(6.0);
         pick_row(ui, theme, t!("Works in"), &CONTEXTS, &mut cmd.contexts, t!("Nowhere"));
         pick_row(ui, theme, t!("When the bot is"), &INSTALLS, &mut cmd.installs, t!("Added to a server"));
-        ui.label(RichText::new(t!("Added to an account, the bot's commands work in any server or DM that person is in. Turn it on in the Discord developer portal › Installation too.")).size(11.5).color(theme.text_muted));
+        kit::hint(ui, theme, t!("Added to an account, the bot's commands work in any server or DM that person is in. Turn it on in the Discord developer portal › Installation too."));
     } else {
         ui.label(RichText::new(tf!("Who can use it and where it works are set on /{command}.", command = root)).size(12.0).color(theme.text_muted));
     }
@@ -811,7 +812,7 @@ fn command_form(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, root: &str) {
         ui.label(RichText::new(tf!("/{command} only groups its subcommands, so the options are on them.", command = cmd.name)).size(12.0).color(theme.text_muted));
         return;
     }
-    dialog::section(ui, theme, &tf!("Options · {count} of 25", count = cmd.options.len()));
+    kit::section(ui, theme, &tf!("Options · {count} of 25", count = cmd.options.len()));
     let (mut remove, mut swap) = (None, None);
     let count = cmd.options.len();
     for (n, o) in cmd.options.iter_mut().enumerate() {
@@ -825,25 +826,25 @@ fn command_form(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, root: &str) {
     if let Some(n) = remove {
         cmd.options.remove(n);
     }
-    if cmd.options.len() < 25 && dialog::secondary_button(ui, theme, t!("+ Add option")).clicked() {
+    if cmd.options.len() < 25 && kit::secondary_button(ui, theme, t!("+ Add option")).clicked() {
         cmd.options.push(SlashOption { name: format!("option{}", cmd.options.len() + 1), description: t!("Describe this option").into(), ..Default::default() });
     }
-    ui.label(RichText::new(t!("Discord lists required options first.")).size(11.5).color(theme.text_muted));
+    kit::hint(ui, theme, t!("Discord lists required options first."));
 }
 
 /// A row with a label and a dropdown picking any number of `options` (keys
 /// with their English labels), centered on one line.
 fn pick_row(ui: &mut Ui, theme: &Theme, label: &str, options: &[(&str, u64, &'static str)], list: &mut Vec<String>, none: &str) {
     ui.horizontal(|ui| {
-        ui.set_min_height(crate::ui::inputs::input_height(ui));
+        ui.set_min_height(crate::ui::kit::input_height(ui));
         ui.label(RichText::new(label).color(theme.text));
         let options: Vec<(String, &'static str)> = options.iter().map(|(k, _, l)| (k.to_string(), *l)).collect();
-        crate::ui::widgets::multi_select(ui, ui.id().with(label), 260.0, &options, list, none);
+        crate::ui::kit::multi_select(ui, theme, ui.id().with(label), 260.0, &options, list, none);
     });
 }
 
 /// Picks any number of permissions; the summary says how many.
-fn permissions_dropdown(ui: &mut Ui, list: &mut Vec<String>) {
+fn permissions_dropdown(ui: &mut Ui, theme: &Theme, list: &mut Vec<String>) {
     let name = |k: &str| PERMISSIONS.iter().find(|p| p.0 == k).map(|p| crate::i18n::t(p.1)).unwrap_or(k).to_string();
     let summary = match list.len() {
         0 => t!("Everyone").to_string(),
@@ -851,16 +852,16 @@ fn permissions_dropdown(ui: &mut Ui, list: &mut Vec<String>) {
         n => tf!("{first} + {more} more", first = name(&list[0]), more = n - 1),
     };
     ui.scope(|ui| {
-        ui.spacing_mut().interact_size.y = crate::ui::inputs::input_height(ui);
+        ui.spacing_mut().interact_size.y = crate::ui::kit::input_height(ui);
         egui::ComboBox::from_id_salt(ui.id().with("permissions")).width(240.0).selected_text(summary).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show_ui(ui, |ui| {
-            if ui.selectable_label(list.is_empty(), t!("Everyone")).clicked() {
+            if kit::option(ui, list.is_empty(), t!("Everyone")).clicked() {
                 list.clear();
             }
             ui.separator();
             ScrollArea::vertical().max_height(340.0).show(ui, |ui| {
                 for (key, label, _) in PERMISSIONS {
                     let mut on = list.iter().any(|k| k == key);
-                    if ui.checkbox(&mut on, crate::i18n::t(label)).changed() {
+                    if kit::checkbox(ui, theme, &mut on, crate::i18n::t(label)).changed() {
                         if on {
                             list.push(key.into());
                         } else {
@@ -882,51 +883,51 @@ fn option_card(ui: &mut Ui, theme: &Theme, o: &mut SlashOption, i: usize, count:
         let numeric = matches!(o.kind.as_str(), "integer" | "number");
         let texty = o.kind == "string";
         ui.horizontal(|ui| {
-            let h = crate::ui::inputs::input_height(ui);
+            let h = crate::ui::kit::input_height(ui);
             ui.set_min_height(h);
-            ui.allocate_ui(vec2(160.0, h), |ui| dialog::text_input(ui, &mut o.name, "name", false));
+            ui.allocate_ui(vec2(160.0, h), |ui| kit::text_input(ui, &mut o.name, "name", false));
             let current = KINDS.iter().find(|k| k.0 == o.kind).map(|k| crate::i18n::t(k.1)).unwrap_or(t!("Text"));
-            crate::ui::widgets::dropdown(ui, ui.id().with("kind"), 130.0, current, |ui| {
+            crate::ui::kit::dropdown(ui, ui.id().with("kind"), 130.0, current, |ui| {
                 for (k, l, _) in KINDS {
                     ui.selectable_value(&mut o.kind, k.to_string(), crate::i18n::t(l));
                 }
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if dialog::danger_button(ui, theme, t!("Remove")).clicked() {
+                if kit::danger_button(ui, theme, t!("Remove")).clicked() {
                     *remove = Some(i);
                 }
-                if ui.add_enabled_ui(i + 1 < count, |ui| dialog::button(ui, theme, t!("Down"))).inner.clicked() {
+                if ui.add_enabled_ui(i + 1 < count, |ui| kit::button(ui, theme, t!("Down"))).inner.clicked() {
                     *swap = Some((i, i + 1));
                 }
-                if ui.add_enabled_ui(i > 0, |ui| dialog::button(ui, theme, t!("Up"))).inner.clicked() {
+                if ui.add_enabled_ui(i > 0, |ui| kit::button(ui, theme, t!("Up"))).inner.clicked() {
                     *swap = Some((i, i - 1));
                 }
             });
         });
         ui.add_space(6.0);
-        dialog::text_input(ui, &mut o.description, t!("What this option is for"), false);
+        kit::text_input(ui, &mut o.description, t!("What this option is for"), false);
         ui.add_space(6.0);
         // The switches on a row of their own, so the row above never runs out of room.
         ui.horizontal(|ui| {
-            ui.set_min_height(crate::ui::inputs::input_height(ui));
+            ui.set_min_height(crate::ui::kit::input_height(ui));
             ui.label(RichText::new(t!("Required")).size(12.0).color(theme.text_muted));
-            crate::ui::widgets::toggle(ui, &mut o.required, theme);
+            crate::ui::kit::toggle(ui, &mut o.required, theme);
             if (texty || numeric) && o.choices.is_empty() {
                 ui.add_space(16.0);
                 ui.label(RichText::new(t!("Autocomplete")).size(12.0).color(theme.text_muted));
-                crate::ui::widgets::toggle(ui, &mut o.autocomplete, theme).on_hover_text(t!("Suggest values while people type, from an Autocomplete block."));
+                crate::ui::kit::toggle(ui, &mut o.autocomplete, theme).on_hover_text(t!("Suggest values while people type, from an Autocomplete block."));
             }
         });
         if texty {
             ui.horizontal(|ui| {
-                ui.set_min_height(crate::ui::inputs::input_height(ui));
+                ui.set_min_height(crate::ui::kit::input_height(ui));
                 ui.label(RichText::new(t!("Length")).size(12.0).color(theme.text_muted));
                 length_box(ui, t!("Shortest"), &mut o.min_length);
                 length_box(ui, t!("Longest"), &mut o.max_length);
             });
         } else if numeric {
             ui.horizontal(|ui| {
-                ui.set_min_height(crate::ui::inputs::input_height(ui));
+                ui.set_min_height(crate::ui::kit::input_height(ui));
                 ui.label(RichText::new(t!("Value")).size(12.0).color(theme.text_muted));
                 number_box(ui, t!("Smallest"), &mut o.min);
                 number_box(ui, t!("Largest"), &mut o.max);
@@ -950,20 +951,20 @@ fn choices(ui: &mut Ui, theme: &Theme, o: &mut SlashOption, numeric: bool) {
     let w = ui.available_width();
     for (i, ch) in o.choices.iter_mut().enumerate() {
         ui.horizontal(|ui| {
-            ui.set_min_height(crate::ui::inputs::input_height(ui));
+            ui.set_min_height(crate::ui::kit::input_height(ui));
             let field_w = ((w - 230.0) / 2.0).max(120.0);
-            ui.add(crate::ui::inputs::TextLine::new(&mut ch.name).hint(t!("Name people see")).width(field_w));
+            ui.add(crate::ui::kit::TextLine::new(&mut ch.name).hint(t!("Name people see")).width(field_w));
             let mut value = crate::ui::widgets::as_text(&ch.value);
-            if ui.add(crate::ui::inputs::TextLine::new(&mut value).hint(t!("Value the bot gets")).width(field_w)).changed() {
+            if ui.add(crate::ui::kit::TextLine::new(&mut value).hint(t!("Value the bot gets")).width(field_w)).changed() {
                 ch.value = if numeric { value.trim().parse::<f64>().map(Value::from).unwrap_or(Value::from(value)) } else { Value::from(value) };
             }
             let label = if ch.locales.is_empty() { t!("Translations").to_string() } else { tf!("Translations · {count}", count = ch.locales.len()) };
-            let resp = dialog::button(ui, theme, label);
+            let resp = kit::button(ui, theme, label);
             egui::Popup::menu(&resp).id(ui.id().with(("choice-locales", i))).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
                 ui.set_width(460.0);
                 locales::editor(ui, theme, ui.id().with(("choice-rows", i)), &mut ch.locales, false);
             });
-            if dialog::danger_button(ui, theme, "×").on_hover_text(t!("Remove this choice")).clicked() {
+            if kit::danger_button(ui, theme, "×").on_hover_text(t!("Remove this choice")).clicked() {
                 remove = Some(i);
             }
         });
@@ -971,7 +972,7 @@ fn choices(ui: &mut Ui, theme: &Theme, o: &mut SlashOption, numeric: bool) {
     if let Some(i) = remove {
         o.choices.remove(i);
     }
-    if o.choices.len() < 25 && dialog::button(ui, theme, t!("+ Add choice")).clicked() {
+    if o.choices.len() < 25 && kit::button(ui, theme, t!("+ Add choice")).clicked() {
         let n = o.choices.len() + 1;
         let value = if numeric { Value::from(n) } else { Value::from(format!("choice{n}")) };
         o.choices.push(Choice { name: tf!("Choice {number}", number = n), value, locales: Locales::new() });
@@ -980,14 +981,14 @@ fn choices(ui: &mut Ui, theme: &Theme, o: &mut SlashOption, numeric: bool) {
 
 fn number_box(ui: &mut Ui, label: &str, v: &mut Option<f64>) {
     let mut text = v.map(|n| n.to_string()).unwrap_or_default();
-    if ui.add(crate::ui::inputs::TextLine::new(&mut text).hint(label).width(96.0)).changed() {
+    if ui.add(crate::ui::kit::TextLine::new(&mut text).hint(label).width(96.0)).changed() {
         *v = text.trim().parse().ok();
     }
 }
 
 fn length_box(ui: &mut Ui, label: &str, v: &mut Option<u32>) {
     let mut text = v.map(|n| n.to_string()).unwrap_or_default();
-    if ui.add(crate::ui::inputs::TextLine::new(&mut text).hint(label).width(96.0)).changed() {
+    if ui.add(crate::ui::kit::TextLine::new(&mut text).hint(label).width(96.0)).changed() {
         *v = text.trim().parse().ok();
     }
 }

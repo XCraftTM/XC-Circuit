@@ -5,7 +5,7 @@ use eframe::egui::text::{LayoutJob, TextFormat};
 use eframe::egui::{self, Align2, Color32, FontId, RichText, Stroke, Ui, vec2};
 use serde_json::Value;
 
-use crate::ui::dialog;
+use crate::ui::kit;
 use crate::ui::theme::Theme;
 
 /// The JSON a builder shows while switched to JSON, and why it doesn't apply.
@@ -98,14 +98,14 @@ pub fn switch(ui: &mut Ui, theme: &Theme, json: bool) -> Option<bool> {
     let mut picked = None;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
-        let h = crate::ui::inputs::input_height(ui);
+        let h = crate::ui::kit::input_height(ui);
         for (is_json, label) in [(false, t!("Builder")), (true, "JSON")] {
             let on = is_json == json;
             let ink = if on { if theme.dark { Color32::from_rgb(0, 24, 28) } else { Color32::WHITE } } else { theme.text };
             let corner = if is_json { egui::CornerRadius { nw: 0, sw: 0, ne: 7, se: 7 } } else { egui::CornerRadius { nw: 7, sw: 7, ne: 0, se: 0 } };
             let b = egui::Button::new(RichText::new(label).size(13.0).color(ink)).corner_radius(corner).min_size(vec2(82.0, h));
             let fill = if on { theme.accent } else { theme.panel };
-            if dialog::styled_button(ui, theme, b, fill, Stroke::new(1.0, if on { theme.accent } else { theme.node_border })).clicked() && !on {
+            if kit::styled_button(ui, theme, b, fill, Stroke::new(1.0, if on { theme.accent } else { theme.node_border })).clicked() && !on {
                 picked = Some(is_json);
             }
         }
@@ -121,15 +121,15 @@ pub fn editor(ui: &mut Ui, theme: &Theme, id: egui::Id, jt: &mut JsonText, help:
     ui.label(RichText::new(help).size(12.0).color(theme.text_muted));
     ui.add_space(4.0);
     ui.horizontal(|ui| {
-        if dialog::button(ui, theme, t!("Format")).on_hover_text(t!("Indent the JSON neatly")).clicked()
+        if kit::button(ui, theme, t!("Format")).on_hover_text(t!("Indent the JSON neatly")).clicked()
             && let Ok(v) = serde_json::from_str::<Value>(&jt.text)
         {
             jt.text = serde_json::to_string_pretty(&v).unwrap_or_default();
         }
-        if dialog::button(ui, theme, t!("Copy")).clicked() {
+        if kit::button(ui, theme, t!("Copy")).clicked() {
             ui.ctx().copy_text(jt.text.clone());
         }
-        if dialog::button(ui, theme, t!("Clear")).on_hover_text(t!("Empty the box, to paste other JSON in")).clicked() {
+        if kit::button(ui, theme, t!("Clear")).on_hover_text(t!("Empty the box, to paste other JSON in")).clicked() {
             jt.text.clear();
         }
         match &jt.error {

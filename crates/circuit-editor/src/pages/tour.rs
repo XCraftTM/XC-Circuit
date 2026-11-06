@@ -11,6 +11,7 @@ use circuit_core::{Link, PinRef, Project, Workspace};
 use eframe::egui::{self, Align, Color32, Layout, Order, Pos2, Rect, RichText, Stroke, StrokeKind, pos2, vec2};
 use serde_json::{Value, json};
 
+use crate::ui::kit;
 use crate::editor::{Editor, NO_MODE};
 use crate::i18n::n;
 
@@ -456,7 +457,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor, tour: &mut Tour, bot_running: 
             .show(ui, |ui| {
                 ui.set_width(card_w - 36.0);
                 // Progress: a dot for each step.
-                crate::ui::widgets::line(ui, |ui| {
+                crate::ui::kit::line(ui, |ui| {
                     let (r, _) = ui.allocate_exact_size(vec2(STEPS.len() as f32 * 15.0, 14.0), egui::Sense::hover());
                     for i in 0..STEPS.len() {
                         let c = pos2(r.left() + 7.0 + i as f32 * 15.0, r.center().y);
@@ -470,7 +471,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor, tour: &mut Tour, bot_running: 
                         }
                     }
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if crate::ui::dialog::button(ui, &theme, t!("Skip tour")).clicked() {
+                        if crate::ui::kit::button(ui, &theme, t!("Skip tour")).clicked() {
                             ask = Some(Ask::End(Exit::Return));
                         }
                     });
@@ -494,7 +495,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor, tour: &mut Tour, bot_running: 
                                 ui.add_space(4.0);
                                 for (right, text) in &guide.check {
                                     if *right {
-                                        crate::ui::widgets::done_label(ui, RichText::new(text).size(12.5), theme.action);
+                                        crate::ui::kit::done_label(ui, RichText::new(text).size(12.5), theme.action);
                                     } else {
                                         ui.label(RichText::new(text).size(12.5).color(theme.warning));
                                     }
@@ -507,12 +508,12 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor, tour: &mut Tour, bot_running: 
                             if step.wait == Some(Wait::Run) && circuit_runner::node::check_node_cached().is_err() {
                                 ui.add_space(4.0);
                                 ui.label(RichText::new(t!("Node.js isn't set up yet, so the bot can't start.")).size(12.5).color(theme.warning));
-                                if ui.button(t!("Set up Node.js")).clicked() {
+                                if kit::button(ui, &theme, t!("Set up Node.js")).clicked() {
                                     ask = Some(Ask::SetUpNode);
                                 }
                             } else if step.wait == Some(Wait::Run) && bot_running {
                                 ui.add_space(4.0);
-                                crate::ui::widgets::line(ui, |ui| {
+                                crate::ui::kit::line(ui, |ui| {
                                     ui.spinner();
                                     ui.label(RichText::new(t!("The bot is starting …")).size(12.5).color(theme.text_muted));
                                 });
@@ -520,13 +521,13 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor, tour: &mut Tour, bot_running: 
                         });
                 } else if step.wait.is_some() {
                     ui.add_space(8.0);
-                    crate::ui::widgets::done_label(ui, RichText::new(t!("Done! Click Next.")).size(14.0).strong(), theme.action);
+                    crate::ui::kit::done_label(ui, RichText::new(t!("Done! Click Next.")).size(14.0).strong(), theme.action);
                 }
                 ui.add_space(12.0);
                 if tour.step + 1 == STEPS.len() {
                     for (label, exit) in [(t!("Open the DemoBot example"), Exit::DemoBot), (t!("Start a new project"), Exit::NewProject), (t!("Back to my project"), Exit::Return)] {
                         let primary = exit == Exit::DemoBot;
-                        let b = if primary { crate::ui::dialog::primary_button(ui, &theme, label) } else { crate::ui::dialog::secondary_button(ui, &theme, label) };
+                        let b = if primary { crate::ui::kit::primary_button(ui, &theme, label) } else { crate::ui::kit::secondary_button(ui, &theme, label) };
                         if b.clicked() {
                             ask = Some(Ask::End(exit));
                         }
@@ -534,19 +535,19 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor, tour: &mut Tour, bot_running: 
                     }
                     return;
                 }
-                crate::ui::widgets::line(ui, |ui| {
-                    if tour.step > 0 && crate::ui::dialog::secondary_button(ui, &theme, t!("Back")).clicked() {
+                crate::ui::kit::line(ui, |ui| {
+                    if tour.step > 0 && crate::ui::kit::secondary_button(ui, &theme, t!("Back")).clicked() {
                         tour.step -= 1;
                     }
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         let label = if tour.step == 0 { t!("Let's go") } else { t!("Next") };
-                        let next = ui.add_enabled_ui(!waiting, |ui| crate::ui::dialog::primary_button(ui, &theme, label)).inner;
+                        let next = ui.add_enabled_ui(!waiting, |ui| crate::ui::kit::primary_button(ui, &theme, label)).inner;
                         if next.clicked() {
                             tour.step += 1;
                         }
                         if waiting
                             && let Some(w) = step.wait
-                            && crate::ui::dialog::secondary_button(ui, &theme, t!("Do it for me")).clicked()
+                            && crate::ui::kit::secondary_button(ui, &theme, t!("Do it for me")).clicked()
                         {
                             ask = do_it(ed, w);
                         }

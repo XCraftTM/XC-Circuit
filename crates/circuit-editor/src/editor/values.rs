@@ -21,6 +21,7 @@ use circuit_core::{BlockKind, BlockShape, Workspace};
 use circuit_plugins::{ClassDef, Member, Registry};
 use eframe::egui::{self, Color32, Id, Key, Modifiers, RichText, Ui, vec2};
 
+use crate::ui::kit;
 use crate::ui::theme::Theme;
 
 /// The blocks that run before `node` on its action path, first to last
@@ -269,7 +270,7 @@ fn menu(ui: &mut Ui, scope: &Scope) -> Option<String> {
                         ui.menu_button(text, |ui| member_menu(ui, scope, class, &v.token, &v.label, 1, &mut picked));
                     }
                     _ => {
-                        if ui.button(text).on_hover_text(&v.kind).clicked() {
+                        if kit::menu_item(ui, text, None, true).on_hover_text(&v.kind).clicked() {
                             picked = Some(v.token.clone());
                             ui.close();
                         }
@@ -284,7 +285,7 @@ fn menu(ui: &mut Ui, scope: &Scope) -> Option<String> {
 /// A value itself, then its members; members with members of their own get a
 /// submenu while `depth` allows.
 fn member_menu(ui: &mut Ui, scope: &Scope, class: &str, token: &str, label: &str, depth: usize, picked: &mut Option<String>) {
-    if ui.button(RichText::new(format!("{label}   {{{token}}}")).strong()).clicked() {
+    if kit::menu_item(ui, RichText::new(format!("{label}   {{{token}}}")).strong(), None, true).clicked() {
         *picked = Some(token.to_string());
         ui.close();
     }
@@ -298,7 +299,7 @@ fn member_menu(ui: &mut Ui, scope: &Scope, class: &str, token: &str, label: &str
                     ui.menu_button(text, |ui| member_menu(ui, scope, c, &path, &m.name, depth + 1, picked));
                 }
                 _ => {
-                    let b = ui.button(text);
+                    let b = kit::menu_item(ui, text, None, true);
                     let b = if let Some(doc) = &m.doc { b.on_hover_text(doc) } else { b };
                     if b.clicked() {
                         *picked = Some(path);

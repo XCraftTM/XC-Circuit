@@ -73,12 +73,12 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, view: &mut StoredView, bot_running: b
     let mut changed = false;
     Frame::new().inner_margin(Margin::symmetric(12, 8)).show(ui, |ui| {
         let mut refresh = false;
-        crate::ui::widgets::field_with_button(
+        crate::ui::kit::field_with_button(
             ui,
             |ui| {
-                ui.add(crate::ui::inputs::TextLine::new(&mut view.filter).hint(t!("Filter keys")));
+                ui.add(crate::ui::kit::TextLine::new(&mut view.filter).hint(t!("Filter keys")));
             },
-            |ui| refresh = crate::ui::dialog::button(ui, &theme, t!("Refresh")).clicked(),
+            |ui| refresh = crate::ui::kit::button(ui, &theme, t!("Refresh")).clicked(),
         );
         if refresh {
             view.reload(ed);
@@ -107,7 +107,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, view: &mut StoredView, bot_running: b
                             let editing_this = view.editing.as_ref().is_some_and(|(s, k, _)| s == &scope && k == key);
                             if editing_this {
                                 let text = &mut view.editing.as_mut().unwrap().2;
-                                let r = ui.add(crate::ui::inputs::TextLine::new(text).width(260.0).monospace().compact());
+                                let r = ui.add(crate::ui::kit::TextLine::new(text).width(260.0).monospace().compact());
                                 if r.lost_focus() {
                                     let (s, k, t) = view.editing.take().unwrap();
                                     let parsed = serde_json::from_str(&t).unwrap_or(Value::String(t));
@@ -126,7 +126,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, view: &mut StoredView, bot_running: b
                                     view.editing = Some((scope.clone(), key.clone(), shown));
                                 }
                             }
-                            if ui.add_enabled_ui(!bot_running, |ui| crate::ui::dialog::danger_button(ui, &theme, t!("Delete"))).inner.clicked()
+                            if ui.add_enabled_ui(!bot_running, |ui| crate::ui::kit::danger_button(ui, &theme, t!("Delete"))).inner.clicked()
                                 && let Some(Value::Object(m)) = view.data.get_mut(&scope)
                             {
                                 m.shift_remove(key);

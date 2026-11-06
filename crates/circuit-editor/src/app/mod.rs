@@ -314,6 +314,11 @@ impl eframe::App for CircuitApp {
         }
         self.ed.ui_rects_before = std::mem::take(&mut self.ed.ui_rects);
         self.ed.tour_parts = self.tour.is_some();
+        // The icon set, for kit pieces drawn where only a ui is at hand (plugins' notes).
+        let icons_id = egui::Id::new(crate::ui::kit::KIT_ICONS);
+        if ctx.data(|d| d.get_temp::<std::collections::HashMap<String, std::path::PathBuf>>(icons_id).map(|m| m.len())) != Some(self.ed.reg.icons.len()) {
+            ctx.data_mut(|d| d.insert_temp(icons_id, self.ed.reg.icons.clone()));
+        }
         // The tour's practice project is never worth a "save changes?" question.
         if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close && self.tour.is_none() && self.ed.unsaved_now() {
             ctx.send_viewport_cmd(ViewportCommand::CancelClose);

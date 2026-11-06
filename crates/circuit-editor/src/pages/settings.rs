@@ -3,7 +3,8 @@
 
 use eframe::egui::{self, Align, Align2, Color32, CursorIcon, FontId, Layout, Rect, RichText, ScrollArea, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
 
-use crate::editor::{Editor, file_uri};
+use crate::ui::kit;
+use crate::editor::Editor;
 use crate::i18n::n;
 use crate::plugins::native::NativeHost;
 use crate::editor::prefs::{ACCENTS, UI_SCALES};
@@ -77,7 +78,7 @@ pub fn ui(ui: &mut Ui, ed: &mut Editor, native: &NativeHost, view: &mut Settings
     nav_ui.label(RichText::new(t!("SETTINGS")).size(11.0).strong().color(theme.text_muted));
     nav_ui.add_space(8.0);
     for (section, name, icon) in Section::ALL {
-        if nav_item(&mut nav_ui, &theme, ed.reg.icons.get(icon).map(|p| p.as_path()), crate::i18n::t(name), view.section == section, None).clicked() {
+        if kit::nav_item(&mut nav_ui, &theme, ed.reg.icons.get(icon).map(|p| p.as_path()), crate::i18n::t(name), view.section == section, None).clicked() {
             view.section = section;
             view.recording = None;
         }
@@ -106,111 +107,8 @@ pub fn ui(ui: &mut Ui, ed: &mut Editor, native: &NativeHost, view: &mut Settings
     });
 }
 
-/// One entry of a settings list on the left (here and in Bot › Settings):
-/// its icon and name, and a count or mark on the right when there is one.
-pub fn nav_item(ui: &mut Ui, theme: &Theme, icon: Option<&std::path::Path>, name: &str, selected: bool, badge: Option<(String, Color32)>) -> egui::Response {
-    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 32.0), Sense::click());
-    if selected {
-        ui.painter().rect_filled(rect, 6.0, with_alpha(theme.accent, 38));
-    } else if resp.hovered() {
-        ui.painter().rect_filled(rect, 6.0, theme.panel_header);
-    }
-    let tint = if selected { theme.accent } else { theme.text_muted };
-    if let Some(path) = icon {
-        egui::Image::from_uri(file_uri(path)).tint(tint).paint_at(ui, Rect::from_center_size(rect.left_center() + vec2(18.0, 0.0), vec2(16.0, 16.0)));
-    }
-    let mut right = rect.right() - 8.0;
-    if let Some((text, color)) = &badge {
-        let galley = ui.painter().layout_no_wrap(text.clone(), FontId::proportional(11.0), theme.panel);
-        let size = vec2((galley.size().x + 10.0).max(18.0), 18.0);
-        let pill = Rect::from_center_size(pos2(right - size.x / 2.0, rect.center().y), size);
-        ui.painter().rect_filled(pill, 9.0, *color);
-        ui.painter().galley(pill.center() - galley.size() / 2.0, galley, theme.panel);
-        right = pill.left() - 6.0;
-    }
-    // A name too long for the list is cut short; the whole name shows on hover.
-    let font = FontId::proportional(13.5);
-    let color = if selected { theme.text } else { theme.text_muted };
-    let galley = ui.painter().layout(name.to_string(), font, color, f32::INFINITY);
-    let room = right - (rect.left() + 36.0);
-    let resp = if galley.size().x > room {
-        let job = egui::text::LayoutJob { wrap: egui::text::TextWrapping::truncate_at_width(room), ..egui::text::LayoutJob::simple_singleline(name.to_string(), FontId::proportional(13.5), color) };
-        let cut = ui.painter().layout_job(job);
-        ui.painter().galley(pos2(rect.left() + 36.0, rect.center().y - cut.size().y / 2.0), cut, color);
-        resp.on_hover_text(name)
-    } else {
-        ui.painter().galley(pos2(rect.left() + 36.0, rect.center().y - galley.size().y / 2.0), galley, color);
-        resp
-    };
-    resp.on_hover_cursor(CursorIcon::PointingHand)
-}
-
-/// A group heading.
-pub fn group(ui: &mut Ui, theme: &Theme, title: &str) {
-    ui.add_space(10.0);
-    ui.label(RichText::new(title.to_uppercase()).size(11.0).strong().color(theme.text_muted));
-    ui.add_space(6.0);
-}
-
-/// One setting: its name and description on the left, the control on the right.
-pub fn row(ui: &mut Ui, theme: &Theme, title: &str, description: &str, control: impl FnOnce(&mut Ui)) {
-    egui::Frame::new().fill(theme.panel_header).stroke(Stroke::new(1.0, theme.line)).corner_radius(8).inner_margin(egui::Margin::symmetric(16, 12)).show(ui, |ui| {
-        let inner = ui.available_width();
-        ui.set_width(inner);
-        // The control's width as drawn last time: the text takes the rest. When
-        // that leaves too little for the text, the control goes under it, so
-        // a row is never wider than the page.
-        let measured = ui.id().with(("settings-control", title));
-        let control_w: f32 = ui.data(|d| d.get_temp(measured)).unwrap_or(0.0);
-        let stacked = inner - control_w - 16.0 < 180.0;
-        let text = |ui: &mut Ui| {
-            ui.spacing_mut().item_spacing.y = 3.0;
-            ui.label(RichText::new(title).size(13.5).color(theme.text));
-            if !description.is_empty() {
-                ui.label(RichText::new(description).size(11.5).color(theme.text_muted));
-            }
-        };
-        let drawn = if stacked {
-            text(ui);
-            ui.add_space(6.0);
-            ui.horizontal_wrapped(|ui| {
-                ui.set_max_width(inner);
-                control(ui);
-            })
-            .response
-            .rect
-        } else {
-            ui.horizontal(|ui| {
-                let w = inner - control_w - 16.0;
-                if description.is_empty() {
-                    // A name alone sits in the middle of the control's height (34: a field's).
-                    let h = crate::ui::inputs::input_height(ui).max(ui.spacing().interact_size.y).max(34.0);
-                    ui.allocate_ui_with_layout(vec2(w, h), Layout::left_to_right(Align::Center), |ui| {
-                        ui.set_width(w);
-                        text(ui);
-                    });
-                } else {
-                    ui.vertical(|ui| {
-                        ui.set_width(w);
-                        text(ui);
-                    });
-                }
-                ui.with_layout(Layout::right_to_left(Align::Center), control).response.rect
-            })
-            .inner
-        };
-        // Stacked, the control's own width is what it took on its line.
-        let width = if stacked { drawn.width().min(inner) } else { drawn.width() };
-        if (width - control_w).abs() > 0.5 {
-            ui.data_mut(|d| d.insert_temp(measured, width));
-            ui.ctx().request_repaint();
-        }
-    });
-    ui.add_space(8.0);
-}
-
 fn toggle(ui: &mut Ui, theme: &Theme, on: &mut bool) -> bool {
-    crate::ui::widgets::toggle(ui, on, theme).changed()
+    crate::ui::kit::toggle(ui, on, theme).changed()
 }
 
 /// One button per language; a click switches the whole interface right away.
@@ -220,9 +118,9 @@ pub fn language_select(ui: &mut Ui, ed: &mut Editor) {
     let languages = crate::i18n::languages(&ed.reg);
     let current = languages.iter().find(|(code, _)| *code == ed.prefs.language).map_or_else(|| ed.prefs.language.clone(), |(_, name)| name.clone());
     let mut picked = None;
-    crate::ui::widgets::dropdown(ui, egui::Id::new("settings-language"), 180.0, current, |ui| {
+    crate::ui::kit::dropdown(ui, egui::Id::new("settings-language"), 180.0, current, |ui| {
         for (code, name) in &languages {
-            if ui.selectable_label(ed.prefs.language == *code, name).clicked() {
+            if kit::option(ui, ed.prefs.language == *code, name).clicked() {
                 picked = Some(code.clone());
             }
         }
@@ -235,12 +133,12 @@ pub fn language_select(ui: &mut Ui, ed: &mut Editor) {
 
 fn appearance(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView) {
     let ctx = ui.ctx().clone();
-    group(ui, theme, t!("Language"));
-    row(ui, theme, t!("Interface language"), t!("Menus and settings; blocks stay in English. More languages come with plugins."), |ui| {
+    kit::group(ui, theme, t!("Language"));
+    kit::setting_row(ui, theme, t!("Interface language"), t!("Menus and settings; blocks stay in English. More languages come with plugins."), |ui| {
         language_select(ui, ed);
     });
-    row(ui, theme, t!("Translate XC Circuit"), t!("Makes a file with every text to translate, saved as a plugin you can share. Changes show while you edit it."), |ui| {
-        if crate::ui::dialog::button(ui, theme, t!("Create a translation…")).clicked() {
+    kit::setting_row(ui, theme, t!("Translate XC Circuit"), t!("Makes a file with every text to translate, saved as a plugin you can share. Changes show while you edit it."), |ui| {
+        if crate::ui::kit::button(ui, theme, t!("Create a translation…")).clicked() {
             view.new_translation = Some(Default::default());
         }
     });
@@ -248,13 +146,13 @@ fn appearance(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsVi
         new_translation(ui.ctx(), ed, theme, view);
     }
     ui.add_space(14.0);
-    group(ui, theme, t!("Theme"));
+    kit::group(ui, theme, t!("Theme"));
     theme_cards(ui, ed, theme);
     let current = ed.theme.id.clone();
     ui.add_space(10.0);
 
-    row(ui, theme, t!("Accent color"), t!("Used for selections, highlights and the open tab. Changes show right away."), |ui| {
-        if ed.prefs.accent.is_some() && crate::ui::dialog::button(ui, theme, t!("Reset")).on_hover_text(t!("Use the theme's own accent")).clicked() {
+    kit::setting_row(ui, theme, t!("Accent color"), t!("Used for selections, highlights and the open tab. Changes show right away."), |ui| {
+        if ed.prefs.accent.is_some() && crate::ui::kit::button(ui, theme, t!("Reset")).on_hover_text(t!("Use the theme's own accent")).clicked() {
             ed.prefs.accent = None;
             ed.restyle();
             ed.theme.apply(&ctx);
@@ -270,41 +168,41 @@ fn appearance(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsVi
     accent_swatches(ui, ed, theme, 16.0);
     ui.add_space(14.0);
 
-    group(ui, theme, t!("Interface"));
-    row(ui, theme, t!("Touch mode"), t!("Bigger buttons and more room between them, for touch screens and pens."), |ui| {
+    kit::group(ui, theme, t!("Interface"));
+    kit::setting_row(ui, theme, t!("Touch mode"), t!("Bigger buttons and more room between them, for touch screens and pens."), |ui| {
         if toggle(ui, theme, &mut ed.prefs.touch) {
             ed.restyle();
             ed.theme.apply(&ctx);
         }
     });
-    row(ui, theme, t!("Interface size"), t!("Makes all text and controls bigger or smaller."), |ui| {
+    kit::setting_row(ui, theme, t!("Interface size"), t!("Makes all text and controls bigger or smaller."), |ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
         for s in UI_SCALES.iter().rev() {
             let selected = (ed.prefs.ui_scale - s).abs() < 0.01;
             let text = RichText::new(format!("{:.0}%", s * 100.0)).size(12.0).color(if selected { Color32::from_rgb(0, 24, 28) } else { theme.text });
-            let b = egui::Button::new(text).min_size(vec2(52.0, crate::ui::inputs::input_height(ui)));
-            if crate::ui::dialog::styled_button(ui, theme, b, if selected { theme.accent } else { theme.field }, Stroke::NONE).clicked() && !selected {
+            let b = egui::Button::new(text).min_size(vec2(52.0, crate::ui::kit::input_height(ui)));
+            if crate::ui::kit::styled_button(ui, theme, b, if selected { theme.accent } else { theme.field }, Stroke::NONE).clicked() && !selected {
                 ed.prefs.ui_scale = *s;
                 ctx.set_zoom_factor(*s);
             }
         }
     });
 
-    group(ui, theme, t!("Canvas"));
-    row(ui, theme, t!("Grid dots"), t!("The dotted background on canvases."), |ui| {
+    kit::group(ui, theme, t!("Canvas"));
+    kit::setting_row(ui, theme, t!("Grid dots"), t!("The dotted background on canvases."), |ui| {
         toggle(ui, theme, &mut ed.prefs.show_grid);
     });
-    row(ui, theme, t!("Snap to grid"), t!("Blocks and notes you drop line up with the grid. The magnet in the canvas toolbar switches it too."), |ui| {
+    kit::setting_row(ui, theme, t!("Snap to grid"), t!("Blocks and notes you drop line up with the grid. The magnet in the canvas toolbar switches it too."), |ui| {
         toggle(ui, theme, &mut ed.prefs.snap_to_grid);
     });
     let theme_wire = ed.reg.theme(&current).map(|d| d.shape.wire_width).unwrap_or(2.0);
-    row(ui, theme, t!("Wire thickness"), t!("How thick the wires between blocks are drawn."), |ui| {
-        if ed.prefs.wire_width.is_some() && crate::ui::dialog::button(ui, theme, t!("Reset")).clicked() {
+    kit::setting_row(ui, theme, t!("Wire thickness"), t!("How thick the wires between blocks are drawn."), |ui| {
+        if ed.prefs.wire_width.is_some() && crate::ui::kit::button(ui, theme, t!("Reset")).clicked() {
             ed.prefs.wire_width = None;
             ed.restyle();
         }
         let mut w = ed.prefs.wire_width.unwrap_or(theme_wire);
-        if ui.add(egui::Slider::new(&mut w, 1.0..=5.0).step_by(0.5).suffix(" px")).changed() {
+        if kit::Slider::new(&mut w, 1.0..=5.0).step(0.5).suffix(" px").show(ui, theme) {
             ed.prefs.wire_width = Some(w);
             ed.restyle();
         }
@@ -342,32 +240,32 @@ pub fn theme_card(ui: &mut Ui, t: &Theme, page: &Theme, selected: bool, accent_o
 
 fn editor(ui: &mut Ui, ed: &mut Editor, theme: &Theme, asks: &mut Vec<Ask>) {
     let ctx = ui.ctx().clone();
-    group(ui, theme, t!("Window"));
-    row(ui, theme, t!("Activity bar"), t!("The icons on the far left for Workspaces, Stored Data, Plugins and Settings."), |ui| {
+    kit::group(ui, theme, t!("Window"));
+    kit::setting_row(ui, theme, t!("Activity bar"), t!("The icons on the far left for Workspaces, Stored Data, Plugins and Settings."), |ui| {
         toggle(ui, theme, &mut ed.prefs.activity_bar);
     });
-    row(ui, theme, t!("System title bar"), t!("Use the operating system's title bar instead of XC Circuit's own (with the search box)."), |ui| {
+    kit::setting_row(ui, theme, t!("System title bar"), t!("Use the operating system's title bar instead of XC Circuit's own (with the search box)."), |ui| {
         if toggle(ui, theme, &mut ed.prefs.system_titlebar) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(ed.prefs.system_titlebar));
         }
     });
-    row(ui, theme, t!("Panel layout"), t!("Put every panel back where it started."), |ui| {
-        if crate::ui::dialog::button(ui, theme, t!("Reset layout")).clicked() {
+    kit::setting_row(ui, theme, t!("Panel layout"), t!("Put every panel back where it started."), |ui| {
+        if crate::ui::kit::button(ui, theme, t!("Reset layout")).clicked() {
             asks.push(Ask::ResetLayout);
         }
     });
-    group(ui, theme, t!("Startup"));
-    row(ui, theme, t!("Reopen last project"), t!("Open the project you had open last time. When off, XC Circuit starts with the example."), |ui| {
+    kit::group(ui, theme, t!("Startup"));
+    kit::setting_row(ui, theme, t!("Reopen last project"), t!("Open the project you had open last time. When off, XC Circuit starts with the example."), |ui| {
         toggle(ui, theme, &mut ed.prefs.reopen_last_project);
     });
-    row(ui, theme, t!("Look for updates"), t!("At start, ask GitHub whether there is a newer XC Circuit, and say so in the status bar. Help › Check for Updates asks any time."), |ui| {
+    kit::setting_row(ui, theme, t!("Look for updates"), t!("At start, ask GitHub whether there is a newer XC Circuit, and say so in the status bar. Help › Check for Updates asks any time."), |ui| {
         toggle(ui, theme, &mut ed.prefs.check_updates);
     });
 }
 
 fn bot(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView, asks: &mut Vec<Ask>) {
-    group(ui, theme, t!("Running"));
-    row(ui, theme, t!("Restart on save"), t!("Saving restarts a running bot so it uses your changes."), |ui| {
+    kit::group(ui, theme, t!("Running"));
+    kit::setting_row(ui, theme, t!("Restart on save"), t!("Saving restarts a running bot so it uses your changes."), |ui| {
         toggle(ui, theme, &mut ed.prefs.auto_restart);
     });
     if view.node.is_none() {
@@ -379,37 +277,37 @@ fn bot(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView, ask
         None => (String::new(), theme.text_muted),
     };
     let which = ed.prefs.node_path.clone().unwrap_or_else(|| t!("node from the PATH").into());
-    row(ui, theme, "Node.js", &format!("Bots run with Node.js 22 or newer. Using: {which}"), |ui| {
-        if crate::ui::dialog::button(ui, theme, t!("Set up…")).on_hover_text(t!("Find Node.js on this computer or install it")).clicked() {
+    kit::setting_row(ui, theme, "Node.js", &format!("Bots run with Node.js 22 or newer. Using: {which}"), |ui| {
+        if crate::ui::kit::button(ui, theme, t!("Set up…")).on_hover_text(t!("Find Node.js on this computer or install it")).clicked() {
             asks.push(Ask::NodeSetup);
             view.node = None;
         }
-        if crate::ui::dialog::button(ui, theme, t!("Check again")).clicked() {
+        if crate::ui::kit::button(ui, theme, t!("Check again")).clicked() {
             view.node = None;
         }
         ui.label(RichText::new(status).size(12.0).color(color));
     });
     let packages = crate::bot::app_data_dir().join("packages");
-    row(ui, theme, t!("npm packages"), &tf!("Installed once for all bots: {folder}", folder = packages.display()), |ui| {
-        if crate::ui::dialog::button(ui, theme, t!("Open folder")).clicked() {
+    kit::setting_row(ui, theme, t!("npm packages"), &tf!("Installed once for all bots: {folder}", folder = packages.display()), |ui| {
+        if crate::ui::kit::button(ui, theme, t!("Open folder")).clicked() {
             let _ = std::fs::create_dir_all(&packages);
             let _ = open::that(&packages);
         }
     });
     if let Some(p) = &ed.project {
-        group(ui, theme, &format!("This project · {}", p.meta.name));
-        row(ui, theme, t!("Bot settings"), t!("Token and the other settings of this project's bot."), |ui| {
-            if crate::ui::dialog::button(ui, theme, t!("Open…")).clicked() {
+        kit::group(ui, theme, &format!("This project · {}", p.meta.name));
+        kit::setting_row(ui, theme, t!("Bot settings"), t!("Token and the other settings of this project's bot."), |ui| {
+            if crate::ui::kit::button(ui, theme, t!("Open…")).clicked() {
                 asks.push(Ask::BotSettings);
             }
         });
-        row(ui, theme, t!("Slash commands"), t!("The commands this bot registers with Discord."), |ui| {
-            if crate::ui::dialog::button(ui, theme, t!("Edit…")).clicked() {
+        kit::setting_row(ui, theme, t!("Slash commands"), t!("The commands this bot registers with Discord."), |ui| {
+            if crate::ui::kit::button(ui, theme, t!("Edit…")).clicked() {
                 asks.push(Ask::SlashCommands);
             }
         });
-        row(ui, theme, t!("Export"), t!("Write a folder that runs with node index.js."), |ui| {
-            if crate::ui::dialog::button(ui, theme, t!("Export…")).clicked() {
+        kit::setting_row(ui, theme, t!("Export"), t!("Write a folder that runs with node index.js."), |ui| {
+            if crate::ui::kit::button(ui, theme, t!("Export…")).clicked() {
                 asks.push(Ask::Export);
             }
         });
@@ -417,54 +315,54 @@ fn bot(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView, ask
 }
 
 fn backups(ui: &mut Ui, ed: &mut Editor, theme: &Theme, asks: &mut Vec<Ask>) {
-    group(ui, theme, t!("Project backups"));
-    row(ui, theme, t!("Back up on every save"), t!("Keeps a copy of the project each time you save, outside the project folder."), |ui| {
+    kit::group(ui, theme, t!("Project backups"));
+    kit::setting_row(ui, theme, t!("Back up on every save"), t!("Keeps a copy of the project each time you save, outside the project folder."), |ui| {
         toggle(ui, theme, &mut ed.prefs.backups);
     });
-    row(ui, theme, t!("Keep the newest"), t!("How many of the most recent backups are always kept."), |ui| {
-        ui.add(egui::Slider::new(&mut ed.prefs.backup_keep, 5..=100).suffix(" backups"));
+    kit::setting_row(ui, theme, t!("Keep the newest"), t!("How many of the most recent backups are always kept."), |ui| {
+        kit::Slider::new(&mut ed.prefs.backup_keep, 5..=100).suffix(" backups").width(140.0).show(ui, theme);
     });
-    row(ui, theme, t!("And one a day for"), t!("Older backups thin out to the last one of each day."), |ui| {
-        ui.add(egui::Slider::new(&mut ed.prefs.backup_days, 0..=60).suffix(" days"));
+    kit::setting_row(ui, theme, t!("And one a day for"), t!("Older backups thin out to the last one of each day."), |ui| {
+        kit::Slider::new(&mut ed.prefs.backup_days, 0..=60).suffix(" days").width(140.0).show(ui, theme);
     });
-    row(ui, theme, t!("Restore"), t!("See what changed and bring back the project, a workspace or the bot's saved data."), |ui| {
-        if crate::ui::dialog::button(ui, theme, t!("Restore from backup…")).clicked() {
+    kit::setting_row(ui, theme, t!("Restore"), t!("See what changed and bring back the project, a workspace or the bot's saved data."), |ui| {
+        if crate::ui::kit::button(ui, theme, t!("Restore from backup…")).clicked() {
             asks.push(Ask::OpenBackups);
         }
     });
     let folder = crate::bot::app_data_dir().join("backups");
-    row(ui, theme, t!("Backups folder"), &folder.display().to_string(), |ui| {
-        if crate::ui::dialog::button(ui, theme, t!("Open")).clicked() {
+    kit::setting_row(ui, theme, t!("Backups folder"), &folder.display().to_string(), |ui| {
+        if crate::ui::kit::button(ui, theme, t!("Open")).clicked() {
             let _ = std::fs::create_dir_all(&folder);
             let _ = open::that(&folder);
         }
     });
-    group(ui, theme, t!("Unsaved changes"));
-    row(ui, theme, t!("Crash recovery"), t!("While you have unsaved changes, a copy is kept every 30 seconds. If XC Circuit or your computer stops, you're offered your changes back the next time you open the project."), |_| {});
-    group(ui, theme, t!("The bot's saved data"));
-    row(ui, theme, t!("Backups by the bot"), t!("Every bot backs up its saved data each time it starts and every 6 hours, keeping the newest 10. If the data is ever empty, it asks whether to restore a backup."), |_| {});
+    kit::group(ui, theme, t!("Unsaved changes"));
+    kit::setting_row(ui, theme, t!("Crash recovery"), t!("While you have unsaved changes, a copy is kept every 30 seconds. If XC Circuit or your computer stops, you're offered your changes back the next time you open the project."), |_| {});
+    kit::group(ui, theme, t!("The bot's saved data"));
+    kit::setting_row(ui, theme, t!("Backups by the bot"), t!("Every bot backs up its saved data each time it starts and every 6 hours, keeping the newest 10. If the data is ever empty, it asks whether to restore a backup."), |_| {});
 }
 
 fn plugins(ui: &mut Ui, ed: &mut Editor, native: &NativeHost, theme: &Theme, asks: &mut Vec<Ask>) {
-    group(ui, theme, t!("Plugins"));
-    row(ui, theme, t!("Installed plugins"), &tf!("{plugins} plugins with {blocks} blocks and {themes} themes are loaded.", plugins = ed.reg.plugins.len(), blocks = ed.reg.blocks.len(), themes = ed.reg.themes.len()), |ui| {
-        if crate::ui::dialog::button(ui, theme, t!("Manage…")).clicked() {
+    kit::group(ui, theme, t!("Plugins"));
+    kit::setting_row(ui, theme, t!("Installed plugins"), &tf!("{plugins} plugins with {blocks} blocks and {themes} themes are loaded.", plugins = ed.reg.plugins.len(), blocks = ed.reg.blocks.len(), themes = ed.reg.themes.len()), |ui| {
+        if crate::ui::kit::button(ui, theme, t!("Manage…")).clicked() {
             asks.push(Ask::ManagePlugins);
         }
-        if crate::ui::dialog::button(ui, theme, t!("Reload")).on_hover_text(t!("Load plugin files again")).clicked() {
+        if crate::ui::kit::button(ui, theme, t!("Reload")).on_hover_text(t!("Load plugin files again")).clicked() {
             asks.push(Ask::ReloadPlugins);
         }
     });
     let mut allow = native.allow;
-    row(ui, theme, t!("Allow native plugins"), t!("Native plugins are compiled Rust code with full access to your computer. Only turn this on for plugins you trust."), |ui| {
+    kit::setting_row(ui, theme, t!("Allow native plugins"), t!("Native plugins are compiled Rust code with full access to your computer. Only turn this on for plugins you trust."), |ui| {
         if toggle(ui, theme, &mut allow) {
             asks.push(Ask::AllowNative(allow));
         }
     });
-    group(ui, theme, t!("Plugin folders"));
+    kit::group(ui, theme, t!("Plugin folders"));
     for dir in ed.plugin_dirs.clone() {
-        row(ui, theme, &dir.display().to_string(), if dir.is_dir() { "" } else { t!("Doesn't exist yet") }, |ui| {
-            if crate::ui::dialog::button(ui, theme, t!("Open")).clicked() {
+        kit::setting_row(ui, theme, &dir.display().to_string(), if dir.is_dir() { "" } else { t!("Doesn't exist yet") }, |ui| {
+            if crate::ui::kit::button(ui, theme, t!("Open")).clicked() {
                 let _ = std::fs::create_dir_all(&dir);
                 let _ = open::that(&dir);
             }
@@ -537,8 +435,8 @@ fn shortcuts(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsVie
     ui.label(RichText::new(t!("Click a shortcut, then press the keys you want: any key, with Ctrl, Shift and Alt as you like, or the mouse's side buttons. Esc cancels. Each action can have two.")).size(12.5).color(theme.text_muted));
     ui.add_space(8.0);
     ui.horizontal(|ui| {
-        ui.add(crate::ui::inputs::TextLine::new(&mut view.shortcut_filter).hint(t!("Search actions or keys")).width(260.0));
-        if !ed.prefs.shortcuts.is_empty() && crate::ui::dialog::button(ui, theme, t!("Reset all")).on_hover_text(t!("Every shortcut back to how it came")).clicked() {
+        ui.add(crate::ui::kit::TextLine::new(&mut view.shortcut_filter).hint(t!("Search actions or keys")).width(260.0));
+        if !ed.prefs.shortcuts.is_empty() && crate::ui::kit::button(ui, theme, t!("Reset all")).on_hover_text(t!("Every shortcut back to how it came")).clicked() {
             ed.prefs.shortcuts.clear();
             view.shortcut_note = None;
         }
@@ -555,9 +453,9 @@ fn shortcuts(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsVie
         }
         if action.group() != last_group {
             last_group = action.group();
-            group(ui, theme, last_group);
+            kit::group(ui, theme, last_group);
             if action.canvas_only() {
-                ui.label(RichText::new(t!("These work while the mouse is over a canvas.")).size(11.5).color(theme.text_muted));
+                kit::hint(ui, theme, t!("These work while the mouse is over a canvas."));
                 ui.add_space(4.0);
             }
         }
@@ -630,7 +528,7 @@ fn shortcuts(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsVie
         }
     }
 
-    group(ui, theme, t!("Mouse and fixed keys"));
+    kit::group(ui, theme, t!("Mouse and fixed keys"));
     egui::Frame::new().fill(theme.panel_header).stroke(Stroke::new(1.0, theme.line)).corner_radius(8).inner_margin(egui::Margin::symmetric(16, 8)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         egui::Grid::new("shortcuts").num_columns(2).spacing(vec2(24.0, 10.0)).show(ui, |ui| {
@@ -656,11 +554,11 @@ fn about(ui: &mut Ui, ed: &Editor, theme: &Theme) {
         });
     });
     ui.add_space(14.0);
-    group(ui, theme, t!("Where things are kept"));
+    kit::group(ui, theme, t!("Where things are kept"));
     let data = crate::bot::app_data_dir();
     for (title, path) in [(t!("App data"), data.clone()), (t!("npm packages"), data.join("packages")), (t!("Plugins you install"), data.join("plugins"))] {
-        row(ui, theme, title, &path.display().to_string(), |ui| {
-            if crate::ui::dialog::button(ui, theme, t!("Open")).clicked() {
+        kit::setting_row(ui, theme, title, &path.display().to_string(), |ui| {
+            if crate::ui::kit::button(ui, theme, t!("Open")).clicked() {
                 let _ = std::fs::create_dir_all(&path);
                 let _ = open::that(&path);
             }
@@ -668,8 +566,8 @@ fn about(ui: &mut Ui, ed: &Editor, theme: &Theme) {
     }
     if let Some(p) = &ed.project {
         let root = p.root.clone();
-        row(ui, theme, t!("This project"), &root.display().to_string(), |ui| {
-            if crate::ui::dialog::button(ui, theme, t!("Open")).clicked() {
+        kit::setting_row(ui, theme, t!("This project"), &root.display().to_string(), |ui| {
+            if crate::ui::kit::button(ui, theme, t!("Open")).clicked() {
                 let _ = open::that(&root);
             }
         });
@@ -734,19 +632,19 @@ fn new_translation(ctx: &egui::Context, ed: &mut Editor, theme: &Theme, view: &m
         crate::ui::dialog::Spec { id: "new-translation", title: t!("Create a translation"), subtitle: Some(t!("Every text is listed in English, ready to fill in")), icon: None, width: 460.0 },
         |ui, part| match part {
             crate::ui::dialog::Part::Body => {
-                crate::ui::dialog::field(ui, theme, t!("Language code"), Some(t!("Such as fr, es or pt-BR. An existing one (de) starts from its translation.")), |ui| {
-                    crate::ui::dialog::text_input(ui, code, "fr", false);
+                crate::ui::kit::field(ui, theme, t!("Language code"), Some(t!("Such as fr, es or pt-BR. An existing one (de) starts from its translation.")), |ui| {
+                    crate::ui::kit::text_input(ui, code, "fr", false);
                 });
-                crate::ui::dialog::field(ui, theme, t!("Name in that language"), None, |ui| {
-                    crate::ui::dialog::text_input(ui, name, "Français", false);
+                crate::ui::kit::field(ui, theme, t!("Name in that language"), None, |ui| {
+                    crate::ui::kit::text_input(ui, name, "Français", false);
                 });
-                crate::ui::dialog::field(ui, theme, t!("Name in English"), None, |ui| {
-                    crate::ui::dialog::text_input(ui, english, "French", false);
+                crate::ui::kit::field(ui, theme, t!("Name in English"), None, |ui| {
+                    crate::ui::kit::text_input(ui, english, "French", false);
                 });
             }
             crate::ui::dialog::Part::Footer => {
-                create = ui.add_enabled_ui(!code.trim().is_empty(), |ui| crate::ui::dialog::primary_button(ui, theme, t!("Create"))).inner.clicked();
-                cancel = crate::ui::dialog::secondary_button(ui, theme, t!("Cancel")).clicked();
+                create = ui.add_enabled_ui(!code.trim().is_empty(), |ui| crate::ui::kit::primary_button(ui, theme, t!("Create"))).inner.clicked();
+                cancel = crate::ui::kit::secondary_button(ui, theme, t!("Cancel")).clicked();
             }
         },
     );
@@ -799,7 +697,7 @@ mod tests {
             for _ in 0..12 {
                 let input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(width, 600.0))), ..Default::default() };
                 let mut out = ctx.run_ui(input, |ui| {
-                    row(ui, &theme, "Interface language", "Menus and settings; blocks stay in English. More languages come with plugins.", |ui| {
+                    kit::setting_row(ui, &theme, "Interface language", "Menus and settings; blocks stay in English. More languages come with plugins.", |ui| {
                         let before = ui.min_rect();
                         language_select(ui, &mut ed);
                         places.push(ui.min_rect().union(before));

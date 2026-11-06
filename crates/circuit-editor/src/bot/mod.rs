@@ -14,6 +14,7 @@ use std::time::{Duration, Instant};
 use circuit_runner::{BotEvent, ExportOptions, ExportSecret, Msg, Session, SessionConfig, build_bundle, secrets};
 use eframe::egui::{self, RichText};
 
+use crate::ui::kit;
 use crate::ui::dialog::{self, Part};
 use crate::editor::{Editor, Level};
 
@@ -269,7 +270,7 @@ impl BotUi {
                     ui.label(RichText::new(&text).size(13.5).color(theme.text));
                     ui.add_space(10.0);
                     for (i, c) in choices.iter().enumerate() {
-                        let b = if i == 0 { dialog::primary_button(ui, &theme, &c.label) } else { dialog::secondary_button(ui, &theme, &c.label) };
+                        let b = if i == 0 { kit::primary_button(ui, &theme, &c.label) } else { kit::secondary_button(ui, &theme, &c.label) };
                         if b.clicked() {
                             picked = Some((c.value.clone(), c.label.clone()));
                         }
@@ -277,7 +278,7 @@ impl BotUi {
                     }
                 }
                 Part::Footer => {
-                    if dialog::secondary_button(ui, &theme, t!("Stop the bot")).clicked() {
+                    if kit::secondary_button(ui, &theme, t!("Stop the bot")).clicked() {
                         picked = Some((String::new(), String::new()));
                     }
                 }
@@ -314,11 +315,11 @@ impl BotUi {
             },
             |ui, part| match part {
                 Part::Body => {
-                    dialog::section(ui, &theme, t!("Destination"));
-                    dialog::field(ui, &theme, t!("Folder"), Some(t!("Created if it doesn't exist. It must be empty, or a folder you exported a bot to before.")), |ui| {
+                    kit::section(ui, &theme, t!("Destination"));
+                    kit::field(ui, &theme, t!("Folder"), Some(t!("Created if it doesn't exist. It must be empty, or a folder you exported a bot to before.")), |ui| {
                         ui.horizontal(|ui| {
-                            ui.allocate_ui(egui::vec2(ui.available_width() - 104.0, 34.0), |ui| dialog::readout(ui, &theme, &draft.dir.display().to_string()));
-                            if dialog::secondary_button(ui, &theme, t!("Change…")).clicked()
+                            ui.allocate_ui(egui::vec2(ui.available_width() - 104.0, 34.0), |ui| kit::readout(ui, &theme, &draft.dir.display().to_string()));
+                            if kit::secondary_button(ui, &theme, t!("Change…")).clicked()
                                 && let Some(parent) = rfd::FileDialog::new().set_title(t!("Choose where to export the bot")).pick_folder()
                             {
                                 draft.dir = parent.join(circuit_runner::export::folder_name(&draft.name));
@@ -326,7 +327,7 @@ impl BotUi {
                         });
                     });
 
-                    dialog::section(ui, &theme, t!("Options"));
+                    kit::section(ui, &theme, t!("Options"));
                     let token_env = ed.mode().map(|m| m.token_env().to_string()).unwrap_or_else(|| "DISCORD_TOKEN".into());
                     let token_text = if draft.token_saved {
                         tf!("Writes {variable} and the other saved secrets to the folder's .env file. Never share or upload that file.", variable = token_env)
@@ -334,11 +335,11 @@ impl BotUi {
                         t!("No token saved yet (Bot › Settings). An empty .env is created for you to fill in.").to_string()
                     };
                     ui.add_enabled_ui(draft.token_saved, |ui| {
-                        dialog::toggle_row(ui, &theme, &mut draft.include_token, t!("Include the bot token and secrets"), &token_text);
+                        kit::toggle_row(ui, &theme, &mut draft.include_token, t!("Include the bot token and secrets"), &token_text);
                     });
-                    dialog::toggle_row(ui, &theme, &mut draft.install, t!("Install npm packages now"), t!("Runs npm install in the folder so it's ready to start. Needs internet."));
+                    kit::toggle_row(ui, &theme, &mut draft.install, t!("Install npm packages now"), t!("Runs npm install in the folder so it's ready to start. Needs internet."));
 
-                    dialog::section(ui, &theme, t!("What you get"));
+                    kit::section(ui, &theme, t!("What you get"));
                     egui::Frame::new().fill(theme.field).corner_radius(8).inner_margin(egui::Margin::symmetric(12, 10)).show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         for (file, what) in [
@@ -349,14 +350,14 @@ impl BotUi {
                         ] {
                             ui.horizontal(|ui| {
                                 ui.label(RichText::new(file).monospace().size(12.0).color(theme.text));
-                                ui.label(RichText::new(what).size(11.5).color(theme.text_muted));
+                                kit::hint(ui, &theme, what);
                             });
                         }
                     });
                 }
                 Part::Footer => {
-                    go = dialog::primary_button(ui, &theme, t!("Export")).clicked();
-                    cancel = dialog::secondary_button(ui, &theme, t!("Cancel")).clicked();
+                    go = kit::primary_button(ui, &theme, t!("Export")).clicked();
+                    cancel = kit::secondary_button(ui, &theme, t!("Cancel")).clicked();
                 }
             },
         );

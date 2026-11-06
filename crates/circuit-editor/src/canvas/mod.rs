@@ -14,6 +14,7 @@ use eframe::egui::{
 };
 use serde_json::Value;
 
+use crate::ui::kit;
 use crate::editor::{Editor, node_shape};
 use crate::canvas::picker::{PendingWire, Picker};
 use crate::ui::theme::{Theme, mix, with_alpha};
@@ -407,21 +408,21 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             ui.spacing_mut().item_spacing.y = 8.0;
             ui.label(RichText::new(t!("Try Zone")).strong());
             ui.label(t!("Title"));
-            *edited |= ui.add(crate::ui::inputs::TextLine::new(&mut z.title)).changed();
+            *edited |= ui.add(crate::ui::kit::TextLine::new(&mut z.title)).changed();
             ui.horizontal(|ui| {
                 ui.label(t!("Retries"));
-                *edited |= ui.add(egui::DragValue::new(&mut z.retry).range(0..=10)).changed();
+                *edited |= kit::Number::new(&mut z.retry).range(0..=10).show(ui, theme).changed();
             });
             ui.horizontal(|ui| {
                 ui.label(t!("Timeout (s)"));
                 let mut secs = z.timeout_ms.map(|t| t as f64 / 1000.0).unwrap_or(0.0);
-                if ui.add(egui::DragValue::new(&mut secs).range(0.0..=600.0).speed(0.5)).changed() {
+                if kit::Number::new(&mut secs).range(0.0..=600.0).speed(0.5).show(ui, theme).changed() {
                     z.timeout_ms = (secs > 0.0).then_some((secs * 1000.0) as u64);
                     *edited = true;
                 }
             });
             ui.separator();
-            if crate::ui::dialog::button(ui, theme, t!("Remove Try Zone")).clicked() {
+            if crate::ui::kit::button(ui, theme, t!("Remove Try Zone")).clicked() {
                 menu = Some(NodeMenu::RemoveZone(zid.clone()));
                 ui.close();
             }
@@ -486,7 +487,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                         ui.label(RichText::new(crate::bot::ago(at.elapsed())).size(11.0).color(theme.text_muted));
                     }
                     None => {
-                        ui.label(RichText::new(t!("No value yet: run the bot and this shows the last value that went through this wire.")).size(11.5).color(theme.text_muted));
+                        kit::hint(ui, theme, t!("No value yet: run the bot and this shows the last value that went through this wire."));
                     }
                 }
             });
@@ -1043,7 +1044,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.label(RichText::new(t!("This workspace is turned off: the bot leaves it out, so its blocks don't run.")).color(theme.text));
-                        if ui.button(t!("Turn on")).clicked() {
+                        if kit::button(ui, theme, t!("Turn on")).clicked() {
                             ws.disabled = false;
                             *edited = true;
                         }
@@ -1071,7 +1072,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             *edited = true;
         }
         let snap_tip = if prefs.snap_to_grid { t!("Snap to grid is on: dropped blocks and notes line up with the grid") } else { t!("Snap to grid is off") };
-        if crate::ui::dialog::styled_button(
+        if crate::ui::kit::styled_button(
             ui,
             theme,
             egui::Button::image(egui::Image::from_uri(icon("magnet").map(|p| crate::editor::file_uri(&p)).unwrap_or_default()).tint(if prefs.snap_to_grid { theme.accent } else { theme.text_muted }).fit_to_exact_size(vec2(15.0, 15.0)))
@@ -1086,17 +1087,17 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             prefs.snap_to_grid = !prefs.snap_to_grid;
         }
         ui.add_space(6.0);
-        if crate::ui::dialog::icon_button(ui, theme, icon("zoom-out").as_deref(), "−", t!("Zoom out")).clicked() {
+        if crate::ui::kit::icon_button(ui, theme, icon("zoom-out").as_deref(), "−", t!("Zoom out")).clicked() {
             view.zoom_at(outer.min, center, 1.0 / 1.25);
         }
         let percent = format!("{:.0}%", view.zoom * 100.0);
         if tool_button(ui, theme, None, &percent).on_hover_text(t!("Back to 100%")).clicked() {
             view.zoom_at(outer.min, center, 1.0 / view.zoom);
         }
-        if crate::ui::dialog::icon_button(ui, theme, icon("zoom-in").as_deref(), "+", t!("Zoom in")).clicked() {
+        if crate::ui::kit::icon_button(ui, theme, icon("zoom-in").as_deref(), "+", t!("Zoom in")).clicked() {
             view.zoom_at(outer.min, center, 1.25);
         }
-        if crate::ui::dialog::icon_button(ui, theme, icon("maximize").as_deref(), t!("Fit"), t!("Show every block and note")).clicked() {
+        if crate::ui::kit::icon_button(ui, theme, icon("maximize").as_deref(), t!("Fit"), t!("Show every block and note")).clicked() {
             fit_view(view, outer, &layouts[..node_count], ws);
         }
     });
@@ -1131,7 +1132,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                             if i == 3 || i == 6 {
                                 ui.separator();
                             }
-                            if ui.button(how.name()).clicked() {
+                            if kit::menu_item(ui, how.name(), None, true).clicked() {
                                 menu = Some(NodeMenu::Arrange(b.node.clone(), how));
                             }
                         }

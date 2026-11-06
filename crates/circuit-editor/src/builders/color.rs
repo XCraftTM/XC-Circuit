@@ -56,7 +56,7 @@ pub fn color_button(ui: &mut Ui, id: Id, color: &mut Color32, theme: &Theme, wid
     let font = egui::FontId::monospace(12.0);
     let galley = ui.painter().layout_no_wrap(hex.clone(), font, theme.text);
     let w = width.unwrap_or(galley.size().x + 40.0);
-    let (rect, resp) = ui.allocate_exact_size(vec2(w, 22.0), Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(vec2(w, crate::ui::kit::control_height(ui)), Sense::click());
     let open_id = id.with("open");
     let mut open: Option<Open> = ui.data(|d| d.get_temp(open_id));
     let fill = if resp.hovered() || open.is_some() { mix(theme.field, theme.text, 0.08) } else { theme.field };
@@ -281,9 +281,12 @@ mod tests {
         let ctx = egui::Context::default();
         let theme = Theme::fallback();
         let mut color = Color32::from_rgb(0x58, 0x65, 0xF2);
+        // The swatch is as tall as the kit's controls.
+        let height = std::cell::Cell::new(22.0);
         let run = |events: Vec<egui::Event>, color: &mut Color32| {
             let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(600.0, 600.0))), events, ..Default::default() };
             let mut out = ctx.run_ui(raw, |ui| {
+                height.set(crate::ui::kit::control_height(ui));
                 color_button(ui, Id::new("c"), color, &theme, Some(120.0));
             });
             out.textures_delta.clear();
@@ -301,7 +304,7 @@ mod tests {
         assert!(ctx.data(|d| d.get_temp::<Open>(Id::new("c").with("open"))).is_some(), "clicking the swatch opens the picker");
 
         // Near the bottom of the square everything is close to black, whatever the hue.
-        let near_bottom_left = pos2(14.0, 22.0 + 4.0 + 10.0 + SQUARE_H - 4.0);
+        let near_bottom_left = pos2(14.0, height.get() + 4.0 + 10.0 + SQUARE_H - 4.0);
         run(click(near_bottom_left), &mut color);
         assert!(color.r().max(color.g()).max(color.b()) < 60, "picked {color:?}");
 

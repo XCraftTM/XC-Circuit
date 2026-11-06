@@ -1,7 +1,7 @@
 # Panels (ui)
 
 ::: info In short
-`render(ui)` of a [panel](./editor#xc-panel) or [overlay](./editor#xc-overlay) lists what to show, top to bottom: `ui.heading("…")`, `ui.button("…", onClick)`… XC Circuit draws it in the app's own style and calls `render` again when something changes.
+`render(ui)` of a [panel](./editor#xc-panel) or [overlay](./editor#xc-overlay) lists what to show, top to bottom: `ui.heading("…")`, `ui.button("…", onClick)`… XC Circuit draws it with the same UI kit as the rest of the app (its buttons, switches, dropdowns, numbers and colours, in the theme in use) and calls `render` again when something changes.
 :::
 
 A panel's `render(ui)` describes what it shows by calling `ui` methods in order. XC Circuit draws the result with the app's own look and theme.
@@ -59,6 +59,12 @@ Every method returns `ui`, so calls can be chained.
 | `ui.button(label, onClick, options?)` | A button. Options: `primary` (filled with the accent), `tooltip`. Without `onClick` it's disabled. |
 | `ui.link(label, onClick, options?)` | A link-style button. Options: `tooltip`. |
 | `ui.checkbox(label, checked, onChange)` | A check box. `onChange(checked)`. |
+| `ui.toggle(label, on, onChange)` | A switch, like the app's settings. `onChange(on)`. |
+| `ui.select(value, choices, onChange, options?)` | A dropdown. `choices`: `{ value: "Label" }` or `[["value", "Label"], …]` (or plain values). `onChange(value)`. Options: `width` (default 200). |
+| `ui.number(value, onChange, options?)` | A number to type or drag. `onChange(number)`. Options: `min`, `max`, `step`, `suffix` (`" px"`). |
+| `ui.slider(value, min, max, onChange, options?)` | A slider with its number beside it. `onChange(number)`. Options: `step`, `suffix`. |
+| `ui.color(value, onChange)` | A colour with the app's picker. `value` and `onChange(value)` as `"#RRGGBB"`. |
+| `ui.note(text, options?)` | A box of text. Options: `tone` (`"info"`, `"warning"` or `"success"`), `title`. |
 | `ui.input(value, onChange, options?)` | A text box. `onChange(text)` on every change. Options: `placeholder`, `multiline` (a box of several lines), `key` (keeps the text box's focus when the panel's layout around it changes). |
 | `ui.progress(fraction, label?)` | A progress bar, `fraction` from 0 to 1. |
 | `ui.image(file, options?)` | A picture from the plugin's folder (PNG, JPEG or SVG). Options: `width`, `height` (default 64), `tint` (a colour, as for text). |

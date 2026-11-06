@@ -27,7 +27,7 @@ pub(super) fn tool_button(ui: &mut Ui, theme: &Theme, icon: Option<&std::path::P
         None => egui::Button::new(text),
     };
     let h = ui.spacing().interact_size.y.max(32.0);
-    crate::ui::dialog::styled_button(ui, theme, button.corner_radius(7).min_size(vec2(h, h)), theme.panel, Stroke::new(1.0, theme.node_border))
+    crate::ui::kit::styled_button(ui, theme, button.corner_radius(7).min_size(vec2(h, h)), theme.panel, Stroke::new(1.0, theme.node_border))
 }
 
 pub fn block_tooltip(ui: &mut Ui, def: &BlockDef, theme: &Theme) {

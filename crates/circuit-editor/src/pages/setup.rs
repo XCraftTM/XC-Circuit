@@ -10,6 +10,7 @@ use circuit_runner::node::MIN_NODE_MAJOR;
 use circuit_runner::node_setup::{self, NodeInstall};
 use eframe::egui::{self, Align, Align2, Color32, CursorIcon, FontId, Layout, Rect, RichText, ScrollArea, Sense, Stroke, Ui, pos2, vec2};
 
+use crate::ui::kit;
 use crate::editor::{Editor, file_uri};
 use crate::i18n::n;
 use crate::ui::theme::{Theme, mix, with_alpha};
@@ -159,24 +160,24 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, setup: &mut Setup) -> Option<Done> {
     let mut f = col.new_child(egui::UiBuilder::new().max_rect(footer).layout(Layout::left_to_right(Align::Center)));
     if setup.node_only {
         f.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if crate::ui::dialog::primary_button(ui, &theme, t!("Save and close")).clicked() && setup.job.is_none() {
+            if crate::ui::kit::primary_button(ui, &theme, t!("Save and close")).clicked() && setup.job.is_none() {
                 done = Some(Done::Closed);
             }
         });
         return done;
     }
-    if crate::ui::dialog::secondary_button(&mut f, &theme, t!("Skip setup")).on_hover_text(t!("You can run it again from Help")).clicked() {
+    if crate::ui::kit::secondary_button(&mut f, &theme, t!("Skip setup")).on_hover_text(t!("You can run it again from Help")).clicked() {
         done = Some(Done::Finished { tour: false });
     }
     f.with_layout(Layout::right_to_left(Align::Center), |ui| {
         let i = setup.step.index();
         if setup.step != Step::Tour {
             let label = if setup.step == Step::Welcome { t!("Get started") } else { t!("Next") };
-            if crate::ui::dialog::primary_button(ui, &theme, label).clicked() && setup.job.is_none() {
+            if crate::ui::kit::primary_button(ui, &theme, label).clicked() && setup.job.is_none() {
                 setup.step = Step::ALL[i + 1].0;
             }
         }
-        if i > 0 && crate::ui::dialog::secondary_button(ui, &theme, t!("Back")).clicked() && setup.job.is_none() {
+        if i > 0 && crate::ui::kit::secondary_button(ui, &theme, t!("Back")).clicked() && setup.job.is_none() {
             setup.step = Step::ALL[i - 1].0;
         }
     });
@@ -231,7 +232,7 @@ fn steps_bar(ui: &mut Ui, theme: &Theme, current: Step) {
 }
 
 fn check_mark(ui: &Ui, center: egui::Pos2, size: f32, color: Color32) {
-    crate::ui::widgets::check_mark(ui.painter(), center, size, color);
+    crate::ui::kit::check_mark(ui.painter(), center, size, color);
 }
 
 fn title(ui: &mut Ui, theme: &Theme, text: &str, sub: &str) {
@@ -338,7 +339,7 @@ fn node_step(ui: &mut Ui, ed: &mut Editor, theme: &Theme, setup: &mut Setup) {
     ui.horizontal(|ui| {
         ui.label(RichText::new(t!("ON THIS COMPUTER")).size(11.0).strong().color(theme.text_muted));
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if ui.add_enabled(setup.job.is_none(), egui::Button::new(t!("Browse…"))).clicked()
+            if ui.add_enabled_ui(setup.job.is_none(), |ui| kit::button(ui, theme, t!("Browse…"))).inner.clicked()
                 && let Some(path) = {
                     let dialog = rfd::FileDialog::new().set_title(t!("Choose the node executable"));
                     if cfg!(windows) { dialog.add_filter("Node.js", &["exe"]) } else { dialog }
@@ -354,7 +355,7 @@ fn node_step(ui: &mut Ui, ed: &mut Editor, theme: &Theme, setup: &mut Setup) {
                     Err(e) => setup.outcome = Some(Err(format!("{e:#}"))),
                 }
             }
-            if ui.add_enabled(setup.scan.is_none() && setup.job.is_none(), egui::Button::new(t!("Search again"))).clicked() {
+            if ui.add_enabled_ui(setup.scan.is_none() && setup.job.is_none(), |ui| kit::button(ui, theme, t!("Search again"))).inner.clicked() {
                 setup.rescan();
             }
         });
@@ -491,7 +492,7 @@ fn install_option(ui: &mut Ui, theme: &Theme, head: &str, text: &str, busy: bool
             ui.label(RichText::new(text).size(12.5).color(theme.text_muted));
         });
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            go = ui.add_enabled(!busy, egui::Button::new(RichText::new(t!("Install")).strong()).min_size(vec2(90.0, 30.0))).clicked();
+            go = ui.add_enabled_ui(!busy, |ui| kit::primary_button(ui, theme, t!("Install"))).inner.clicked();
         });
     });
     go
@@ -507,7 +508,7 @@ fn look(ui: &mut Ui, ed: &mut Editor, theme: &Theme) {
     ui.add_space(22.0);
     ui.horizontal(|ui| {
         let mut touch = ed.prefs.touch;
-        if crate::ui::widgets::toggle(ui, &mut touch, theme).changed() {
+        if crate::ui::kit::toggle(ui, &mut touch, theme).changed() {
             ed.prefs.touch = touch;
             ed.restyle();
             ed.theme.apply(ui.ctx());

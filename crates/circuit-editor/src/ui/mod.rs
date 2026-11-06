@@ -4,6 +4,7 @@ pub mod chips;
 pub mod dialog;
 pub mod fonts;
 pub mod inputs;
+pub mod kit;
 pub mod notes;
 pub mod palette;
 pub mod theme;

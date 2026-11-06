@@ -5,6 +5,7 @@ use circuit_core::PinMode;
 use eframe::egui::{self, Color32, Frame, Margin, RichText, ScrollArea, Ui};
 use serde_json::Value;
 
+use crate::ui::kit;
 use crate::editor::{Editor, Level, node_shape};
 use crate::ui::theme::with_alpha;
 use crate::ui::widgets;
@@ -96,7 +97,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 let text = if pinned { t!("● pin") } else { t!("○ pin") };
                                 let color = if pinned { theme.pin_color(&f.ty, reg) } else { theme.text_muted };
-                                if ui.add(egui::Button::new(RichText::new(text).size(11.0).color(color)).selected(pinned)).on_hover_text(t!("Switch between typing a value and connecting a pin")).clicked() {
+                                if kit::filter_chip(ui, &theme, text, color, pinned).on_hover_text(t!("Switch between typing a value and connecting a pin")).clicked() {
                                     toggle = Some(key.clone());
                                 }
                             });
@@ -110,19 +111,19 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                         });
                     } else if pinned && f.label.as_deref().is_some_and(|l| l.starts_with("${")) {
                         // A text's {name} input: connecting it is up to you.
-                        ui.label(RichText::new(t!("Optional: connect what goes there. Unconnected, the name is looked up in the event and earlier blocks.")).size(11.5).color(theme.text_muted));
+                        kit::hint(ui, &theme, t!("Optional: connect what goes there. Unconnected, the name is looked up in the event and earlier blocks."));
                     } else if pinned {
                         ui.label(RichText::new(tf!("Waiting for a {type} wire", type = f.ty.display(reg))).italics().color(theme.text_muted));
                     } else if f.type_name == "embed" {
-                        if crate::ui::dialog::button(ui, &theme, t!("Open Embed Builder")).clicked() {
+                        if crate::ui::kit::button(ui, &theme, t!("Open Embed Builder")).clicked() {
                             *ask = Some(InspectorAsk::EmbedBuilder(ws_key.clone(), node_id.clone(), key.clone()));
                         }
                     } else if f.type_name == "canvas" {
-                        if crate::ui::dialog::button(ui, &theme, t!("Open Canvas Builder")).clicked() {
+                        if crate::ui::kit::button(ui, &theme, t!("Open Canvas Builder")).clicked() {
                             *ask = Some(InspectorAsk::CanvasBuilder(ws_key.clone(), node_id.clone(), key.clone()));
                         }
                     } else if f.type_name == "layout" {
-                        if crate::ui::dialog::button(ui, &theme, t!("Open Layout Builder")).clicked() {
+                        if crate::ui::kit::button(ui, &theme, t!("Open Layout Builder")).clicked() {
                             *ask = Some(InspectorAsk::LayoutBuilder(ws_key.clone(), node_id.clone(), key.clone()));
                         }
                     } else {
@@ -135,7 +136,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                         if f.templated() {
                             ui.label(RichText::new(t!("${…} holds JavaScript: type ${ for values from earlier blocks, or ${xp * 2}")).size(11.0).color(theme.text_muted));
                         }
-                        if f.type_name == "slash-command-ref" && crate::ui::dialog::button(ui, &theme, t!("Edit slash commands…")).clicked() {
+                        if f.type_name == "slash-command-ref" && crate::ui::kit::button(ui, &theme, t!("Edit slash commands…")).clicked() {
                             *ask = Some(InspectorAsk::SlashCommands);
                         }
                     }
@@ -181,11 +182,11 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
         ui.separator();
         padded(ui, |ui| {
             ui.horizontal(|ui| {
-                if crate::ui::dialog::button(ui, &theme, t!("Block source")).clicked() {
+                if crate::ui::kit::button(ui, &theme, t!("Block source")).clicked() {
                     let _ = open::that(&def.source);
                 }
                 if let Some(docs) = &def.docs
-                    && crate::ui::dialog::button(ui, &theme, t!("Docs")).clicked()
+                    && crate::ui::kit::button(ui, &theme, t!("Docs")).clicked()
                 {
                     let _ = open::that(docs);
                 }
@@ -221,7 +222,7 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
     // one level of lines, each with how many there are.
     Frame::new().inner_margin(Margin::symmetric(12, 8)).show(ui, |ui| {
         ui.horizontal(|ui| {
-            if crate::ui::dialog::button(ui, &theme, t!("Clear")).clicked() {
+            if crate::ui::kit::button(ui, &theme, t!("Clear")).clicked() {
                 ed.log.clear();
             }
             ui.add_space(6.0);
@@ -235,7 +236,7 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
                 (Some(Level::Error), format!("{} {}", t!("Errors"), count(Level::Error)), theme.error),
             ];
             for (l, label, color) in options {
-                if crate::ui::dialog::filter_chip(ui, &theme, &label, color, l == level).clicked() {
+                if crate::ui::kit::filter_chip(ui, &theme, &label, color, l == level).clicked() {
                     let n: u8 = match l {
                         None => 0,
                         Some(Level::Info) => 1,
@@ -258,7 +259,7 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
         .filter(|(_, l)| level.is_none_or(|want| l.level == want))
         .flat_map(|(i, l)| l.text.split('\n').enumerate().map(move |(n, part)| (i, n, part.trim_end_matches('\r'))))
         .collect();
-    let row_h = crate::ui::inputs::input_height(ui);
+    let row_h = crate::ui::kit::input_height(ui);
     ui.spacing_mut().item_spacing.y = 0.0;
     ScrollArea::vertical().auto_shrink([false, false]).stick_to_bottom(true).show_rows(ui, row_h, rows.len(), |ui, range| {
         Frame::new().inner_margin(Margin::symmetric(12, 0)).show(ui, |ui| {
@@ -274,7 +275,7 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
                     ui.label(RichText::new(part).monospace());
                     if n == 0
                         && let Some(t) = &line.target
-                        && crate::ui::dialog::button(ui, &theme, t!("Show block")).on_hover_text(t!("Show the block that wrote this")).clicked()
+                        && crate::ui::kit::button(ui, &theme, t!("Show block")).on_hover_text(t!("Show the block that wrote this")).clicked()
                     {
                         jump = Some(t.clone());
                     }

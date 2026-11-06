@@ -5,6 +5,7 @@ use circuit_core::{BlockDef, BlockKind, Compat, Link, PinMode, PinRef, PinType};
 use circuit_plugins::{BuildMode, Registry};
 use eframe::egui::{self, Align2, Frame, Key, Margin, Order, Pos2, RichText, ScrollArea, Stroke, TextEdit, vec2};
 
+use crate::ui::kit;
 use crate::canvas::{Dir, PinEnd};
 use crate::editor::Editor;
 use crate::ui::theme::{Theme, with_alpha};
@@ -295,7 +296,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                         let options = [(None, t!("All")), (Some(BlockKind::Event), t!("Events")), (Some(BlockKind::Action), t!("Actions")), (Some(BlockKind::Value), t!("Values"))];
                         for (kind, label) in options {
                             let color = kind.map(|k| kind_color(k, &theme)).unwrap_or(theme.text);
-                            if crate::ui::dialog::filter_chip(ui, &theme, label, color, kind == kind_filter).clicked() {
+                            if crate::ui::kit::filter_chip(ui, &theme, label, color, kind == kind_filter).clicked() {
                                 new_filter = Some(kind);
                             }
                         }
@@ -405,7 +406,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                                 ui.add_space(4.0);
                                 let starred = favorite_ids.contains(&def.id);
                                 let label = if starred { t!("★ Favourite") } else { t!("☆ Add to favourites") };
-                                if crate::ui::dialog::button(ui, &theme, label).on_hover_text(t!("Favourites are listed at the top of the picker")).clicked() {
+                                if crate::ui::kit::button(ui, &theme, label).on_hover_text(t!("Favourites are listed at the top of the picker")).clicked() {
                                     star = Some(def.id.clone());
                                 }
                             }
@@ -569,7 +570,7 @@ fn details(ui: &mut egui::Ui, def: &BlockDef, reg: &Registry, theme: &Theme) {
         };
         ui.label(RichText::new(what).size(11.5).color(kind_color(def.kind, theme)));
         if let Some(waits) = def.timing() {
-            ui.label(RichText::new(if waits { t!("Async") } else { t!("Sync") }).size(11.5).color(theme.text_muted)).on_hover_text(timing_text(waits));
+            kit::hint(ui, theme, if waits { t!("Async") } else { t!("Sync") }).on_hover_text(timing_text(waits));
         }
     });
     ui.label(RichText::new(format!("by {} · v{} · {}", def.author, def.version, def.plugin)).size(12.0).color(theme.text_muted));

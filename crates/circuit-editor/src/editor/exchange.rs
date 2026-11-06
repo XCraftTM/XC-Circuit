@@ -11,6 +11,7 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::ui::kit;
 use crate::ui::dialog::{self, Part};
 use crate::editor::{Action, Editor, Level};
 use crate::ui::theme::Theme;
@@ -168,24 +169,24 @@ pub fn export_tab(ui: &mut Ui, ed: &mut Editor) {
         },
         |ui, part| match part {
             Part::Body => {
-                dialog::section(ui, &theme, t!("Workspaces"));
+                kit::section(ui, &theme, t!("Workspaces"));
                 ui.horizontal(|ui| {
-                    if dialog::button(ui, &theme, t!("All")).clicked() {
+                    if kit::button(ui, &theme, t!("All")).clicked() {
                         draft.chosen.values_mut().for_each(|on| *on = true);
                     }
-                    if dialog::button(ui, &theme, t!("None")).clicked() {
+                    if kit::button(ui, &theme, t!("None")).clicked() {
                         draft.chosen.values_mut().for_each(|on| *on = false);
                     }
                 });
                 workspace_checklist(ui, &theme, project, &mut draft.chosen);
 
                 if !commands.is_empty() {
-                    dialog::section(ui, &theme, t!("Slash commands"));
-                    ui.label(RichText::new(t!("The chosen workspaces use these. They come along, so the commands work in the other project too.")).size(11.5).color(theme.text_muted));
+                    kit::section(ui, &theme, t!("Slash commands"));
+                    kit::hint(ui, &theme, t!("The chosen workspaces use these. They come along, so the commands work in the other project too."));
                     for (root, entry) in &commands {
                         let mut on = !draft.skipped_commands.contains(root);
                         let text = format!("/{}", entry.get("name").and_then(Value::as_str).unwrap_or(root));
-                        if ui.checkbox(&mut on, RichText::new(text).monospace()).changed() {
+                        if kit::checkbox(ui, &theme, &mut on, RichText::new(text).monospace()).changed() {
                             if on {
                                 draft.skipped_commands.remove(root);
                             } else {
@@ -195,7 +196,7 @@ pub fn export_tab(ui: &mut Ui, ed: &mut Editor) {
                     }
                 }
 
-                dialog::section(ui, &theme, t!("Summary"));
+                kit::section(ui, &theme, t!("Summary"));
                 let keys: Vec<&String> = draft.chosen.iter().filter(|(_, on)| **on).map(|(k, _)| k).collect();
                 let wss: Vec<&Workspace> = keys.iter().filter_map(|k| project.workspaces.get(*k)).collect();
                 let blocks: usize = wss.iter().map(|w| w.nodes.len()).sum();
@@ -223,13 +224,13 @@ pub fn export_tab(ui: &mut Ui, ed: &mut Editor) {
                         summary_line(ui, &theme, &tf!("Needs the plugins {names}", names = plugins.join(", ")));
                     }
                     ui.add_space(4.0);
-                    ui.label(RichText::new(t!("Not included: the bot token and other secrets, the bot settings and the bot's saved data.")).size(11.5).color(theme.text_muted));
+                    kit::hint(ui, &theme, t!("Not included: the bot token and other secrets, the bot settings and the bot's saved data."));
                 });
             }
             Part::Footer => {
                 let any = draft.chosen.values().any(|on| *on);
-                ui.add_enabled_ui(any, |ui| go = dialog::primary_button(ui, &theme, t!("Export…")).clicked());
-                cancel = dialog::secondary_button(ui, &theme, t!("Cancel")).clicked();
+                ui.add_enabled_ui(any, |ui| go = kit::primary_button(ui, &theme, t!("Export…")).clicked());
+                cancel = kit::secondary_button(ui, &theme, t!("Cancel")).clicked();
             }
         },
     );
@@ -288,7 +289,7 @@ fn workspace_checklist(ui: &mut Ui, theme: &Theme, project: &Project, chosen: &m
             let indent = if let Some(name) = &folder {
                 let on = keys.iter().filter(|k| chosen.get(*k).copied().unwrap_or(false)).count();
                 let mut all = on == keys.len();
-                if ui.add(egui::Checkbox::new(&mut all, RichText::new(name).strong()).indeterminate(on > 0 && on < keys.len())).changed() {
+                if kit::checkbox_mixed(ui, theme, &mut all, on > 0 && on < keys.len(), RichText::new(name).strong()).changed() {
                     for k in &keys {
                         chosen.insert(k.clone(), all);
                     }
@@ -302,8 +303,8 @@ fn workspace_checklist(ui: &mut Ui, theme: &Theme, project: &Project, chosen: &m
                 ui.horizontal(|ui| {
                     ui.add_space(indent);
                     let on = chosen.entry(k.clone()).or_insert(false);
-                    ui.checkbox(on, &ws.name);
-                    ui.label(RichText::new(blocks_text(ws.nodes.len())).size(11.5).color(theme.text_muted));
+                    kit::checkbox(ui, theme, on, &ws.name);
+                    kit::hint(ui, theme, blocks_text(ws.nodes.len()));
                 });
             }
         }
@@ -465,20 +466,20 @@ pub fn import_tab(ui: &mut Ui, ed: &mut Editor) {
         dialog::Spec { id: "import-workspaces", title: t!("Import workspaces"), subtitle: Some(t!("Into this project, as unsaved changes")), icon: icon.as_deref(), width: 620.0 },
         |ui, part| match part {
             Part::Body => {
-                dialog::section(ui, &theme, t!("From"));
+                kit::section(ui, &theme, t!("From"));
                 for (path, f) in &draft.files {
                     let file = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
                     let when = chrono::DateTime::parse_from_rfc3339(&f.exported_at).map(|d| d.format("%Y-%m-%d %H:%M").to_string()).unwrap_or_default();
                     ui.label(RichText::new(tf!("{file}: from the project {project}, exported {when}", file = file, project = f.project, when = when)).size(12.0).color(theme.text_muted));
                 }
 
-                dialog::section(ui, &theme, t!("Workspaces"));
+                kit::section(ui, &theme, t!("Workspaces"));
                 egui::Frame::new().fill(theme.field).corner_radius(8).inner_margin(egui::Margin::symmetric(12, 8)).show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     for (item, name) in draft.items.iter_mut().zip(&names) {
                         let ws = &draft.files[item.file].1.workspaces[item.index].workspace;
                         ui.horizontal(|ui| {
-                            ui.checkbox(&mut item.chosen, &ws.name);
+                            kit::checkbox(ui, &theme, &mut item.chosen, &ws.name);
                             if let Some(n) = name
                                 && *n != ws.name
                             {
@@ -487,36 +488,36 @@ pub fn import_tab(ui: &mut Ui, ed: &mut Editor) {
                             if let Some(f) = &ws.folder {
                                 let new = !project.meta.folders.contains(f) && !project.workspaces.values().any(|w| w.folder.as_ref() == Some(f));
                                 let text = if new { tf!("new folder {name}", name = f) } else { tf!("in {name}", name = f) };
-                                ui.label(RichText::new(text).size(11.5).color(theme.text_muted));
+                                kit::hint(ui, &theme, text);
                             }
-                            ui.label(RichText::new(blocks_text(ws.nodes.len())).size(11.5).color(theme.text_muted));
+                            kit::hint(ui, &theme, blocks_text(ws.nodes.len()));
                         });
                     }
                 });
 
                 if !draft.commands.is_empty() {
-                    dialog::section(ui, &theme, t!("Slash commands"));
+                    kit::section(ui, &theme, t!("Slash commands"));
                     for c in &mut draft.commands {
                         let text = format!("/{}", c.entry.get("name").and_then(Value::as_str).unwrap_or(""));
                         if c.exists {
                             ui.horizontal(|ui| {
-                                ui.add_enabled(false, egui::Checkbox::new(&mut false, RichText::new(&text).monospace()));
-                                ui.label(RichText::new(t!("already in this project, kept as it is")).size(11.5).color(theme.text_muted));
+                                ui.add_enabled_ui(false, |ui| kit::checkbox(ui, &theme, &mut true, RichText::new(&text).monospace()));
+                                kit::hint(ui, &theme, t!("already in this project, kept as it is"));
                             });
                         } else {
-                            ui.checkbox(&mut c.chosen, RichText::new(&text).monospace());
+                            kit::checkbox(ui, &theme, &mut c.chosen, RichText::new(&text).monospace());
                         }
                     }
                 }
 
                 if !draft.missing_plugins.is_empty() {
-                    dialog::section(ui, &theme, t!("Missing plugins"));
+                    kit::section(ui, &theme, t!("Missing plugins"));
                     for (id, version) in &draft.missing_plugins {
                         ui.label(RichText::new(tf!("{id} {version} isn't installed: its blocks show as missing until it is.", id = id, version = version)).size(12.0).color(theme.warning));
                     }
                 }
 
-                dialog::section(ui, &theme, t!("Summary"));
+                kit::section(ui, &theme, t!("Summary"));
                 let count = names.iter().flatten().count();
                 let blocks: usize = draft.items.iter().filter(|i| i.chosen).map(|i| draft.files[i.file].1.workspaces[i.index].workspace.nodes.len()).sum();
                 let renamed = draft.items.iter().zip(&names).filter(|(i, n)| n.as_ref().is_some_and(|n| *n != draft.files[i.file].1.workspaces[i.index].workspace.name)).count();
@@ -542,13 +543,13 @@ pub fn import_tab(ui: &mut Ui, ed: &mut Editor) {
                     }
                     summary_line(ui, &theme, &commands_text(commands));
                     ui.add_space(4.0);
-                    ui.label(RichText::new(t!("Nothing is replaced. The project only changes on disk when you save.")).size(11.5).color(theme.text_muted));
+                    kit::hint(ui, &theme, t!("Nothing is replaced. The project only changes on disk when you save."));
                 });
             }
             Part::Footer => {
                 let any = draft.items.iter().any(|i| i.chosen) || draft.commands.iter().any(|c| c.chosen && !c.exists);
-                ui.add_enabled_ui(any, |ui| go = dialog::primary_button(ui, &theme, t!("Import")).clicked());
-                cancel = dialog::secondary_button(ui, &theme, t!("Cancel")).clicked();
+                ui.add_enabled_ui(any, |ui| go = kit::primary_button(ui, &theme, t!("Import")).clicked());
+                cancel = kit::secondary_button(ui, &theme, t!("Cancel")).clicked();
             }
         },
     );

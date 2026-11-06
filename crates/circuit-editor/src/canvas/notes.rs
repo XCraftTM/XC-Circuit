@@ -139,7 +139,7 @@ pub(super) fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, 
             ui.spacing_mut().item_spacing.y = 8.0;
             ui.label(RichText::new(t!("Note")).strong());
             ui.label(t!("Title"));
-            *edited |= ui.add(crate::ui::inputs::TextLine::new(&mut n.title)).changed();
+            *edited |= ui.add(crate::ui::kit::TextLine::new(&mut n.title)).changed();
             ui.label(t!("Description"));
             *edited |= ui.add(egui::TextEdit::multiline(&mut n.text).desired_rows(4).desired_width(f32::INFINITY)).changed();
             ui.label(t!("Color"));
@@ -162,12 +162,12 @@ pub(super) fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, 
                 }
             });
             let mut carry = !n.loose;
-            if crate::ui::dialog::toggle_row(ui, theme, &mut carry, t!("Move blocks with the note"), t!("Dragging the title also moves the blocks inside. Hold Alt for the opposite.")).changed() {
+            if crate::ui::kit::toggle_row(ui, theme, &mut carry, t!("Move blocks with the note"), t!("Dragging the title also moves the blocks inside. Hold Alt for the opposite.")).changed() {
                 n.loose = !carry;
                 *edited = true;
             }
             ui.separator();
-            if crate::ui::dialog::button(ui, theme, t!("Delete note")).on_hover_text(t!("The blocks in it stay")).clicked() {
+            if crate::ui::kit::button(ui, theme, t!("Delete note")).on_hover_text(t!("The blocks in it stay")).clicked() {
                 delete = Some(nid.clone());
                 ui.close();
             }

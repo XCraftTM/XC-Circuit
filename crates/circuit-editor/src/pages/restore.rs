@@ -204,10 +204,10 @@ fn project_backups(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, theme: 
                                         Change::OnlyNow => (t!("added since"), theme.action),
                                     };
                                     ui.label(RichText::new(name).size(13.0).color(theme.text));
-                                    crate::ui::dialog::pill(ui, text, color);
+                                    crate::ui::kit::pill(ui, text, color);
                                     if matches!(change, Change::Changed | Change::OnlyInBackup) {
                                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                            if crate::ui::dialog::button(ui, theme, t!("Restore this workspace")).on_hover_text(t!("Brings it back as an unsaved change")).clicked() {
+                                            if crate::ui::kit::button(ui, theme, t!("Restore this workspace")).on_hover_text(t!("Brings it back as an unsaved change")).clicked() {
                                                 restore_ws = Some((snap.clone(), key.clone()));
                                             }
                                         });
@@ -218,14 +218,14 @@ fn project_backups(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, theme: 
                             if view.confirm == Some(Confirm::Project(snap.dir.clone())) {
                                 ui.label(RichText::new(t!("Put the whole project back as it was then? Your current version is backed up first, so you can come back to it.")).size(12.5).color(theme.text));
                                 ui.horizontal(|ui| {
-                                    if crate::ui::dialog::primary_button(ui, theme, t!("Yes, restore")).clicked() {
+                                    if crate::ui::kit::primary_button(ui, theme, t!("Yes, restore")).clicked() {
                                         restore_project = Some(snap.clone());
                                     }
-                                    if crate::ui::dialog::secondary_button(ui, theme, t!("Cancel")).clicked() {
+                                    if crate::ui::kit::secondary_button(ui, theme, t!("Cancel")).clicked() {
                                         view.confirm = None;
                                     }
                                 });
-                            } else if crate::ui::dialog::primary_button(ui, theme, t!("Restore the whole project")).clicked() {
+                            } else if crate::ui::kit::primary_button(ui, theme, t!("Restore the whole project")).clicked() {
                                 view.confirm = Some(Confirm::Project(snap.dir.clone()));
                             }
                         }
@@ -294,14 +294,14 @@ fn bot_data_backups(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, theme:
                 });
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if view.confirm == Some(Confirm::BotData(b.path.clone())) {
-                        if crate::ui::dialog::button(ui, theme, t!("Cancel")).clicked() {
+                        if crate::ui::kit::button(ui, theme, t!("Cancel")).clicked() {
                             view.confirm = None;
                         }
-                        if crate::ui::dialog::button(ui, theme, RichText::new(t!("Yes, restore")).strong()).clicked() {
+                        if crate::ui::kit::button(ui, theme, RichText::new(t!("Yes, restore")).strong()).clicked() {
                             restore = Some(b.path.clone());
                         }
                     } else {
-                        let r = ui.add_enabled_ui(!bot_running, |ui| crate::ui::dialog::button(ui, theme, t!("Restore"))).inner;
+                        let r = ui.add_enabled_ui(!bot_running, |ui| crate::ui::kit::button(ui, theme, t!("Restore"))).inner;
                         let r = if bot_running { r.on_disabled_hover_text(t!("Stop the bot first")) } else { r };
                         if r.clicked() {
                             view.confirm = Some(Confirm::BotData(b.path.clone()));
