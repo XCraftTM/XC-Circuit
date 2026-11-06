@@ -154,6 +154,8 @@ const { rows: top } = await db.run("SELECT * FROM levels WHERE xp > ?", [100]);
 
 A database of [Bot › Settings › Databases](/explanations/databases). `"default"` (or nothing) is the default one. It connects the first time it's used; every block shares the connection.
 
+`ctx.db({ kind, host, port, user, password, database, ssl, url })` connects to a database the block is given instead (`kind` is `"mariadb"`, `"postgres"` or `"mongodb"`; `url` instead of the others). It throws unless Bot › Settings › Databases allows [databases given on blocks](/explanations/databases#a-database-given-on-the-block). The same details give the same connection; up to 8 stay open. List the kind's npm package in your block's `requires.dependencies`, since the bundle only adds drivers for the databases of Bot › Settings and the built-in blocks.
+
 | Method | Gives |
 | --- | --- |
 | `select(table, conditions?, { order, desc, limit, offset, any }?)` | The rows, as objects. |

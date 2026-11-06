@@ -26,6 +26,14 @@ Passwords and connection URLs are kept in the system's password store, like the 
 
 One database is the **default**. Every database block has a **Database** list: *Default database*, or one by name. Blocks left on Default all switch when you choose another default, so a bot can move from a test database to the real one in one place.
 
+### A database given on the block
+
+**Database** can also be *Given here*: the block connects to a MariaDB / MySQL, PostgreSQL or MongoDB server it's given, such as one from a slash command's options. Kind, host, port, user, database name and SSL are fields you can type or connect; the **password** and the **connection URL** (which holds one) can only be connected: typed into a block they'd be saved in the project file.
+
+This is off until you allow it: Bot › Settings › Databases › Safety › *Allow databases given on blocks*. Anyone who can use such a command can make the bot connect where they say (to machines on your own network, too), so only turn it on for commands you trust them with.
+
+The bot keeps up to 8 given connections open for the next run with the same details, and closes the one used longest ago after that. An export gets the npm package of each kind chosen on a block.
+
 ## The blocks
 
 | Block | What it does |

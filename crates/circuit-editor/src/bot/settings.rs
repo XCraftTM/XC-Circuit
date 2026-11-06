@@ -207,11 +207,10 @@ pub struct SettingsDraft {
 impl SettingsDraft {
     /// Problems and missing required values on a page, for its mark in the list.
     fn page_marks(&self, page: &str) -> (usize, usize) {
-        if page == databases::PAGE {
-            return (self.databases.problems(), 0);
-        }
+        // The Databases page has its own list, and plugins can add settings to it too.
+        let own = if page == databases::PAGE { self.databases.problems() } else { 0 };
         let on = || self.fields.iter().filter(move |f| f.page == page);
-        (on().filter(|f| f.problem().is_some()).count(), on().filter(|f| f.missing()).count())
+        (own + on().filter(|f| f.problem().is_some()).count(), on().filter(|f| f.missing()).count())
     }
 }
 
@@ -292,6 +291,8 @@ impl BotUi {
             })
             .collect();
         let mut pages: Vec<PageInfo> = all.pages.iter().map(|p| PageInfo { id: p.id.clone(), name: tr(&p.name), icon: p.icon.clone(), description: p.description.as_deref().map(tr) }).collect();
+        // Plugins may add settings to the Databases page (xc.core's safety switch); it's drawn here.
+        pages.retain(|p| p.id != databases::PAGE);
         pages.push(PageInfo {
             id: databases::PAGE.into(),
             name: t!("Databases").into(),
@@ -404,11 +405,10 @@ impl BotUi {
                         intents_page(ui, &theme, &draft.intents, draft.intents_page.as_deref());
                         return;
                     }
-                    if draft.page == databases::PAGE {
-                        if let Some(databases::Ask::Test(i)) = draft.databases.ui(ui, ed, &theme) {
-                            test = Some(i);
-                        }
-                        return;
+                    if draft.page == databases::PAGE
+                        && let Some(databases::Ask::Test(i)) = draft.databases.ui(ui, ed, &theme)
+                    {
+                        test = Some(i);
                     }
                     let root = ed.project.as_ref().map(|p| p.root.clone());
                     let mut heading: Option<String> = None;

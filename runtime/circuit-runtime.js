@@ -278,7 +278,11 @@ class Runtime {
       asset: (name) => rt.asset(node.blockId, name),
       /** One-time timers: schedule, cancel, list, and on(name, fn) to run when one is due. */
       timers: rt.timers.api(),
-      /** A database of Bot › Settings › Databases: its id or name, or "default". */
+      /**
+       * A database of Bot › Settings › Databases: its id or name, or "default".
+       * Or one the block gives itself: { kind, host, port, user, password,
+       * database, ssl, url }, once Bot › Settings › Databases allows that.
+       */
       db: (which) => rt.databases.get(which),
       require: (name) => rt.require(name),
       /** Project info: name, settings and project-editor data such as slashCommands. */
@@ -1153,6 +1157,9 @@ const MONGO_OPS = { "!=": "$ne", ">": "$gt", ">=": "$gte", "<": "$lt", "<=": "$l
 
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+/** Databases given on blocks kept open at once. */
+const MAX_GIVEN = 8;
+
 /** The table where Set/Get Stored Value keep their values, when they use a database. */
 const STORE_TABLE = "xc_store";
 
@@ -1168,8 +1175,9 @@ class Databases {
     return Array.isArray(list) ? list.filter((d) => d && d.id) : [];
   }
 
-  /** The database `which` names (its id or name), or the default one for "default" or nothing. */
+  /** The database `which` names (its id or name), or the default one for "default" or nothing; an object gives the connection itself. */
   get(which) {
+    if (which && typeof which === "object") return this.given(which);
     const list = this.list();
     let spec;
     if (!which || which === "default") {
@@ -1183,6 +1191,47 @@ class Databases {
       if (!spec) throw new Error(`There's no database "${which}" in Bot › Settings › Databases.`);
     }
     return getOr(this.open, spec.id, () => new Database(spec, this.rt));
+  }
+
+  /**
+   * A database a block gives itself (from a command's options, say), when
+   * Bot › Settings › Databases allows that. It stays open for the next run
+   * with the same details; the least recently used closes past MAX_GIVEN.
+   */
+  given(spec) {
+    if (this.rt.setting("databaseGivenAllowed") !== true) {
+      throw new Error("Databases given on a block are off: allow them in Bot › Settings › Databases › Safety");
+    }
+    const kind = String(spec.kind || "mariadb");
+    if (!DB_KINDS[kind] || kind === "sqlite") throw new Error(`A database given on a block is MariaDB / MySQL, PostgreSQL or MongoDB, not "${kind}".`);
+    const text = (v) => (v === undefined || v === null ? "" : String(v).trim());
+    const s = {
+      kind,
+      host: text(spec.host),
+      port: Number(spec.port) || undefined,
+      user: text(spec.user),
+      database: text(spec.database),
+      ssl: spec.ssl === true || spec.ssl === "true",
+      password: spec.password === undefined || spec.password === null ? "" : String(spec.password),
+      url: text(spec.url),
+    };
+    if (!s.host && !s.url) throw new Error("The block gives no host and no connection URL for its database.");
+    const key = "given:" + require("crypto").createHash("sha256").update(JSON.stringify(s)).digest("hex");
+    let db = this.open.get(key);
+    if (db) {
+      this.open.delete(key); // to the end: used most recently
+    } else {
+      const given = [...this.open.keys()].filter((k) => k.startsWith("given:"));
+      for (const old of given.slice(0, Math.max(0, given.length - MAX_GIVEN + 1))) {
+        const d = this.open.get(old);
+        this.open.delete(old);
+        d.close().catch(() => {});
+      }
+      // Its name in messages: never the password or the URL (which can hold it).
+      db = new Database({ ...s, id: key, name: s.host ? `${s.host}${s.port ? `:${s.port}` : ""}` : "the given database", given: true }, this.rt);
+    }
+    this.open.set(key, db);
+    return db;
   }
 
   async closeAll() {
@@ -1208,8 +1257,9 @@ class Database {
     return this.kind !== "mongodb";
   }
 
-  /** The connection's password or URL, from the system keyring (or .env in an exported bot). */
+  /** The connection's password or URL, from the system keyring (or .env in an exported bot), or as the block gave it. */
   secret(part) {
+    if (this.spec.given) return this.spec[part] || undefined;
     return this.rt.secret(`db_${this.spec.id}_${part}`);
   }
 

@@ -258,8 +258,42 @@ function blocksInABot() {
   });
 }
 
+/** Databases given on a block: only when allowed, kept open by their details, never named by their password. */
+async function given() {
+  const off = fakeRuntime({});
+  assert.throws(() => off.databases.get({ kind: "mariadb", host: "db.example.com" }), /Databases given on a block are off/);
+  const rt = fakeRuntime({ databaseGivenAllowed: true });
+  assert.throws(() => rt.databases.get({ kind: "sqlite", host: "x" }), /MariaDB \/ MySQL, PostgreSQL or MongoDB/);
+  assert.throws(() => rt.databases.get({ kind: "postgres", password: "pw" }), /no host and no connection URL/);
+  const a = rt.databases.get({ kind: "postgres", host: "db.example.com", port: 5433, user: "bot", password: "hunter2" });
+  assert.strictEqual(a, rt.databases.get({ kind: "postgres", host: "db.example.com", port: "5433", user: "bot", password: "hunter2" }));
+  assert.notStrictEqual(a, rt.databases.get({ kind: "postgres", host: "db.example.com", port: 5433, user: "bot", password: "other" }));
+  assert.strictEqual(a.secret("password"), "hunter2");
+  assert.strictEqual(a.name, "db.example.com:5433");
+  const viaUrl = rt.databases.get({ kind: "mariadb", url: "mysql://bot:hunter2@db.example.com/x" });
+  assert.ok(!viaUrl.name.includes("hunter2") && !viaUrl.name.includes("mysql://"), viaUrl.name);
+  // At most MAX_GIVEN stay open: the least recently used goes.
+  for (let i = 0; i < 12; i++) rt.databases.get({ kind: "mariadb", host: `h${i}.example.com` });
+  assert.strictEqual([...rt.databases.open.keys()].filter((k) => k.startsWith("given:")).length, 8);
+  // A block set to Given here hands ctx.db the connection, not an id.
+  let handed;
+  const ctx = { db: (w) => ((handed = w), { select: async () => [] }) };
+  await require("../../plugins/xc.core/blocks/database/get_rows.js").run({ fields: { database: "given", dbKind: "postgres", dbHost: "h", dbPort: 0, dbUser: "u", dbPassword: "p", dbName: "n", dbSsl: true, table: "t", conditions: 0 }, ctx });
+  assert.deepStrictEqual(handed, { kind: "postgres", host: "h", port: 0, user: "u", password: "p", database: "n", ssl: true, url: undefined });
+  await require("../../plugins/xc.core/blocks/database/get_rows.js").run({ fields: { database: "db1", table: "t", conditions: 0 }, ctx });
+  assert.strictEqual(handed, "db1");
+  // And a real one, given by its URL, for each server here.
+  for (const spec of kinds.filter((k) => k.kind !== "sqlite")) {
+    const db = rt.databases.get({ kind: spec.kind, url: secrets[`db_${spec.kind}_url`] });
+    assert.ok(await db.describe(), spec.kind);
+  }
+  await rt.databases.closeAll();
+}
+
 (async () => {
   defaults();
+  await given();
+  console.log("  given on a block: ok");
   for (const spec of kinds) {
     const rt = fakeRuntime({ databases: [spec] }, secrets);
     const db = rt.databases.get(spec.id);

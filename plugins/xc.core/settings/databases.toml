@@ -1,0 +1,10 @@
+# Bot › Settings › Databases: XC Circuit draws its connections; this adds
+# whether blocks may connect to a database they give themselves.
+
+[[pages]]
+id = "xc:databases"
+name = "Databases"
+icon = "database"
+
+[settings]
+databaseGivenAllowed = { type = "boolean", page = "xc:databases", group = "Safety", label = "Allow databases given on blocks", default = false, description = "On: a database block set to Given here connects to the host, user and password it's given (from a command's options, say). Anyone who can use such a command can make the bot connect where they say, so only turn it on for commands you trust them with." }

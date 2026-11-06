@@ -61,6 +61,16 @@ pub fn build_bundle(project: &Project, reg: &Registry, mode: Option<&BuildMode>)
     for (name, version) in database_dependencies(&project.meta.settings) {
         dependencies.entry(name).or_insert(version);
     }
+    // Database blocks set to Given here need their kind's driver too.
+    for node in enabled().flat_map(|(_, ws)| ws.nodes.values()) {
+        if node.values.get("database").and_then(Value::as_str) != Some("given") {
+            continue;
+        }
+        let kind = node.values.get("dbKind").and_then(Value::as_str).unwrap_or("mariadb");
+        if let Some((_, package, version)) = DATABASE_DRIVERS.iter().find(|(k, ..)| *k == kind) {
+            dependencies.entry(package.to_string()).or_insert_with(|| version.to_string());
+        }
+    }
 
     let mut libs = Vec::new();
     for spec in mode.map(|m| m.runtime_libs.as_slice()).unwrap_or_default() {
@@ -193,5 +203,26 @@ mod tests {
         assert!(settings(&["sqlite"]).is_empty());
         let deps = settings(&["mariadb", "postgres", "mariadb", "mongodb"]);
         assert_eq!(deps.keys().map(String::as_str).collect::<Vec<_>>(), ["mysql2", "pg", "mongodb"]);
+    }
+
+    /// A database block set to Given here brings its kind's package too.
+    #[test]
+    fn given_databases_bring_their_packages() {
+        let dir = std::env::temp_dir().join(format!("xc-bundle-given-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let mut project = Project::create(&dir, "Given", "discord-bot").unwrap();
+        let ws = project.workspaces.values_mut().next().unwrap();
+        let node = |values: Value| Node { block: "core.get_rows@1".into(), values: values.as_object().unwrap().clone(), ..Default::default() };
+        ws.nodes.insert("a".into(), node(json!({ "database": "given", "dbKind": "postgres" })));
+        ws.nodes.insert("b".into(), node(json!({ "database": "given" })));
+        ws.nodes.insert("c".into(), node(json!({ "database": "default", "dbKind": "mongodb" })));
+        let engine = circuit_plugins::BlockEngine::new().unwrap();
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+        let reg = Registry::load(std::slice::from_ref(&root), &engine);
+        let bundle = build_bundle(&project, &reg, None).unwrap();
+        // Postgres and the default kind (MariaDB); not MongoDB, which isn't Given here.
+        assert!(bundle.dependencies.contains_key("pg") && bundle.dependencies.contains_key("mysql2"));
+        assert!(!bundle.dependencies.contains_key("mongodb"));
+        let _ = fs::remove_dir_all(&dir);
     }
 }

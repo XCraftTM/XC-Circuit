@@ -199,7 +199,17 @@ fn database_blocks_list_the_databases() {
     let get = shape("core.get_rows", serde_json::json!({ "conditions": 2 }));
     let field = |s: &circuit_core::BlockShape, k: &str| s.fields.iter().find(|(key, _)| key == k).map(|(_, f)| f.clone());
     let choices: Vec<String> = field(&get, "database").unwrap().choice_list().into_iter().map(|(_, v, label)| format!("{v}={label}")).collect();
-    assert_eq!(choices, ["default=Default database", "db1=Main", "db2=Levels"]);
+    assert_eq!(choices, ["default=Default database", "db1=Main", "db2=Levels", "given=Given here"]);
+    // The connection's fields only show for Given here, and its secrets can only be connected.
+    let shown = |s: &circuit_core::BlockShape, k: &str| s.visible_fields().any(|(key, _)| key == k);
+    assert!(!shown(&get, "dbHost") && !shown(&get, "dbPassword"));
+    let given = shape("core.get_rows", serde_json::json!({ "database": "given" }));
+    for k in ["dbKind", "dbHost", "dbPort", "dbUser", "dbPassword", "dbName", "dbSsl", "dbUrl"] {
+        assert!(shown(&given, k), "{k}");
+    }
+    for k in ["dbPassword", "dbUrl"] {
+        assert_eq!(field(&given, k).unwrap().pin, circuit_core::PinMode::Only, "{k}");
+    }
     for k in ["where1", "where1Op", "where1Value", "where2", "where2Value"] {
         assert!(field(&get, k).is_some(), "{k}");
     }

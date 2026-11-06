@@ -1,8 +1,30 @@
-// The Database list: the default one and each of Bot › Settings › Databases.
+// The Database list: the default one, each of Bot › Settings › Databases,
+// and one given on the block.
 function databases(project) {
   const choices = { default: "Default database" };
-  for (const d of (project && project.settings && project.settings.databases) || []) if (d && d.id) choices[d.id] = d.name || d.id;
+  for (const d of (project && project.settings && project.settings.databases) || []) if (d && d.id && d.id !== "given") choices[d.id] = d.name || d.id;
+  choices.given = "Given here";
   return choices;
+}
+
+// A database given on the block (from a command's options, say). Bot ›
+// Settings › Databases has to allow that.
+const GIVEN_KINDS = { mariadb: "MariaDB / MySQL", postgres: "PostgreSQL", mongodb: "MongoDB" };
+const GIVEN = {
+  dbKind: { type: "select", pin: false, default: "mariadb", choices: GIVEN_KINDS, show: { database: ["given"] }, label: "Kind" },
+  dbHost: { type: "text", default: "", show: { database: ["given"] }, label: "Host", placeholder: "db.example.com" },
+  dbPort: { type: "number", default: 0, min: 0, max: 65535, show: { database: ["given"] }, label: "Port", description: "0: the kind's usual port (3306, 5432, 27017)." },
+  dbUser: { type: "text", default: "", show: { database: ["given"] }, label: "User" },
+  dbPassword: { type: "text", pin: "only", show: { database: ["given"] }, label: "Password", description: "Connect it from a command's option or a form (only the bot sees those): typed into a block, it would be saved in the project file." },
+  dbName: { type: "text", default: "", show: { database: ["given"] }, label: "Database name" },
+  dbSsl: { type: "boolean", pin: false, default: false, show: { database: ["given"] }, label: "Use SSL/TLS" },
+  dbUrl: { type: "text", pin: "only", show: { database: ["given"] }, label: "Connection URL", description: "Instead of the boxes above, such as mysql://user:password@host:3306/name. Connected, like the password: it holds one." },
+};
+
+/** What ctx.db takes: a database's id, or the connection the block gives. */
+function which(fields) {
+  if (fields.database !== "given") return fields.database;
+  return { kind: fields.dbKind, host: fields.dbHost, port: fields.dbPort, user: fields.dbUser, password: fields.dbPassword, database: fields.dbName, ssl: fields.dbSsl, url: fields.dbUrl };
 }
 
 /** A column and its value, for each of `count` columns. */
@@ -32,7 +54,7 @@ module.exports = {
     name: "Insert Row",
     description: "Adds a row to a table of a database in Bot › Settings › Databases (in MongoDB, a document to a collection).",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "database",
@@ -43,7 +65,8 @@ module.exports = {
     icon: "database",
   },
   fields: {
-    database: { type: "select", pin: false, default: "default", choices: { default: "Default database" }, description: "Which database of Bot › Settings › Databases. Default is the one chosen there." },
+    database: { type: "select", pin: false, default: "default", choices: { default: "Default database" }, description: "Which database of Bot › Settings › Databases (Default is the one chosen there), or one given here, which needs its switch there." },
+    ...GIVEN,
     table: { type: "text", pin: false, template: false, required: true, default: "", placeholder: "users", description: "The table (in MongoDB, the collection)." },
     columns: { type: "number", pin: false, default: 2, min: 1, max: 12, description: "How many columns to fill in." },
     values: { type: "object", pin: "only", advanced: true, label: "More values", description: "An object of column → value, added to the ones above." },
@@ -56,7 +79,7 @@ module.exports = {
     return { set: { database: { choices: databases(project) } }, add: columnFields(values.columns ?? 2) };
   },
   async run({ fields, ctx }) {
-    const { id, row } = await ctx.db(fields.database).insert(fields.table, columnValues(fields));
+    const { id, row } = await ctx.db(which(fields)).insert(fields.table, columnValues(fields));
     return { id, row };
   },
 };
