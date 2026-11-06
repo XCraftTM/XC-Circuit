@@ -8,32 +8,27 @@ title: Download
 XC™ Circuit is in Early Access: it works and is used for real bots, but expect rough edges. See the [known issues](/known-issues) and [what's new](/changelog). It's [built with AI assistance](/made-with-ai).
 :::
 
-XC™ Circuit runs on **Windows** 10 and 11 and **Linux**, on x64 and ARM64 computers.
+<Downloads />
 
-<p>
-  <a class="VPButton medium brand" href="https://github.com/XCraftTM/XC-Circuit/releases/latest" style="display:inline-block">Latest release on GitHub</a>
-</p>
+## After downloading
 
-## Which file?
+- **Windows Setup**: run it. It installs for you only; no administrator needed.
+- **Windows .zip** or **Linux .tar.gz**: unpack it anywhere and start `xc-circuit.exe` (Windows) or `xc-circuit` (Linux).
+- **AppImage**: make it executable (right-click › Properties › *Allow executing*, or `chmod +x`), then double-click it.
+- **.deb**: `sudo apt install ./XC-Circuit-…deb` · **.rpm**: `sudo dnf install ./XC-Circuit-…rpm`
 
-| You have | Download | Then |
-| --- | --- | --- |
-| Windows (most PCs) | `…-windows-x64-setup.exe` | run it; it installs for you only, no administrator needed |
-| Windows on ARM (Snapdragon laptops) | `…-windows-arm64-setup.exe` | the same |
-| Windows, without installing | `…-windows-x64.zip` | unpack anywhere, start `xc-circuit.exe` |
-| Linux, any distribution | `…-linux-x86_64.AppImage` | make it executable (`chmod +x`), double-click |
-| Ubuntu, Debian, Mint, Pop!_OS | `…-linux-x86_64.deb` | `sudo apt install ./XC-Circuit-…deb` |
-| Fedora, openSUSE, RHEL | `…-linux-x86_64.rpm` | `sudo dnf install ./XC-Circuit-…rpm` |
-| Linux, without installing | `…-linux-x64.tar.gz` | unpack anywhere, start `xc-circuit` |
+Not sure whether your computer is x64 or ARM64? Almost every PC is x64; ARM64 is mostly laptops with a Snapdragon chip.
+
+::: tip "Windows protected your PC"?
+The installer isn't signed yet, so Windows asks first. Choose **More info › Run anyway**.
+:::
+
+## Updates
 
 The app looks for newer versions itself (at start, and from Help › Check for Updates; you can turn the check off in Settings).
 
 - **Installed with the Windows Setup, or an AppImage:** **Update and restart** downloads the new version, checks it against the checksum GitHub publishes, and installs it as XC Circuit closes (asking about unsaved changes first). Then XC Circuit opens again. On Windows only a small progress window shows; installed for everyone, Windows asks for administrator rights.
 - **.deb, .rpm, .zip or .tar.gz:** **Download** opens the release page; install the new file as you did the first one.
-
-::: tip "Windows protected your PC"?
-The installer isn't signed yet, so Windows asks first. Choose **More info › Run anyway**.
-:::
 
 ## What you need
 
