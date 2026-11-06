@@ -3,7 +3,7 @@ name        = "Discord Bot"
 icon        = "bolt"
 description = "A Discord bot built with discord.js."
 
-blocks      = ["xc.core/*", "xc.discord/*"]
+blocks      = ["xc.core/*", "xc.server/*", "xc.discord/*"]
 runtime     = "node"
 runtimeLibs = ["xc.discord/runtime/discord.js"]
 exporter    = "xc.discord/node-bundle"
@@ -129,6 +129,11 @@ icon = "database"
 id = "files"
 name = "Files"
 icon = "folder"
+
+[[categories]]
+id = "servertools"
+name = "Server Tools"
+icon = "terminal"
 
 [[categories]]
 id = "text"

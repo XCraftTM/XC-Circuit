@@ -1,0 +1,30 @@
+# Die Server-Werkzeuge auf Deutsch: ihre Seite in den Bot-Einstellungen. Die Blöcke bleiben englisch.
+
+[meta]
+code = "de"
+name = "Deutsch"
+english_name = "German"
+
+[strings]
+"Server Tools" = "Server-Werkzeuge"
+"Server tools" = "Server-Werkzeuge"
+"SSH, RCON and Docker for the blocks in Server Tools. They act on your servers, so they only run once allowed here." = "SSH, RCON und Docker für die Blöcke unter Server-Werkzeuge. Sie wirken auf deine Server, darum laufen sie erst, wenn du es hier erlaubst."
+"Safety" = "Sicherheit"
+"Allow SSH, RCON and Docker" = "SSH, RCON und Docker erlauben"
+"On: the SSH Command, RCON Command, Docker and Server Usage (over SSH) blocks may run. Only turn it on for a bot whose commands you wrote yourself." = "An: Die Blöcke SSH Command, RCON Command, Docker und Server Usage (über SSH) dürfen laufen. Schalte es nur für einen Bot ein, dessen Befehle du selbst geschrieben hast."
+"SSH" = "SSH"
+"The server the SSH blocks connect to." = "Der Server, mit dem sich die SSH-Blöcke verbinden."
+"server.example.com or 203.0.113.5" = "server.example.com oder 203.0.113.5"
+"bot" = "bot"
+"A user just for the bot, with only the rights it needs, is safest." = "Am sichersten ist ein eigener Benutzer für den Bot, mit nur den Rechten, die er braucht."
+"Or use a key below" = "Oder unten einen Schlüssel verwenden"
+"Private key" = "Privater Schlüssel"
+"The whole private key (instead of a password). Keys with a passphrase use the password above as their passphrase." = "Der ganze private Schlüssel (statt eines Passworts). Bei Schlüsseln mit Passphrase dient das Passwort oben als Passphrase."
+"-----BEGIN OPENSSH PRIVATE KEY----- …" = "-----BEGIN OPENSSH PRIVATE KEY----- …"
+"RCON" = "RCON"
+"A game server with RCON (Minecraft, Rust, ARK, CS2 …). Minecraft: enable-rcon=true in server.properties." = "Ein Spielserver mit RCON (Minecraft, Rust, ARK, CS2 …). Minecraft: enable-rcon=true in server.properties."
+"localhost" = "localhost"
+"rcon.password in Minecraft's server.properties." = "rcon.password in Minecrafts server.properties."
+"Docker" = "Docker"
+"Where Docker answers: empty for the computer the bot runs on (its socket), or tcp://host:2375." = "Wo Docker antwortet: leer für den Computer, auf dem der Bot läuft (sein Socket), oder tcp://host:2375."
+"Empty: Docker on this computer" = "Leer: Docker auf diesem Computer"

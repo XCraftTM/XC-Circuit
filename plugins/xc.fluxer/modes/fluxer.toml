@@ -3,7 +3,7 @@ name        = "Fluxer Bot"
 icon        = "message"
 description = "A bot for Fluxer, built with fluxer.js. Commands are text commands such as !help."
 
-blocks      = ["xc.core/*", "xc.fluxer/*"]
+blocks      = ["xc.core/*", "xc.server/*", "xc.fluxer/*"]
 runtime     = "node"
 runtimeLibs = ["xc.fluxer/runtime/fluxer.js"]
 exporter    = "xc.fluxer/node-bundle"
@@ -105,6 +105,11 @@ icon = "database"
 id = "files"
 name = "Files"
 icon = "folder"
+
+[[categories]]
+id = "servertools"
+name = "Server Tools"
+icon = "terminal"
 
 [[categories]]
 id = "text"

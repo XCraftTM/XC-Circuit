@@ -1,0 +1,21 @@
+# Bot › Settings › Server tools: whether the powerful blocks may run, and
+# the logins they use. Passwords and keys go to the system keyring.
+
+[[pages]]
+id = "server-tools"
+name = "Server tools"
+icon = "terminal"
+description = "SSH, RCON and Docker for the blocks in Server Tools. They act on your servers, so they only run once allowed here."
+order = 60
+
+[settings]
+serverToolsAllowed = { type = "boolean", page = "server-tools", group = "Safety", label = "Allow SSH, RCON and Docker", default = false, description = "On: the SSH Command, RCON Command, Docker and Server Usage (over SSH) blocks may run. Only turn it on for a bot whose commands you wrote yourself." }
+sshHost = { page = "server-tools", group = "SSH", label = "Host", placeholder = "server.example.com or 203.0.113.5", description = "The server the SSH blocks connect to." }
+sshPort = { type = "number", page = "server-tools", group = "SSH", label = "Port", default = 22, min = 1, max = 65535 }
+sshUser = { page = "server-tools", group = "SSH", label = "User", placeholder = "bot" }
+sshPassword = { type = "secret", page = "server-tools", group = "SSH", label = "Password", placeholder = "Or use a key below", description = "A user just for the bot, with only the rights it needs, is safest." }
+sshKey = { type = "secret", page = "server-tools", group = "SSH", label = "Private key", placeholder = "-----BEGIN OPENSSH PRIVATE KEY----- …", description = "The whole private key (instead of a password). Keys with a passphrase use the password above as their passphrase." }
+rconHost = { page = "server-tools", group = "RCON", label = "Host", placeholder = "localhost", description = "A game server with RCON (Minecraft, Rust, ARK, CS2 …). Minecraft: enable-rcon=true in server.properties." }
+rconPort = { type = "number", page = "server-tools", group = "RCON", label = "Port", default = 25575, min = 1, max = 65535 }
+rconPassword = { type = "secret", page = "server-tools", group = "RCON", label = "Password", description = "rcon.password in Minecraft's server.properties." }
+dockerHost = { page = "server-tools", group = "Docker", label = "Docker", placeholder = "Empty: Docker on this computer", description = "Where Docker answers: empty for the computer the bot runs on (its socket), or tcp://host:2375." }

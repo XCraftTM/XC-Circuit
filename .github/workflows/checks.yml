@@ -87,6 +87,7 @@ jobs:
           node runtime/test/timers.js
           node runtime/test/alerts.js
           node runtime/test/files.js
+          node runtime/test/server_tools.js
 
   # The database blocks against real servers: MariaDB, PostgreSQL and
   # MongoDB (SQLite runs with the other runtime tests). Linux runners only
@@ -134,7 +135,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/db-deps"
           cd "$RUNNER_TEMP/db-deps"
           npm init -y > /dev/null
-          npm install --no-audit --no-fund mysql2@^3.24.6 pg@^8.23.1 mongodb@^7.8.0 @napi-rs/canvas@^1.1.0
+          npm install --no-audit --no-fund mysql2@^3.24.6 pg@^8.23.1 mongodb@^7.8.0 @napi-rs/canvas@^1.1.0 ssh2@^1.17.0
       - name: Database tests
         env:
           XC_TEST_DEPS: ${{ runner.temp }}/db-deps
@@ -147,6 +148,11 @@ jobs:
         env:
           XC_TEST_DEPS: ${{ runner.temp }}/db-deps
         run: node runtime/test/canvas.js
+      # Server tools with ssh2 (SSH against a stand-in server).
+      - name: Server tools tests
+        env:
+          XC_TEST_DEPS: ${{ runner.temp }}/db-deps
+        run: node runtime/test/server_tools.js
 
   website:
     name: Website builds

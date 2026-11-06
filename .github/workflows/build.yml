@@ -104,6 +104,7 @@ jobs:
           node runtime/test/timers.js
           node runtime/test/alerts.js
           node runtime/test/files.js
+          node runtime/test/server_tools.js
 
       # Native plugins are built together with the editor so they share one build of egui.
       - name: Release build
