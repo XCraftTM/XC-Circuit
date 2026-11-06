@@ -46,6 +46,7 @@ Besides the [type strings](#type-strings), a field's `type` can name an editor:
 | `color` | swatch with a colour picker | `"#RRGGBB"` |
 | `embed` | the Embed Builder (Discord) | embed object |
 | `slash-command-ref` | a slash command of the project (Discord) | its name |
+| `canvas` | the Canvas Builder, and the picture on the block | a design: `{ width, height, background, layers, samples }` ([Build Canvas](/explanations/canvas)) |
 
 ## Type strings
 

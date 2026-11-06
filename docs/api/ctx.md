@@ -160,6 +160,14 @@ A database of [Bot › Settings › Databases](/explanations/databases). `"defau
 
 A condition is `{ column, op, value }`; `op` is `"="`, `"!="`, `">"`, `">="`, `"<"`, `"<="`, `"contains"`, `"starts"`, `"ends"` (these three ignore upper and lower case), `"null"` or `"notNull"`. With `any`, one condition is enough. Table and column names must be letters, digits and `_` (a `.` between schema and table); values are always sent as parameters. `db.kind` is `"mariadb"`, `"postgres"`, `"sqlite"` or `"mongodb"`, and `db.client` the driver's own pool or client once connected.
 
+## asset
+
+```js
+const font = ctx.asset("../../fonts/MyFont.ttf");
+```
+
+The path on disk of a file the block lists in [`requires.assets`](./blocks#requires), as written there. It's written into the bot's data folder the first time.
+
 ## util
 
 | Member | Description |

@@ -44,6 +44,7 @@ impl TabViewer for Viewer<'_> {
             Tab::Canvas(key) => self.ed.workspace(key).map(|w| w.name.clone()).unwrap_or_else(|| key.clone()).into(),
             Tab::EmbedBuilder => t!("Embed Builder").into(),
             Tab::LayoutBuilder => t!("Layout Builder").into(),
+            Tab::CanvasBuilder => t!("Canvas Builder").into(),
             Tab::SlashCommands => t!("Slash Commands").into(),
             Tab::BotSettings => t!("Bot settings").into(),
             Tab::Export => t!("Export bot").into(),
@@ -67,6 +68,7 @@ impl TabViewer for Viewer<'_> {
         match tab {
             Tab::EmbedBuilder => self.ed.embed_edit = None,
             Tab::LayoutBuilder => self.ed.layout_edit = None,
+            Tab::CanvasBuilder => self.ed.canvas_edit = None,
             Tab::SlashCommands => self.ed.slash_edit = None,
             Tab::BotSettings => self.bot.settings = None,
             Tab::Export => self.bot.export = None,
@@ -110,6 +112,7 @@ impl TabViewer for Viewer<'_> {
             }
             Tab::EmbedBuilder => crate::builders::embed::tab(ui, self.ed),
             Tab::LayoutBuilder => crate::builders::layout::tab(ui, self.ed),
+            Tab::CanvasBuilder => crate::builders::canvas::tab(ui, self.ed),
             Tab::SlashCommands => crate::builders::slash::tab(ui, self.ed),
             Tab::BotSettings => self.bot.settings_tab(ui, self.ed),
             Tab::Export => self.bot.export_tab(ui, self.ed),

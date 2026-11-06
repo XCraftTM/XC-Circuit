@@ -95,7 +95,8 @@ module.exports = {
       Boolean,
     );
     const flags = flagList.length ? flagList : undefined;
-    const files = (fields.files || []).flat().filter(Boolean).map((f) => f.url ?? f.attachment ?? f);
+    // A drawn picture ({ attachment: <bytes>, name }) goes as it is, keeping its name.
+    const files = (fields.files || []).flat().filter(Boolean).map((f) => (Buffer.isBuffer(f.attachment) ? f : f.url ?? f.attachment ?? f));
     const payload = { content: fields.text || undefined, embeds: fields.embeds?.length ? fields.embeds : undefined, flags, files: files.length ? files : undefined };
     if (fields.tts) payload.tts = true;
     const stickers = String(fields.stickers || "").split(",").map((s) => s.trim()).filter(Boolean);

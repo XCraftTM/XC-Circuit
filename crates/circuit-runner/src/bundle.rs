@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 use std::fs;
 
 use anyhow::{Context, Result, anyhow};
+use base64::Engine as _;
 use circuit_core::Project;
 use circuit_plugins::{BuildMode, Registry};
 use indexmap::IndexMap;
@@ -40,7 +41,18 @@ pub fn build_bundle(project: &Project, reg: &Registry, mode: Option<&BuildMode>)
             Some(js) => js.clone(),
             None => fs::read_to_string(&def.source).with_context(|| format!("reading {}", def.source.display()))?,
         };
-        blocks.insert(id.clone(), json!({ "source": source, "file": def.source.display().to_string(), "plugin": def.plugin }));
+        // Files the block needs (fonts …), so an exported bot has them too.
+        let mut assets = Map::new();
+        for name in &def.assets {
+            let file = def.source.parent().unwrap_or(std::path::Path::new(".")).join(name);
+            let bytes = fs::read(&file).with_context(|| format!("reading {}, which {} needs", file.display(), def.name))?;
+            assets.insert(name.clone(), Value::String(base64::engine::general_purpose::STANDARD.encode(bytes)));
+        }
+        let mut entry = json!({ "source": source, "file": def.source.display().to_string(), "plugin": def.plugin });
+        if !assets.is_empty() {
+            entry["assets"] = Value::Object(assets);
+        }
+        blocks.insert(id.clone(), entry);
         for (name, version) in &def.dependencies {
             dependencies.entry(name.clone()).or_insert_with(|| version.clone());
         }
@@ -144,6 +156,27 @@ mod tests {
         assert!(settings(&project).get("token").is_none());
         project.meta.settings.insert("prefix".into(), Value::from("?"));
         assert_eq!(settings(&project)["prefix"], "?");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A block's files (Build Canvas's fonts) go into the bot with it, as base64.
+    #[test]
+    fn blocks_bring_their_files() {
+        let dir = std::env::temp_dir().join(format!("xc-bundle-assets-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let mut project = Project::create(&dir, "Assets", "discord-bot").unwrap();
+        let ws = project.workspaces.values_mut().next().unwrap();
+        ws.nodes.insert("c".into(), Node { block: "core.build_canvas@1".into(), ..Default::default() });
+        let engine = circuit_plugins::BlockEngine::new().unwrap();
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+        let reg = Registry::load(&[root.clone()], &engine);
+        assert!(reg.problems.is_empty(), "{:?}", reg.problems);
+        let bundle = build_bundle(&project, &reg, None).unwrap();
+        let assets = bundle.value["blocks"]["core.build_canvas"]["assets"].as_object().unwrap();
+        assert_eq!(assets.len(), 4);
+        let font = base64::engine::general_purpose::STANDARD.decode(assets["../../fonts/Ubuntu-Bold.ttf"].as_str().unwrap()).unwrap();
+        assert_eq!(font, fs::read(root.join("xc.core/fonts/Ubuntu-Bold.ttf")).unwrap());
+        assert!(bundle.dependencies.contains_key("@napi-rs/canvas"));
         let _ = fs::remove_dir_all(&dir);
     }
 

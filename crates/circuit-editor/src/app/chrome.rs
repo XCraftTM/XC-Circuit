@@ -264,6 +264,7 @@ impl CircuitApp {
         let wanted = [
             (Tab::EmbedBuilder, self.ed.embed_edit.is_some(), egui::vec2(1060.0, 760.0)),
             (Tab::LayoutBuilder, self.ed.layout_edit.is_some(), egui::vec2(1240.0, 800.0)),
+            (Tab::CanvasBuilder, self.ed.canvas_edit.is_some(), egui::vec2(1280.0, 820.0)),
             (Tab::SlashCommands, self.ed.slash_edit.is_some(), egui::vec2(1320.0, 720.0)),
             (Tab::BotSettings, self.bot.settings.is_some(), egui::vec2(820.0, 620.0)),
             (Tab::Export, self.bot.export.is_some(), egui::vec2(560.0, 620.0)),

@@ -78,6 +78,7 @@ export default defineConfig({
             { text: "Projects and workspaces", link: "/explanations/projects" },
             { text: "Variables and stored data", link: "/explanations/data" },
             { text: "Databases", link: "/explanations/databases" },
+            { text: "Pictures with Build Canvas", link: "/explanations/canvas" },
             { text: "Try Zones and errors", link: "/explanations/errors" },
             { text: "Plugins", link: "/explanations/plugins" },
             { text: "Running and exporting", link: "/explanations/running" },

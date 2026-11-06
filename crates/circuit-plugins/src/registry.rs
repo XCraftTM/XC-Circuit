@@ -221,6 +221,12 @@ impl Registry {
             );
             return;
         }
+        let dir = path.parent().unwrap_or(Path::new("."));
+        for asset in &def.assets {
+            if !dir.join(asset).is_file() {
+                self.problem(display(path), format!("`requires.assets` lists {asset}, but there's no such file next to the block"));
+            }
+        }
         self.engine_keys.insert(def.id.clone(), key);
         self.block_icons.remove(&def.id);
         if let Some(icon) = def.icon.as_deref().filter(|i| i.ends_with(".svg") || i.ends_with(".png")) {

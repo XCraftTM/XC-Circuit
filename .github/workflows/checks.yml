@@ -83,6 +83,7 @@ jobs:
           node runtime/test/discord_forms.js
           node runtime/test/backups.js < /dev/null
           node runtime/test/databases.js
+          node runtime/test/canvas.js
 
   # The database blocks against real servers: MariaDB, PostgreSQL and
   # MongoDB (SQLite runs with the other runtime tests). Linux runners only
@@ -90,7 +91,7 @@ jobs:
   # MongoDB 8 doesn't start on the newer kernel of ubuntu-latest
   # (https://jira.mongodb.org/browse/SERVER-121912).
   databases:
-    name: Databases
+    name: Databases and pictures
     runs-on: ubuntu-22.04
     services:
       mariadb:
@@ -130,7 +131,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/db-deps"
           cd "$RUNNER_TEMP/db-deps"
           npm init -y > /dev/null
-          npm install --no-audit --no-fund mysql2@^3.24.6 pg@^8.23.1 mongodb@^7.8.0
+          npm install --no-audit --no-fund mysql2@^3.24.6 pg@^8.23.1 mongodb@^7.8.0 @napi-rs/canvas@^1.1.0
       - name: Database tests
         env:
           XC_TEST_DEPS: ${{ runner.temp }}/db-deps
@@ -138,6 +139,11 @@ jobs:
           XC_TEST_POSTGRES: postgres://postgres:test@127.0.0.1:5432/test
           XC_TEST_MONGODB: mongodb://127.0.0.1:27017/test
         run: node runtime/test/databases.js
+      # Build Canvas, with the package bots get (its requires.dependencies).
+      - name: Picture tests
+        env:
+          XC_TEST_DEPS: ${{ runner.temp }}/db-deps
+        run: node runtime/test/canvas.js
 
   website:
     name: Website builds

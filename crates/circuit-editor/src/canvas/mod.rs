@@ -134,7 +134,7 @@ enum NodeMenu {
 }
 
 pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
-    let Editor { reg, engine, theme, project, shapes, views, selected, edited, picker, active_workspace, activity, wire_values, multi, selected_notes, recording_frame, define_ctx, embed_edit, layout_edit, selected_wire, prefs, ui_rects, .. } = ed;
+    let Editor { reg, engine, theme, project, shapes, views, selected, edited, picker, active_workspace, activity, wire_values, multi, selected_notes, recording_frame, define_ctx, embed_edit, layout_edit, canvas_edit, selected_wire, prefs, ui_rects, .. } = ed;
     let Some(project) = project.as_mut() else { return };
     let mode = reg.mode(&project.meta.mode).or_else(|| reg.modes.first());
     let Some(ws) = project.workspaces.get_mut(ws_key) else {
@@ -194,6 +194,13 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             for (key, f) in s.visible_fields().filter(|(_, f)| f.type_name == "layout") {
                 let lines = crate::builders::layout::summary(node.values.get(key).or(f.default.as_ref()).unwrap_or(&Value::Null)).len().clamp(1, LAYOUT_LINES);
                 tall.insert(key.clone(), 8.0 + lines as f32 * LAYOUT_LINE_H + 8.0 + 26.0 + 8.0);
+            }
+        }
+        if let (Some(s), Some(d)) = (&shape, def) {
+            for (key, f) in s.visible_fields().filter(|(_, f)| f.type_name == "canvas") {
+                let data = crate::builders::canvas::CanvasData::from_value(node.values.get(key).or(f.default.as_ref()).unwrap_or(&Value::Null));
+                let w = node.width.unwrap_or_else(|| default_width(d)) - 28.0;
+                tall.insert(key.clone(), 4.0 + crate::builders::canvas::block_height(&data, w) + 8.0 + 26.0 + 8.0);
             }
         }
         if let (Some(s), Some(d)) = (&shape, def) {
@@ -597,6 +604,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         let shape = node_shapes.get(id.as_str()).map(|s| &**s);
         let mut open_embed: Option<String> = None;
         let mut open_layout: Option<String> = None;
+        let mut open_canvas: Option<String> = None;
         for (row, r) in layout.rows.iter() {
             // Hovering a row's name shows what it is, like hovering its pin.
             let (tip_key, tip_dir, tip_rect) = match row {
@@ -629,6 +637,16 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     let button = Rect::from_min_size(pos2(r.left() + 14.0, r.top() + 4.0 + l.height + 8.0), vec2(w, 26.0));
                     if cui.put(button, egui::Button::new(t!("Edit embed…"))).clicked() {
                         open_embed = Some(key.clone());
+                    }
+                }
+                RowKind::Field { key, .. } if shape.and_then(|s| s.field(key)).is_some_and(|f| f.type_name == "canvas") => {
+                    let f = shape.and_then(|s| s.field(key)).unwrap();
+                    let data = crate::builders::canvas::CanvasData::from_value(ws.nodes[id].values.get(key).or(f.default.as_ref()).unwrap_or(&Value::Null));
+                    let w = r.width() - 28.0;
+                    crate::builders::canvas::paint_on_block(&painter, r.min + vec2(14.0, 4.0), w, &data);
+                    let button = Rect::from_min_size(pos2(r.left() + 14.0, r.top() + 4.0 + crate::builders::canvas::block_height(&data, w) + 8.0), vec2(w, 26.0));
+                    if cui.put(button, egui::Button::new(t!("Edit canvas…"))).clicked() {
+                        open_canvas = Some(key.clone());
                     }
                 }
                 RowKind::Field { key, .. } if shape.and_then(|s| s.field(key)).is_some_and(|f| f.type_name == "layout") => {
@@ -767,6 +785,10 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
 
         if let Some(k) = open_embed {
             open_embed_for = Some((id.clone(), k));
+        }
+        if let Some(k) = open_canvas {
+            let value = ws.nodes[id].values.get(&k).cloned().or_else(|| shape.and_then(|s| s.field(&k)).and_then(|f| f.default.clone())).unwrap_or(Value::Null);
+            *canvas_edit = Some(crate::builders::canvas::CanvasEdit::new(ws_key, id, &k, &value));
         }
         if let Some(k) = open_layout {
             let value = ws.nodes[id].values.get(&k).cloned().or_else(|| shape.and_then(|s| s.field(&k)).and_then(|f| f.default.clone())).unwrap_or(Value::Null);

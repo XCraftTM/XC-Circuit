@@ -67,6 +67,31 @@ class Runtime {
     return (this.bundle.project.settings || {})[name];
   }
 
+  /**
+   * A file a block brought along (`requires.assets`): written once into the
+   * data folder's .assets, and its path given back.
+   */
+  asset(blockId, name) {
+    const data = ((this.bundle.blocks[blockId] || {}).assets || {})[name];
+    if (data == null) throw new Error(`${blockId} has no file "${name}": list it in requires.assets`);
+    this.assetFiles = this.assetFiles || new Map();
+    const key = `${blockId}\u0000${name}`;
+    if (!this.assetFiles.has(key)) {
+      const file = path.join(this.opts.dataDir || process.cwd(), ".assets", blockId.replace(/[^\w.-]/g, "_"), path.basename(name));
+      const bytes = Buffer.from(data, "base64");
+      let same = false;
+      try {
+        same = fs.readFileSync(file).equals(bytes);
+      } catch {}
+      if (!same) {
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, bytes);
+      }
+      this.assetFiles.set(key, file);
+    }
+    return this.assetFiles.get(key);
+  }
+
   /** Union of `intents` of every event block placed in the project. */
   intents() {
     const out = new Set();
@@ -240,6 +265,8 @@ class Runtime {
         setting: (name) => rt.setting(name),
       },
       util: UTIL,
+      /** A file the block lists in `requires.assets` (a font …), as a path on disk. */
+      asset: (name) => rt.asset(node.blockId, name),
       /** A database of Bot › Settings › Databases: its id or name, or "default". */
       db: (which) => rt.databases.get(which),
       require: (name) => rt.require(name),

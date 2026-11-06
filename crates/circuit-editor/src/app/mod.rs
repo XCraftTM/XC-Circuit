@@ -53,6 +53,7 @@ pub enum Tab {
     /// Editors that used to be dialogs. Each is open while its draft exists.
     EmbedBuilder,
     LayoutBuilder,
+    CanvasBuilder,
     SlashCommands,
     BotSettings,
     Export,
@@ -82,7 +83,7 @@ impl Tab {
 
     /// The editors that open in their own floating window.
     fn floats(&self) -> bool {
-        matches!(self, Tab::EmbedBuilder | Tab::LayoutBuilder | Tab::SlashCommands | Tab::BotSettings | Tab::Export | Tab::Plugins | Tab::WorkspaceExport | Tab::WorkspaceImport)
+        matches!(self, Tab::EmbedBuilder | Tab::LayoutBuilder | Tab::CanvasBuilder | Tab::SlashCommands | Tab::BotSettings | Tab::Export | Tab::Plugins | Tab::WorkspaceExport | Tab::WorkspaceImport)
     }
 
     const PANELS: [(Tab, &'static str); 3] = [(Tab::Inspector, n("Inspector")), (Tab::Console, n("Console")), (Tab::Problems, n("Problems"))];

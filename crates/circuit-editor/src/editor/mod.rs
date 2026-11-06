@@ -119,6 +119,7 @@ pub struct Editor {
     pub define_ctx: Value,
     pub embed_edit: Option<crate::builders::embed::EmbedEdit>,
     pub layout_edit: Option<crate::builders::layout::LayoutEdit>,
+    pub canvas_edit: Option<crate::builders::canvas::CanvasEdit>,
     /// The bot's name and picture, for message previews.
     pub bot_profile: crate::bot::profile::Profile,
     pub slash_edit: Option<crate::builders::slash::SlashEdit>,
@@ -163,6 +164,7 @@ impl Editor {
             define_ctx: Value::Object(Map::new()),
             embed_edit: None,
             layout_edit: None,
+            canvas_edit: None,
             bot_profile: Default::default(),
             slash_edit: None,
             ws_export: None,
@@ -296,6 +298,7 @@ impl Editor {
         self.activity.clear();
         self.embed_edit = None;
         self.layout_edit = None;
+        self.canvas_edit = None;
         self.slash_edit = None;
         self.ws_export = None;
         self.ws_import = None;

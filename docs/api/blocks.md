@@ -70,7 +70,7 @@ The keys inside `info`, `search`, `look` and `requires` may also stand at the to
 | --- | --- |
 | `icon` | An icon name from any plugin's `icons`: `message`, `user`, `clock`, `hash`, `branch`… |
 | `width` | The block's width on the canvas, in points. |
-| `preview` | A built-in preview drawn on the block. `embed` draws the block's embed as Discord shows it (and makes the block wider). |
+| `preview` | A built-in preview drawn on the block. `embed` draws the block's embed as Discord shows it, `canvas` its picture (both make the block wider). |
 
 ### requires
 
@@ -78,6 +78,7 @@ The keys inside `info`, `search`, `look` and `requires` may also stand at the to
 | --- | --- |
 | `intents` | Discord gateway intents the block needs, such as `GuildMessages` or `GuildMembers`. The bot asks Discord for the intents of the blocks used. |
 | `dependencies` | npm packages the block's code needs: `{ "node-fetch": "^3.3.0" }`. They're installed before Run and listed in exports. Load them with [`ctx.require`](./ctx#require). |
+| `assets` | Files the block needs in the bot, such as fonts or pictures, as paths relative to the block file: `["../../fonts/MyFont.ttf"]`. They go into the bot (and into exports) with the block; [`ctx.asset(name)`](./ctx#asset) gives a path to one. |
 | `permissions` | The bot's permissions the block needs, by the platform's flag names: `["ManageRoles"]`, or a list per value of one field: `{ action: { kick: ["KickMembers"], ban: ["BanMembers"] } }`. When the platform answers "Missing Permissions", the error names them. |
 
 Discord's privileged intents (`GuildMembers`, `GuildPresences`, `MessageContent`) have to be turned on for the bot in the developer portal; Bot settings lists the ones the project's blocks need, with a link there.

@@ -165,7 +165,7 @@ pub const BLOCK_GROUPS: [(&str, &[&str]); 4] = [
     ("info", &["name", "description", "author", "version", "docs", "deprecated"]),
     ("search", &["category", "aliases", "tags"]),
     ("look", &["icon", "width", "preview"]),
-    ("requires", &["intents", "dependencies", "permissions"]),
+    ("requires", &["intents", "dependencies", "permissions", "assets"]),
 ];
 
 /// Moves the keys in a block file's groups (`info`, `search`, `look`,
@@ -217,6 +217,9 @@ pub struct BlockDef {
     /// a list per value of one field (`{ action: { kick: ["KickMembers"] } }`).
     pub permissions: Value,
     pub dependencies: IndexMap<String, String>,
+    /// Files the block needs in the bot (fonts, pictures), relative to the
+    /// block file. They go into the bot with it; `ctx.asset(name)` finds them.
+    pub assets: Vec<String>,
     pub width: Option<f32>,
     pub preview: Option<String>,
     pub deprecated: Option<Value>,

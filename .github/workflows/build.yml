@@ -100,6 +100,7 @@ jobs:
           node runtime/test/discord_forms.js
           node runtime/test/backups.js < /dev/null
           node runtime/test/databases.js
+          node runtime/test/canvas.js
 
       # Native plugins are built together with the editor so they share one build of egui.
       - name: Release build
