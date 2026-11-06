@@ -221,7 +221,8 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
     // A toolbar row like the Stored Data panel's: Clear, then chips that show
     // one level of lines, each with how many there are.
     Frame::new().inner_margin(Margin::symmetric(12, 8)).show(ui, |ui| {
-        ui.horizontal(|ui| {
+        // Wrapping: in the narrow side bar the chips go on to a second line.
+        ui.horizontal_wrapped(|ui| {
             if crate::ui::kit::button(ui, &theme, t!("Clear")).clicked() {
                 ed.log.clear();
             }
@@ -251,13 +252,35 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
     });
     let mut jump: Option<(String, String)> = None;
     // One screen row per line of text (stack traces span several), all as tall
-    // as the Show block button, so only the rows in view are laid out.
+    // as the Show block button, so only the rows in view are laid out. A line
+    // too long for the width is broken into rows here (between words where it
+    // can be), under its text: a narrow Console (in the side bar) shows it all.
+    let font = egui::TextStyle::Monospace.resolve(ui.style());
+    let char_w = ui.fonts_mut(|f| f.glyph_width(&font, 'm')).max(1.0);
+    let gap = ui.spacing().item_spacing.x;
+    // Time (8) and level (5) with their gaps; the Show block button on lines that have it.
+    let lead = char_w * 13.0 + gap * 3.0;
+    let button = 96.0 + gap;
+    let width = ui.available_width() - 24.0 - ui.spacing().scroll.bar_width - 4.0;
+    // Narrow (the side bar): the time and level get a row of their own, and the
+    // text the whole width under it, a little indented.
+    let indent = char_w * 2.0;
+    let stacked = width - lead - button < char_w * 32.0;
+    let columns = |has_button: bool| {
+        let room = if stacked { width - indent } else { width - lead - if has_button { button } else { 0.0 } };
+        ((room / char_w).floor() as usize).max(8)
+    };
     let rows: Vec<(usize, usize, &str)> = ed
         .log
         .iter()
         .enumerate()
         .filter(|(_, l)| level.is_none_or(|want| l.level == want))
-        .flat_map(|(i, l)| l.text.split('\n').enumerate().map(move |(n, part)| (i, n, part.trim_end_matches('\r'))))
+        .flat_map(|(i, l)| {
+            let cols = columns(l.target.is_some());
+            // Stacked, row 0 is the time and level alone; the text starts at row 1.
+            let head = stacked.then_some("");
+            head.into_iter().chain(l.text.split('\n').flat_map(move |part| wrap_columns(part.trim_end_matches('\r'), cols))).enumerate().map(move |(n, part)| (i, n, part))
+        })
         .collect();
     let row_h = crate::ui::kit::input_height(ui);
     ui.spacing_mut().item_spacing.y = 0.0;
@@ -268,11 +291,18 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
                 let (tag, color) = level_look(line.level, &theme);
                 ui.horizontal(|ui| {
                     ui.set_height(row_h);
-                    // The time and level only on a line's first row.
-                    let (time, tag) = if n == 0 { (line.time.as_str(), tag) } else { ("        ", "     ") };
-                    ui.label(RichText::new(time).monospace().color(theme.text_muted));
-                    ui.label(RichText::new(tag).monospace().color(color));
-                    ui.label(RichText::new(part).monospace());
+                    if stacked && n > 0 {
+                        ui.add_space(indent);
+                        ui.label(RichText::new(part).monospace());
+                    } else {
+                        // The time and level only on a line's first row.
+                        let (time, tag) = if n == 0 { (line.time.as_str(), tag) } else { ("        ", "     ") };
+                        ui.label(RichText::new(time).monospace().color(theme.text_muted));
+                        ui.label(RichText::new(tag).monospace().color(color));
+                        if !stacked {
+                            ui.label(RichText::new(part).monospace());
+                        }
+                    }
                     if n == 0
                         && let Some(t) = &line.target
                         && crate::ui::kit::button(ui, &theme, t!("Show block")).on_hover_text(t!("Show the block that wrote this")).clicked()
@@ -286,6 +316,21 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
     if let Some((ws, node)) = jump {
         ed.reveal(&ws, &node);
     }
+}
+
+/// `text` in pieces of at most `cols` characters, broken after a space where
+/// there is one (a long word is cut).
+fn wrap_columns(text: &str, cols: usize) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut rest = text;
+    while rest.chars().count() > cols {
+        let cut = rest.char_indices().nth(cols).map_or(rest.len(), |(i, _)| i);
+        let at = rest[..cut].rfind(' ').filter(|&i| i > 0).map_or(cut, |i| i + 1);
+        out.push(&rest[..at]);
+        rest = &rest[at..];
+    }
+    out.push(rest);
+    out
 }
 
 /// One entry in the Problems panel: where, what, and the block to jump to.
@@ -412,6 +457,14 @@ pub fn problems(ui: &mut Ui, ed: &mut Editor, items: Vec<ProblemItem>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn console_lines_wrap_between_words() {
+        assert_eq!(wrap_columns("Loaded 5 plugins, 267 blocks", 12), ["Loaded 5 ", "plugins, ", "267 blocks"]);
+        assert_eq!(wrap_columns("short", 12), ["short"]);
+        assert_eq!(wrap_columns("C:/Users/Admin/AppData/Local", 10), ["C:/Users/A", "dmin/AppDa", "ta/Local"], "a long word is cut");
+        assert_eq!(wrap_columns("äöü äöü äöü", 5), ["äöü ", "äöü ", "äöü"], "by characters, not bytes");
+    }
     use circuit_core::{Node, Workspace};
 
     /// A Call whose When Called block is only in a workspace that is off is a
