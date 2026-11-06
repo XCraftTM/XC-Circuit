@@ -151,10 +151,11 @@ impl DockViewer<Tab> for Viewer<'_> {
                     self.start_pick = Some(pick);
                 }
             }
-            Tab::EmbedBuilder => crate::builders::embed::tab(ui, self.ed),
-            Tab::LayoutBuilder => crate::builders::layout::tab(ui, self.ed),
-            Tab::CanvasBuilder => crate::builders::canvas::tab(ui, self.ed),
-            Tab::SlashCommands => crate::builders::slash::tab(ui, self.ed),
+            // The builders keep a size they work at; a smaller tab or window scrolls.
+            Tab::EmbedBuilder => at_least(ui, egui::vec2(760.0, 520.0), |ui| crate::builders::embed::tab(ui, self.ed)),
+            Tab::LayoutBuilder => at_least(ui, egui::vec2(900.0, 560.0), |ui| crate::builders::layout::tab(ui, self.ed)),
+            Tab::CanvasBuilder => at_least(ui, egui::vec2(900.0, 580.0), |ui| crate::builders::canvas::tab(ui, self.ed)),
+            Tab::SlashCommands => at_least(ui, egui::vec2(900.0, 520.0), |ui| crate::builders::slash::tab(ui, self.ed)),
             Tab::BotSettings => self.bot.settings_tab(ui, self.ed),
             Tab::Export => self.bot.export_tab(ui, self.ed),
             Tab::WorkspaceExport => crate::editor::exchange::export_tab(ui, self.ed),
@@ -163,6 +164,25 @@ impl DockViewer<Tab> for Viewer<'_> {
             Tab::Plugins => {}
         }
     }
+}
+
+/// Draws `add` in at least `min`: a tab smaller than that scrolls (both
+/// ways) instead of squeezing what's in it.
+fn at_least(ui: &mut egui::Ui, min: egui::Vec2, add: impl FnOnce(&mut egui::Ui)) {
+    let room = ui.available_size();
+    if room.x >= min.x && room.y >= min.y {
+        return add(ui);
+    }
+    // Solid bars, so it's plain that there's more (floating ones only show near the pointer).
+    let scroll = ui.spacing().scroll;
+    ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
+    egui::ScrollArea::both().id_salt("at-least").auto_shrink([false, false]).scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible).show(ui, |ui| {
+        let (rect, _) = ui.allocate_exact_size(room.max(min), egui::Sense::hover());
+        let mut inner = ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(egui::Layout::top_down(egui::Align::Min)));
+        inner.set_clip_rect(rect.intersect(ui.clip_rect()));
+        inner.spacing_mut().scroll = scroll;
+        add(&mut inner);
+    });
 }
 
 /// Workspaces, Stored Data or Plugins, as a tab or in the side bar. Returns
