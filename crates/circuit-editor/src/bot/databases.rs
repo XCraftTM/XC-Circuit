@@ -415,7 +415,7 @@ fn connection_ui(ui: &mut Ui, ed: &Editor, theme: &Theme, c: &mut Connection, pr
         ui.spacing_mut().item_spacing.y = 6.0;
         let width = ui.available_width();
         // Name, kind and remove.
-        ui.horizontal(|ui| {
+        crate::ui::widgets::line(ui, |ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
             ui.allocate_ui(vec2((width - 260.0).clamp(120.0, 300.0), 34.0), |ui| dialog::text_input(ui, &mut c.name, t!("Name"), false));
             let kind = KINDS.iter().find(|(k, _)| *k == c.kind).map(|(_, n)| *n).unwrap_or("?");
@@ -448,11 +448,11 @@ fn connection_ui(ui: &mut Ui, ed: &Editor, theme: &Theme, c: &mut Connection, pr
             field(ui, t!("File"), &mut c.file, "bot.sqlite", inner);
             ui.label(RichText::new(t!("In the bot's data folder, or a full path. Made when it's first used.")).size(11.5).color(theme.text_muted));
         } else {
-            ui.horizontal(|ui| {
+            crate::ui::widgets::line(ui, |ui| {
                 field(ui, t!("Host"), &mut c.host, "localhost", inner - 110.0);
                 field(ui, t!("Port"), &mut c.port, default_port(&c.kind), 96.0);
             });
-            ui.horizontal(|ui| {
+            crate::ui::widgets::line(ui, |ui| {
                 field(ui, t!("User"), &mut c.user, "", (inner - 8.0) / 2.0);
                 ui.vertical(|ui| {
                     ui.spacing_mut().item_spacing.y = 2.0;
@@ -462,7 +462,7 @@ fn connection_ui(ui: &mut Ui, ed: &Editor, theme: &Theme, c: &mut Connection, pr
             });
             field(ui, t!("Database name"), &mut c.database, if c.kind == "postgres" { "postgres" } else { "" }, inner);
             if c.kind != "mongodb" {
-                ui.horizontal(|ui| {
+                crate::ui::widgets::line(ui, |ui| {
                     crate::ui::widgets::toggle(ui, &mut c.ssl, theme);
                     ui.label(RichText::new(t!("Use SSL/TLS (for databases on the internet)")).size(12.5).color(theme.text));
                 });
@@ -521,7 +521,7 @@ fn found(r: &TestResult) -> String {
 fn secret_ui(ui: &mut Ui, ed: &Editor, theme: &Theme, s: &mut Secret, width: f32, id: (&str, &str)) {
     let icon = |name: &str| ed.reg.icons.get(name).map(|p| p.as_path());
     ui.push_id(id, |ui| {
-        ui.horizontal(|ui| {
+        crate::ui::widgets::line(ui, |ui| {
             ui.spacing_mut().item_spacing.x = 6.0;
             let hint = if s.saved && !s.remove { t!("•••••••• saved · type to replace") } else { "" };
             ui.allocate_ui(vec2((width - 80.0).max(80.0), 34.0), |ui| dialog::text_input(ui, &mut s.value, hint, !s.reveal));

@@ -661,7 +661,7 @@ fn left_panel(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit, icons: &Icons) 
     }
 
     dialog::section(ui, theme, t!("Size"));
-    ui.horizontal(|ui| {
+    crate::ui::widgets::line(ui, |ui| {
         ui.add(egui::DragValue::new(&mut d.width).range(16.0..=4096.0).speed(1.0).suffix(" px"));
         ui.label("×");
         ui.add(egui::DragValue::new(&mut d.height).range(16.0..=4096.0).speed(1.0).suffix(" px"));
@@ -674,7 +674,7 @@ fn left_panel(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit, icons: &Icons) 
         }
     });
     dialog::section(ui, theme, t!("Background"));
-    ui.horizontal(|ui| {
+    crate::ui::widgets::line(ui, |ui| {
         let mut clear = d.background.trim().is_empty();
         if !clear {
             colour_edit(ui, theme, Id::new("canvas-bg"), &mut d.background);
@@ -700,6 +700,7 @@ fn left_panel(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit, icons: &Icons) 
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
+                    ui.set_min_height(22.0);
                     let title = RichText::new(l.title()).size(12.5).color(if l.hidden { theme.text_muted } else { theme.text });
                     if ui.add(egui::Label::new(title).truncate().sense(Sense::click())).clicked() {
                         action = Some((i, "select"));
@@ -872,7 +873,7 @@ fn samples(ui: &mut Ui, theme: &Theme, d: &mut CanvasData) {
 /// A colour: a swatch with the picker, or (for a colour from the bot, such
 /// as a role's) a `${…}` text. The small button switches between them.
 fn colour_edit(ui: &mut Ui, theme: &Theme, id: Id, value: &mut String) {
-    ui.horizontal(|ui| {
+    crate::ui::widgets::line(ui, |ui| {
         let expression = value.contains("${");
         if expression {
             ui.add(crate::ui::inputs::TextLine::new(value).hint("${role.hexColor}").width(200.0));
@@ -939,10 +940,14 @@ fn properties(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit) {
         }
         ui.end_row();
     });
-    ui.horizontal(|ui| {
-        label(ui, theme, t!("Opacity"));
+    crate::ui::widgets::line(ui, |ui| {
+        // Named like Width and Height above. The slider's own value box would sit
+        // in the slider's height, off its middle: the box is added next to it.
+        ui.label(t!("Opacity"));
         let mut o = l.opacity.unwrap_or(100.0);
-        if ui.add(egui::Slider::new(&mut o, 0.0..=100.0).fixed_decimals(0).suffix(" %")).changed() {
+        let slid = ui.add(egui::Slider::new(&mut o, 0.0..=100.0).show_value(false)).changed();
+        let typed = ui.add(egui::DragValue::new(&mut o).range(0.0..=100.0).fixed_decimals(0).suffix(" %")).changed();
+        if slid || typed {
             l.opacity = (o < 100.0).then_some(o);
         }
     });
@@ -954,11 +959,11 @@ fn properties(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit) {
         "text" => {
             label(ui, theme, t!("Text"));
             ui.add(crate::ui::inputs::TextArea::new(("canvas-text", i), &mut l.text).hint("Hello ${user.username}").rows(3));
-            ui.horizontal(|ui| {
+            crate::ui::widgets::line(ui, |ui| {
                 choose(ui, &format!("canvas-font-{i}"), &mut l.font, &[("regular", n("Regular")), ("bold", n("Bold")), ("mono", n("Monospace"))], 120.0);
                 opt_number(ui, &mut l.size, 32.0, 4.0..=400.0, " px");
             });
-            ui.horizontal(|ui| {
+            crate::ui::widgets::line(ui, |ui| {
                 label(ui, theme, t!("Align"));
                 choose(ui, &format!("canvas-align-{i}"), &mut l.align, &[("left", n("Left")), ("center", n("Center")), ("right", n("Right"))], 110.0);
             });
@@ -971,17 +976,17 @@ fn properties(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit) {
             label(ui, theme, t!("Picture"));
             ui.add(crate::ui::inputs::TextArea::new(("canvas-src", i), &mut l.src).hint("https://… or ${user.displayAvatarURL({ extension: 'png' })}").rows(2));
             label(ui, theme, t!("A web address, a file path, or ${…}. The preview shows where it goes; the bot loads it."));
-            ui.horizontal(|ui| {
+            crate::ui::widgets::line(ui, |ui| {
                 label(ui, theme, t!("Shape"));
                 choose(ui, &format!("canvas-shape-{i}"), &mut l.shape, &[("rect", n("Square corners")), ("rounded", n("Round corners")), ("circle", n("Circle"))], 140.0);
             });
             if l.shape == "rounded" {
-                ui.horizontal(|ui| {
+                crate::ui::widgets::line(ui, |ui| {
                     label(ui, theme, t!("Corner radius"));
                     opt_number(ui, &mut l.radius, 16.0, 0.0..=2000.0, " px");
                 });
             }
-            ui.horizontal(|ui| {
+            crate::ui::widgets::line(ui, |ui| {
                 label(ui, theme, t!("Fit"));
                 choose(ui, &format!("canvas-fit-{i}"), &mut l.fit, &[("cover", n("Fill (cut off the rest)")), ("contain", n("Whole picture")), ("stretch", n("Stretch"))], 180.0);
             });
@@ -996,7 +1001,7 @@ fn properties(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit) {
             gradient(ui, theme, l, id("color2"));
             label(ui, theme, t!("Empty part"));
             colour_edit(ui, theme, id("back"), &mut l.back);
-            ui.horizontal(|ui| {
+            crate::ui::widgets::line(ui, |ui| {
                 label(ui, theme, t!("Corner radius"));
                 opt_number(ui, &mut l.radius, 0.0, 0.0..=2000.0, " px");
             });
@@ -1006,7 +1011,7 @@ fn properties(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit) {
             colour_edit(ui, theme, id("color"), &mut l.color);
             gradient(ui, theme, l, id("color2"));
             if l.kind == "rect" {
-                ui.horizontal(|ui| {
+                crate::ui::widgets::line(ui, |ui| {
                     label(ui, theme, t!("Corner radius"));
                     opt_number(ui, &mut l.radius, 0.0, 0.0..=2000.0, " px");
                 });
@@ -1024,9 +1029,15 @@ fn properties(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit) {
         }
     }
     if has_outline {
-        ui.horizontal(|ui| {
+        crate::ui::widgets::line(ui, |ui| {
             colour_edit(ui, theme, id("outline"), &mut l.outline);
-            opt_number(ui, &mut l.outline_width, 4.0, 0.0..=200.0, " px");
+            // As tall as the colour field beside it (22).
+            ui.spacing_mut().button_padding.y = 3.0;
+            ui.spacing_mut().interact_size = vec2(56.0, 22.0);
+            let mut w = l.outline_width.unwrap_or(4.0);
+            if ui.add(egui::DragValue::new(&mut w).range(0.0..=200.0).speed(1.0).suffix(" px")).changed() {
+                l.outline_width = Some(w);
+            }
         });
     }
 }
@@ -1038,7 +1049,7 @@ fn gradient(ui: &mut Ui, theme: &Theme, l: &mut Layer, id: Id) {
         l.color2 = if on { "#3DFF6E".into() } else { String::new() };
     }
     if on {
-        ui.horizontal(|ui| {
+        crate::ui::widgets::line(ui, |ui| {
             colour_edit(ui, theme, id, &mut l.color2);
             opt_number(ui, &mut l.angle, 0.0, -360.0..=360.0, "°");
         });

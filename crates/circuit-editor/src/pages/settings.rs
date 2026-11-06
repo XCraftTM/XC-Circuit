@@ -181,10 +181,20 @@ pub fn row(ui: &mut Ui, theme: &Theme, title: &str, description: &str, control: 
             .rect
         } else {
             ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.set_width(inner - control_w - 16.0);
-                    text(ui);
-                });
+                let w = inner - control_w - 16.0;
+                if description.is_empty() {
+                    // A name alone sits in the middle of the control's height (34: a field's).
+                    let h = crate::ui::inputs::input_height(ui).max(ui.spacing().interact_size.y).max(34.0);
+                    ui.allocate_ui_with_layout(vec2(w, h), Layout::left_to_right(Align::Center), |ui| {
+                        ui.set_width(w);
+                        text(ui);
+                    });
+                } else {
+                    ui.vertical(|ui| {
+                        ui.set_width(w);
+                        text(ui);
+                    });
+                }
                 ui.with_layout(Layout::right_to_left(Align::Center), control).response.rect
             })
             .inner

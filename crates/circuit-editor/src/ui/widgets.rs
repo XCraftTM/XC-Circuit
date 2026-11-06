@@ -91,6 +91,20 @@ fn editor(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width:
 /// A row with a text box and a control after it (a button): the control takes
 /// what it needs, in any language, and the text box the rest of the width.
 /// The row is as tall as a text box.
+/// A row of a label and controls, all in its middle. egui centres each item
+/// in the height the row has when the item is added, so a label put before
+/// a taller control (a dropdown, a slider, a field) would sit at the top:
+/// the row gets its full height first. (It starts at that height too: in
+/// another row, a shorter start would be centred there and then grow down.)
+pub fn line<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
+    let h = crate::ui::inputs::input_height(ui).max(ui.spacing().interact_size.y);
+    ui.allocate_ui_with_layout(egui::vec2(ui.available_size_before_wrap().x, h), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+        ui.set_min_height(h);
+        add(ui)
+    })
+    .inner
+}
+
 pub fn field_with_button(ui: &mut Ui, field: impl FnOnce(&mut Ui), button: impl FnOnce(&mut Ui)) {
     let size = egui::vec2(ui.available_width(), crate::ui::inputs::input_height(ui).max(ui.spacing().interact_size.y));
     ui.allocate_ui_with_layout(size, egui::Layout::right_to_left(egui::Align::Center), |ui| {
