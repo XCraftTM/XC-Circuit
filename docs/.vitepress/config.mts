@@ -79,6 +79,7 @@ export default defineConfig({
             { text: "Variables and stored data", link: "/explanations/data" },
             { text: "Databases", link: "/explanations/databases" },
             { text: "Pictures with Build Canvas", link: "/explanations/canvas" },
+            { text: "New-post alerts", link: "/explanations/alerts" },
             { text: "Try Zones and errors", link: "/explanations/errors" },
             { text: "Plugins", link: "/explanations/plugins" },
             { text: "Running and exporting", link: "/explanations/running" },

@@ -218,6 +218,8 @@ class Runtime {
     const rt = this;
     const graph = node.graph;
     const ctx = {
+      /** This block, as `workspace:node`: a key for data of its own (what it has seen …). */
+      id: `${graph.key}:${node.id}`,
       fields: node.inline(),
       event: run ? run.event : undefined,
       log: makeLogger(rt, node),
@@ -266,6 +268,8 @@ class Runtime {
         },
         onStart: (h) => rt.startHandlers.push(h),
         setting: (name) => rt.setting(name),
+        /** A secret of Bot › Settings (an API key a plugin's page asks for). */
+        secret: (name) => rt.secret(name),
       },
       util: UTIL,
       /** A file the block lists in `requires.assets` (a font …), as a path on disk. */

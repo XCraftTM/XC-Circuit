@@ -85,6 +85,7 @@ jobs:
           node runtime/test/databases.js
           node runtime/test/canvas.js
           node runtime/test/timers.js
+          node runtime/test/alerts.js
 
   # The database blocks against real servers: MariaDB, PostgreSQL and
   # MongoDB (SQLite runs with the other runtime tests). Linux runners only

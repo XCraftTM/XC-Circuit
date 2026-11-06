@@ -24,6 +24,10 @@ ctx.set("progress", 50)
 
 Sets one output without continuing. Useful in loops, or before a `next` that doesn't pass outputs.
 
+## id
+
+`"workspace:node"`: this block in this workspace, for keeping data of its own (in [`ctx.store.ns`](#store), say), apart from other copies of the block.
+
 ## fields
 
 The block's own field values as filled in (without connected values). In `run`, prefer the `fields` argument, which includes connected values.
@@ -106,6 +110,7 @@ Starts every **On Signal** event with that name, without waiting for them.
 | `onCall(name, fn)` | Answers Call blocks with that name: `fn(data)` starts a run and resolves to what it returns. |
 | `call(name, data)` | Runs the When Called flows with that name and resolves to the first one's return value. |
 | `setting(name)` | A setting of Bot › Settings (not a secret). |
+| `secret(name)` | A secret of Bot › Settings, such as an API key a [plugin's page](./build-modes#plugin-settings) asks for. |
 
 ## returnValue
 
