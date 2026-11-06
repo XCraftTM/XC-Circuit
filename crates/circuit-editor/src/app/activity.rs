@@ -115,6 +115,8 @@ impl CircuitApp {
     fn activity_button(&self, ui: &mut egui::Ui, icon: &str, tip: &str, active: bool, lifted: bool, sense: egui::Sense) -> egui::Response {
         let t = &self.ed.theme;
         let (rect, resp) = ui.allocate_exact_size(egui::vec2(ACTIVITY_W, 40.0), sense);
+        // Named by its tip, also while dragged; "pressed" while its view shows.
+        crate::ui::kit::describe_selected(&resp, egui::Role::Button, active, tip);
         let resp = if lifted { resp } else { resp.on_hover_text(tip).on_hover_cursor(egui::CursorIcon::PointingHand) };
         if active {
             ui.painter().rect_filled(egui::Rect::from_min_size(rect.min, egui::vec2(2.0, rect.height())), 0.0, t.accent);

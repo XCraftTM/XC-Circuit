@@ -973,7 +973,7 @@ fn draw(ui: &mut egui::Ui, theme: &crate::ui::theme::Theme, items: &mut [Item], 
             }
             Item::Toggle { text, value, on } => {
                 let changed = kit::line(ui, |ui| {
-                    let c = ui.add_enabled_ui(on.is_some(), |ui| kit::toggle(ui, value, theme)).inner.changed();
+                    let c = ui.add_enabled_ui(on.is_some(), |ui| kit::toggle(ui, value, theme).accessible_name(text.as_str())).inner.changed();
                     ui.label(RichText::new(text.as_str()).color(theme.text));
                     c
                 });

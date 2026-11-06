@@ -235,7 +235,10 @@ fn project_backups(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, theme: 
             .response;
         // Clicking the summary opens or closes it.
         let summary = egui::Rect::from_min_size(resp.rect.min, vec2(resp.rect.width(), 48.0));
-        if ui.interact(summary, ui.scope_id().with(("snap", i)), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+        let toggle = ui.interact(summary, ui.scope_id().with(("snap", i)), Sense::click());
+        toggle.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, local_time(snap.info.saved_at)));
+        crate::ui::kit::accesskit_expanded(&toggle, open);
+        if toggle.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
             if open {
                 view.open = None;
             } else {

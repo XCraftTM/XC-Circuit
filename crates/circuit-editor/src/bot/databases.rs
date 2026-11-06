@@ -418,13 +418,15 @@ fn connection_ui(ui: &mut Ui, ed: &Editor, theme: &Theme, c: &mut Connection, pr
             ui.spacing_mut().item_spacing.x = 8.0;
             ui.allocate_ui(vec2((width - 260.0).clamp(120.0, 300.0), 34.0), |ui| kit::text_input(ui, &mut c.name, t!("Name"), false));
             let kind = KINDS.iter().find(|(k, _)| *k == c.kind).map(|(_, n)| *n).unwrap_or("?");
-            crate::ui::kit::dropdown(ui, Id::unique(("db-kind", c.id.as_str())), 170.0, kind, |ui| {
-                for (k, name) in KINDS {
-                    if kit::option(ui, c.kind == k, name).clicked() && c.kind != k {
-                        c.kind = k.into();
-                        c.test = None;
+            kit::called(ui, t!("Type"), |ui| {
+                crate::ui::kit::dropdown(ui, Id::unique(("db-kind", c.id.as_str())), 170.0, kind, |ui| {
+                    for (k, name) in KINDS {
+                        if kit::option(ui, c.kind == k, name).clicked() && c.kind != k {
+                            c.kind = k.into();
+                            c.test = None;
+                        }
                     }
-                }
+                })
             });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if kit::icon_button(ui, theme, icon("trash"), "×", t!("Remove this database")).clicked() {
@@ -438,8 +440,8 @@ fn connection_ui(ui: &mut Ui, ed: &Editor, theme: &Theme, c: &mut Connection, pr
         let field = |ui: &mut Ui, label: &str, value: &mut String, hint: &str, w: f32| {
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 2.0;
-                kit::hint(ui, theme, label);
-                ui.allocate_ui(vec2(w, 34.0), |ui| kit::text_input(ui, value, hint, false));
+                let label = kit::hint(ui, theme, label).id;
+                kit::labelled(ui, label, |ui| ui.allocate_ui(vec2(w, 34.0), |ui| kit::text_input(ui, value, hint, false)));
             });
         };
         let inner = width.min(520.0);
@@ -455,14 +457,14 @@ fn connection_ui(ui: &mut Ui, ed: &Editor, theme: &Theme, c: &mut Connection, pr
                 field(ui, t!("User"), &mut c.user, "", (inner - 8.0) / 2.0);
                 ui.vertical(|ui| {
                     ui.spacing_mut().item_spacing.y = 2.0;
-                    kit::hint(ui, theme, t!("Password"));
-                    secret_ui(ui, ed, theme, &mut c.password, (inner - 8.0) / 2.0, ("db-pw", &c.id));
+                    let label = kit::hint(ui, theme, t!("Password")).id;
+                    kit::labelled(ui, label, |ui| secret_ui(ui, ed, theme, &mut c.password, (inner - 8.0) / 2.0, ("db-pw", &c.id)));
                 });
             });
             field(ui, t!("Database name"), &mut c.database, if c.kind == "postgres" { "postgres" } else { "" }, inner);
             if c.kind != "mongodb" {
                 crate::ui::kit::line(ui, |ui| {
-                    crate::ui::kit::toggle(ui, &mut c.ssl, theme);
+                    crate::ui::kit::toggle(ui, &mut c.ssl, theme).accessible_name(t!("Use SSL/TLS (for databases on the internet)"));
                     ui.label(RichText::new(t!("Use SSL/TLS (for databases on the internet)")).size(12.5).color(theme.text));
                 });
             }
@@ -472,7 +474,7 @@ fn connection_ui(ui: &mut Ui, ed: &Editor, theme: &Theme, c: &mut Connection, pr
                 _ => "mysql://user:password@host:3306/name",
             };
             kit::hint(ui, theme, tf!("Or a connection URL, used instead of the boxes above: {example}", example = example));
-            secret_ui(ui, ed, theme, &mut c.url, inner, ("db-url", &c.id));
+            kit::called(ui, t!("Connection URL"), |ui| secret_ui(ui, ed, theme, &mut c.url, inner, ("db-url", &c.id)));
         }
         // Test, and what it found.
         ui.add_space(2.0);

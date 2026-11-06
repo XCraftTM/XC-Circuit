@@ -175,6 +175,7 @@ fn sidebar(ui: &mut Ui, theme: &Theme, state: &mut NewProject, reg: &Registry) -
         for mode in &reg.modes {
             let on = state.mode == mode.id;
             let (rect, resp) = ui.allocate_exact_size(vec2(width, 32.0), Sense::click());
+            kit::describe_selected(&resp, egui::Role::RadioButton, on, &crate::i18n::tr(&mode.name));
             if on {
                 ui.painter().rect_filled(rect, 6.0, with_alpha(theme.accent, 40));
             } else if resp.hovered() {
@@ -254,8 +255,9 @@ fn form(ui: &mut Ui, theme: &Theme, state: &mut NewProject, reg: &Registry, temp
                     ui.spacing_mut().item_spacing.x = gap;
                     for (i, icon, name, description) in row {
                         let (rect, click) = ui.allocate_exact_size(card, Sense::click());
-                        let click = click.on_hover_cursor(CursorIcon::PointingHand).on_hover_text(description);
                         let on = state.picked == *i;
+                        kit::describe_selected(&click, egui::Role::RadioButton, on, name);
+                        let click = click.on_hover_cursor(CursorIcon::PointingHand).on_hover_text(description);
                         let fill = if on { with_alpha(theme.accent, 30) } else if click.hovered() { crate::ui::theme::mix(theme.panel_header, theme.text, 0.05) } else { theme.panel_header };
                         let painter = ui.painter();
                         painter.rect(rect, 8.0, fill, Stroke::new(1.0, if on { theme.accent } else { theme.line }), egui::StrokeKind::Inside);

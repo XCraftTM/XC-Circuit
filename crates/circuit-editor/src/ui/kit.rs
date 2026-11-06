@@ -533,6 +533,8 @@ const NAMED_BY: &str = "xc-kit-named-by";
 enum Name {
     /// A label on screen.
     Label(egui::Id),
+    /// A name not shown as a label of its own (a block's field, drawn on the canvas).
+    Text(String),
     /// Nothing yet: a [`setting_card`] before its [`setting_title`].
     Later,
 }
@@ -543,6 +545,11 @@ enum Name {
 /// rows and fields do this with their titles.
 pub fn labelled<R>(ui: &mut Ui, label: egui::Id, add: impl FnOnce(&mut Ui) -> R) -> R {
     with_name(ui, Name::Label(label), add)
+}
+
+/// [`labelled`] by a name that isn't a label on screen.
+pub fn called<R>(ui: &mut Ui, name: &str, add: impl FnOnce(&mut Ui) -> R) -> R {
+    with_name(ui, Name::Text(name.to_string()), add)
 }
 
 /// Runs `add` with `name` for its controls, then puts back the name as it was.
@@ -562,10 +569,11 @@ fn with_name<R>(ui: &mut Ui, name: Name, add: impl FnOnce(&mut Ui) -> R) -> R {
     r
 }
 
-/// Names a control by the label around it ([`labelled`]), when there is one.
+/// Names a control by the label around it ([`labelled`], [`called`]), when there is one.
 pub fn named(ui: &Ui, resp: Response) -> Response {
     match ui.data(|d| d.get_temp::<Name>(egui::Id::unique(NAMED_BY))) {
         Some(Name::Label(label)) => resp.labelled_by(label),
+        Some(Name::Text(name)) => resp.accessible_name(name),
         Some(Name::Later) | None => resp,
     }
 }
@@ -579,6 +587,11 @@ pub fn describe(resp: &Response, role: Role, name: &str) {
 /// [`describe`] for something that is on or off, chosen or not.
 pub fn describe_selected(resp: &Response, role: Role, selected: bool, name: &str) {
     resp.widget_info(|| egui::WidgetInfo::selected(role, resp.enabled(), selected, name));
+}
+
+/// Tells screen readers whether something that opens and closes (a folder) is open.
+pub fn accesskit_expanded(resp: &Response, open: bool) {
+    resp.ctx.accesskit_node_builder(resp.id, |node| node.set_expanded(open));
 }
 
 // ── The theme ────────────────────────────────────────────────────────────

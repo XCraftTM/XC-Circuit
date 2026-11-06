@@ -162,6 +162,14 @@ fn row(ui: &mut Ui, theme: &Theme, icons: &Icons, id: Id, depth: usize, open: Op
     let h = if theme.touch { ROW_TOUCH_H } else { ROW_H };
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), h), Sense::hover());
     let resp = ui.interact(rect, id, Sense::click_and_drag());
+    match open {
+        // A folder (or the project): open or closed.
+        Some(open) => {
+            resp.widget_info(|| egui::WidgetInfo { selected: Some(active), ..egui::WidgetInfo::labeled(egui::Role::TreeItem, true, label) });
+            crate::ui::kit::accesskit_expanded(&resp, open);
+        }
+        None => crate::ui::kit::describe_selected(&resp, egui::Role::TreeItem, active, label),
+    }
     // A workspace dragged over a folder or the project goes into it (the row
     // fills); over another workspace it goes next to it (a line shows where).
     let drop_target = resp.dnd_hover_payload::<String>().is_some() && icon != Some("workspace");
@@ -196,7 +204,9 @@ fn row(ui: &mut Ui, theme: &Theme, icons: &Icons, id: Id, depth: usize, open: Op
 
 /// A small icon button drawn over the right end of a row.
 fn row_button(ui: &mut Ui, theme: &Theme, icons: &Icons, rect: Rect, id: Id, icon: &str, tip: &str) -> egui::Response {
-    let resp = ui.interact(rect, id, Sense::click()).on_hover_text(tip).on_hover_cursor(CursorIcon::PointingHand);
+    let resp = ui.interact(rect, id, Sense::click());
+    crate::ui::kit::describe(&resp, egui::Role::Button, tip);
+    let resp = resp.on_hover_text(tip).on_hover_cursor(CursorIcon::PointingHand);
     if resp.hovered() || egui::Popup::is_id_open(ui.ctx(), egui::Popup::default_response_id(&resp)) {
         ui.painter().rect_filled(rect, 4.0, theme.field);
     }
@@ -214,7 +224,7 @@ fn more_button(ui: &mut Ui, theme: &Theme, icons: &Icons, row: Rect, id: Id) -> 
 /// The name editor shown in place of a row's label.
 fn rename_box(ui: &mut Ui, area: Rect, state: &mut Renaming) -> Option<bool> {
     let id = Id::unique("sidebar-rename");
-    let resp = ui.put(area, egui::TextEdit::singleline(&mut state.text).id(id).margin(egui::Margin::symmetric(4, 2)));
+    let resp = ui.put(area, egui::TextEdit::singleline(&mut state.text).id(id).margin(egui::Margin::symmetric(4, 2))).accessible_name(t!("Rename"));
     if state.fresh {
         resp.request_focus();
         state.fresh = false;

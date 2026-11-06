@@ -30,7 +30,9 @@ pub const SEARCH_W: f32 = 380.0;
 /// The search box in the middle of the title bar. Clicking it opens the
 /// command palette, which appears on top of it.
 pub fn search_box(ui: &mut egui::Ui, rect: Rect, theme: &Theme, label: &str, shortcut: &str) -> bool {
-    let resp = ui.interact(rect, ui.scope_id().with("title-search"), Sense::click()).on_hover_text(t!("Search commands, workspaces and blocks"));
+    let resp = ui.interact(rect, ui.scope_id().with("title-search"), Sense::click());
+    crate::ui::kit::describe(&resp, egui::Role::Button, t!("Search commands, workspaces and blocks"));
+    let resp = resp.on_hover_text(t!("Search commands, workspaces and blocks"));
     let fill = if resp.hovered() { mix(theme.field, theme.text, 0.06) } else { theme.field };
     let p = ui.painter();
     p.rect(rect, 6.0, fill, Stroke::new(1.0, theme.line), egui::StrokeKind::Inside);
@@ -55,6 +57,13 @@ enum Button {
 pub fn window_buttons(ui: &mut egui::Ui, theme: &Theme) {
     for b in [Button::Close, Button::Maximize, Button::Minimize] {
         let (rect, resp) = ui.allocate_exact_size(vec2(BUTTON_W, HEIGHT), Sense::click());
+        let name = match b {
+            Button::Minimize => t!("Minimize"),
+            Button::Maximize if maximized(ui.ctx()) => t!("Restore"),
+            Button::Maximize => t!("Maximize"),
+            Button::Close => t!("Close"),
+        };
+        crate::ui::kit::describe(&resp, egui::Role::Button, name);
         let hover = resp.hovered();
         let (bg, fg) = match b {
             Button::Close if hover => (Color32::from_rgb(0xC4, 0x2B, 0x1C), Color32::WHITE),

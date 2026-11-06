@@ -130,7 +130,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                     } else {
                         let mut value = ws.nodes[&node_id].values.get(key).cloned().or_else(|| f.default.clone()).unwrap_or(Value::Null);
                         let id = ui.scope_id().with(("inspector", &node_id, key));
-                        if widgets::value_editor(ui, id, f, &mut value, ui.available_width(), true, &theme) {
+                        if kit::called(ui, &f.label(key), |ui| widgets::value_editor(ui, id, f, &mut value, ui.available_width(), true, &theme)) {
                             ws.nodes.get_mut(&node_id).unwrap().values.insert(key.clone(), value);
                             *edited = true;
                         }

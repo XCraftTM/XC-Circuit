@@ -792,11 +792,11 @@ fn command_form(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, root: &str) {
         kit::section(ui, theme, t!("Who and where"));
         ui.horizontal(|ui| {
             ui.set_min_height(crate::ui::kit::input_height(ui));
-            ui.label(RichText::new(t!("Who can use it")).color(theme.text));
-            permissions_dropdown(ui, theme, &mut cmd.permissions);
+            let name = ui.label(RichText::new(t!("Who can use it")).color(theme.text)).id;
+            kit::labelled(ui, name, |ui| permissions_dropdown(ui, theme, &mut cmd.permissions));
             ui.add_space(16.0);
-            ui.label(RichText::new(t!("Age-restricted")).color(theme.text));
-            crate::ui::kit::toggle(ui, &mut cmd.nsfw, theme).on_hover_text(t!("Only usable in age-restricted (NSFW) channels."));
+            let name = ui.label(RichText::new(t!("Age-restricted")).color(theme.text)).id;
+            crate::ui::kit::toggle(ui, &mut cmd.nsfw, theme).labelled_by(name).on_hover_text(t!("Only usable in age-restricted (NSFW) channels."));
         });
         kit::hint(ui, theme, t!("People without all of these permissions don't see the command. Server admins can change it in Server Settings › Integrations."));
         ui.add_space(6.0);
@@ -837,9 +837,9 @@ fn command_form(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, root: &str) {
 fn pick_row(ui: &mut Ui, theme: &Theme, label: &str, options: &[(&str, u64, &'static str)], list: &mut Vec<String>, none: &str) {
     ui.horizontal(|ui| {
         ui.set_min_height(crate::ui::kit::input_height(ui));
-        ui.label(RichText::new(label).color(theme.text));
+        let name = ui.label(RichText::new(label).color(theme.text)).id;
         let options: Vec<(String, &'static str)> = options.iter().map(|(k, _, l)| (k.to_string(), *l)).collect();
-        crate::ui::kit::multi_select(ui, theme, ui.scope_id().with(label), 260.0, &options, list, none);
+        kit::labelled(ui, name, |ui| crate::ui::kit::multi_select(ui, theme, ui.scope_id().with(label), 260.0, &options, list, none));
     });
 }
 
@@ -851,7 +851,7 @@ fn permissions_dropdown(ui: &mut Ui, theme: &Theme, list: &mut Vec<String>) {
         1 => name(&list[0]),
         n => tf!("{first} + {more} more", first = name(&list[0]), more = n - 1),
     };
-    ui.scope(|ui| {
+    let resp = ui.scope(|ui| {
         ui.spacing_mut().interact_size.y = crate::ui::kit::input_height(ui);
         egui::ComboBox::from_id_salt(ui.scope_id().with("permissions")).width(240.0).selected_text(summary).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show_ui(ui, |ui| {
             if kit::option(ui, list.is_empty(), t!("Everyone")).clicked() {
@@ -873,8 +873,8 @@ fn permissions_dropdown(ui: &mut Ui, theme: &Theme, list: &mut Vec<String>) {
         })
     })
     .inner
-    .response
-    .on_hover_text(t!("People need all the permissions you tick."));
+    .response;
+    kit::named(ui, resp).on_hover_text(t!("People need all the permissions you tick."));
 }
 
 fn option_card(ui: &mut Ui, theme: &Theme, o: &mut SlashOption, i: usize, count: usize, remove: &mut Option<usize>, swap: &mut Option<(usize, usize)>) {
@@ -891,7 +891,8 @@ fn option_card(ui: &mut Ui, theme: &Theme, o: &mut SlashOption, i: usize, count:
                 for (k, l, _) in KINDS {
                     ui.selectable_value(&mut o.kind, k.to_string(), crate::i18n::t(l));
                 }
-            });
+            })
+            .accessible_name(t!("Type"));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if kit::danger_button(ui, theme, t!("Remove")).clicked() {
                     *remove = Some(i);
@@ -910,12 +911,12 @@ fn option_card(ui: &mut Ui, theme: &Theme, o: &mut SlashOption, i: usize, count:
         // The switches on a row of their own, so the row above never runs out of room.
         ui.horizontal(|ui| {
             ui.set_min_height(crate::ui::kit::input_height(ui));
-            ui.label(RichText::new(t!("Required")).size(12.0).color(theme.text_muted));
-            crate::ui::kit::toggle(ui, &mut o.required, theme);
+            let name = ui.label(RichText::new(t!("Required")).size(12.0).color(theme.text_muted)).id;
+            crate::ui::kit::toggle(ui, &mut o.required, theme).labelled_by(name);
             if (texty || numeric) && o.choices.is_empty() {
                 ui.add_space(16.0);
-                ui.label(RichText::new(t!("Autocomplete")).size(12.0).color(theme.text_muted));
-                crate::ui::kit::toggle(ui, &mut o.autocomplete, theme).on_hover_text(t!("Suggest values while people type, from an Autocomplete block."));
+                let name = ui.label(RichText::new(t!("Autocomplete")).size(12.0).color(theme.text_muted)).id;
+                crate::ui::kit::toggle(ui, &mut o.autocomplete, theme).labelled_by(name).on_hover_text(t!("Suggest values while people type, from an Autocomplete block."));
             }
         });
         if texty {

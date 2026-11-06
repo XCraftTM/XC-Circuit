@@ -249,6 +249,7 @@ fn appearance(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsVi
 /// A small picture of a theme: title bar, sidebar, canvas with a block and a wire.
 pub fn theme_card(ui: &mut Ui, t: &Theme, page: &Theme, selected: bool, accent_override: Option<Color32>) -> bool {
     let (rect, resp) = ui.allocate_exact_size(vec2(170.0, 132.0), Sense::click());
+    kit::describe_selected(&resp, egui::Role::RadioButton, selected, &t.name);
     let accent = accent_override.unwrap_or(t.accent);
     let preview = Rect::from_min_size(rect.min, vec2(rect.width(), 100.0));
     let p = ui.painter();
@@ -514,6 +515,7 @@ fn key_chip(ui: &mut Ui, text: &str, fill: Color32, stroke: Stroke, ink: Color32
     let galley = ui.painter().layout_no_wrap(text.to_string(), font.clone(), ink);
     let size = vec2((galley.size().x + 22.0).max(64.0), 24.0);
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
+    kit::describe(&resp, egui::Role::Button, text);
     let fill = if resp.hovered() { mix(fill, theme_hover(ui), 0.12) } else { fill };
     ui.painter().rect(rect, 5.0, fill, stroke, StrokeKind::Inside);
     // Capitals' height decides the middle, so "Ctrl+," and "F5" sit alike.
@@ -714,6 +716,7 @@ pub fn accent_swatches(ui: &mut Ui, ed: &mut Editor, theme: &Theme, indent: f32)
             let Some(c) = crate::builders::color::parse_hex(hex) else { continue };
             let (r, resp) = ui.allocate_exact_size(vec2(26.0, 26.0), Sense::click());
             let selected = crate::builders::color::to_hex(ed.theme.accent) == hex;
+            kit::describe_selected(&resp, egui::Role::RadioButton, selected, name);
             ui.painter().circle_filled(r.center(), 11.0, c);
             if selected {
                 ui.painter().circle_stroke(r.center(), 13.0, Stroke::new(2.0, theme.text));

@@ -388,15 +388,16 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
 }
 
 fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
-    kit::section(ui, theme, t!("Color"));
+    let heading = kit::section(ui, theme, t!("Color")).id;
     ui.horizontal(|ui| {
         let mut c = hex_color(&e.color).unwrap_or(Color32::from_rgb(0, 0xD8, 0xF0));
-        if crate::builders::color::color_button(ui, ui.scope_id().with("embed-color"), &mut c, theme, None) {
+        if kit::labelled(ui, heading, |ui| crate::builders::color::color_button(ui, ui.scope_id().with("embed-color"), &mut c, theme, None)) {
             e.color = crate::builders::color::to_hex(c);
         }
         for preset in ["#00D8F0", "#3DFF6E", "#5865F2", "#FEE75C", "#ED4245", "#EB459E"] {
             let col = hex_color(preset).unwrap();
             let (r, resp) = ui.allocate_exact_size(vec2(20.0, 20.0), egui::Sense::click());
+            kit::describe_selected(&resp, egui::Role::RadioButton, e.color.eq_ignore_ascii_case(preset), preset);
             ui.painter().rect_filled(r, 5.0, col);
             if e.color.eq_ignore_ascii_case(preset) {
                 ui.painter().rect_stroke(r.expand(2.0), 6.0, Stroke::new(2.0, theme.text), egui::StrokeKind::Outside);
@@ -442,8 +443,8 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
             // The switch and buttons below, so the texts get the whole width.
             ui.horizontal(|ui| {
                 ui.set_min_height(crate::ui::kit::input_height(ui));
-                ui.label(RichText::new(t!("Inline")).size(12.0).color(theme.text_muted));
-                crate::ui::kit::toggle(ui, &mut f.inline, theme).on_hover_text(t!("Inline: share a row with other inline fields"));
+                let name = ui.label(RichText::new(t!("Inline")).size(12.0).color(theme.text_muted)).id;
+                kit::labelled(ui, name, |ui| crate::ui::kit::toggle(ui, &mut f.inline, theme)).on_hover_text(t!("Inline: share a row with other inline fields"));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if kit::danger_button(ui, theme, t!("Remove")).clicked() {
                         remove = Some(i);
@@ -479,8 +480,8 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
     if footer.text.is_empty() && footer.icon.is_empty() {
         e.footer = None;
     }
-    kit::section(ui, theme, t!("Timestamp"));
-    ui.horizontal(|ui| {
+    let heading = kit::section(ui, theme, t!("Timestamp")).id;
+    kit::labelled(ui, heading, |ui| ui.horizontal(|ui| {
         ui.set_min_height(crate::ui::kit::input_height(ui));
         // None, when it's sent, or a set time (kept in `time`).
         let set_id = ui.scope_id().with("set-time");
@@ -500,7 +501,7 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
             let w = ui.available_width();
             ui.add(crate::ui::kit::TextLine::new(&mut e.time).hint("2026-12-24T18:00:00Z or ${date}").width(w));
         }
-    });
+    }));
     kit::hint(ui, theme, t!("Shown next to the footer, in each reader's own time zone."));
 }
 

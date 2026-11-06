@@ -397,6 +397,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         let side = if theme.touch { zone_button } else { zone_button.min(layout.header.height() * view.zoom - 2.0).max(18.0) } / view.zoom;
         let gr = Rect::from_center_size(layout.header.right_center() - vec2(side / 2.0 + 6.0 / view.zoom, 0.0), Vec2::splat(side));
         let gear = cui.interact(gr, cui.scope_id().with(("zone-settings", &zid)), Sense::click()).on_hover_cursor(CursorIcon::PointingHand);
+        kit::describe(&gear, egui::Role::Button, t!("Try Zone settings"));
         let fill = if gear.hovered() { mix(theme.panel, theme.accent, 0.25) } else { theme.panel };
         painter.rect(gr, 6.0 / view.zoom, fill, Stroke::new(1.0 / view.zoom, with_alpha(theme.accent, 120)), StrokeKind::Inside);
         if let Some(path) = reg.icons.get("settings") {
@@ -407,8 +408,8 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             let Some(z) = ws.zones.get_mut(&zid) else { return };
             ui.spacing_mut().item_spacing.y = 8.0;
             ui.label(RichText::new(t!("Try Zone")).strong());
-            ui.label(t!("Title"));
-            *edited |= ui.add(crate::ui::kit::TextLine::new(&mut z.title)).changed();
+            let label = ui.label(t!("Title")).id;
+            *edited |= kit::labelled(ui, label, |ui| ui.add(crate::ui::kit::TextLine::new(&mut z.title))).changed();
             ui.horizontal(|ui| {
                 ui.label(t!("Retries"));
                 *edited |= kit::Number::new(&mut z.retry).range(0..=10).show(ui, theme).changed();
@@ -430,6 +431,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
 
         for spot in layout.pins.iter() {
             let resp = cui.interact(Rect::from_center_size(spot.pos, Vec2::splat(pin_hit)), cui.scope_id().with(("zpin", &zid, &spot.pin)), Sense::click_and_drag());
+            kit::describe(&resp, egui::Role::Button, &spot.label);
             if resp.drag_started() {
                 start_drag = Some(PinEnd { node: zid.clone(), pin: spot.pin.clone(), dir: Dir::Out, ty: spot.ty.clone(), picked_up: None });
             }
@@ -712,7 +714,8 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                                             .hint_text(f.placeholder.clone().unwrap_or_default())
                                             .desired_width(inner.width())
                                             .min_size(vec2(inner.width(), inner.height())),
-                                    );
+                                    )
+                                    .accessible_name(f.label(key));
                                     if crate::editor::values::after(ui, &resp, &mut text) {
                                         resp.mark_changed();
                                     }
@@ -770,7 +773,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                             None => wr,
                         };
                         let drawn = cui.scope_builder(UiBuilder::new().id_salt(("field-ui", id, key)).max_rect(place).layout(egui::Layout::right_to_left(egui::Align::Min)), |ui| {
-                            widgets::value_editor(ui, wid, f, &mut value, wr.width(), false, theme)
+                            kit::called(ui, &f.label(key), |ui| widgets::value_editor(ui, wid, f, &mut value, wr.width(), false, theme))
                         });
                         // Its own height: the row fits it, and it is centered from the next frame on.
                         view.field_heights.insert(field, drawn.response.rect.height());
@@ -798,6 +801,8 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
 
         // Header interaction: the only place a block can be dragged.
         let head = cui.interact(layout.header, cui.scope_id().with(("head", id)), Sense::click_and_drag());
+        // The block, by its name; chosen while selected.
+        kit::describe_selected(&head, egui::Role::Button, is_selected, &def.name);
         if head.hovered() {
             ctx.set_cursor_icon(CursorIcon::Grab);
         }
@@ -863,6 +868,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             draw_pin(&painter, spot, connected, candidate, theme, reg);
 
             let resp = cui.interact(Rect::from_center_size(spot.pos, Vec2::splat(pin_hit)), cui.scope_id().with(("pin", id, &spot.pin, spot.dir)), Sense::click_and_drag());
+            kit::describe(&resp, egui::Role::Button, &format!("{} › {}", def.name, if spot.label.is_empty() { &spot.pin } else { &spot.label }));
             if resp.hovered() {
                 ctx.set_cursor_icon(CursorIcon::Crosshair);
             }

@@ -266,9 +266,9 @@ fn welcome(ui: &mut Ui, ed: &mut Editor, theme: &Theme) {
         ui.label(RichText::new(t!("Build Discord bots by connecting blocks.")).size(15.0).color(theme.text_muted));
     });
     ui.add_space(22.0);
-    ui.label(RichText::new(t!("LANGUAGE")).size(11.0).strong().color(theme.text_muted));
+    let label = ui.label(RichText::new(t!("LANGUAGE")).size(11.0).strong().color(theme.text_muted));
     ui.add_space(6.0);
-    crate::pages::settings::language_select(ui, ed);
+    kit::labelled(ui, label.id, |ui| crate::pages::settings::language_select(ui, ed));
     ui.add_space(18.0);
     for (ic, head, text) in [
         ("workspace", t!("Connect blocks"), t!("Every block does one thing. Wire them together on a canvas, no code needed.")),
@@ -475,6 +475,7 @@ fn install_row(ui: &mut Ui, theme: &Theme, n: &NodeInstall, selected: bool) -> b
     }
     let text = if usable { theme.text } else { mix(theme.text_muted, theme.panel, 0.3) };
     let version = n.version.clone().unwrap_or_else(|| t!("won't start").into());
+    kit::describe_selected(&resp, egui::Role::RadioButton, selected, &format!("Node.js {version}, {}", n.path.display()));
     p.text(pos2(rect.left() + 38.0, rect.center().y - 8.0), Align2::LEFT_CENTER, &version, FontId::proportional(14.0), text);
     p.text(pos2(rect.left() + 38.0, rect.center().y + 9.0), Align2::LEFT_CENTER, n.path.display().to_string(), FontId::monospace(11.0), theme.text_muted);
     let note = if usable { n.source.clone() } else if n.version.is_some() { format!("{} · too old", n.source) } else { format!("{} · doesn't start", n.source) };
@@ -508,7 +509,7 @@ fn look(ui: &mut Ui, ed: &mut Editor, theme: &Theme) {
     ui.add_space(22.0);
     ui.horizontal(|ui| {
         let mut touch = ed.prefs.touch;
-        if crate::ui::kit::toggle(ui, &mut touch, theme).changed() {
+        if crate::ui::kit::toggle(ui, &mut touch, theme).accessible_name(t!("Touch mode")).changed() {
             ed.prefs.touch = touch;
             ed.restyle();
             ed.theme.apply(ui.ctx());
@@ -530,6 +531,7 @@ fn tour_choice(ui: &mut Ui, ed: &Editor, theme: &Theme) -> Option<bool> {
             let ui = &mut cols[i];
             let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 170.0), Sense::click());
             let primary = tour;
+            kit::describe(&resp, egui::Role::Button, head);
             let fill = if resp.hovered() { theme.panel_header } else { theme.panel };
             ui.painter().rect(rect, 12.0, fill, Stroke::new(if primary { 1.5 } else { 1.0 }, if primary { theme.accent } else { theme.line }), egui::StrokeKind::Inside);
             let ic_rect = Rect::from_min_size(rect.min + vec2(20.0, 20.0), vec2(44.0, 44.0));

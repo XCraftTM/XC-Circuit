@@ -226,6 +226,7 @@ pub fn show(ctx: &egui::Context, theme: &Theme, state: &mut Palette, items: &[It
                         let item = &items[*i];
                         let selected = row == state.highlighted;
                         let (rect, resp) = ui.allocate_exact_size(vec2(width, 30.0), egui::Sense::click());
+                        crate::ui::kit::describe_selected(&resp, egui::Role::ListBoxOption, selected, &format!("{}: {}", item.group, item.label));
                         let rect = rect.shrink2(vec2(6.0, 1.0));
                         if selected {
                             ui.painter().rect_filled(rect, 6.0, with_alpha(theme.accent, 45));

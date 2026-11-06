@@ -679,9 +679,14 @@ pub fn after(ui: &mut Ui, resp: &egui::Response, text: &mut String) -> bool {
             let head = ui.horizontal(|ui| {
                 ui.set_width(width);
                 let text = if can_back { format!("‹  {heading}") } else { heading };
-                ui.add(egui::Label::new(RichText::new(text).size(11.5).strong().color(v.weak_text_color())).truncate());
+                ui.add(egui::Label::new(RichText::new(&text).size(11.5).strong().color(v.weak_text_color())).truncate());
+                text
             });
+            let head_text = head.inner;
             let head = ui.interact(head.response.rect, id.with("values-back"), if can_back { egui::Sense::click() } else { egui::Sense::hover() });
+            if can_back {
+                crate::ui::kit::describe(&head, egui::Role::Button, &head_text);
+            }
             if can_back && head.hovered() {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
             }
@@ -775,6 +780,8 @@ fn row_ui(ui: &mut Ui, row: &Row, selected: bool) -> (egui::Response, bool) {
     let visuals = ui.visuals().clone();
     let accent = visuals.selection.stroke.color;
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), egui::Sense::click());
+    let name = [row.code.as_str(), row.text.as_str(), row.kind.as_str()].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(", ");
+    crate::ui::kit::describe_selected(&resp, egui::Role::ListBoxOption, selected, &name);
     let fill = if selected {
         crate::ui::theme::with_alpha(accent, 45)
     } else if resp.hovered() {
@@ -806,6 +813,7 @@ fn row_ui(ui: &mut Ui, row: &Row, selected: bool) -> (egui::Response, bool) {
     if row.into.is_some() {
         let arrow = egui::Rect::from_min_size(egui::pos2(rect.right() - arrow_w - 4.0, rect.top()), vec2(arrow_w, ROW_H));
         let a = ui.interact(arrow, resp.id.with("into"), egui::Sense::click());
+        crate::ui::kit::describe(&a, egui::Role::Button, &format!("{name} ›"));
         let color = if a.hovered() { accent } else { visuals.weak_text_color() };
         painter.text(arrow.center(), egui::Align2::CENTER_CENTER, "›", egui::FontId::proportional(16.0), color);
         go_into = a.clicked();

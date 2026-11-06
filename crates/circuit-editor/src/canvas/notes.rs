@@ -124,6 +124,7 @@ pub(super) fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, 
         // The edit button, on the right of the title.
         let pr = Rect::from_center_size(pos2(header.right() - 8.0 / zoom - button / 2.0, header.top() + 10.0 + line / 2.0), Vec2::splat(button));
         let pencil = cui.interact(pr, cui.scope_id().with(("note-edit", &nid)), Sense::click()).on_hover_cursor(CursorIcon::PointingHand);
+        crate::ui::kit::describe(&pencil, egui::Role::Button, t!("Edit note"));
         let fill = if pencil.hovered() { mix(theme.panel, color, 0.25) } else { theme.panel };
         painter.rect(pr, 6.0 / zoom, fill, Stroke::new(1.0 / zoom, with_alpha(color, 120)), StrokeKind::Inside);
         if let Some(path) = reg.icons.get("pencil") {
@@ -138,10 +139,10 @@ pub(super) fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, 
             let Some(n) = ws.notes.get_mut(&nid) else { return };
             ui.spacing_mut().item_spacing.y = 8.0;
             ui.label(RichText::new(t!("Note")).strong());
-            ui.label(t!("Title"));
-            *edited |= ui.add(crate::ui::kit::TextLine::new(&mut n.title)).changed();
-            ui.label(t!("Description"));
-            *edited |= ui.add(egui::TextEdit::multiline(&mut n.text).desired_rows(4).desired_width(f32::INFINITY)).changed();
+            let label = ui.label(t!("Title")).id;
+            *edited |= crate::ui::kit::labelled(ui, label, |ui| ui.add(crate::ui::kit::TextLine::new(&mut n.title))).changed();
+            let label = ui.label(t!("Description")).id;
+            *edited |= ui.add(egui::TextEdit::multiline(&mut n.text).desired_rows(4).desired_width(f32::INFINITY)).labelled_by(label).changed();
             ui.label(t!("Color"));
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
@@ -150,6 +151,8 @@ pub(super) fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, 
                     let swatch = choice.as_deref().and_then(|c| Color32::from_hex(c).ok()).unwrap_or(theme.accent);
                     let (rect, resp) = ui.allocate_exact_size(vec2(22.0, 22.0), Sense::click());
                     let chosen = n.color == choice;
+                    let name = choice.as_deref().unwrap_or(t!("The theme's accent"));
+                    crate::ui::kit::describe_selected(&resp, egui::Role::RadioButton, chosen, name);
                     ui.painter().circle_filled(rect.center(), 9.0, swatch);
                     if chosen || resp.hovered() {
                         ui.painter().circle_stroke(rect.center(), 11.0, Stroke::new(1.5, theme.text));

@@ -170,6 +170,7 @@ fn hline(ui: &mut Ui, theme: &Theme) {
 
 fn close_button(ui: &mut Ui, theme: &Theme) -> Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(30.0, 30.0), Sense::click());
+    crate::ui::kit::describe(&resp, egui::Role::Button, t!("Close"));
     if resp.hovered() {
         ui.painter().rect_filled(rect, 7.0, mix(theme.panel_header, theme.text, 0.1));
     }

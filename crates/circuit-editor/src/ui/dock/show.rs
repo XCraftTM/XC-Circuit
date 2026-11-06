@@ -314,11 +314,16 @@ fn leaf_ui<T: Clone + PartialEq + Hash + std::fmt::Debug, V: DockViewer<T>>(ui: 
         }
         let id = Id::unique(("dock-tab", tab));
         let resp = ui.interact(visible, id, Sense::click_and_drag());
+        let active = i == leaf.active;
+        // Tabs and their × are drawn by hand: named for screen readers.
+        let title = galleys[i].text();
+        crate::ui::kit::describe_selected(&resp, egui::Role::Tab, active, title);
         let close = closeable[i].then(|| {
             let c = Rect::from_center_size(pos2(r.right() - 17.0, r.center().y), vec2(18.0, 18.0));
-            (c, ui.interact(c.intersect(bar), id.with("close"), Sense::click()))
+            let close = ui.interact(c.intersect(bar), id.with("close"), Sense::click());
+            crate::ui::kit::describe(&close, egui::Role::Button, &tf!("Close {name}", name = title));
+            (c, close)
         });
-        let active = i == leaf.active;
         let focused = p.focused.as_ref() == Some(tab);
         let lifted = p.dragged.as_ref() == Some(tab);
         let hovered = resp.hovered() || close.as_ref().is_some_and(|(_, c)| c.hovered());

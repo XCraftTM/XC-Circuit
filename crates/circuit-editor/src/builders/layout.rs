@@ -524,7 +524,7 @@ fn body(ui: &mut Ui, theme: &Theme, c: &mut Value, next: usize) {
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 ui.set_min_height(crate::ui::kit::input_height(ui));
-                ui.label(RichText::new(t!("Next to the text")).color(theme.text));
+                let name = ui.label(RichText::new(t!("Next to the text")).color(theme.text)).id;
                 let is_button = c.get("accessory").is_some_and(|a| ty(a) == kind::BUTTON);
                 let current = if is_button { t!("A button") } else { t!("A picture") };
                 crate::ui::kit::dropdown(ui, ui.scope_id().with("accessory"), 140.0, current, |ui| {
@@ -534,7 +534,8 @@ fn body(ui: &mut Ui, theme: &Theme, c: &mut Value, next: usize) {
                     if kit::option(ui, is_button, t!("A button")).clicked() && !is_button {
                         c["accessory"] = new_button(next);
                     }
-                });
+                })
+                .labelled_by(name);
             });
             let accessory = object_mut(c, "accessory");
             if ty(accessory) == kind::BUTTON {
@@ -550,8 +551,8 @@ fn body(ui: &mut Ui, theme: &Theme, c: &mut Value, next: usize) {
             ui.horizontal(|ui| {
                 ui.set_min_height(crate::ui::kit::input_height(ui));
                 let mut on = c.get("accent_color").is_some_and(|v| !v.is_null());
-                ui.label(RichText::new(t!("Accent color")).color(theme.text));
-                if crate::ui::kit::toggle(ui, &mut on, theme).changed() {
+                let name = ui.label(RichText::new(t!("Accent color")).color(theme.text)).id;
+                if crate::ui::kit::toggle(ui, &mut on, theme).labelled_by(name).changed() {
                     if on {
                         c["accent_color"] = json!(0x00D8F0);
                     } else if let Some(m) = c.as_object_mut() {
@@ -602,18 +603,19 @@ fn body(ui: &mut Ui, theme: &Theme, c: &mut Value, next: usize) {
             ui.horizontal(|ui| {
                 ui.set_min_height(crate::ui::kit::input_height(ui));
                 let mut divider = c.get("divider").and_then(Value::as_bool).unwrap_or(true);
-                ui.label(RichText::new(t!("Line")).color(theme.text));
-                if crate::ui::kit::toggle(ui, &mut divider, theme).changed() {
+                let name = ui.label(RichText::new(t!("Line")).color(theme.text)).id;
+                if crate::ui::kit::toggle(ui, &mut divider, theme).labelled_by(name).changed() {
                     c["divider"] = json!(divider);
                 }
                 ui.add_space(12.0);
-                ui.label(RichText::new(t!("Space")).color(theme.text));
+                let name = ui.label(RichText::new(t!("Space")).color(theme.text)).id;
                 let mut spacing = c.get("spacing").and_then(Value::as_u64).unwrap_or(1);
                 let labels = [t!("Small"), t!("Large")];
                 crate::ui::kit::dropdown(ui, ui.scope_id().with("spacing"), 110.0, labels[(spacing == 2) as usize], |ui| {
                     ui.selectable_value(&mut spacing, 1, labels[0]);
                     ui.selectable_value(&mut spacing, 2, labels[1]);
-                });
+                })
+                .labelled_by(name);
                 c["spacing"] = json!(spacing);
             });
         }
@@ -649,23 +651,25 @@ fn body(ui: &mut Ui, theme: &Theme, c: &mut Value, next: usize) {
     }
 }
 
-/// The name in front of a row's control, in a column of its own.
-fn label_column(ui: &mut Ui, label: egui::Label) {
+/// The name in front of a row's control, in a column of its own. Returns
+/// the label's id, which names the control for screen readers.
+fn label_column(ui: &mut Ui, label: egui::Label) -> egui::Id {
     let h = crate::ui::kit::input_height(ui);
     ui.allocate_ui_with_layout(vec2(110.0, h), egui::Layout::left_to_right(egui::Align::Center), |ui| {
         ui.set_min_width(110.0);
-        ui.add(label.truncate());
-    });
+        ui.add(label.truncate()).id
+    })
+    .inner
 }
 
 /// A text box for a string under `key`; an empty one removes the key.
 fn line(ui: &mut Ui, v: &mut Value, key: &str, hint: &str, label: &str) {
     ui.horizontal(|ui| {
         ui.set_min_height(crate::ui::kit::input_height(ui));
-        label_column(ui, egui::Label::new(RichText::new(label).size(12.5)));
+        let name = label_column(ui, egui::Label::new(RichText::new(label).size(12.5)));
         let mut text = text_of(v, key).to_string();
         let w = ui.available_width();
-        if ui.add(crate::ui::kit::TextLine::new(&mut text).hint(hint).width(w)).changed() {
+        if ui.add(crate::ui::kit::TextLine::new(&mut text).hint(hint).width(w)).labelled_by(name).changed() {
             set_text(v, key, text);
         }
     });
@@ -691,8 +695,8 @@ fn text_area(ui: &mut Ui, v: &mut Value, key: &str, hint: &str) {
 /// A switch for a yes/no setting that is left out when off.
 fn flag(ui: &mut Ui, theme: &Theme, v: &mut Value, key: &str, label: &str) {
     let mut on = v.get(key).and_then(Value::as_bool).unwrap_or(false);
-    ui.label(RichText::new(label).color(theme.text));
-    if crate::ui::kit::toggle(ui, &mut on, theme).changed() {
+    let name = ui.label(RichText::new(label).color(theme.text)).id;
+    if crate::ui::kit::toggle(ui, &mut on, theme).labelled_by(name).changed() {
         if on {
             v[key] = json!(true);
         } else if let Some(m) = v.as_object_mut() {
@@ -715,14 +719,15 @@ fn button_editor(ui: &mut Ui, theme: &Theme, b: &mut Value) {
     let style = b.get("style").and_then(Value::as_u64).unwrap_or(1);
     ui.horizontal(|ui| {
         ui.set_min_height(crate::ui::kit::input_height(ui));
-        label_column(ui, egui::Label::new(RichText::new(t!("Style")).size(12.5)));
+        let name = label_column(ui, egui::Label::new(RichText::new(t!("Style")).size(12.5)));
         let current = BUTTON_STYLES.iter().find(|s| s.0 == style).map(|s| crate::i18n::t(s.1)).unwrap_or(t!("Blurple"));
         let mut picked = style;
         crate::ui::kit::dropdown(ui, ui.scope_id().with("style"), 210.0, current, |ui| {
             for (s, l) in BUTTON_STYLES {
                 ui.selectable_value(&mut picked, s, crate::i18n::t(l));
             }
-        });
+        })
+        .labelled_by(name);
         if picked != style {
             b["style"] = json!(picked);
             let m = b.as_object_mut().unwrap();
@@ -767,10 +772,10 @@ fn picked_style(b: &Value) -> u64 {
 fn emoji_line(ui: &mut Ui, v: &mut Value) {
     ui.horizontal(|ui| {
         ui.set_min_height(crate::ui::kit::input_height(ui));
-        label_column(ui, egui::Label::new(RichText::new(t!("Emoji")).size(12.5)));
+        let name = label_column(ui, egui::Label::new(RichText::new(t!("Emoji")).size(12.5)));
         let mut text = emoji_text(v.get("emoji"));
         let w = ui.available_width();
-        if ui.add(crate::ui::kit::TextLine::new(&mut text).hint("👍 or <:name:id>").width(w)).changed() {
+        if ui.add(crate::ui::kit::TextLine::new(&mut text).hint("👍 or <:name:id>").width(w)).labelled_by(name).changed() {
             match parse_emoji(&text) {
                 Some(e) => v["emoji"] = e,
                 None => {
@@ -783,8 +788,8 @@ fn emoji_line(ui: &mut Ui, v: &mut Value) {
 
 fn number(ui: &mut Ui, v: &mut Value, key: &str, label: &str) {
     let mut text = v.get(key).and_then(Value::as_u64).map(|n| n.to_string()).unwrap_or_default();
-    ui.label(RichText::new(label).size(12.5));
-    if ui.add(crate::ui::kit::TextLine::new(&mut text).hint("1").width(60.0)).changed() {
+    let name = ui.label(RichText::new(label).size(12.5)).id;
+    if ui.add(crate::ui::kit::TextLine::new(&mut text).hint("1").width(60.0)).labelled_by(name).changed() {
         match text.trim().parse::<u64>() {
             Ok(n) => v[key] = json!(n),
             Err(_) => {
@@ -798,14 +803,15 @@ fn select_editor(ui: &mut Ui, theme: &Theme, sel: &mut Value) {
     let current = ty(sel);
     ui.horizontal(|ui| {
         ui.set_min_height(crate::ui::kit::input_height(ui));
-        label_column(ui, egui::Label::new(RichText::new(t!("Choose from")).size(12.5)));
+        let name = label_column(ui, egui::Label::new(RichText::new(t!("Choose from")).size(12.5)));
         let label = SELECT_KINDS.iter().find(|k| k.0 == current).map(|k| crate::i18n::t(k.1)).unwrap_or_default();
         let mut picked = current;
         crate::ui::kit::dropdown(ui, ui.scope_id().with("select-kind"), 180.0, label, |ui| {
             for (k, l) in SELECT_KINDS {
                 ui.selectable_value(&mut picked, k, crate::i18n::t(l));
             }
-        });
+        })
+        .labelled_by(name);
         if picked != current {
             sel["type"] = json!(picked);
             let m = sel.as_object_mut().unwrap();
@@ -866,10 +872,10 @@ fn select_editor(ui: &mut Ui, theme: &Theme, sel: &mut Value) {
             if t == 8 {
                 ui.horizontal(|ui| {
                     ui.set_min_height(crate::ui::kit::input_height(ui));
-                    label_column(ui, egui::Label::new(RichText::new(t!("Channel kinds")).size(12.5)));
+                    let name = label_column(ui, egui::Label::new(RichText::new(t!("Channel kinds")).size(12.5)));
                     let types = list_mut(sel, "channel_types");
                     let mut picked: Vec<u64> = types.iter().filter_map(Value::as_u64).collect();
-                    if crate::ui::kit::multi_select(ui, theme, ui.scope_id().with("channel-kinds"), 220.0, &CHANNEL_TYPES, &mut picked, t!("Every kind")) {
+                    if kit::labelled(ui, name, |ui| crate::ui::kit::multi_select(ui, theme, ui.scope_id().with("channel-kinds"), 220.0, &CHANNEL_TYPES, &mut picked, t!("Every kind"))) {
                         *types = picked.into_iter().map(|n| json!(n)).collect();
                     }
                 });
@@ -884,9 +890,9 @@ fn select_editor(ui: &mut Ui, theme: &Theme, sel: &mut Value) {
                 let mut ids = list_of(sel, "default_values").iter().map(|d| text_of(d, "id").to_string()).collect::<Vec<_>>().join(", ");
                 ui.horizontal(|ui| {
                     ui.set_min_height(crate::ui::kit::input_height(ui));
-                    label_column(ui, egui::Label::new(RichText::new(t!("Picked at first")).size(12.5)));
+                    let name = label_column(ui, egui::Label::new(RichText::new(t!("Picked at first")).size(12.5)));
                     let w = ui.available_width();
-                    if ui.add(crate::ui::kit::TextLine::new(&mut ids).hint(t!("Ids, separated by commas")).width(w)).changed() {
+                    if ui.add(crate::ui::kit::TextLine::new(&mut ids).hint(t!("Ids, separated by commas")).width(w)).labelled_by(name).changed() {
                         let list: Vec<Value> = ids.split(',').map(str::trim).filter(|s| !s.is_empty()).map(|id| json!({ "id": id, "type": what })).collect();
                         if list.is_empty() {
                             sel.as_object_mut().unwrap().remove("default_values");

@@ -371,7 +371,8 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, view: &mut StoredView, bot_running: b
                         pick = Some(Show::Tables(id.clone()));
                     }
                 }
-            });
+            })
+            .accessible_name(t!("Show"));
             if let Some(p) = pick
                 && p != view.show
             {
@@ -422,7 +423,8 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, view: &mut StoredView, bot_running: b
                                     pick = Some(t.clone());
                                 }
                             }
-                        });
+                        })
+                        .accessible_name(t!("Tables"));
                     },
                     |ui| refresh = ui.add_enabled_ui(!busy, |ui| kit::button(ui, &theme, t!("Refresh"))).inner.clicked(),
                 );
@@ -742,7 +744,7 @@ fn rows_ui(ui: &mut Ui, theme: &Theme, ed: &mut Editor, view: &mut StoredView, b
                             let editing = cell_edit.as_ref().is_some_and(|(ri, col, ..)| *ri == i && col == c);
                             if editing {
                                 let Some((_, _, text, was)) = cell_edit.as_mut() else { return };
-                                let resp = ui.add(TextLine::new(text).monospace().compact().width(ui.available_width()));
+                                let resp = ui.add(TextLine::new(text).monospace().compact().width(ui.available_width())).accessible_name(c.as_str());
                                 let (enter, escape) = ui.input(|inp| (inp.key_pressed(egui::Key::Enter), inp.key_pressed(egui::Key::Escape)));
                                 if escape {
                                     *cell_edit = None;

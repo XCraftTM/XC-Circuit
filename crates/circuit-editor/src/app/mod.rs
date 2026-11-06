@@ -651,6 +651,7 @@ fn status_item(ui: &mut egui::Ui, theme: &crate::ui::theme::Theme, dot: Option<e
     let dot_w = if dot.is_some() { 14.0 } else { 0.0 };
     let size = egui::vec2(galley.size().x + dot_w + 16.0, ui.available_height());
     let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
+    crate::ui::kit::describe(&resp, egui::Role::Button, text);
     if resp.hovered() {
         ui.painter().rect_filled(rect.shrink2(egui::vec2(0.0, 2.0)), 4.0, crate::ui::theme::mix(theme.status_bar, theme.status_text, 0.14));
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);

@@ -123,8 +123,11 @@ fn recent_row(ui: &mut Ui, theme: &Theme, i: usize, e: &Entry) -> Option<Pick> {
     let mut pick = None;
     let h = 52.0;
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), h), Sense::click());
+    crate::ui::kit::describe(&resp, egui::Role::Button, &format!("{}, {}", e.name, e.path));
     let remove = egui::Rect::from_center_size(rect.right_center() - vec2(22.0, 0.0), vec2(26.0, 26.0));
-    let x = ui.interact(remove, ui.scope_id().with(("recent-forget", i)), Sense::click()).on_hover_text(t!("Remove from the list"));
+    let x = ui.interact(remove, ui.scope_id().with(("recent-forget", i)), Sense::click());
+    crate::ui::kit::describe(&x, egui::Role::Button, &format!("{}: {}", t!("Remove from the list"), e.name));
+    let x = x.on_hover_text(t!("Remove from the list"));
     let hovered = resp.hovered() || x.hovered();
     if hovered {
         ui.painter().rect_filled(rect, 8.0, theme.panel_header);

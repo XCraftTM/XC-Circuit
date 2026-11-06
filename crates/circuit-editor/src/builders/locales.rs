@@ -84,7 +84,8 @@ pub fn editor(ui: &mut Ui, theme: &Theme, id: egui::Id, map: &mut BTreeMap<Strin
                         }
                     }
                 });
-            });
+            })
+            .accessible_name(t!("Language"));
             let rest = (width - 180.0 - 110.0).max(160.0);
             let name_w = if description { (rest * 0.4).floor() } else { rest };
             changed |= ui.add(crate::ui::kit::TextLine::new(&mut text.name).hint(t!("Name")).width(name_w)).changed();

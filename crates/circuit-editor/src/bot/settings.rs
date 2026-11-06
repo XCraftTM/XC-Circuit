@@ -654,11 +654,7 @@ fn setting_ui(ui: &mut Ui, ed: &Editor, theme: &Theme, f: &mut SettingField, roo
             });
         }
         Kind::Text | Kind::Secret => kit::setting_card(ui, theme, |ui| {
-            ui.label(RichText::new(&label).size(13.5).color(theme.text));
-            if !description.is_empty() {
-                kit::hint(ui, theme, &description);
-            }
-            ui.add_space(5.0);
+            kit::setting_title(ui, theme, &label, &description);
             let width = ui.available_width().min(460.0);
             if !f.masked {
                 ui.allocate_ui(vec2(width, 34.0), |ui| kit::text_input(ui, &mut f.value, &f.placeholder, false));

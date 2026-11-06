@@ -621,6 +621,7 @@ impl Icons {
 /// A small framed button with an icon (or text), for the layer list.
 fn tiny(ui: &mut Ui, theme: &Theme, icon: Option<&std::path::Path>, text: &str, tip: &str, enabled: bool) -> bool {
     let (rect, resp) = ui.allocate_exact_size(vec2(22.0, 22.0), if enabled { Sense::click() } else { Sense::hover() });
+    kit::describe(&resp, egui::Role::Button, tip);
     let ink = if enabled { if resp.hovered() { theme.text } else { theme.text_muted } } else { crate::ui::theme::with_alpha(theme.text_muted, 70) };
     if enabled && resp.hovered() {
         ui.painter().rect_filled(rect, 5.0, crate::ui::theme::mix(theme.panel_header, theme.text, 0.1));
@@ -646,14 +647,16 @@ fn tiny(ui: &mut Ui, theme: &Theme, icon: Option<&std::path::Path>, text: &str, 
 /// Size, background, a design to start from, and the layers.
 fn left_panel(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit, icons: &Icons) {
     let d = &mut edit.draft;
-    kit::section(ui, theme, t!("Start from"));
+    let heading = kit::section(ui, theme, t!("Start from")).id;
     let mut start = None;
-    crate::ui::kit::dropdown(ui, Id::unique("canvas-start"), 220.0, t!("Choose a design…"), |ui| {
-        for (i, (name, _)) in starters().iter().enumerate() {
-            if kit::option(ui, false, crate::i18n::t(name)).clicked() {
-                start = Some(i);
+    kit::labelled(ui, heading, |ui| {
+        crate::ui::kit::dropdown(ui, Id::unique("canvas-start"), 220.0, t!("Choose a design…"), |ui| {
+            for (i, (name, _)) in starters().iter().enumerate() {
+                if kit::option(ui, false, crate::i18n::t(name)).clicked() {
+                    start = Some(i);
+                }
             }
-        }
+        })
     })
     .on_hover_text(t!("Replaces the design; Cancel brings yours back."));
     if let Some(i) = start {
@@ -661,24 +664,26 @@ fn left_panel(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit, icons: &Icons) 
         edit.selected = (!d.layers.is_empty()).then(|| d.layers.len() - 1);
     }
 
-    kit::section(ui, theme, t!("Size"));
+    let heading = kit::section(ui, theme, t!("Size")).id;
     crate::ui::kit::line(ui, |ui| {
-        kit::Number::new(&mut d.width).range(16.0..=4096.0).suffix(" px").width(64.0).show(ui, theme);
+        kit::called(ui, t!("Width"), |ui| kit::Number::new(&mut d.width).range(16.0..=4096.0).suffix(" px").width(64.0).show(ui, theme));
         ui.label("×");
-        kit::Number::new(&mut d.height).range(16.0..=4096.0).suffix(" px").width(64.0).show(ui, theme);
+        kit::called(ui, t!("Height"), |ui| kit::Number::new(&mut d.height).range(16.0..=4096.0).suffix(" px").width(64.0).show(ui, theme));
     });
-    crate::ui::kit::dropdown(ui, Id::unique("canvas-sizes"), 220.0, t!("Common sizes"), |ui| {
-        for (name, w, h) in SIZES {
-            if kit::option(ui, d.width == w && d.height == h, crate::i18n::t(name)).clicked() {
-                (d.width, d.height) = (w, h);
+    kit::labelled(ui, heading, |ui| {
+        crate::ui::kit::dropdown(ui, Id::unique("canvas-sizes"), 220.0, t!("Common sizes"), |ui| {
+            for (name, w, h) in SIZES {
+                if kit::option(ui, d.width == w && d.height == h, crate::i18n::t(name)).clicked() {
+                    (d.width, d.height) = (w, h);
+                }
             }
-        }
+        })
     });
-    kit::section(ui, theme, t!("Background"));
+    let heading = kit::section(ui, theme, t!("Background")).id;
     crate::ui::kit::line(ui, |ui| {
         let mut clear = d.background.trim().is_empty();
         if !clear {
-            colour_edit(ui, theme, Id::unique("canvas-bg"), &mut d.background);
+            kit::labelled(ui, heading, |ui| colour_edit(ui, theme, Id::unique("canvas-bg"), &mut d.background));
         }
         if kit::checkbox(ui, theme, &mut clear, t!("See-through")).changed() {
             d.background = if clear { String::new() } else { "#2B2D31".into() };
@@ -861,9 +866,9 @@ fn samples(ui: &mut Ui, theme: &Theme, d: &mut CanvasData) {
     kit::hint(ui, theme, t!("Only for the preview: the bot fills in the real values."));
     egui::Grid::new("canvas-samples-grid").num_columns(2).spacing(vec2(10.0, 4.0)).show(ui, |ui| {
         for e in &exprs {
-            ui.label(RichText::new(format!("${{{e}}}")).monospace().size(11.5).color(theme.text));
+            let name = ui.label(RichText::new(format!("${{{e}}}")).monospace().size(11.5).color(theme.text)).id;
             let value = d.samples.entry(e.clone()).or_default();
-            ui.add(crate::ui::kit::TextLine::new(value).hint(e.as_str()).width(220.0));
+            kit::labelled(ui, name, |ui| ui.add(crate::ui::kit::TextLine::new(value).hint(e.as_str()).width(220.0)));
             ui.end_row();
         }
     });
@@ -888,8 +893,15 @@ fn colour_edit(ui: &mut Ui, theme: &Theme, id: Id, value: &mut String) {
     });
 }
 
-fn label(ui: &mut Ui, theme: &Theme, text: &str) {
-    kit::caption(ui, theme, text);
+/// A caption; it names the controls drawn with it (see [`labelled`]).
+fn label(ui: &mut Ui, theme: &Theme, text: &str) -> Id {
+    kit::caption(ui, theme, text).id
+}
+
+/// A caption and the controls it names.
+fn labelled<R>(ui: &mut Ui, theme: &Theme, text: &str, add: impl FnOnce(&mut Ui) -> R) -> R {
+    let id = label(ui, theme, text);
+    kit::labelled(ui, id, add)
 }
 
 fn choose(ui: &mut Ui, id: &str, value: &mut String, choices: &[(&'static str, &'static str)], width: f32) {
@@ -914,29 +926,28 @@ fn properties(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit) {
     let l = &mut edit.draft.layers[i];
     let kind = KINDS.iter().find(|(k, _)| *k == l.kind).map(|(_, n)| crate::i18n::t(n)).unwrap_or("?");
     kit::section(ui, theme, kind);
-    label(ui, theme, t!("Name"));
     let hint = l.title();
-    ui.add(crate::ui::kit::TextLine::new(&mut l.name).hint(hint).width(280.0));
+    labelled(ui, theme, t!("Name"), |ui| ui.add(crate::ui::kit::TextLine::new(&mut l.name).hint(hint).width(280.0)));
     ui.add_space(4.0);
     egui::Grid::new("canvas-box").num_columns(4).spacing(vec2(6.0, 4.0)).show(ui, |ui| {
         for (name, v) in [("X", &mut l.x), ("Y", &mut l.y)] {
-            ui.label(name);
-            kit::Number::new(v).show(ui, theme);
+            let name = ui.label(name).id;
+            kit::labelled(ui, name, |ui| kit::Number::new(v).show(ui, theme));
         }
         ui.end_row();
-        ui.label(t!("Width"));
-        kit::Number::new(&mut l.w).range(0.0..=4096.0).show(ui, theme);
+        let name = ui.label(t!("Width")).id;
+        kit::labelled(ui, name, |ui| kit::Number::new(&mut l.w).range(0.0..=4096.0).show(ui, theme));
         if l.kind != "text" {
-            ui.label(t!("Height"));
-            kit::Number::new(&mut l.h).range(0.0..=4096.0).show(ui, theme);
+            let name = ui.label(t!("Height")).id;
+            kit::labelled(ui, name, |ui| kit::Number::new(&mut l.h).range(0.0..=4096.0).show(ui, theme));
         }
         ui.end_row();
     });
     crate::ui::kit::line(ui, |ui| {
         // Named like Width and Height above.
-        ui.label(t!("Opacity"));
+        let name = ui.label(t!("Opacity")).id;
         let mut o = l.opacity.unwrap_or(100.0);
-        if kit::Slider::new(&mut o, 0.0..=100.0).decimals(0).suffix(" %").show(ui, theme) {
+        if kit::labelled(ui, name, |ui| kit::Slider::new(&mut o, 0.0..=100.0).decimals(0).suffix(" %").show(ui, theme)) {
             l.opacity = (o < 100.0).then_some(o);
         }
     });
@@ -946,63 +957,49 @@ fn properties(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit) {
     let id = |k: &str| Id::unique(("canvas-prop", i, k.to_string()));
     match l.kind.as_str() {
         "text" => {
-            label(ui, theme, t!("Text"));
-            ui.add(crate::ui::kit::TextArea::new(("canvas-text", i), &mut l.text).hint("Hello ${user.username}").rows(3));
+            labelled(ui, theme, t!("Text"), |ui| ui.add(crate::ui::kit::TextArea::new(("canvas-text", i), &mut l.text).hint("Hello ${user.username}").rows(3)));
             crate::ui::kit::line(ui, |ui| {
-                choose(ui, &format!("canvas-font-{i}"), &mut l.font, &[("regular", n("Regular")), ("bold", n("Bold")), ("mono", n("Monospace"))], 120.0);
-                opt_number(ui, theme, &mut l.size, 32.0, 4.0..=400.0, " px");
+                kit::called(ui, t!("Font"), |ui| choose(ui, &format!("canvas-font-{i}"), &mut l.font, &[("regular", n("Regular")), ("bold", n("Bold")), ("mono", n("Monospace"))], 120.0));
+                kit::called(ui, t!("Font size"), |ui| opt_number(ui, theme, &mut l.size, 32.0, 4.0..=400.0, " px"));
             });
             crate::ui::kit::line(ui, |ui| {
-                label(ui, theme, t!("Align"));
-                choose(ui, &format!("canvas-align-{i}"), &mut l.align, &[("left", n("Left")), ("center", n("Center")), ("right", n("Right"))], 110.0);
+                labelled(ui, theme, t!("Align"), |ui| choose(ui, &format!("canvas-align-{i}"), &mut l.align, &[("left", n("Left")), ("center", n("Center")), ("right", n("Right"))], 110.0));
             });
-            label(ui, theme, t!("Colour"));
-            colour_edit(ui, theme, id("color"), &mut l.color);
+            labelled(ui, theme, t!("Colour"), |ui| colour_edit(ui, theme, id("color"), &mut l.color));
             kit::checkbox(ui, theme, &mut l.shrink, t!("Shrink to fit the width (one line)"));
             kit::checkbox(ui, theme, &mut l.shadow, t!("Shadow"));
         }
         "image" => {
-            label(ui, theme, t!("Picture"));
-            ui.add(crate::ui::kit::TextArea::new(("canvas-src", i), &mut l.src).hint("https://… or ${user.displayAvatarURL({ extension: 'png' })}").rows(2));
-            label(ui, theme, t!("A web address, a file path, or ${…}. The preview shows where it goes; the bot loads it."));
+            labelled(ui, theme, t!("Picture"), |ui| ui.add(crate::ui::kit::TextArea::new(("canvas-src", i), &mut l.src).hint("https://… or ${user.displayAvatarURL({ extension: 'png' })}").rows(2)));
+            kit::caption(ui, theme, t!("A web address, a file path, or ${…}. The preview shows where it goes; the bot loads it."));
             crate::ui::kit::line(ui, |ui| {
-                label(ui, theme, t!("Shape"));
-                choose(ui, &format!("canvas-shape-{i}"), &mut l.shape, &[("rect", n("Square corners")), ("rounded", n("Round corners")), ("circle", n("Circle"))], 140.0);
+                labelled(ui, theme, t!("Shape"), |ui| choose(ui, &format!("canvas-shape-{i}"), &mut l.shape, &[("rect", n("Square corners")), ("rounded", n("Round corners")), ("circle", n("Circle"))], 140.0));
             });
             if l.shape == "rounded" {
                 crate::ui::kit::line(ui, |ui| {
-                    label(ui, theme, t!("Corner radius"));
-                    opt_number(ui, theme, &mut l.radius, 16.0, 0.0..=2000.0, " px");
+                    labelled(ui, theme, t!("Corner radius"), |ui| opt_number(ui, theme, &mut l.radius, 16.0, 0.0..=2000.0, " px"));
                 });
             }
             crate::ui::kit::line(ui, |ui| {
-                label(ui, theme, t!("Fit"));
-                choose(ui, &format!("canvas-fit-{i}"), &mut l.fit, &[("cover", n("Fill (cut off the rest)")), ("contain", n("Whole picture")), ("stretch", n("Stretch"))], 180.0);
+                labelled(ui, theme, t!("Fit"), |ui| choose(ui, &format!("canvas-fit-{i}"), &mut l.fit, &[("cover", n("Fill (cut off the rest)")), ("contain", n("Whole picture")), ("stretch", n("Stretch"))], 180.0));
             });
         }
         "bar" => {
-            label(ui, theme, t!("Value"));
-            ui.add(crate::ui::kit::TextLine::new(&mut l.value).hint("${xp}").width(280.0));
-            label(ui, theme, t!("Out of"));
-            ui.add(crate::ui::kit::TextLine::new(&mut l.max).hint("100").width(280.0));
-            label(ui, theme, t!("Colour"));
-            colour_edit(ui, theme, id("color"), &mut l.color);
+            labelled(ui, theme, t!("Value"), |ui| ui.add(crate::ui::kit::TextLine::new(&mut l.value).hint("${xp}").width(280.0)));
+            labelled(ui, theme, t!("Out of"), |ui| ui.add(crate::ui::kit::TextLine::new(&mut l.max).hint("100").width(280.0)));
+            labelled(ui, theme, t!("Colour"), |ui| colour_edit(ui, theme, id("color"), &mut l.color));
             gradient(ui, theme, l, id("color2"));
-            label(ui, theme, t!("Empty part"));
-            colour_edit(ui, theme, id("back"), &mut l.back);
+            labelled(ui, theme, t!("Empty part"), |ui| colour_edit(ui, theme, id("back"), &mut l.back));
             crate::ui::kit::line(ui, |ui| {
-                label(ui, theme, t!("Corner radius"));
-                opt_number(ui, theme, &mut l.radius, 0.0, 0.0..=2000.0, " px");
+                labelled(ui, theme, t!("Corner radius"), |ui| opt_number(ui, theme, &mut l.radius, 0.0, 0.0..=2000.0, " px"));
             });
         }
         _ => {
-            label(ui, theme, t!("Colour"));
-            colour_edit(ui, theme, id("color"), &mut l.color);
+            labelled(ui, theme, t!("Colour"), |ui| colour_edit(ui, theme, id("color"), &mut l.color));
             gradient(ui, theme, l, id("color2"));
             if l.kind == "rect" {
                 crate::ui::kit::line(ui, |ui| {
-                    label(ui, theme, t!("Corner radius"));
-                    opt_number(ui, theme, &mut l.radius, 0.0, 0.0..=2000.0, " px");
+                    labelled(ui, theme, t!("Corner radius"), |ui| opt_number(ui, theme, &mut l.radius, 0.0, 0.0..=2000.0, " px"));
                 });
             }
         }
@@ -1019,8 +1016,8 @@ fn properties(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit) {
     }
     if has_outline {
         crate::ui::kit::line(ui, |ui| {
-            colour_edit(ui, theme, id("outline"), &mut l.outline);
-            opt_number(ui, theme, &mut l.outline_width, 4.0, 0.0..=200.0, " px");
+            kit::called(ui, t!("Outline"), |ui| colour_edit(ui, theme, id("outline"), &mut l.outline));
+            kit::called(ui, t!("Outline width"), |ui| opt_number(ui, theme, &mut l.outline_width, 4.0, 0.0..=200.0, " px"));
         });
     }
 }
@@ -1033,8 +1030,8 @@ fn gradient(ui: &mut Ui, theme: &Theme, l: &mut Layer, id: Id) {
     }
     if on {
         crate::ui::kit::line(ui, |ui| {
-            colour_edit(ui, theme, id, &mut l.color2);
-            opt_number(ui, theme, &mut l.angle, 0.0, -360.0..=360.0, "°");
+            kit::called(ui, t!("Gradient"), |ui| colour_edit(ui, theme, id, &mut l.color2));
+            kit::called(ui, t!("Gradient angle"), |ui| opt_number(ui, theme, &mut l.angle, 0.0, -360.0..=360.0, "°"));
         });
     }
 }

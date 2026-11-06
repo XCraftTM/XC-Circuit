@@ -331,6 +331,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                                 }
                                 let selected = i == picker.highlighted;
                                 let (rect, resp) = ui.allocate_exact_size(vec2(LIST_W - 8.0, ROW_H), egui::Sense::click());
+                                crate::ui::kit::describe_selected(&resp, egui::Role::ListBoxOption, selected, &def.name);
                                 let rect = rect.translate(vec2(4.0, 0.0));
                                 if selected {
                                     ui.painter().rect_filled(rect, 6.0, with_alpha(theme.accent, 45));
@@ -354,6 +355,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                                 let chip = if starred || resp.hovered() || selected {
                                     let sr = egui::Rect::from_center_size(egui::pos2(chip.left() - 14.0, rect.center().y), vec2(20.0, 20.0));
                                     let sresp = ui.interact(sr, ui.scope_id().with(("star", i)), egui::Sense::click());
+                                    crate::ui::kit::describe_selected(&sresp, egui::Role::Button, starred, &format!("{}: {}", t!("Favourites"), def.name));
                                     let tint = if starred { theme.warning } else if sresp.hovered() { theme.text } else { with_alpha(theme.text_muted, 140) };
                                     if let Some(path) = ed.reg.icons.get(if starred { "star-filled" } else { "star" }) {
                                         egui::Image::from_uri(crate::editor::file_uri(path)).tint(tint).paint_at(ui, sr.shrink(3.0));
@@ -498,6 +500,8 @@ enum Fold {
 fn category_header(ui: &mut egui::Ui, theme: &Theme, name: &str, count: usize, closed: bool) -> egui::Response {
     ui.add_space(4.0);
     let (rect, resp) = ui.allocate_exact_size(vec2(LIST_W - 8.0, HEADER_H), egui::Sense::click());
+    crate::ui::kit::describe(&resp, egui::Role::Button, &format!("{name} ({count})"));
+    crate::ui::kit::accesskit_expanded(&resp, !closed);
     let rect = rect.translate(vec2(4.0, 0.0));
     if resp.hovered() {
         ui.painter().rect_filled(rect, 6.0, theme.panel_header);
@@ -550,6 +554,7 @@ pub fn timing_text(waits: bool) -> &'static str {
 /// A small icon button in the search row, with its name as a tooltip.
 fn fold_button(ui: &mut egui::Ui, theme: &Theme, icon: &str, tip: &str, reg: &Registry) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(24.0, 24.0), egui::Sense::click());
+    crate::ui::kit::describe(&resp, egui::Role::Button, tip);
     if resp.hovered() {
         ui.painter().rect_filled(rect, 6.0, theme.panel_header);
     }

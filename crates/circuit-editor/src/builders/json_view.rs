@@ -162,6 +162,8 @@ pub fn editor(ui: &mut Ui, theme: &Theme, id: egui::Id, jt: &mut JsonText, help:
                     .min_size(vec2(0.0, height - 4.0))
                     .layouter(&mut layouter)
                     .show(ui);
+                // Named like the switch that shows it.
+                let _ = egui::Response::clone(&out.response).accessible_name("JSON");
                 // A number at the start of each line (rows don't wrap), the
                 // line with a JSON mistake marked.
                 let painter = ui.painter();
