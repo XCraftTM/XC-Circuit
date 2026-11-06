@@ -109,7 +109,7 @@ const exited = new Promise((r) => child.on("exit", r));
   for (const w of want) assert.ok(seen.some((s) => s.endsWith(w)), `logged "${w}":\n${all}`);
   assert.ok(errors().some((e) => e.includes('"../secret.txt" is outside')), all);
   assert.ok(errors().some((e) => e.includes("xc-outside.txt") && e.includes("is a path on the computer")), all);
-  assert.ok(errors().some((e) => e.includes("bigger than 1 MB")), all);
+  assert.ok(errors().some((e) => e.includes("more than 1 MB")), all);
   assert.ok(!fs.existsSync(path.join(os.tmpdir(), "xc-outside.txt")), "nothing was written outside");
   assert.ok(!fs.existsSync(path.join(dir, "data", "files", "big.bin")));
   assert.strictEqual(fs.readFileSync(path.join(dir, "data", "files", "pics", "cat one.png"), "utf8"), "PNGDATA");

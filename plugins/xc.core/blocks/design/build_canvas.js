@@ -59,16 +59,36 @@ function outline(g, layer, fill) {
   g.stroke();
 }
 
-/** A picture from a web address, a data: URL, or a file path. */
-async function picture(src, loadImage) {
+/** The most a picture from the web may be. */
+const PICTURE_MAX = 20 * 1024 * 1024;
+
+/**
+ * A picture from a web address, a data: URL, or a file path. When the design
+ * fills it from ${…} (`fromPeople`), whoever typed the value decides it: then
+ * a web address must be public, and a file must be in the bot's files folder.
+ */
+async function picture(src, loadImage, { fromPeople = false, dataDir, fetch: get } = {}) {
   if (/^https?:\/\//i.test(src)) {
+    if (get) {
+      const { res, body } = await get(src, { signal: AbortSignal.timeout(10000) }, { publicOnly: fromPeople, maxBytes: PICTURE_MAX });
+      if (!res.ok) throw new Error(`${src} answered ${res.status}`);
+      return loadImage(body);
+    }
     const res = await fetch(src, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) throw new Error(`${src} answered ${res.status}`);
     return loadImage(Buffer.from(await res.arrayBuffer()));
   }
   if (/^data:/i.test(src)) return loadImage(src);
+  const fs = require("fs");
+  const path = require("path");
+  if (fromPeople) {
+    const root = path.join(dataDir || process.cwd(), "files");
+    const full = path.resolve(root, src);
+    if (!full.startsWith(root + path.sep)) throw new Error("A picture filled in from ${…} is a web address or a file in the bot's files folder (data/files), by its name");
+    return loadImage(await fs.promises.readFile(full));
+  }
   // A file: read here, as loadImage takes C:\… for a web address.
-  return loadImage(await require("fs").promises.readFile(src));
+  return loadImage(await fs.promises.readFile(src));
 }
 
 /** Lines of `text` that fit in `width` (0: no wrapping). */
@@ -105,10 +125,10 @@ const LAYERS = {
     g.fill();
     outline(g, l, fill);
   },
-  async image(g, l, fill, { loadImage }) {
+  async image(g, l, fill, { loadImage }, pictures = {}) {
     const src = String(fill(l.src) ?? "").trim();
     if (!src) return;
-    const img = await picture(src, loadImage);
+    const img = await picture(src, loadImage, { ...pictures, fromPeople: String(l.src ?? "").includes("${") });
     const shape = l.shape === "circle" ? "circle" : "rect";
     const radius = l.shape === "rounded" ? num(l.radius, 16) : 0;
     g.save();
@@ -187,7 +207,8 @@ const LAYERS = {
 };
 
 /** Draws `design` and gives the PNG. Layers that fail (a picture that can't be loaded) are left out, with a warning. */
-async function draw(design, fill, napi, warn) {
+/** `pictures`: { dataDir, fetch } for pictures filled in from ${…} (see picture). */
+async function draw(design, fill, napi, warn, pictures = {}) {
   const width = Math.round(Math.max(16, Math.min(4096, num(design.width, 900))));
   const height = Math.round(Math.max(16, Math.min(4096, num(design.height, 300))));
   const canvas = napi.createCanvas(width, height);
@@ -202,7 +223,7 @@ async function draw(design, fill, napi, warn) {
     g.save();
     g.globalAlpha = Math.max(0, Math.min(1, num(raw.opacity, 100) / 100));
     try {
-      await LAYERS[raw.type](g, l, fill, napi);
+      await LAYERS[raw.type](g, l, fill, napi, pictures);
     } catch (e) {
       warn(`${raw.name || raw.type} was left out: ${e.message}`);
     }
@@ -218,7 +239,7 @@ module.exports = {
     name: "Build Canvas",
     description: "Draws a picture, such as a welcome or rank card, from a design made in the Canvas Builder. ${…} in its texts and pictures holds JavaScript. Send it with Send Message's Files.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "design",
@@ -267,7 +288,7 @@ module.exports = {
     registerFonts(ctx, napi.GlobalFonts);
     const fill = (v) => (typeof v === "string" && v.includes("${") ? ctx.fill(v, fields) : v);
     const name = String(fields.name || "canvas.png").replace(/[\\/:*?"<>|]/g, "_").replace(/(\.png)?$/i, ".png");
-    const png = await draw(fields.canvas || {}, fill, napi, (text) => ctx.log.warn(text));
+    const png = await draw(fields.canvas || {}, fill, napi, (text) => ctx.log.warn(text), { dataDir: ctx.runtime.dataDir, fetch: ctx.util.fetch });
     return { file: { attachment: png, name }, url: `attachment://${name}` };
   },
 

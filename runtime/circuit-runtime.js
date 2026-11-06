@@ -221,6 +221,18 @@ class Runtime {
       /** This block, as `workspace:node`: a key for data of its own (what it has seen …). */
       id: `${graph.key}:${node.id}`,
       fields: node.inline(),
+      /**
+       * What the bot's author typed into field `key`, before ${…} was filled;
+       * undefined when the field is wired. A typed value without ${…} is the
+       * author's own; anything else may come from what people type.
+       */
+      typed: (key) => (graph.inputs.has(`${node.id}.${key}`) ? undefined : node.inline()[key]),
+      /** Whether field `key` is exactly what the author typed: not wired, no ${…}. */
+      authored: (key) => {
+        if (graph.inputs.has(`${node.id}.${key}`)) return false;
+        const v = node.inline()[key];
+        return typeof v !== "string" || !v.includes("${");
+      },
       event: run ? run.event : undefined,
       log: makeLogger(rt, node),
       store: rt.store.api(),
@@ -1906,8 +1918,87 @@ class Timers {
   }
 }
 
+// ─── Fetching what people point the bot at ──────────────────────────────────
+// When the address comes from a ${…} or a wire, whoever types it decides where
+// the bot connects: not this computer, its network or a cloud's metadata
+// service. And nothing read from the web may be bigger than a limit.
+
+/** Whether an IP address is somewhere only this computer or its network can reach. */
+function isPrivateAddress(ip) {
+  const net = require("net");
+  let a = String(ip).toLowerCase();
+  if (a.startsWith("[") && a.endsWith("]")) a = a.slice(1, -1);
+  const mapped = a.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (mapped) a = mapped[1];
+  if (net.isIPv4(a)) {
+    const [p, q] = a.split(".").map(Number);
+    return (
+      p === 0 || p === 10 || p === 127 || (p === 100 && q >= 64 && q <= 127) || (p === 169 && q === 254) || (p === 172 && q >= 16 && q <= 31) || (p === 192 && q === 168) || (p === 198 && (q === 18 || q === 19)) || p >= 224
+    );
+  }
+  if (net.isIPv6(a)) {
+    return a === "::" || a === "::1" || /^f[cd]/.test(a) || /^fe[89ab]/.test(a) || a.startsWith("ff") || a.startsWith("64:ff9b:") || a.startsWith("2001:db8");
+  }
+  return true;
+}
+
+/** Throws unless every address `url`'s host has is public. */
+async function checkPublic(url) {
+  const u = new URL(url);
+  if (!/^https?:$/.test(u.protocol)) throw new Error(`Only web addresses (https://…), not ${u.protocol}`);
+  const host = u.hostname.replace(/^\[|\]$/g, "");
+  const net = require("net");
+  const addresses = net.isIP(host) ? [host] : (await require("dns").promises.lookup(host, { all: true, verbatim: true })).map((r) => r.address);
+  if (!addresses.length || addresses.some(isPrivateAddress)) {
+    throw new Error(`${u.host} is this computer or a private network; an address from what people type may only go to the public web. (Allow it with the block's Private addresses too.)`);
+  }
+}
+
+/**
+ * fetch(), guarded: with `publicOnly`, the address and every redirect must
+ * be public; the body is read up to `maxBytes` (then it fails). Resolves to
+ * { res, body } with the body as a Buffer.
+ */
+async function guardedFetch(url, init = {}, { publicOnly = false, maxBytes = 10 * 1024 * 1024, redirects = 5 } = {}) {
+  let current = String(url);
+  for (let hop = 0; ; hop++) {
+    if (publicOnly) await checkPublic(current);
+    const res = await fetch(current, { ...init, redirect: publicOnly ? "manual" : "follow" });
+    const to = res.headers.get("location");
+    if (publicOnly && res.status >= 300 && res.status < 400 && to) {
+      if (hop >= redirects) throw new Error(`${new URL(current).host}: too many redirects`);
+      current = new URL(to, current).href;
+      // A redirect turns a POST into a GET, as browsers do.
+      if (res.status === 303 || ((res.status === 301 || res.status === 302) && init.method && init.method !== "GET")) init = { ...init, method: "GET", body: undefined };
+      continue;
+    }
+    const mb = Math.round((maxBytes / 1024 / 1024) * 10) / 10;
+    if (Number(res.headers.get("content-length")) > maxBytes) throw new Error(`${new URL(current).host} sent more than ${mb} MB`);
+    const tooBig = () => new Error(`${new URL(current).host} sent more than ${mb} MB`);
+    // Read in pieces, stopping past the limit (a body without a stream, as
+    // some stand-ins give: whole, then checked).
+    if (!res.body || typeof res.body[Symbol.asyncIterator] !== "function") {
+      const body = Buffer.from(await res.arrayBuffer());
+      if (body.length > maxBytes) throw tooBig();
+      return { res, body };
+    }
+    const chunks = [];
+    let size = 0;
+    for await (const chunk of res.body) {
+      size += chunk.length;
+      if (size > maxBytes) throw tooBig();
+      chunks.push(chunk);
+    }
+    return { res, body: Buffer.concat(chunks) };
+  }
+}
+
 const UTIL = {
   sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+  /** fetch() with a size limit and, with publicOnly, only public addresses (redirects too): { res, body }. */
+  fetch: guardedFetch,
+  /** Throws unless a web address is public (not this computer or a private network). */
+  checkPublic,
   isURL: (s) => {
     try {
       return Boolean(new URL(String(s)));
@@ -2224,4 +2315,5 @@ if (typeof __XC_BUNDLE__ !== "undefined") {
   cli();
 }
 
-module.exports = { start, ungroupBlock, fillTemplate, templateParts, snapshot, Timers, coerce, compare, preview, Store, DbStore, Database, Databases, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };
+module.exports = {
+  isPrivateAddress, guardedFetch, start, ungroupBlock, fillTemplate, templateParts, snapshot, Timers, coerce, compare, preview, Store, DbStore, Database, Databases, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };

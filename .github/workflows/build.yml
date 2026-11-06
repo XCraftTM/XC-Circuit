@@ -104,6 +104,7 @@ jobs:
           node runtime/test/timers.js
           node runtime/test/alerts.js
           node runtime/test/files.js
+          node runtime/test/web_guard.js
           node runtime/test/server_tools.js
           node runtime/test/captcha.js
           node runtime/test/transcript.js

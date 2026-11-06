@@ -51,6 +51,9 @@ const design = {
     { type: "text", name: "Name", x: 210, y: 160, w: 180, text: "${who} 🎉", font: "bold", size: 24, color: "#FFFFFF", shrink: true },
     { type: "bar", name: "Bar", x: 0, y: 180, w: 200, h: 20, value: "${xp}", max: "100", color: "#00FF00", back: "#000000" },
     { type: "image", name: "Missing", x: 0, y: 0, w: 10, h: 10, src: path.join(dir, "nope.png") },
+    // Filled in from ${…}: only a file in the bot's files folder, not one anywhere on the disk.
+    { type: "image", name: "Outside", x: 0, y: 0, w: 10, h: 10, src: "${outside}" },
+    { type: "image", name: "Kept", x: 10, y: 0, w: 10, h: 10, src: "${kept}" },
     { type: "rect", name: "Hidden", x: 0, y: 0, w: 400, h: 200, color: "#FFFFFF", hidden: true },
   ],
 };
@@ -63,6 +66,13 @@ const nodes = {
 nodes.draw.values.dot = "#0000FF";
 nodes.draw.values.who = "Alex";
 nodes.draw.values.xp = 50;
+// A picture outside the files folder, and one in it.
+const tiny = napi.createCanvas(2, 2).toBuffer("image/png");
+fs.writeFileSync(path.join(dir, "outside.png"), tiny);
+fs.mkdirSync(path.join(dir, "data", "files"), { recursive: true });
+fs.writeFileSync(path.join(dir, "data", "files", "pic.png"), tiny);
+nodes.draw.values.outside = path.join(dir, "outside.png");
+nodes.draw.values.kept = "pic.png";
 const links = ["start.next > draw.in", "draw.next > save.in", "draw.file > save.file", "draw.url > save.url"];
 const bundle = { project: { name: "Canvas", mode: "test", settings: {}, data: {} }, blocks, libs: [], workspaces: { main: { name: "Main", nodes, links } } };
 const file = path.join(dir, "bundle.json");
@@ -92,6 +102,9 @@ const exited = new Promise((r) => child.on("exit", r));
   await exited;
   assert.ok(seen.some((s) => s.endsWith("saved card.png attachment://card.png")), `saved:\n${seen.join("\n")}\n${err}`);
   assert.ok(seen.some((s) => s.startsWith("warn:") && s.includes("Missing was left out")), "a picture that can't be loaded is left out, with a warning");
+  const logged = seen.join("\n");
+  assert.ok(seen.some((s) => s.startsWith("warn:") && s.includes("Outside was left out") && s.includes("files folder")), `a path from \${…} outside data/files is refused:\n${logged}`);
+  assert.ok(!seen.some((s) => s.includes("Kept was left out")), `a file in data/files loads:\n${logged}`);
   // The fonts were written once into the data folder.
   const fonts = fs.readdirSync(path.join(dir, "data", ".assets", "core.build_canvas")).sort();
   assert.deepStrictEqual(fonts, ["Hack-Regular.ttf", "NotoEmoji-Regular.ttf", "Ubuntu-Bold.ttf", "Ubuntu-Light.ttf"]);

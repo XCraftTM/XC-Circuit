@@ -7,7 +7,7 @@ module.exports = {
     name: "Web Request",
     description: "Calls a web address (API) and gives back the answer. Fails on HTTP errors, so wrap it in a Try Zone.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "web",
@@ -23,6 +23,8 @@ module.exports = {
     body: { type: "any", pin: true, description: "Sent as JSON for POST, PUT and PATCH.", show: { method: ["POST", "PUT", "PATCH"] } },
     headers: { type: "textarea", pin: false, default: "", advanced: true, description: "One per line: Name: value" },
     timeoutSeconds: { type: "number", default: 15, advanced: true, label: "Timeout (s)", description: "Give up and fail when there is no answer after this many seconds." },
+    maxMb: { type: "number", default: 10, min: 1, max: 500, advanced: true, label: "At most (MB)", description: "A bigger answer isn't read: the block stops with an error." },
+    privateOk: { type: "boolean", pin: false, default: false, advanced: true, label: "Private addresses too", description: "An address from ${…} or a wire may only go to the public web, not this computer or its network (people could otherwise make the bot reach those). On: anywhere, for addresses only you choose." },
   },
   outputs: {
     status: { type: "number", description: "The HTTP status, such as 200." },
@@ -39,8 +41,10 @@ module.exports = {
       init.body = typeof fields.body === "string" ? fields.body : JSON.stringify(fields.body);
       headers["Content-Type"] ??= "application/json";
     }
-    const res = await fetch(fields.url, init);
-    const text = await res.text();
+    // An address the author typed goes anywhere; one from ${…} or a wire only to the public web.
+    const publicOnly = !ctx.authored("url") && !fields.privateOk;
+    const { res, body } = await ctx.util.fetch(fields.url, init, { publicOnly, maxBytes: (Number(fields.maxMb) || 10) * 1024 * 1024 });
+    const text = body.toString("utf8");
     let data = text;
     try {
       data = JSON.parse(text);

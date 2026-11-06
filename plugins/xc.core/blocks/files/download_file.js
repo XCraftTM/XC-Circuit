@@ -17,7 +17,7 @@ module.exports = {
     name: "Download File",
     description: "Saves a file from the web, or a message's attachment, into the bot's files folder.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "files",
@@ -31,6 +31,7 @@ module.exports = {
     from: { type: "any", default: "https://", label: "From", description: "A web address, or an attachment of a message." },
     path: { type: "text", default: "downloads/", description: "Where in the bot's files folder. Ending in / (or empty): that folder, with the file's own name." },
     maxMb: { type: "number", default: 25, min: 1, max: 500, advanced: true, label: "At most (MB)", description: "Bigger files aren't saved: the block stops with an error." },
+    privateOk: { type: "boolean", pin: false, default: false, advanced: true, label: "Private addresses too", description: "An address from ${…} or a wire may only go to the public web, not this computer or its network (people could otherwise make the bot reach those). On: anywhere, for addresses only you choose." },
   },
   outputs: {
     path: { type: "text", description: "The whole path on disk (for Send Message's Files)." },
@@ -48,11 +49,10 @@ module.exports = {
     const target = String(fields.path ?? "").trim();
     const full = place(ctx, !target || /[\\/]$/.test(target) ? `${target}${name}` : target);
     const max = (Number(fields.maxMb) || 25) * 1024 * 1024;
-    const res = await fetch(url, { signal: AbortSignal.timeout(60000) });
+    // An address the author typed goes anywhere; one from ${…} or a wire (an attachment, say) only to the public web.
+    const publicOnly = !ctx.authored("from") && !fields.privateOk;
+    const { res, body: bytes } = await ctx.util.fetch(url, { signal: AbortSignal.timeout(60000) }, { publicOnly, maxBytes: max });
     if (!res.ok) throw new Error(`${new URL(url).host} answered ${res.status}`);
-    if (Number(res.headers.get("content-length")) > max) throw new Error(`The file is bigger than ${fields.maxMb} MB`);
-    const bytes = Buffer.from(await res.arrayBuffer());
-    if (bytes.length > max) throw new Error(`The file is bigger than ${fields.maxMb} MB`);
     await fs.mkdir(path.dirname(full), { recursive: true });
     await fs.writeFile(full, bytes);
     return { path: full, name: path.basename(full), size: bytes.length };

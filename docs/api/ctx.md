@@ -32,6 +32,17 @@ Sets one output without continuing. Useful in loops, or before a `next` that doe
 
 The block's own field values as filled in (without connected values). In `run`, prefer the `fields` argument, which includes connected values.
 
+## typed · authored
+
+`ctx.typed(key)` is what the bot's author typed into field `key`, before `${…}` was filled in, and `undefined` when the field is connected. `ctx.authored(key)` says whether the field is exactly that: not connected and without `${…}`.
+
+A value that isn't authored may come from what the bot's users type (a command option, a message). Treat it so where that matters: a web address only to the public web, a file only inside the bot's files folder.
+
+```js
+const publicOnly = !ctx.authored("url") && !fields.privateOk;
+const { res, body } = await ctx.util.fetch(fields.url, {}, { publicOnly, maxBytes: 10 * 1024 * 1024 });
+```
+
 ## event
 
 The outputs of the event that started this run: `ctx.event.user`, `ctx.event.message`… Undefined in `listen` and `setup`.
@@ -196,6 +207,8 @@ The path on disk of a file the block lists in [`requires.assets`](./blocks#requi
 | `id(length = 10)` | A random id of letters and digits. |
 | `shuffle(list)` | A shuffled copy. |
 | `typeOf(value)` | `"null"`, `"list"`, or JavaScript's `typeof`. |
+| `fetch(url, init?, { publicOnly, maxBytes, redirects }?)` | `fetch`, guarded: resolves to `{ res, body }` with the body as a Buffer, read up to `maxBytes` (10 MB; more fails). With `publicOnly`, the address and each redirect must be on the public web, not this computer, a private network or a cloud's metadata service. |
+| `checkPublic(url)` | Throws unless a web address is public, as above. |
 
 ## bot
 

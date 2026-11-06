@@ -56,7 +56,7 @@ The blocks in **Files** keep files in the bot's **files folder**: `.circuit/data
 | **Write File** | Text, JSON, a table or bytes (a Build Canvas picture); replaces the file, or adds to its end (added text gets a line of its own; added rows no second header). |
 | **List Files** | A folder's files, newest first, matching a name like `*.png`. |
 | **File Action** | Checks that a file is there, deletes, copies or moves it, makes a folder. |
-| **Download File** | Saves a file from the web, or a message's attachment (at most 25 MB unless you say otherwise). |
+| **Download File** | Saves a file from the web, or a message's attachment (at most 25 MB unless you say otherwise). An address that comes from `${…}` or a wire (one people type) may only go to the public web; *Private addresses too* (under Advanced) lifts that for addresses only you choose. |
 
 Each gives the file's whole **path** on disk, which Send Message's **Files** takes.
 
