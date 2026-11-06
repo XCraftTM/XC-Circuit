@@ -28,6 +28,7 @@ fields: {
 | `show` | object | Shown only when other fields have one of these values: `{ mode: ["send", "edit"] }`. |
 | `choices` | object | For `select`: value → label. A nested object makes a group: `{ "Text": { plain: "Plain", bold: "Bold" } }`. |
 | `template` | boolean | Whether `${…}` in the text is filled in. Default: yes for text fields. |
+| `templateParts` | boolean | Instead of filling `${…}` in, give the block `{ strings, values }`: the text around them and their values, as a JavaScript tagged template gets them. SQL Query uses it to send the values as parameters. |
 | `min`, `max`, `step` | number | For numbers. |
 | `placeholder` | text | Grey hint in an empty text box. |
 

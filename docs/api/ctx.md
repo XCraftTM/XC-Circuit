@@ -125,7 +125,7 @@ Reads the block's inputs again. Loops whose condition changes while they run (Lo
 
 ## project
 
-`{ name, mode, settings, data }`: the project's name, build mode, settings (without secrets) and data, such as `data.slashCommands`.
+`{ name, mode, settings, data }`: the project's name, build mode, settings (without secrets) and data, such as `data.slashCommands`. `settings.databases` lists the databases (without passwords).
 
 ## fill
 
@@ -134,6 +134,31 @@ ctx.fill("Hello ${name}!", { name: "Alex" })
 ```
 
 Fills `${…}` in a text the way text fields are filled: from the event, run variables, earlier outputs and the names you pass.
+
+## db
+
+```js
+const db = ctx.db("default");              // or a database's name, or its id
+const rows = await db.select("levels", [{ column: "xp", op: ">", value: 100 }], { order: "xp", desc: true, limit: 10 });
+const { id } = await db.insert("levels", { user_id: user.id, xp: 0 });
+await db.update("levels", { xp: 50 }, [{ column: "user_id", op: "=", value: user.id }]);
+await db.remove("levels", [{ column: "user_id", op: "=", value: user.id }]);
+const { rows: top } = await db.run("SELECT * FROM levels WHERE xp > ?", [100]);
+```
+
+A database of [Bot › Settings › Databases](/explanations/databases). `"default"` (or nothing) is the default one. It connects the first time it's used; every block shares the connection.
+
+| Method | Gives |
+| --- | --- |
+| `select(table, conditions?, { order, desc, limit, offset, any }?)` | The rows, as objects. |
+| `insert(table, values)` | `{ id, row }`: the new row's id, and the row where the database gives it back. |
+| `update(table, values, conditions?, any?)` | How many rows changed. |
+| `remove(table, conditions?, any?)` | How many rows were deleted. |
+| `query(sql)` | `{ rows, affected, id }`. `sql` is text, or `{ strings, values }` from a [`templateParts`](./fields#field-options) field: the values are sent as parameters. Not for MongoDB. |
+| `run(sql, params)` | The same, with your own parameters: `?` for MariaDB, MySQL and SQLite, `$1, $2…` for PostgreSQL. |
+| `describe()` | `{ version, tables }`. |
+
+A condition is `{ column, op, value }`; `op` is `"="`, `"!="`, `">"`, `">="`, `"<"`, `"<="`, `"contains"`, `"starts"`, `"ends"` (these three ignore upper and lower case), `"null"` or `"notNull"`. With `any`, one condition is enough. Table and column names must be letters, digits and `_` (a `.` between schema and table); values are always sent as parameters. `db.kind` is `"mariadb"`, `"postgres"`, `"sqlite"` or `"mongodb"`, and `db.client` the driver's own pool or client once connected.
 
 ## util
 

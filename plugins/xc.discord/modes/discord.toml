@@ -121,6 +121,11 @@ name = "Stored Data"
 icon = "database"
 
 [[categories]]
+id = "database"
+name = "Databases"
+icon = "database"
+
+[[categories]]
 id = "text"
 name = "Text"
 icon = "text"

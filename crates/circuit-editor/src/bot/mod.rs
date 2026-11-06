@@ -1,6 +1,7 @@
 //! Running the bot from the editor, its Settings dialog and Export.
 
 pub mod profile;
+mod databases;
 mod settings;
 
 pub use settings::SettingsDraft;
@@ -120,9 +121,9 @@ impl BotUi {
             Err(e) => return ed.log(Level::Error, format!("Could not prepare the bot: {e:#}")),
         };
         let mut env = Vec::new();
-        for s in settings::secret_settings(ed) {
-            if let Some(v) = secrets::get(&project.root, &s.key) {
-                env.push((format!("XC_SECRET_{}", s.key.to_uppercase()), v));
+        for (key, _) in settings::secret_keys(ed) {
+            if let Some(v) = secrets::get(&project.root, &key) {
+                env.push((format!("XC_SECRET_{}", key.to_uppercase()), v));
             }
         }
         let cfg = SessionConfig {
@@ -375,13 +376,13 @@ impl BotUi {
         };
         let token = if draft.include_token { secrets::get(&project.root, "token") } else { None };
         // The mode's other secrets, as lines in .env: with their values when the token goes too.
-        let secrets_out = settings::secret_settings(ed)
+        let secrets_out = settings::secret_keys(ed)
             .into_iter()
-            .filter(|s| s.key != "token")
-            .map(|s| ExportSecret {
-                env: format!("XC_SECRET_{}", s.key.to_uppercase()),
-                label: s.text("label").unwrap_or(&s.key).to_string(),
-                value: if draft.include_token { secrets::get(&project.root, &s.key) } else { None },
+            .filter(|(key, _)| key != "token")
+            .map(|(key, label)| ExportSecret {
+                env: format!("XC_SECRET_{}", key.to_uppercase()),
+                value: if draft.include_token { secrets::get(&project.root, &key) } else { None },
+                label,
             })
             .collect();
         let token_env = ed.mode().map(|m| m.token_env().to_string()).unwrap_or_else(|| "DISCORD_TOKEN".into());

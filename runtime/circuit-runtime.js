@@ -43,6 +43,9 @@ class Runtime {
     this.startHandlers = [];
     // Opened in start(), after the saved data was checked and backed up.
     this.store = null;
+    /** The connections of Bot › Settings › Databases, opened when first used. */
+    this.databases = new Databases(this);
+    runtimes.add(this);
     this.runCounter = 0;
     this.log = makeLogger(this, null);
   }
@@ -121,12 +124,18 @@ class Runtime {
   }
 
   async start() {
-    // First: check the saved data, back it up, and ask if it is empty.
-    await prepareStoreFile(this.opts.dataDir, this);
-    this.store = new Store(this.opts.dataDir, this);
+    const storeIn = this.setting("storeIn");
+    if (storeIn && storeIn !== "json") {
+      // Stored values in a database (Bot › Settings › Databases).
+      this.store = await DbStore.open(this, storeIn);
+    } else {
+      // First: check the saved data, back it up, and ask if it is empty.
+      await prepareStoreFile(this.opts.dataDir, this);
+      this.store = new Store(this.opts.dataDir, this);
+      this.backupTimer = setInterval(() => backupStore(this.opts.dataDir, this, true), BACKUP_EVERY_MS);
+      this.backupTimer.unref?.();
+    }
     if (this.store.note) this.log.warn(this.store.note);
-    this.backupTimer = setInterval(() => backupStore(this.opts.dataDir, this, true), BACKUP_EVERY_MS);
-    this.backupTimer.unref?.();
     this.log.info(`Runtime ready · Node ${process.version}`);
     this.conversions = compileConversions(this.bundle.types, this.log);
     for (const [id, b] of Object.entries(this.bundle.blocks)) {
@@ -212,8 +221,8 @@ class Runtime {
         get uptime() {
           return Date.now() - rt.startedAt;
         },
-        stop: () => process.exit(0),
-        restart: () => process.exit(75),
+        stop: () => shutdown(0),
+        restart: () => shutdown(75),
       },
       runtime: {
         onError: (h) => rt.errorHandlers.push({ h, node }),
@@ -231,6 +240,8 @@ class Runtime {
         setting: (name) => rt.setting(name),
       },
       util: UTIL,
+      /** A database of Bot › Settings › Databases: its id or name, or "default". */
+      db: (which) => rt.databases.get(which),
       require: (name) => rt.require(name),
       /** Project info: name, settings and project-editor data such as slashCommands. */
       project: rt.bundle.project,
@@ -509,6 +520,11 @@ class GraphNode {
     for (const pin of wired) if (!(pin in (this.def.fields || {}))) placed[pin] = fields[pin];
     for (const [k, f] of Object.entries(this.def.fields || {})) {
       if (!f) continue;
+      if (f.templateParts && !wired.has(k) && typeof fields[k] === "string") {
+        // Kept apart, like a tagged template: the database blocks send the values as parameters.
+        fields[k] = templateParts(fields[k], run, fields, placed);
+        continue;
+      }
       if (templated(f) && !wired.has(k) && typeof fields[k] === "string") fields[k] = fillTemplate(fields[k], run, fields, placed);
       fields[k] = coerce(fields[k], f.type);
     }
@@ -562,6 +578,33 @@ function fillTemplate(text, run, fields, placed = {}) {
       throw new Error(`\${${expr}}: ${e.message}`);
     }
     out += value == null ? "" : String(value);
+    from = close + 1;
+  }
+}
+
+/**
+ * Like fillTemplate, but keeps the texts and the values of the ${…} apart:
+ * { strings, values }, with one more string than values (as a tagged
+ * template gets them). SQL Query sends the values as parameters.
+ */
+function templateParts(text, run, fields, placed = {}) {
+  const strings = [];
+  const values = [];
+  let from = 0;
+  for (;;) {
+    const open = text.indexOf("${", from);
+    const close = open < 0 ? -1 : expressionEnd(text, open + 2);
+    if (close < 0) {
+      strings.push(text.slice(from));
+      return { strings, values };
+    }
+    const expr = text.slice(open + 2, close);
+    strings.push(text.slice(from, open));
+    try {
+      values.push(evaluate(expr, run, fields, placed));
+    } catch (e) {
+      throw new Error(`\${${expr}}: ${e.message}`);
+    }
     from = close + 1;
   }
 }
@@ -984,6 +1027,16 @@ class Store {
     if (this.timer) this.flush();
   }
 
+  /** Value `name` of bucket `bucket` changed (or was deleted). */
+  changed(bucket, name) {
+    this.save();
+  }
+
+  /** Writes what's waiting, for a bot that is about to end. */
+  async flushAll() {
+    this.flushPending();
+  }
+
   scope(...parts) {
     const key = storeKey(parts);
     const bucket = () => getOrObj(this.data, key);
@@ -992,22 +1045,22 @@ class Store {
       has: async (k) => k in bucket(),
       set: async (k, v) => {
         bucket()[k] = v;
-        this.save();
+        this.changed(key, k);
       },
       delete: async (k) => {
         delete bucket()[k];
-        this.save();
+        this.changed(key, k);
       },
       inc: async (k, by = 1) => {
         const b = bucket();
         b[k] = (Number(b[k]) || 0) + Number(by);
-        this.save();
+        this.changed(key, k);
         return b[k];
       },
       push: async (k, v) => {
         const b = bucket();
         b[k] = Array.isArray(b[k]) ? [...b[k], v] : [v];
-        this.save();
+        this.changed(key, k);
         return b[k];
       },
       keys: async () => Object.keys(bucket()),
@@ -1036,6 +1089,596 @@ class Store {
       ns: (name) => this.scope("ns", name),
       each: (scope, serverId) => this.each(scope, serverId),
     };
+  }
+}
+
+// ─── Databases ───────────────────────────────────────────────────────────────
+// The connections of Bot › Settings › Databases: MariaDB/MySQL (mysql2),
+// PostgreSQL (pg), SQLite (built into Node.js) and MongoDB (mongodb). The
+// editor adds the npm package a connection needs to the bot's packages.
+// Values always go to the database as parameters, never into the SQL text.
+
+/** Every Runtime, so a bot that ends can close its connections. */
+const runtimes = new Set();
+
+const DB_KINDS = {
+  mariadb: { name: "MariaDB / MySQL", port: 3306, package: "mysql2" },
+  postgres: { name: "PostgreSQL", port: 5432, package: "pg" },
+  sqlite: { name: "SQLite" },
+  mongodb: { name: "MongoDB", port: 27017, package: "mongodb" },
+};
+
+/** Comparisons of a condition: { column, op, value }. */
+const SQL_OPS = { "=": "=", "!=": "<>", ">": ">", ">=": ">=", "<": "<", "<=": "<=" };
+const LIKE_OPS = { contains: (v) => `%${v}%`, starts: (v) => `${v}%`, ends: (v) => `%${v}` };
+const MONGO_OPS = { "!=": "$ne", ">": "$gt", ">=": "$gte", "<": "$lt", "<=": "$lte" };
+
+const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/** The table where Set/Get Stored Value keep their values, when they use a database. */
+const STORE_TABLE = "xc_store";
+
+class Databases {
+  constructor(rt) {
+    this.rt = rt;
+    this.open = new Map(); // id -> Database
+  }
+
+  /** The connections in Bot › Settings › Databases. */
+  list() {
+    const list = this.rt.setting("databases");
+    return Array.isArray(list) ? list.filter((d) => d && d.id) : [];
+  }
+
+  /** The database `which` names (its id or name), or the default one for "default" or nothing. */
+  get(which) {
+    const list = this.list();
+    let spec;
+    if (!which || which === "default") {
+      const id = this.rt.setting("databaseDefault");
+      spec = list.find((d) => d.id === id) || (list.length === 1 ? list[0] : undefined);
+      if (!spec) {
+        throw new Error(list.length ? "No default database is chosen. Choose one in Bot › Settings › Databases, or pick a database on the block." : "No database is set up yet. Add one in Bot › Settings › Databases.");
+      }
+    } else {
+      spec = list.find((d) => d.id === which) || list.find((d) => d.name === which);
+      if (!spec) throw new Error(`There's no database "${which}" in Bot › Settings › Databases.`);
+    }
+    return getOr(this.open, spec.id, () => new Database(spec, this.rt));
+  }
+
+  async closeAll() {
+    const all = [...this.open.values()];
+    this.open.clear();
+    await Promise.allSettled(all.map((d) => d.close()));
+  }
+}
+
+class Database {
+  constructor(spec, rt) {
+    this.spec = spec;
+    this.rt = rt;
+    this.kind = spec.kind;
+    this.name = spec.name || spec.id;
+    if (!DB_KINDS[this.kind]) throw new Error(`${this.name}: "${spec.kind}" isn't a kind of database XC Circuit knows.`);
+    this.client = null;
+    this.connecting = null;
+  }
+
+  /** Whether it speaks SQL (everything but MongoDB). */
+  get sql() {
+    return this.kind !== "mongodb";
+  }
+
+  /** The connection's password or URL, from the system keyring (or .env in an exported bot). */
+  secret(part) {
+    return this.rt.secret(`db_${this.spec.id}_${part}`);
+  }
+
+  /** Connects once; later calls wait for the same connection. */
+  connect() {
+    if (!this.connecting) {
+      this.connecting = this.open().catch((e) => {
+        this.connecting = null;
+        throw this.explain(e);
+      });
+    }
+    return this.connecting;
+  }
+
+  require(name) {
+    try {
+      return this.rt.require(name);
+    } catch (e) {
+      if (e && e.code === "MODULE_NOT_FOUND") {
+        throw new Error(`the npm package ${name} isn't installed. XC Circuit installs it when you run the bot; an exported bot needs npm install once.`);
+      }
+      throw e;
+    }
+  }
+
+  async open() {
+    const s = this.spec;
+    const url = this.secret("url");
+    const password = this.secret("password");
+    const port = Number(s.port) || DB_KINDS[this.kind].port;
+    switch (this.kind) {
+      case "mariadb": {
+        const mysql = this.require("mysql2/promise");
+        // Big numbers (such as Discord ids in BIGINT columns) come back as text when a number can't hold them exactly.
+        const common = { connectionLimit: 5, supportBigNumbers: true, dateStrings: false };
+        this.client = url
+          ? mysql.createPool({ uri: url, ...common })
+          : mysql.createPool({ host: s.host || "localhost", port, user: s.user || undefined, password, database: s.database || undefined, ssl: s.ssl ? {} : undefined, ...common });
+        await this.client.query("SELECT 1");
+        break;
+      }
+      case "postgres": {
+        const pg = this.require("pg");
+        // BIGINT as a number when it fits exactly, otherwise as text (like Discord ids).
+        pg.types.setTypeParser(20, (v) => (Number.isSafeInteger(Number(v)) ? Number(v) : v));
+        this.client = url
+          ? new pg.Pool({ connectionString: url, max: 5 })
+          : new pg.Pool({ host: s.host || "localhost", port, user: s.user || undefined, password, database: s.database || undefined, ssl: s.ssl ? true : undefined, max: 5 });
+        await this.client.query("SELECT 1");
+        break;
+      }
+      case "sqlite": {
+        const file = path.resolve(this.rt.opts.dataDir || process.cwd(), s.file || "bot.sqlite");
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        let sqlite;
+        // node:sqlite says it's experimental on every start; that's no news for bot makers.
+        const warn = process.emitWarning;
+        process.emitWarning = (w, ...rest) => (String(w && w.message ? w.message : w).includes("SQLite") ? undefined : warn.call(process, w, ...rest));
+        try {
+          sqlite = require("node:sqlite");
+        } catch {
+          throw new Error(`SQLite needs Node.js 22.13 or newer; this is ${process.version}.`);
+        } finally {
+          process.emitWarning = warn;
+        }
+        this.client = new sqlite.DatabaseSync(file);
+        this.file = file;
+        break;
+      }
+      case "mongodb": {
+        const { MongoClient, ObjectId } = this.require("mongodb");
+        this.ObjectId = ObjectId;
+        const auth = s.user ? `${encodeURIComponent(s.user)}:${encodeURIComponent(password || "")}@` : "";
+        this.client = new MongoClient(url || `mongodb://${auth}${s.host || "localhost"}:${port}/`, { serverSelectionTimeoutMS: 8000 });
+        await this.client.connect();
+        this.db = this.client.db(s.database || undefined);
+        break;
+      }
+    }
+  }
+
+  /** An error that says which database, and what to check. */
+  explain(e) {
+    const s = this.spec;
+    const where = s.host ? `${s.host}:${Number(s.port) || DB_KINDS[this.kind].port}` : "";
+    const code = e && (e.code || (e.cause && e.cause.code));
+    let text = e && e.message ? e.message : String(e);
+    if (code === "ECONNREFUSED") text = `nothing answers at ${where || "its address"}. Is the database running, and is the port right?`;
+    else if (code === "ENOTFOUND" || code === "EAI_AGAIN") text = `the host ${s.host} wasn't found. Check its name.`;
+    else if (code === "ETIMEDOUT" || (e && e.name === "MongoServerSelectionError")) text = `${where || "the database"} didn't answer in time. Is it reachable from here (firewall, allowed IPs)?`;
+    else if (code === "ER_ACCESS_DENIED_ERROR" || code === "28P01" || (e && e.codeName === "AuthenticationFailed")) text = "the user name or password is wrong.";
+    else if (code === "ER_BAD_DB_ERROR" || code === "3D000") text = `there's no database called "${s.database}" on the server.`;
+    const err = new Error(`${this.name}: ${text}`);
+    err.cause = e;
+    return err;
+  }
+
+  /** A table or column name, checked and quoted. `${…}` values can't be names. */
+  ident(name) {
+    const parts = String(name ?? "").trim().split(".");
+    if (!parts.every((p) => NAME.test(p))) {
+      throw new Error(`"${name}" can't be a table or column name here: use letters, digits and _ (and a . between a schema and a table).`);
+    }
+    const q = this.kind === "mariadb" ? "`" : '"';
+    return parts.map((p) => q + p + q).join(".");
+  }
+
+  /** Placeholder number `i` (1-based). */
+  ph(i) {
+    return this.kind === "postgres" ? `$${i}` : "?";
+  }
+
+  /** A value as the driver takes it. */
+  value(v) {
+    if (v === undefined || v === null) return null;
+    if (typeof v === "number" || typeof v === "string" || typeof v === "bigint") return v;
+    if (typeof v === "boolean") return this.kind === "sqlite" ? (v ? 1 : 0) : v;
+    if (v instanceof Date) return this.kind === "sqlite" ? v.toISOString() : v;
+    if (Buffer.isBuffer(v)) return v;
+    if (isEntity(v)) return v.id;
+    if (!this.sql) return v;
+    return JSON.stringify(v);
+  }
+
+  /** Runs SQL with its parameters: { rows, affected, id }. */
+  async run(sql, params = []) {
+    if (!this.sql) throw new Error(`${this.name} is MongoDB: SQL works with MariaDB, MySQL, PostgreSQL and SQLite. Use Get Rows, Insert Row, Update Rows and Delete Rows.`);
+    await this.connect();
+    try {
+      switch (this.kind) {
+        case "mariadb": {
+          const [r] = await this.client.query(sql, params);
+          if (Array.isArray(r)) return { rows: r.map(plain), affected: 0 };
+          return { rows: [], affected: r.affectedRows || 0, id: r.insertId || undefined };
+        }
+        case "postgres": {
+          const r = await this.client.query(sql, params);
+          return { rows: (r.rows || []).map(plain), affected: r.rowCount || 0 };
+        }
+        case "sqlite": {
+          const st = this.client.prepare(sql);
+          if (/^\s*(select|with|pragma|explain|values)\b/i.test(sql) || /\breturning\b/i.test(sql)) return { rows: st.all(...params).map(plain), affected: 0 };
+          const r = st.run(...params);
+          return { rows: [], affected: Number(r.changes) || 0, id: r.lastInsertRowid ? Number(r.lastInsertRowid) : undefined };
+        }
+      }
+    } catch (e) {
+      throw new Error(`${this.name}: ${e.message}`, { cause: e });
+    }
+  }
+
+  /** SQL with ${…} values ({ strings, values }, or plain text) run as parameters. */
+  async query(parts) {
+    if (typeof parts === "string") return this.run(parts);
+    const params = [];
+    let sql = parts.strings[0];
+    for (let i = 0; i < parts.values.length; i++) {
+      params.push(this.value(parts.values[i]));
+      sql += this.ph(params.length) + parts.strings[i + 1];
+    }
+    return this.run(sql, params);
+  }
+
+  /** WHERE for conditions [{ column, op, value }], all of them or (`any`) one. */
+  where(conds, params, any) {
+    const parts = [];
+    for (const c of conds || []) {
+      const col = this.ident(c.column);
+      const op = c.op || "=";
+      if (op === "null" || ((op === "=" || op === "!=") && c.value == null)) {
+        parts.push(`${col} IS ${op === "!=" ? "NOT " : ""}NULL`);
+      } else if (op === "notNull") {
+        parts.push(`${col} IS NOT NULL`);
+      } else if (LIKE_OPS[op]) {
+        params.push(LIKE_OPS[op](String(c.value ?? "").replace(/[!%_]/g, "!$&")));
+        // Upper and lower case count as the same everywhere.
+        const left = this.kind === "postgres" ? `${col}::text ILIKE` : `${col} LIKE`;
+        parts.push(`${left} ${this.ph(params.length)} ESCAPE '!'`);
+      } else if (SQL_OPS[op]) {
+        params.push(this.value(c.value));
+        parts.push(`${col} ${SQL_OPS[op]} ${this.ph(params.length)}`);
+      } else {
+        throw new Error(`"${op}" isn't a way to compare.`);
+      }
+    }
+    return parts.length ? ` WHERE ${parts.join(any ? " OR " : " AND ")}` : "";
+  }
+
+  limit(limit, offset) {
+    const n = Math.floor(Number(limit) || 0);
+    const skip = Math.floor(Number(offset) || 0);
+    if (n > 0) return ` LIMIT ${n}${skip > 0 ? ` OFFSET ${skip}` : ""}`;
+    if (skip <= 0) return "";
+    if (this.kind === "postgres") return ` OFFSET ${skip}`;
+    return ` LIMIT ${this.kind === "sqlite" ? -1 : "18446744073709551615"} OFFSET ${skip}`;
+  }
+
+  /** The rows of `table` that match: [{ column: value }]. */
+  async select(table, where = [], { order, desc, limit, offset, any } = {}) {
+    if (!this.sql) {
+      await this.connect();
+      const opts = {};
+      if (order) opts.sort = { [mongoName(order)]: desc ? -1 : 1 };
+      if (Number(offset) > 0) opts.skip = Math.floor(Number(offset));
+      if (Number(limit) > 0) opts.limit = Math.floor(Number(limit));
+      return this.mongo(async () => (await this.db.collection(mongoName(table)).find(this.filter(where, any), opts).toArray()).map(mongoPlain));
+    }
+    const params = [];
+    let sql = `SELECT * FROM ${this.ident(table)}${this.where(where, params, any)}`;
+    if (order) sql += ` ORDER BY ${this.ident(order)}${desc ? " DESC" : ""}`;
+    sql += this.limit(limit, offset);
+    return (await this.run(sql, params)).rows;
+  }
+
+  /** Adds a row: { id, row }. `row` is the new row where the database gives it back. */
+  async insert(table, values) {
+    const cols = Object.keys(values || {});
+    if (!cols.length) throw new Error("There's nothing to insert: give at least one column a value.");
+    if (!this.sql) {
+      await this.connect();
+      const doc = Object.fromEntries(cols.map((c) => [mongoName(c), this.value(values[c])]));
+      const r = await this.mongo(() => this.db.collection(mongoName(table)).insertOne(doc));
+      return { id: String(r.insertedId), row: mongoPlain({ ...doc, _id: r.insertedId }) };
+    }
+    const params = cols.map((c) => this.value(values[c]));
+    let sql = `INSERT INTO ${this.ident(table)} (${cols.map((c) => this.ident(c)).join(", ")}) VALUES (${params.map((_, i) => this.ph(i + 1)).join(", ")})`;
+    if (this.kind !== "mariadb") sql += " RETURNING *";
+    const r = await this.run(sql, params);
+    const row = r.rows[0];
+    return { id: r.id ?? (row ? row.id : undefined), row };
+  }
+
+  /** Changes the matching rows; gives how many. */
+  async update(table, values, where = [], any = false) {
+    const cols = Object.keys(values || {});
+    if (!cols.length) throw new Error("There's nothing to change: give at least one column a value.");
+    if (!this.sql) {
+      await this.connect();
+      const set = Object.fromEntries(cols.map((c) => [mongoName(c), this.value(values[c])]));
+      const r = await this.mongo(() => this.db.collection(mongoName(table)).updateMany(this.filter(where, any), { $set: set }));
+      return r.modifiedCount;
+    }
+    const params = [];
+    const set = cols.map((c) => {
+      params.push(this.value(values[c]));
+      return `${this.ident(c)} = ${this.ph(params.length)}`;
+    });
+    return (await this.run(`UPDATE ${this.ident(table)} SET ${set.join(", ")}${this.where(where, params, any)}`, params)).affected;
+  }
+
+  /** Deletes the matching rows; gives how many. */
+  async remove(table, where = [], any = false) {
+    if (!this.sql) {
+      await this.connect();
+      const r = await this.mongo(() => this.db.collection(mongoName(table)).deleteMany(this.filter(where, any)));
+      return r.deletedCount;
+    }
+    const params = [];
+    return (await this.run(`DELETE FROM ${this.ident(table)}${this.where(where, params, any)}`, params)).affected;
+  }
+
+  /** A MongoDB filter for conditions. Values are compared as values ($eq), never read as operators. */
+  filter(conds, any) {
+    const parts = (conds || []).map((c) => {
+      const col = mongoName(c.column);
+      const op = c.op || "=";
+      let v = this.value(c.value);
+      if (col === "_id" && typeof v === "string" && /^[0-9a-f]{24}$/i.test(v)) v = new this.ObjectId(v);
+      if (op === "null") return { [col]: null };
+      if (op === "notNull") return { [col]: { $ne: null } };
+      if (LIKE_OPS[op]) {
+        const text = String(c.value ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return { [col]: { $regex: op === "starts" ? `^${text}` : op === "ends" ? `${text}$` : text, $options: "i" } };
+      }
+      if (op === "=") return { [col]: { $eq: v } };
+      if (MONGO_OPS[op]) return { [col]: { [MONGO_OPS[op]]: v } };
+      throw new Error(`"${op}" isn't a way to compare.`);
+    });
+    if (!parts.length) return {};
+    if (parts.length === 1) return parts[0];
+    return any ? { $or: parts } : { $and: parts };
+  }
+
+  async mongo(fn) {
+    try {
+      return await fn();
+    } catch (e) {
+      throw new Error(`${this.name}: ${e.message}`, { cause: e });
+    }
+  }
+
+  /** What Test connection shows: the server's version and its tables. */
+  async describe() {
+    await this.connect();
+    const first = async (sql) => Object.values((await this.run(sql)).rows[0] || {})[0];
+    const names = async (sql) => (await this.run(sql)).rows.map((r) => Object.values(r)[0]);
+    switch (this.kind) {
+      case "mariadb":
+        return { version: String(await first("SELECT VERSION()")), tables: await names("SHOW TABLES") };
+      case "postgres":
+        return {
+          version: String(await first("SHOW server_version")),
+          tables: await names("SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() ORDER BY table_name"),
+        };
+      case "sqlite":
+        return { version: String(await first("SELECT sqlite_version()")), tables: await names("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"), file: this.file };
+      case "mongodb": {
+        const info = await this.mongo(() => this.db.admin().command({ buildInfo: 1 }));
+        const list = await this.mongo(() => this.db.listCollections({}, { nameOnly: true }).toArray());
+        return { version: info.version, tables: list.map((c) => c.name).sort() };
+      }
+    }
+  }
+
+  async close() {
+    const client = this.client;
+    this.client = null;
+    this.connecting = null;
+    if (!client) return;
+    if (this.kind === "sqlite") client.close();
+    else if (this.kind === "mongodb") await client.close();
+    else await client.end();
+  }
+
+  // Stored values (Set/Get Stored Value) in the table xc_store: one row per value, as JSON.
+
+  async prepareStore() {
+    if (!this.sql) {
+      await this.connect();
+      return;
+    }
+    const text = this.kind === "mariadb" ? "VARCHAR(191)" : "TEXT";
+    const value = this.kind === "mariadb" ? "LONGTEXT" : "TEXT";
+    await this.run(`CREATE TABLE IF NOT EXISTS ${STORE_TABLE} (bucket ${text} NOT NULL, name ${text} NOT NULL, value ${value}, PRIMARY KEY (bucket, name))`);
+  }
+
+  async loadStore() {
+    if (!this.sql) return this.mongo(async () => this.db.collection(STORE_TABLE).find({}).toArray());
+    return (await this.run(`SELECT bucket, name, value FROM ${STORE_TABLE}`)).rows;
+  }
+
+  async writeStore(bucket, name, value) {
+    const id = `${bucket}\u0000${name}`;
+    if (!this.sql) {
+      const c = this.db.collection(STORE_TABLE);
+      if (value === undefined) await this.mongo(() => c.deleteOne({ _id: id }));
+      else await this.mongo(() => c.updateOne({ _id: id }, { $set: { bucket, name, value: JSON.stringify(value) } }, { upsert: true }));
+      return;
+    }
+    if (value === undefined) {
+      await this.run(`DELETE FROM ${STORE_TABLE} WHERE bucket = ${this.ph(1)} AND name = ${this.ph(2)}`, [bucket, name]);
+      return;
+    }
+    const upsert = this.kind === "mariadb" ? "ON DUPLICATE KEY UPDATE value = VALUES(value)" : "ON CONFLICT (bucket, name) DO UPDATE SET value = excluded.value";
+    await this.run(`INSERT INTO ${STORE_TABLE} (bucket, name, value) VALUES (${this.ph(1)}, ${this.ph(2)}, ${this.ph(3)}) ${upsert}`, [bucket, name, JSON.stringify(value)]);
+  }
+}
+
+/** A Discord (or Fluxer) object such as a user or channel: kept as its id. */
+function isEntity(v) {
+  return v && typeof v === "object" && !Array.isArray(v) && typeof v.id === "string" && Object.getPrototypeOf(v) !== Object.prototype && Object.getPrototypeOf(v) !== null;
+}
+
+/** A row as a plain object (drivers give their own classes). */
+function plain(row) {
+  return { ...row };
+}
+
+function mongoName(name) {
+  const n = String(name ?? "").trim();
+  if (!n || n.startsWith("$") || n.includes("\0")) throw new Error(`"${name}" can't be a collection or field name.`);
+  return n;
+}
+
+/** A MongoDB document with its _id as text. */
+function mongoPlain(doc) {
+  const out = { ...doc };
+  if (out._id && typeof out._id === "object" && typeof out._id.toHexString === "function") out._id = out._id.toHexString();
+  return out;
+}
+
+/** Stored values (ctx.store) kept in a database instead of store.json. */
+class DbStore extends Store {
+  /** Opens the store in database `which`. The first time, store.json's values are copied in. */
+  static async open(rt, which) {
+    const store = Object.create(DbStore.prototype);
+    Object.assign(store, { rt, data: {}, note: null, timer: null, dirty: new Map(), writing: null, readOnly: false });
+    store.db = rt.databases.get(which);
+    await store.db.prepareStore();
+    const rows = await store.db.loadStore();
+    for (const r of rows) {
+      try {
+        getOrObj(store.data, r.bucket)[r.name] = JSON.parse(r.value);
+      } catch {
+        rt.log.warn(`Stored value ${r.name} of ${r.bucket} in ${store.db.name} isn't JSON; it's left out.`);
+      }
+    }
+    if (!rows.length) {
+      const file = path.join(rt.opts.dataDir, "store.json");
+      let old = null;
+      try {
+        old = JSON.parse(fs.readFileSync(file, "utf8"));
+      } catch {}
+      if (old && typeof old === "object" && !Array.isArray(old)) {
+        let count = 0;
+        for (const [bucket, values] of Object.entries(old)) {
+          if (!values || typeof values !== "object") continue;
+          for (const [name, value] of Object.entries(values)) {
+            getOrObj(store.data, bucket)[name] = value;
+            store.dirty.set(`${bucket}\u0000${name}`, [bucket, name]);
+            count++;
+          }
+        }
+        if (count) {
+          await store.flushAll();
+          store.note = `Stored values are kept in ${store.db.name} now: copied ${count} from store.json, which stays as it was.`;
+        }
+      }
+    }
+    openStores.add(store);
+    return store;
+  }
+
+  changed(bucket, name) {
+    this.dirty.set(`${bucket}\u0000${name}`, [bucket, name]);
+    this.save();
+  }
+
+  save() {
+    if (this.timer) return;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      this.flushAll().catch(() => {});
+    }, 250);
+  }
+
+  /** Writes the changed values; ones that fail stay waiting and are tried again. */
+  async flushAll() {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    // One write at a time, so a value never overtakes a newer one.
+    while (this.writing) await this.writing;
+    if (!this.dirty.size) return;
+    const batch = [...this.dirty.values()];
+    this.dirty.clear();
+    this.writing = (async () => {
+      for (const [bucket, name] of batch) {
+        const values = this.data[bucket];
+        try {
+          await this.db.writeStore(bucket, name, values && name in values ? values[name] : undefined);
+        } catch (e) {
+          if (!this.dirty.has(`${bucket}\u0000${name}`)) this.dirty.set(`${bucket}\u0000${name}`, [bucket, name]);
+          this.rt.log.error(`Could not save stored data: ${e.message}`);
+          this.save();
+          break;
+        }
+      }
+    })();
+    try {
+      await this.writing;
+    } finally {
+      this.writing = null;
+    }
+  }
+
+  flush() {
+    this.flushAll().catch(() => {});
+  }
+
+  flushPending() {
+    // Writing to a database takes time; a bot that ends waits for it in shutdown().
+  }
+}
+
+/** Ends the bot after writing what's waiting and closing the databases (a few seconds at most). */
+let shuttingDown = false;
+async function shutdown(code = 0) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms).unref?.());
+  await Promise.race([Promise.allSettled([...openStores].map((s) => s.flushAll())), wait(5000)]);
+  await Promise.race([Promise.allSettled([...runtimes].map((rt) => rt.databases.closeAll())), wait(2000)]);
+  process.exit(code);
+}
+
+/**
+ * Bot › Settings › Databases › Test: connects with the connection in
+ * XC_DB_TEST (JSON; its password and URL as XC_SECRET_DB_<ID>_…) and prints
+ * one line of JSON: { ok, version, tables } or { ok: false, error }.
+ */
+async function testDatabase(depsRoot, dataDir) {
+  const spec = JSON.parse(process.env.XC_DB_TEST || "{}");
+  const rt = {
+    opts: { dataDir },
+    require: Module.createRequire(path.join(depsRoot, "package.json")),
+    secret: (name) => process.env[`XC_SECRET_${String(name).toUpperCase()}`],
+  };
+  let db;
+  try {
+    db = new Database({ id: "test", ...spec }, rt);
+    const info = await db.describe();
+    console.log(JSON.stringify({ ok: true, ...info }));
+  } catch (e) {
+    console.log(JSON.stringify({ ok: false, error: e && e.message ? e.message : String(e) }));
+  } finally {
+    if (db) await Promise.race([db.close().catch(() => {}), new Promise((r) => setTimeout(r, 2000))]);
+    process.exit(0);
   }
 }
 
@@ -1290,6 +1933,10 @@ function cli() {
     const i = args.indexOf(name);
     return i >= 0 ? args[i + 1] : undefined;
   };
+  if (args.includes("--db-test")) {
+    testDatabase(path.resolve(arg("--deps") || process.cwd()), path.resolve(arg("--data") || path.join(process.cwd(), "data")));
+    return;
+  }
   const bundlePath = arg("--bundle");
   if (!bundlePath) {
     console.error("usage: node circuit-runtime.js --bundle bundle.json --deps <dir> [--data <dir>] [--debug]");
@@ -1321,7 +1968,7 @@ process.on("uncaughtException", (e) => {
   reportFatal(`Bot crashed: ${e && e.stack ? e.stack : e}`);
   process.exit(1);
 });
-for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(0));
+for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => shutdown(0));
 
 /** XC Circuit stops a running bot by writing "stop" to it (or by closing its input). */
 function listenForStop() {
@@ -1332,7 +1979,7 @@ function listenForStop() {
     const lines = buffer.split(/\r?\n/);
     buffer = lines.pop();
     for (const line of lines.map((l) => l.trim())) {
-      if (line === "stop") process.exit(0);
+      if (line === "stop") shutdown(0);
       // "answer <id> <value>": XC Circuit's reply to an ask event.
       const m = /^answer (\S+) (.*)$/.exec(line);
       if (m && pendingAnswers.has(m[1])) {
@@ -1342,7 +1989,7 @@ function listenForStop() {
       }
     }
   });
-  process.stdin.on("end", () => process.exit(0));
+  process.stdin.on("end", () => shutdown(0));
   process.stdin.on("error", () => {});
 }
 
@@ -1353,4 +2000,4 @@ if (typeof __XC_BUNDLE__ !== "undefined") {
   cli();
 }
 
-module.exports = { start, ungroupBlock, fillTemplate, coerce, compare, preview, Store, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };
+module.exports = { start, ungroupBlock, fillTemplate, templateParts, coerce, compare, preview, Store, DbStore, Database, Databases, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };

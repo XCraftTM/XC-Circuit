@@ -15,6 +15,16 @@ pub struct Bundle {
     pub dependencies: IndexMap<String, String>,
 }
 
+/// npm packages for the kinds of database in Bot › Settings › Databases
+/// (SQLite is built into Node.js).
+pub const DATABASE_DRIVERS: [(&str, &str, &str); 3] = [("mariadb", "mysql2", "^3.24.6"), ("postgres", "pg", "^8.23.1"), ("mongodb", "mongodb", "^7.8.0")];
+
+/// The npm packages the project's databases need.
+pub fn database_dependencies(settings: &Map<String, Value>) -> IndexMap<String, String> {
+    let kinds: Vec<&str> = settings.get("databases").and_then(Value::as_array).into_iter().flatten().filter_map(|d| d.get("kind").and_then(Value::as_str)).collect();
+    DATABASE_DRIVERS.iter().filter(|(kind, ..)| kinds.contains(kind)).map(|(_, package, version)| (package.to_string(), version.to_string())).collect()
+}
+
 /// Collects the project's workspaces, the source of every block it uses and the
 /// mode's runtime libraries.
 pub fn build_bundle(project: &Project, reg: &Registry, mode: Option<&BuildMode>) -> Result<Bundle> {
@@ -34,6 +44,10 @@ pub fn build_bundle(project: &Project, reg: &Registry, mode: Option<&BuildMode>)
         for (name, version) in &def.dependencies {
             dependencies.entry(name.clone()).or_insert_with(|| version.clone());
         }
+    }
+
+    for (name, version) in database_dependencies(&project.meta.settings) {
+        dependencies.entry(name).or_insert(version);
     }
 
     let mut libs = Vec::new();
@@ -131,5 +145,20 @@ mod tests {
         project.meta.settings.insert("prefix".into(), Value::from("?"));
         assert_eq!(settings(&project)["prefix"], "?");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Each kind of database brings its npm package; SQLite needs none.
+    #[test]
+    fn databases_bring_their_packages() {
+        let settings = |kinds: &[&str]| {
+            let list: Vec<Value> = kinds.iter().enumerate().map(|(i, k)| json!({ "id": format!("db{i}"), "kind": k })).collect();
+            let mut m = Map::new();
+            m.insert("databases".into(), Value::Array(list));
+            database_dependencies(&m)
+        };
+        assert!(settings(&[]).is_empty());
+        assert!(settings(&["sqlite"]).is_empty());
+        let deps = settings(&["mariadb", "postgres", "mariadb", "mongodb"]);
+        assert_eq!(deps.keys().map(String::as_str).collect::<Vec<_>>(), ["mysql2", "pg", "mongodb"]);
     }
 }

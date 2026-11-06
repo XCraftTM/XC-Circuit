@@ -34,6 +34,10 @@ The data is kept in `store.json`: in the project's `.circuit/data/` folder while
 
 A bot backs up its stored data when it starts and every 6 hours, keeping the newest 10 in a `backups` folder next to `store.json`. If the data is empty or damaged at start, the bot asks whether to restore a backup or start empty (a dialog in XC Circuit, a question in the terminal for exported bots).
 
+## In a database
+
+Stored values can be kept in MariaDB, MySQL, PostgreSQL, SQLite or MongoDB instead of `store.json`, and the database blocks read and write your own tables there. See [Databases](./databases).
+
 ## In your own blocks
 
 Blocks reach the same data through [`ctx.vars`](/api/ctx#vars) and [`ctx.store`](/api/ctx#store), so a custom block and the built-in ones share it.

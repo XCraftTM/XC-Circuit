@@ -10,6 +10,7 @@ use eframe::egui::{self, Align, Frame, Id, Layout, Margin, Rect, RichText, Scrol
 use serde_json::Value;
 
 use super::BotUi;
+use super::databases::{self, DatabasesDraft};
 use crate::editor::{Editor, Level};
 use crate::pages::settings::{NAV_W, group, nav_item, row};
 use crate::ui::dialog;
@@ -199,11 +200,16 @@ pub struct SettingsDraft {
     intents: Vec<(String, Vec<String>)>,
     /// Where to turn them on, for this bot.
     intents_page: Option<String>,
+    /// The Databases page.
+    databases: DatabasesDraft,
 }
 
 impl SettingsDraft {
     /// Problems and missing required values on a page, for its mark in the list.
     fn page_marks(&self, page: &str) -> (usize, usize) {
+        if page == databases::PAGE {
+            return (self.databases.problems(), 0);
+        }
         let on = || self.fields.iter().filter(move |f| f.page == page);
         (on().filter(|f| f.problem().is_some()).count(), on().filter(|f| f.missing()).count())
     }
@@ -256,10 +262,17 @@ pub(super) fn app_id_from_token(token: &str) -> Option<String> {
     (id.len() >= 15 && id.bytes().all(|b| b.is_ascii_digit())).then_some(id)
 }
 
-/// The secret settings of the project's build mode and plugins: they go to
-/// the bot as `XC_SECRET_<KEY>`.
-pub(super) fn secret_settings(ed: &Editor) -> Vec<Setting> {
-    ed.mode().map(|m| ed.reg.bot_settings(m).settings.into_iter().filter(Setting::is_secret).collect()).unwrap_or_default()
+/// The secrets of the project's build mode, plugins and databases, with
+/// what to call them: they go to the bot as `XC_SECRET_<KEY>`.
+pub(super) fn secret_keys(ed: &Editor) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = ed
+        .mode()
+        .map(|m| ed.reg.bot_settings(m).settings.into_iter().filter(Setting::is_secret).map(|s| (s.key.clone(), s.text("label").unwrap_or(&s.key).to_string())).collect())
+        .unwrap_or_default();
+    if let Some(p) = &ed.project {
+        out.extend(databases::secret_keys(&p.meta.settings));
+    }
+    out
 }
 
 impl BotUi {
@@ -279,6 +292,12 @@ impl BotUi {
             })
             .collect();
         let mut pages: Vec<PageInfo> = all.pages.iter().map(|p| PageInfo { id: p.id.clone(), name: tr(&p.name), icon: p.icon.clone(), description: p.description.as_deref().map(tr) }).collect();
+        pages.push(PageInfo {
+            id: databases::PAGE.into(),
+            name: t!("Databases").into(),
+            icon: Some("database".into()),
+            description: Some(t!("Connections for the database blocks (MariaDB, MySQL, PostgreSQL, SQLite, MongoDB), and where stored values are kept.").into()),
+        });
         if !mode.privileged_intents.is_empty() {
             pages.push(PageInfo { id: INTENTS.into(), name: t!("Privileged intents").into(), icon: Some("shield".into()), description: None });
         }
@@ -291,7 +310,8 @@ impl BotUi {
         });
         // Reopening (after Save, or Undo) stays on the page shown.
         let page = self.settings.as_ref().map(|d| d.page.clone()).filter(|p| pages.iter().any(|x| x.id == *p)).or_else(|| pages.first().map(|p| p.id.clone())).unwrap_or_default();
-        self.settings = Some(SettingsDraft { fields, pages, page, project_name: project.meta.name.clone(), intents, intents_page });
+        let databases = DatabasesDraft::load(&project.meta.settings, &project.root);
+        self.settings = Some(SettingsDraft { fields, pages, page, project_name: project.meta.name.clone(), intents, intents_page, databases });
         for line in warnings {
             ed.log(Level::Warn, line);
         }
@@ -302,8 +322,9 @@ impl BotUi {
     pub fn settings_tab(&mut self, ui: &mut Ui, ed: &mut Editor) {
         let Some(draft) = &mut self.settings else { return };
         let theme = ed.theme.clone();
-        let problems = draft.fields.iter().filter(|f| f.problem().is_some()).count();
+        let problems = draft.fields.iter().filter(|f| f.problem().is_some()).count() + draft.databases.problems();
         let (mut save, mut close, mut cancel) = (false, false, false);
+        let mut test = None;
 
         egui::Panel::bottom(Id::new("bot-settings-footer"))
             .resizable(false)
@@ -383,6 +404,12 @@ impl BotUi {
                         intents_page(ui, &theme, &draft.intents, draft.intents_page.as_deref());
                         return;
                     }
+                    if draft.page == databases::PAGE {
+                        if let Some(databases::Ask::Test(i)) = draft.databases.ui(ui, ed, &theme) {
+                            test = Some(i);
+                        }
+                        return;
+                    }
                     let root = ed.project.as_ref().map(|p| p.root.clone());
                     let mut heading: Option<String> = None;
                     let shown = draft.page.clone();
@@ -397,6 +424,9 @@ impl BotUi {
             });
         });
 
+        if let Some(i) = test {
+            draft.databases.start_test(i, ed, super::app_data_dir().join("packages"), ui.ctx().clone());
+        }
         if save && problems == 0 {
             self.save_settings(ed, close);
         } else if cancel {
@@ -405,7 +435,7 @@ impl BotUi {
     }
 
     fn save_settings(&mut self, ed: &mut Editor, close: bool) {
-        let Some(draft) = &self.settings else { return };
+        let Some(draft) = &mut self.settings else { return };
         let mut token_changed = false;
         if let Some(project) = ed.project.as_mut() {
             let mut errors = Vec::new();
@@ -440,10 +470,14 @@ impl BotUi {
                     _ => {}
                 }
             }
-            for e in errors {
+            let (changed, db_errors) = draft.databases.save(&mut project.meta.settings, &project.root);
+            ed.edited |= changed;
+            for e in errors.into_iter().chain(db_errors) {
                 ed.log(Level::Error, e);
             }
         }
+        // Blocks list the databases (and other settings) in their fields.
+        ed.refresh_define_ctx();
         ed.log(Level::Success, t!("Settings saved"));
         // The previews show the bot of the token saved now.
         if token_changed {
@@ -697,9 +731,15 @@ mod tests {
         let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
         let dir = std::env::temp_dir().join(format!("xc-bot-settings-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        ed.project = Some(circuit_core::Project::create(&dir, "Settings", "discord-bot").unwrap());
+        let mut project = circuit_core::Project::create(&dir, "Settings", "discord-bot").unwrap();
+        // Databases of each kind, for their page.
+        let kinds = ["mariadb", "postgres", "sqlite", "mongodb"];
+        let list: Vec<Value> = kinds.iter().enumerate().map(|(i, k)| serde_json::json!({ "id": format!("db{i}"), "name": format!("Database {i}"), "kind": k })).collect();
+        project.meta.settings.insert("databases".into(), Value::Array(list));
+        ed.project = Some(project);
         let mut bot = BotUi::new();
         bot.open_settings(&mut ed);
+        assert!(bot.settings.as_ref().unwrap().pages.iter().any(|p| p.id == databases::PAGE));
         let pages: Vec<String> = bot.settings.as_ref().unwrap().pages.iter().map(|p| p.id.clone()).collect();
         assert!(pages.len() >= 5 && pages.last().map(String::as_str) == Some(INTENTS), "{pages:?}");
         let ctx = egui::Context::default();

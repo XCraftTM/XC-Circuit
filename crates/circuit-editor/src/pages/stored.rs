@@ -43,8 +43,24 @@ impl StoredView {
     }
 }
 
+/// The database stored values are kept in, when it isn't store.json.
+fn stored_in_database(ed: &Editor) -> Option<String> {
+    let settings = &ed.project.as_ref()?.meta.settings;
+    let id = settings.get("storeIn").and_then(Value::as_str).filter(|s| *s != "json")?;
+    let list = settings.get("databases").and_then(Value::as_array)?;
+    let db = list.iter().find(|d| d.get("id").and_then(Value::as_str) == Some(id))?;
+    Some(db.get("name").and_then(Value::as_str).unwrap_or(id).to_string())
+}
+
 pub fn panel(ui: &mut Ui, ed: &mut Editor, view: &mut StoredView, bot_running: bool) {
     let theme = ed.theme.clone();
+    // Kept in a database (Bot › Settings › Databases): store.json isn't what the bot uses.
+    if let Some(name) = stored_in_database(ed) {
+        Frame::new().inner_margin(Margin::symmetric(12, 10)).show(ui, |ui| {
+            ui.add(egui::Label::new(RichText::new(tf!("Stored values are kept in the database {name}, in the table xc_store. Look at them with your database's own tools, or switch back to the JSON file in Bot › Settings › Databases.", name = name)).size(12.0).color(theme.text_muted)).wrap());
+        });
+        return;
+    }
     // While the bot runs it owns the file, so the panel only shows it and refreshes.
     let stale = view.loaded.is_none_or(|t| t.elapsed() > Duration::from_secs(if bot_running { 2 } else { 30 }));
     if stale && view.editing.is_none() {

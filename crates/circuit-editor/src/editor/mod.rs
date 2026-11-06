@@ -115,7 +115,7 @@ pub struct Editor {
     pub recovery_offer: Option<circuit_core::backup::Recovery>,
     /// Successful saves so far, so others can react to a save.
     pub saves: u64,
-    /// What blocks see as `project` in `define()`: `{ data }` of the open project.
+    /// What blocks see as `project` in `define()`: `{ data, settings }` of the open project.
     pub define_ctx: Value,
     pub embed_edit: Option<crate::builders::embed::EmbedEdit>,
     pub layout_edit: Option<crate::builders::layout::LayoutEdit>,
@@ -459,10 +459,11 @@ impl Editor {
         crate::editor::values::available(ws, node, reg, &mut |id| node_shape(reg, engine, shapes, ws_key, ws, id, define_ctx))
     }
 
-    /// Call after project data (such as slash commands) changes.
+    /// Call after project data (such as slash commands) or Bot › Settings change.
     pub fn refresh_define_ctx(&mut self) {
         let data = self.project.as_ref().map(|p| p.meta.data.clone()).unwrap_or_default();
-        self.define_ctx = serde_json::json!({ "data": data });
+        let settings = self.project.as_ref().map(|p| p.meta.settings.clone()).unwrap_or_default();
+        self.define_ctx = serde_json::json!({ "data": data, "settings": settings });
         self.shapes.clear();
     }
 

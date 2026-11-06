@@ -82,6 +82,58 @@ jobs:
           node runtime/test/permissions.js
           node runtime/test/discord_forms.js
           node runtime/test/backups.js < /dev/null
+          node runtime/test/databases.js
+
+  # The database blocks against real servers: MariaDB, PostgreSQL and
+  # MongoDB (SQLite runs with the other runtime tests). Linux runners only
+  # have service containers, so this runs on Linux.
+  databases:
+    name: Databases
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: test
+          MARIADB_DATABASE: test
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      mongodb:
+        image: mongo:8
+        ports: ["27017:27017"]
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # The versions bots get (DATABASE_DRIVERS in crates/circuit-runner/src/bundle.rs).
+      - name: Database drivers
+        run: |
+          mkdir -p "$RUNNER_TEMP/db-deps"
+          cd "$RUNNER_TEMP/db-deps"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund mysql2@^3.24.6 pg@^8.23.1 mongodb@^7.8.0
+      - name: Database tests
+        env:
+          XC_TEST_DEPS: ${{ runner.temp }}/db-deps
+          XC_TEST_MARIADB: mysql://root:test@127.0.0.1:3306/test
+          XC_TEST_POSTGRES: postgres://postgres:test@127.0.0.1:5432/test
+          XC_TEST_MONGODB: mongodb://127.0.0.1:27017/test
+        run: node runtime/test/databases.js
 
   website:
     name: Website builds

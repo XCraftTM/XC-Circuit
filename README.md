@@ -23,7 +23,7 @@ Wire events, actions and values on a canvas, run your bot with one click, and ex
 
 ## Why XC Circuit
 
-- 🧩 **Blocks, not boilerplate.** 242 blocks for messages, embeds and Components V2, slash commands, buttons and menus, moderation, roles, music, stored data, timers, web requests and more.
+- 🧩 **Blocks, not boilerplate.** 247 blocks for messages, embeds and Components V2, slash commands, buttons and menus, moderation, roles, music, stored data, databases (MariaDB, MySQL, PostgreSQL, SQLite, MongoDB), timers, web requests and more.
 - ✍️ **JavaScript where you want it.** Every text takes `${…}`, with completion for what earlier blocks give. Run Code and Use Method reach everything discord.js can do.
 - ▶️ **Run, watch, fix.** Press F5: blocks light up as they run, show how long they took, and hovering a wire shows the last value through it. Try Zones retry and catch errors.
 - 📦 **A real bot to take anywhere.** Export a folder that runs with `node index.js`. Your token stays in your computer's password store.

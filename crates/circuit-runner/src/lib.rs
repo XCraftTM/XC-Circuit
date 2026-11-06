@@ -3,6 +3,7 @@
 //! protocol, keeps secrets in the OS credential store, and writes exports.
 
 pub mod bundle;
+pub mod database;
 pub mod export;
 pub mod node;
 pub mod node_setup;

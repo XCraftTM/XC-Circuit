@@ -153,7 +153,7 @@ define({ values, connected, project }) {
 | --- | --- |
 | `values` | The values filled in on the block. |
 | `connected` | The type string of what's connected to each input, by field key. |
-| `project` | `{ data }`: the project's data, such as `slashCommands`. |
+| `project` | `{ data, settings }`: the project's data, such as `slashCommands`, and Bot › Settings (without secrets), such as `databases`. |
 
 It returns a [DefineResult](./fields#define-results): `add`, `hide`, `set`, `outputs`, `flows`. The global `circuit` has helpers: `circuit.types.elementOf("list<discord.role>")` is `"discord.role"`, `circuit.types.shape("object<{ name: text }>")` is `{ name: "text" }`, and `circuit.object.keysToChoices(shape)` turns a shape into choices.
 

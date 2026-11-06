@@ -182,3 +182,32 @@ fn templates_are_wired_correctly() {
     }
     assert!(wrong.is_empty(), "wrong wires:\n{}", wrong.join("\n"));
 }
+
+/// The database blocks list the project's databases, and add a column,
+/// a comparison and a value for each condition.
+#[test]
+fn database_blocks_list_the_databases() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+    let project = serde_json::json!({ "settings": { "databases": [{ "id": "db1", "name": "Main", "kind": "sqlite" }, { "id": "db2", "name": "Levels", "kind": "mariadb" }] }, "data": {} });
+    let shape = |block: &str, values: Value| {
+        let def = ed.reg.block(block).unwrap();
+        let values = values.as_object().unwrap().clone();
+        let d = ed.engine.define(&ed.reg.engine_keys[&def.id], &values, &Map::new(), &project).unwrap();
+        circuit_core::BlockShape::build(def, &values, Some(&d))
+    };
+    let get = shape("core.get_rows", serde_json::json!({ "conditions": 2 }));
+    let field = |s: &circuit_core::BlockShape, k: &str| s.fields.iter().find(|(key, _)| key == k).map(|(_, f)| f.clone());
+    let choices: Vec<String> = field(&get, "database").unwrap().choice_list().into_iter().map(|(_, v, label)| format!("{v}={label}")).collect();
+    assert_eq!(choices, ["default=Default database", "db1=Main", "db2=Levels"]);
+    for k in ["where1", "where1Op", "where1Value", "where2", "where2Value"] {
+        assert!(field(&get, k).is_some(), "{k}");
+    }
+    assert!(field(&get, "where3").is_none());
+    let update = shape("core.update_rows", serde_json::json!({ "columns": 2, "conditions": 1 }));
+    for k in ["column1", "column2Value", "where1"] {
+        assert!(field(&update, k).is_some(), "{k}");
+    }
+    let insert = shape("core.insert_row", serde_json::json!({}));
+    assert!(field(&insert, "column2").is_some() && field(&insert, "column3").is_none(), "two columns to start with");
+}
