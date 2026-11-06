@@ -193,6 +193,9 @@ impl CircuitApp {
         }
         if self.dock.contains(&tab) {
             close_tabs(&mut self.dock, |t| *t == tab);
+            if let Tab::Side(view) = tab {
+                self.back_to_bar(view);
+            }
             return;
         }
         place_panel(&mut self.dock, tab);

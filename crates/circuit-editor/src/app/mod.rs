@@ -507,6 +507,7 @@ impl eframe::App for CircuitApp {
                 stored: &mut self.stored,
                 side_ask: None,
                 to_side: None,
+                closed_side: Vec::new(),
             };
             let size = ui.available_size();
             if let Some(before) = self.dock_size
@@ -523,6 +524,10 @@ impl eframe::App for CircuitApp {
             let start_pick = viewer.start_pick.take();
             let side_ask = viewer.side_ask.take();
             let to_side = viewer.to_side.take();
+            let closed_side = std::mem::take(&mut viewer.closed_side);
+            for view in closed_side {
+                self.back_to_bar(view);
+            }
             if let Some(ask) = side_ask {
                 self.plugins_side_ask(ask, ui.ctx());
             }

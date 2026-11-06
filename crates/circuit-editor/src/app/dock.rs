@@ -24,6 +24,8 @@ pub(super) struct Viewer<'a> {
     /// A tab dropped on the activity bar or the side bar (and where), or
     /// moved there by its menu: it becomes an icon there.
     pub(super) to_side: Option<(Tab, Option<egui::Pos2>)>,
+    /// Workspaces, Stored Data or Plugins whose tab was closed: back to the activity bar.
+    pub(super) closed_side: Vec<SideView>,
 }
 
 impl Tab {
@@ -112,6 +114,7 @@ impl DockViewer<Tab> for Viewer<'_> {
             Tab::Plugins => *self.plugins = None,
             Tab::WorkspaceExport => self.ed.ws_export = None,
             Tab::WorkspaceImport => self.ed.ws_import = None,
+            Tab::Side(view) => self.closed_side.push(*view),
             _ => {}
         }
     }

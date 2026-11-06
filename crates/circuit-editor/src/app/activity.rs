@@ -188,8 +188,7 @@ impl CircuitApp {
 
     /// Each of Workspaces, Stored Data, Plugins and the panels is an icon in
     /// the activity bar or a tab, never both (a layout saved while it was a
-    /// tab may still have it); and the three views are always one or the
-    /// other: closing their tab puts them back in the bar.
+    /// tab may still have it).
     pub(super) fn keep_side_items(&mut self) {
         if self.setup.is_some() || self.tour.is_some() || self.dock_before_tour.is_some() || self.dock_before_start.is_some() || self.ed.project.is_none() {
             return;
@@ -201,10 +200,43 @@ impl CircuitApp {
                 close_tabs(&mut self.dock, |t| *t == tab);
             }
         }
-        for view in SideView::ALL {
-            if !self.ed.prefs.activity.iter().any(|k| k == view.key()) && !self.dock.contains(&Tab::Side(view)) {
-                self.ed.prefs.activity.push(view.key().into());
+    }
+
+    /// Puts Workspaces, Stored Data or Plugins back in the activity bar (at
+    /// the end, not shown): where its tab goes when closed.
+    pub(super) fn back_to_bar(&mut self, view: SideView) {
+        if !self.ed.prefs.activity.iter().any(|k| k == view.key()) {
+            self.ed.prefs.activity.push(view.key().into());
+        }
+    }
+
+    /// Whether a panel (or Workspaces …) is open anywhere: an icon in the
+    /// activity bar, or a tab. What View › Side bar and Panels tick.
+    pub(super) fn panel_present(&self, tab: &Tab) -> bool {
+        tab.side_key().is_some_and(|k| self.ed.prefs.activity.contains(&k)) || self.dock.contains(tab)
+    }
+
+    /// Opens or takes away a panel (or Workspaces …), wherever it is. Opened,
+    /// Workspaces, Stored Data and Plugins come back in the activity bar,
+    /// panels as a tab; either is shown.
+    pub(super) fn set_panel_open(&mut self, tab: Tab, open: bool) {
+        let key = tab.side_key();
+        if !open {
+            if let Some(key) = &key {
+                self.ed.prefs.activity.retain(|k| k != key);
+                if self.ed.prefs.side_shown.as_ref() == Some(key) {
+                    self.ed.prefs.side_shown = None;
+                }
             }
+            close_tabs(&mut self.dock, |t| *t == tab);
+            return;
+        }
+        match (&tab, key) {
+            (Tab::Side(view), Some(key)) if !self.dock.contains(&tab) => {
+                self.back_to_bar(*view);
+                self.ed.prefs.side_shown = Some(key);
+            }
+            _ => self.show_panel(tab),
         }
     }
 
