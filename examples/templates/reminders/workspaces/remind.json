@@ -1,0 +1,61 @@
+{
+  "name": "Remind",
+  "folder": "Commands",
+  "nodes": {
+    "1": {
+      "block": "discord.on_slash_command@2",
+      "at": [
+        40,
+        60
+      ],
+      "values": {
+        "command": "remind"
+      }
+    },
+    "2": {
+      "block": "core.make_object@1",
+      "at": [
+        360,
+        600
+      ],
+      "values": {
+        "keys": "user\nchannel\ntext"
+      }
+    },
+    "3": {
+      "block": "core.schedule@1",
+      "at": [
+        360,
+        60
+      ],
+      "values": {
+        "name": "reminder",
+        "when": "in",
+        "wait": "${after}"
+      }
+    },
+    "4": {
+      "block": "discord.send_message@3",
+      "at": [
+        720,
+        60
+      ],
+      "values": {
+        "mode": "reply",
+        "text": "Okay! I'll remind you in ${after}.",
+        "private": true
+      }
+    }
+  },
+  "links": [
+    "1.next > 3.in",
+    "1.after > 3.after",
+    "1.user > 2.user",
+    "1.channel > 2.channel",
+    "1.what > 2.text",
+    "2.object > 3.data",
+    "3.next > 4.in",
+    "1.interaction > 4.interaction",
+    "1.after > 4.after"
+  ]
+}

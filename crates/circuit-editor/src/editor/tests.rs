@@ -221,3 +221,27 @@ fn database_blocks_list_the_databases() {
     let insert = shape("core.insert_row", serde_json::json!({}));
     assert!(field(&insert, "column2").is_some() && field(&insert, "column3").is_none(), "two columns to start with");
 }
+
+/// Each starter opens with no problems but the values left for you to fill
+/// in (a role or channel id, an address): `XC_LIST_TEMPLATE_PROBLEMS=1` prints them.
+#[test]
+fn templates_open_without_surprises() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut dirs: Vec<PathBuf> = std::fs::read_dir(root.join("examples/templates")).unwrap().flatten().map(|e| e.path()).collect();
+    dirs.extend(std::fs::read_dir(root.join("plugins/xc.fluxer/templates")).unwrap().flatten().map(|e| e.path()));
+    let mut found = Vec::new();
+    for dir in dirs {
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&dir);
+        for (text, _, at) in crate::pages::panels::collect_problems(&ed) {
+            found.push(format!("{} {at:?}: {text}", dir.file_name().unwrap().to_string_lossy()));
+        }
+    }
+    if std::env::var_os("XC_LIST_TEMPLATE_PROBLEMS").is_some() {
+        println!("{}", found.join("\n"));
+    }
+    // Their descriptions say to fill these in.
+    let left_to_you = ["› Add Role", "› Find Channel"];
+    let surprises: Vec<&String> = found.iter().filter(|p| !left_to_you.iter().any(|l| p.ends_with(l))).collect();
+    assert!(surprises.is_empty(), "templates open with problems:\n{surprises:#?}");
+}

@@ -1,4 +1,6 @@
 {
   "name": "Tickets",
-  "description": "/ticket opens a private thread for the member with a Close button that deletes it. Use it in a channel where the bot can create private threads."
+  "description": "/ticket opens a private thread for the member with a Close button. Closing saves a transcript of the thread, sends it to the member in a DM and deletes the thread. Use it in a channel where the bot can create private threads.",
+  "category": "Moderation",
+  "icon": "message"
 }

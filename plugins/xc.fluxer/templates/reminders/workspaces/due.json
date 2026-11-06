@@ -1,0 +1,43 @@
+{
+  "name": "Reminder due",
+  "nodes": {
+    "1": {
+      "block": "core.on_scheduled@1",
+      "at": [
+        40,
+        60
+      ],
+      "values": {
+        "name": "reminder"
+      }
+    },
+    "2": {
+      "block": "fluxer.find_channel@1",
+      "at": [
+        380,
+        60
+      ],
+      "values": {
+        "channel": "${data.channel.id}"
+      }
+    },
+    "3": {
+      "block": "fluxer.send_message@1",
+      "at": [
+        720,
+        60
+      ],
+      "values": {
+        "mode": "send",
+        "text": "⏰ <@${data.user.id}> ${data.text}"
+      }
+    }
+  },
+  "links": [
+    "1.next > 2.in",
+    "1.data > 2.data",
+    "2.next > 3.in",
+    "2.channel > 3.channel",
+    "1.data > 3.data"
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "name": "Verify",
+  "nodes": {
+    "1": {
+      "block": "fluxer.on_text_command@1",
+      "at": [
+        40,
+        60
+      ],
+      "values": {
+        "command": "verify"
+      }
+    },
+    "2": {
+      "block": "fluxer.captcha@1",
+      "at": [
+        380,
+        60
+      ],
+      "values": {
+        "mode": "image"
+      }
+    },
+    "3": {
+      "block": "fluxer.change_role@1",
+      "at": [
+        720,
+        60
+      ],
+      "values": {
+        "action": "add",
+        "role": "",
+        "reason": "Passed the captcha"
+      }
+    },
+    "4": {
+      "block": "fluxer.send_message@1",
+      "at": [
+        1060,
+        60
+      ],
+      "values": {
+        "mode": "reply",
+        "text": "You're in! Welcome 🎉"
+      }
+    },
+    "5": {
+      "block": "fluxer.send_message@1",
+      "at": [
+        720,
+        420
+      ],
+      "values": {
+        "mode": "reply",
+        "text": "That wasn't it. Type !verify to try again."
+      }
+    }
+  },
+  "links": [
+    "1.next > 2.in",
+    "1.channel > 2.channel",
+    "1.author > 2.user",
+    "2.passed > 3.in",
+    "1.member > 3.member",
+    "3.next > 4.in",
+    "1.message > 4.message",
+    "2.failed > 5.in",
+    "2.timedOut > 5.in",
+    "1.message > 5.message"
+  ]
+}

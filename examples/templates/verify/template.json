@@ -1,0 +1,6 @@
+{
+  "name": "Verify with a captcha",
+  "description": "/verify shows a captcha only the member sees: a picture with a code to type. Passed, they get the role in Add Role (set its id there); wrong or too slow, they can use /verify again.",
+  "category": "Moderation",
+  "icon": "check"
+}

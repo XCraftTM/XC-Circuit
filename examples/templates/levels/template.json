@@ -1,4 +1,6 @@
 {
   "name": "Levels & XP",
-  "description": "Members earn 10 XP per message (once a minute). /rank shows yours, /leaderboard the top 10."
+  "description": "Members earn 10 XP per message (once a minute). /rank shows yours, /leaderboard the top 10.",
+  "category": "Community",
+  "icon": "star"
 }

@@ -1,0 +1,7 @@
+{
+  "name": "Reminders",
+  "description": "!remind 10m Take a break posts a reminder in the same channel when the time is up: 30s, 10m, 2h, 3d … They survive restarts of the bot.",
+  "mode": "fluxer-bot",
+  "category": "Community",
+  "icon": "clock"
+}

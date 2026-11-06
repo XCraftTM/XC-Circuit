@@ -1,0 +1,44 @@
+{
+  "name": "New videos",
+  "nodes": {
+    "1": {
+      "block": "core.on_new_post@1",
+      "at": [
+        40,
+        60
+      ],
+      "values": {
+        "source": "youtube",
+        "channel": ""
+      }
+    },
+    "2": {
+      "block": "fluxer.find_channel@1",
+      "at": [
+        400,
+        60
+      ],
+      "values": {
+        "channel": ""
+      }
+    },
+    "3": {
+      "block": "fluxer.send_message@1",
+      "at": [
+        740,
+        60
+      ],
+      "values": {
+        "mode": "send",
+        "text": "📢 **${title}**\n${url}"
+      }
+    }
+  },
+  "links": [
+    "1.next > 2.in",
+    "2.next > 3.in",
+    "2.channel > 3.channel",
+    "1.title > 3.title",
+    "1.url > 3.url"
+  ]
+}

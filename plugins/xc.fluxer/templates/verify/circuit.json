@@ -1,0 +1,13 @@
+{
+  "format": 1,
+  "name": "Verify",
+  "mode": "fluxer-bot",
+  "plugins": {
+    "xc.core": "1.0.0",
+    "xc.fluxer": "1.0.0"
+  },
+  "settings": {
+    "prefix": "!"
+  },
+  "data": {}
+}

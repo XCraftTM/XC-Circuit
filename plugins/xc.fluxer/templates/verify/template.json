@@ -1,0 +1,7 @@
+{
+  "name": "Verify with a captcha",
+  "description": "!verify asks for the code in a picture, right in the channel. Passed, the member gets the role in Change Role (set it there); wrong or too slow, they can type !verify again.",
+  "mode": "fluxer-bot",
+  "category": "Moderation",
+  "icon": "check"
+}

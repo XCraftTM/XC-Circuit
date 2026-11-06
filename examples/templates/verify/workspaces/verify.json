@@ -1,0 +1,73 @@
+{
+  "name": "Verify",
+  "folder": "Commands",
+  "nodes": {
+    "1": {
+      "block": "discord.on_slash_command@2",
+      "at": [
+        40,
+        60
+      ],
+      "values": {
+        "command": "verify"
+      }
+    },
+    "2": {
+      "block": "discord.captcha@1",
+      "at": [
+        360,
+        60
+      ],
+      "values": {
+        "mode": "image",
+        "where": "reply"
+      }
+    },
+    "3": {
+      "block": "discord.add_role@2",
+      "at": [
+        720,
+        60
+      ],
+      "values": {
+        "roleId": "",
+        "reason": "Passed the captcha"
+      }
+    },
+    "4": {
+      "block": "discord.send_message@3",
+      "at": [
+        1060,
+        60
+      ],
+      "values": {
+        "mode": "followup",
+        "text": "You're in! Welcome 🎉",
+        "private": true
+      }
+    },
+    "5": {
+      "block": "discord.send_message@3",
+      "at": [
+        720,
+        400
+      ],
+      "values": {
+        "mode": "followup",
+        "text": "That wasn't it. Use /verify to try again.",
+        "private": true
+      }
+    }
+  },
+  "links": [
+    "1.next > 2.in",
+    "1.interaction > 2.interaction",
+    "2.passed > 3.in",
+    "1.member > 3.member",
+    "3.next > 4.in",
+    "1.interaction > 4.interaction",
+    "2.failed > 5.in",
+    "2.timedOut > 5.in",
+    "1.interaction > 5.interaction"
+  ]
+}

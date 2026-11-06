@@ -1,0 +1,39 @@
+{
+  "format": 1,
+  "name": "Reminders",
+  "mode": "discord-bot",
+  "plugins": {
+    "xc.core": "1.0.0",
+    "xc.discord": "1.0.0"
+  },
+  "settings": {
+    "prefix": "!"
+  },
+  "data": {
+    "slashCommands": [
+      {
+        "name": "remind",
+        "description": "Remind you of something later",
+        "options": [
+          {
+            "name": "after",
+            "type": "string",
+            "description": "How long: 10m, 2h, 3d",
+            "required": true
+          },
+          {
+            "name": "what",
+            "type": "string",
+            "description": "What to remind you of",
+            "required": true
+          }
+        ],
+        "dm": false
+      }
+    ]
+  },
+  "folders": [
+    "Commands",
+    "Events"
+  ]
+}

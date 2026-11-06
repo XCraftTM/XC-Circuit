@@ -1,0 +1,7 @@
+{
+  "name": "Minecraft server status",
+  "description": "!status says whether your Minecraft server is up, how many players are on and its message of the day. Put your server's address in Minecraft Server (Java or Bedrock).",
+  "mode": "fluxer-bot",
+  "category": "Games & servers",
+  "icon": "terminal"
+}

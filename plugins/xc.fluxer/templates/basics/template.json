@@ -1,5 +1,7 @@
 {
   "name": "Basic commands",
   "description": "!ping shows how fast the bot answers, !help lists the commands, and new members get a welcome in the server's system channel.",
-  "mode": "fluxer-bot"
+  "mode": "fluxer-bot",
+  "category": "Basics",
+  "icon": "bolt"
 }

@@ -1,0 +1,47 @@
+{
+  "name": "Status",
+  "folder": "Commands",
+  "nodes": {
+    "1": {
+      "block": "discord.on_slash_command@2",
+      "at": [
+        40,
+        60
+      ],
+      "values": {
+        "command": "status"
+      }
+    },
+    "2": {
+      "block": "server.minecraft_status@1",
+      "at": [
+        360,
+        60
+      ],
+      "values": {
+        "edition": "java",
+        "address": "play.example.com"
+      }
+    },
+    "3": {
+      "block": "discord.send_message@3",
+      "at": [
+        700,
+        60
+      ],
+      "values": {
+        "mode": "reply",
+        "text": "${online ? '🟢 Online' : '🔴 Offline'} · ${players}/${max} players\n${motd}"
+      }
+    }
+  },
+  "links": [
+    "1.next > 2.in",
+    "2.next > 3.in",
+    "1.interaction > 3.interaction",
+    "2.online > 3.online",
+    "2.players > 3.players",
+    "2.max > 3.max",
+    "2.motd > 3.motd"
+  ]
+}

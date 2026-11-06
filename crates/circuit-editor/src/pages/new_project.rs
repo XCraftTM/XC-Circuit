@@ -6,8 +6,9 @@ use std::path::{Path, PathBuf};
 
 use circuit_core::Project;
 use circuit_plugins::Registry;
-use eframe::egui::{self, Align, CursorIcon, Id, Layout, Margin, RichText, Sense, Stroke, Ui, vec2};
+use eframe::egui::{self, CursorIcon, Margin, RichText, Sense, Stroke, Ui, vec2};
 
+use crate::i18n::n;
 use crate::ui::dialog;
 use crate::editor::file_uri;
 use crate::ui::theme::{Theme, with_alpha};
@@ -34,6 +35,11 @@ pub struct Template {
     pub dir: PathBuf,
     pub name: String,
     pub description: String,
+    /// Its group in the gallery (`template.json`'s `category`): Basics,
+    /// Community, Moderation, Notifications … Without one: More.
+    pub category: String,
+    /// An icon of the icon set (`template.json`'s `icon`).
+    pub icon: String,
     /// The kind of project it is: `template.json`'s `mode`, else the project's.
     pub mode: String,
 }
@@ -46,7 +52,9 @@ impl Template {
             m if !m.is_empty() => m,
             _ => Project::load(dir).ok()?.meta.mode,
         };
-        Some(Template { dir: dir.to_path_buf(), name: text("name"), description: text("description"), mode })
+        let category = Some(text("category")).filter(|c| !c.is_empty()).unwrap_or_else(|| "More".into());
+        let icon = Some(text("icon")).filter(|c| !c.is_empty()).unwrap_or_else(|| "workspace".into());
+        Some(Template { dir: dir.to_path_buf(), name: text("name"), description: text("description"), category, icon, mode })
     }
 }
 
@@ -57,6 +65,9 @@ pub fn templates(examples: Option<&Path>, reg: &Registry) -> Vec<Template> {
     list.sort_by(|a, b| a.name.cmp(&b.name));
     list
 }
+
+/// The gallery's groups, in this order; others come after them, then More.
+const CATEGORIES: [&str; 5] = [n("Basics"), n("Community"), n("Moderation"), n("Notifications"), n("Games & servers")];
 
 /// Characters Windows doesn't allow in a folder name.
 const NOT_IN_NAMES: &str = "<>:\"/\\|?*";
@@ -216,33 +227,80 @@ fn form(ui: &mut Ui, theme: &Theme, state: &mut NewProject, reg: &Registry, temp
     ui.add_space(10.0);
 
     dialog::section(ui, theme, t!("Start from"));
-    let empty = (t!("Empty project").to_string(), t!("One empty workspace.").to_string());
-    let starters = templates.iter().filter(|t| t.mode == state.mode).map(|t| (crate::i18n::tr(&t.name).into_owned(), crate::i18n::tr(&t.description).into_owned()));
-    let rows: Vec<(String, String)> = std::iter::once(empty).chain(starters).collect();
-    egui::ScrollArea::vertical().id_salt("new-project-starters").max_height(ui.available_height().max(160.0)).auto_shrink([false, true]).show(ui, |ui| {
-        ui.spacing_mut().item_spacing.y = 4.0;
-        for (i, (name, description)) in rows.iter().enumerate() {
-            let on = state.picked == i;
-            let r = egui::Frame::new()
-                .fill(if on { with_alpha(theme.accent, 30) } else { theme.panel_header })
-                .stroke(Stroke::new(1.0, if on { theme.accent } else { theme.line }))
-                .corner_radius(8)
-                .inner_margin(Margin::symmetric(12, 8))
-                .show(ui, |ui| {
-                    ui.set_width(ui.available_width() - 4.0);
-                    ui.with_layout(Layout::top_down(Align::Min), |ui| {
-                        ui.spacing_mut().item_spacing.y = 2.0;
-                        ui.label(RichText::new(name).size(13.5).strong().color(theme.text));
-                        ui.label(RichText::new(description).size(12.0).color(theme.text_muted));
-                    });
+    // Cards in groups: Empty project first, then each category's templates.
+    // `picked` counts as before: 0 is empty, then this kind's templates in name order.
+    let mine: Vec<(usize, &Template)> = templates.iter().filter(|t| t.mode == state.mode).enumerate().map(|(i, t)| (i + 1, t)).collect();
+    let mut groups: Vec<String> = CATEGORIES.iter().map(|c| c.to_string()).collect();
+    for (_, t) in &mine {
+        if !groups.contains(&t.category) {
+            groups.insert(groups.len(), t.category.clone());
+        }
+    }
+    groups.retain(|g| g != "More");
+    groups.push("More".into());
+    let picked_description = match state.picked {
+        0 => t!("One empty workspace.").to_string(),
+        i => mine.iter().find(|(j, _)| *j == i).map(|(_, t)| crate::i18n::tr(&t.description).into_owned()).unwrap_or_default(),
+    };
+    egui::ScrollArea::vertical().id_salt("new-project-starters").max_height((ui.ctx().content_rect().height() - 470.0).clamp(150.0, 330.0)).auto_shrink([false, true]).show(ui, |ui| {
+        let width = ui.available_width() - 6.0;
+        let cols = if width > 460.0 { 2 } else { 1 };
+        let gap = 8.0;
+        let card = vec2((width - gap * (cols - 1) as f32) / cols as f32, 58.0);
+        let mut grid = |ui: &mut Ui, items: &[(usize, String, String, String)]| {
+            for row in items.chunks(cols) {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = gap;
+                    for (i, icon, name, description) in row {
+                        let (rect, click) = ui.allocate_exact_size(card, Sense::click());
+                        let click = click.on_hover_cursor(CursorIcon::PointingHand).on_hover_text(description);
+                        let on = state.picked == *i;
+                        let fill = if on { with_alpha(theme.accent, 30) } else if click.hovered() { crate::ui::theme::mix(theme.panel_header, theme.text, 0.05) } else { theme.panel_header };
+                        let painter = ui.painter();
+                        painter.rect(rect, 8.0, fill, Stroke::new(1.0, if on { theme.accent } else { theme.line }), egui::StrokeKind::Inside);
+                        let tile = egui::Rect::from_min_size(rect.min + vec2(10.0, 11.0), vec2(36.0, 36.0));
+                        painter.rect_filled(tile, 8.0, with_alpha(theme.accent, if on { 60 } else { 28 }));
+                        if let Some(path) = reg.icons.get(icon.as_str()) {
+                            egui::Image::from_uri(file_uri(path)).tint(theme.accent).paint_at(ui, tile.shrink(9.0));
+                        }
+                        let left = tile.right() + 10.0;
+                        let room = rect.right() - left - 10.0;
+                        let title = painter.layout(name.clone(), egui::FontId::proportional(13.5), theme.text, room);
+                        painter.galley(egui::pos2(left, rect.top() + 9.0), title, theme.text);
+                        // Two lines at most, ending in … when there's more.
+                        let mut job = egui::text::LayoutJob::simple(description.clone(), egui::FontId::proportional(11.5), theme.text_muted, room);
+                        job.wrap.max_rows = 2;
+                        job.wrap.overflow_character = Some('…');
+                        let text = ui.fonts_mut(|f| f.layout_job(job));
+                        ui.painter().galley(egui::pos2(left, rect.top() + 27.0), text, theme.text_muted);
+                        if click.clicked() {
+                            state.picked = *i;
+                        }
+                        go |= click.double_clicked() && target.is_ok();
+                    }
                 });
-            let click = ui.interact(r.response.rect, Id::new(("new-project-starter", i)), Sense::click()).on_hover_cursor(CursorIcon::PointingHand);
-            if click.clicked() {
-                state.picked = i;
+                ui.add_space(gap - ui.spacing().item_spacing.y);
             }
-            go |= click.double_clicked() && target.is_ok();
+        };
+        grid(ui, &[(0, "plus".into(), t!("Empty project").to_string(), t!("One empty workspace.").to_string())]);
+        for group in &groups {
+            let items: Vec<(usize, String, String, String)> = mine
+                .iter()
+                .filter(|(_, t)| t.category == *group)
+                .map(|(i, t)| (*i, t.icon.clone(), crate::i18n::tr(&t.name).into_owned(), crate::i18n::tr(&t.description).into_owned()))
+                .collect();
+            if items.is_empty() {
+                continue;
+            }
+            ui.add_space(4.0);
+            ui.label(RichText::new(crate::i18n::tr(group).to_uppercase()).size(10.5).strong().color(theme.text_muted));
+            ui.add_space(2.0);
+            grid(ui, &items);
         }
     });
+    // The picked one's whole description.
+    ui.add_space(6.0);
+    ui.label(RichText::new(picked_description).size(12.0).color(theme.text_muted));
     go
 }
 

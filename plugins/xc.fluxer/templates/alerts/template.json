@@ -1,0 +1,7 @@
+{
+  "name": "New-post alerts",
+  "description": "Posts each new YouTube video in a channel of your server. Set the YouTube channel in On New Post (or switch it to Twitch, Reddit, Bluesky, an RSS feed …) and your channel id in Find Channel.",
+  "mode": "fluxer-bot",
+  "category": "Notifications",
+  "icon": "send"
+}
