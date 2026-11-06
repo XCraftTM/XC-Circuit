@@ -45,4 +45,4 @@ A picture that can't be loaded (a wrong address, say) is left out, with a warnin
 
 The bot draws with [@napi-rs/canvas](https://www.npmjs.com/package/@napi-rs/canvas), installed with the bot's other packages. The fonts (Ubuntu, Ubuntu Bold, Hack and Noto Emoji) come with the block, so exported bots draw the same on any server.
 
-Fluxer bots can build pictures too, but Fluxer's Send Message can't send files yet.
+Fluxer bots send the picture the same way: Send Message's **Files**.

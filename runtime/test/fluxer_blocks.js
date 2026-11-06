@@ -212,7 +212,7 @@ const message = (content, extra = {}) => ({
   assert.throws(() => run("fluxer.build_embed", { embed: { color: "#fff" } }), /empty/);
 
   const replied = await run("fluxer.send_message", { mode: "reply", text: "Hi", message: message("!hi"), embeds: [embed], pingAuthor: false });
-  assert.deepStrictEqual(replied.message, { replied: { content: "Hi", embeds: [embed] }, options: { ping: false } });
+  assert.deepStrictEqual(replied.message, { replied: { content: "Hi", embeds: [embed], files: undefined }, options: { ping: false } });
   const sent = await run("fluxer.send_message", { mode: "send", text: "Yo", channel: "<#900>" });
   assert.strictEqual(sent.message.channelId, "900", "a channel by its mention");
   const dm = await run("fluxer.send_message", { mode: "dm", text: "psst", user: member("4") });
@@ -220,6 +220,20 @@ const message = (content, extra = {}) => ({
   const edited = await run("fluxer.send_message", { mode: "edit", text: "", message: message("x") });
   assert.deepStrictEqual(edited.message.edited, { content: "", embeds: [] });
   await assert.rejects(run("fluxer.send_message", { mode: "send", text: "", channel: "900" }), /Nothing to send/);
+  // Files: a picture from Build Canvas, a web address and another message's attachment, without any text.
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+  const withFiles = await run("fluxer.send_message", {
+    mode: "send",
+    text: "",
+    channel: "900",
+    files: [[{ attachment: png, name: "card.png" }], "https://cdn.example/a/pic.jpg?size=64", { url: "https://cdn.example/b", filename: "old.gif" }],
+  });
+  assert.deepStrictEqual(withFiles.message.payload.files, [
+    { name: "card.png", data: png },
+    { name: "pic.jpg", url: "https://cdn.example/a/pic.jpg?size=64" },
+    { name: "old.gif", url: "https://cdn.example/b" },
+  ]);
+  assert.strictEqual(withFiles.message.payload.content, undefined);
 
   calls.length = 0;
   await run("fluxer.message_action", { message: message("x"), action: "react", emoji: "🎉" });
