@@ -67,7 +67,8 @@ fn editor(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width:
                 if let Some(r) = range {
                     drag = drag.range(r);
                 }
-                ui.add_sized([width, 22.0], drag).changed()
+                let resp = ui.add_sized([width, 22.0], drag);
+                kit::named(ui, resp).changed()
             };
             if changed {
                 *value = Number::from_f64(n).map(Value::Number).unwrap_or(Value::Null);
@@ -86,7 +87,8 @@ fn editor(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width:
             } else if multiline {
                 ui.add(crate::ui::kit::TextLine::new(&mut s).hint(hint).width(width).compact()).changed()
             } else {
-                ui.add(TextEdit::singleline(&mut s).desired_width(width).hint_text(hint)).changed()
+                let resp = ui.add(TextEdit::singleline(&mut s).desired_width(width).hint_text(hint));
+                kit::named(ui, resp).changed()
             };
             if changed {
                 *value = Value::String(s);
@@ -122,7 +124,8 @@ fn select(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width:
     if full {
         kit::dropdown(ui, id, width, label, list);
     } else {
-        ComboBox::from_id_salt(id).width(width).selected_text(label).show_ui(ui, list);
+        let resp = ComboBox::from_id_salt(id).width(width).selected_text(label).show_ui(ui, list).response;
+        kit::named(ui, resp);
     }
     match picked {
         Some(k) if k != current => {

@@ -66,7 +66,8 @@ impl Widget for TextLine<'_> {
         // A fixed id, known before the box is drawn, for the values list.
         let id = ui.next_auto_id();
         crate::editor::values::before(ui, id);
-        let mut resp = ui.add(edit.id(id));
+        let resp = ui.add(edit.id(id));
+        let mut resp = crate::ui::kit::named(ui, resp);
         if !self.hidden && crate::editor::values::after(ui, &resp, self.value) {
             resp.mark_changed();
         }
@@ -118,7 +119,7 @@ impl Widget for TextArea<'_> {
         let mut child = ui.new_child(UiBuilder::new().max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)));
         child.set_clip_rect(inner.intersect(ui.clip_rect()));
         crate::editor::values::before(ui, id);
-        let mut resp = ScrollArea::vertical()
+        let resp = ScrollArea::vertical()
             .id_salt(id.with("scroll"))
             .auto_shrink([false, false])
             .show(&mut child, |ui| {
@@ -132,6 +133,7 @@ impl Widget for TextArea<'_> {
                 )
             })
             .inner;
+        let mut resp = crate::ui::kit::named(ui, resp);
         if crate::editor::values::after(ui, &resp, self.value) {
             resp.mark_changed();
         }

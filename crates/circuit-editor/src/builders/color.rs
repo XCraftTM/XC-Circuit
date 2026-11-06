@@ -65,7 +65,9 @@ pub fn color_button(ui: &mut Ui, id: Id, color: &mut Color32, theme: &Theme, wid
     let sw = Rect::from_min_size(rect.left_center() + vec2(5.0, -7.0), vec2(14.0, 14.0));
     p.rect(sw, 3.0, *color, Stroke::new(1.0, mix(*color, Color32::BLACK, 0.3)), StrokeKind::Inside);
     p.galley(pos2(sw.right() + 7.0, rect.center().y - galley.size().y / 2.0), galley, theme.text);
-    let resp = resp.on_hover_cursor(CursorIcon::PointingHand).on_hover_text(t!("Pick a color"));
+    // A colour well, named by the label around it (or by its tip).
+    resp.widget_info(|| egui::WidgetInfo { current_text_value: Some(hex.clone()), ..egui::WidgetInfo::labeled(egui::Role::ColorWell, ui.is_enabled(), "") });
+    let resp = crate::ui::kit::named(ui, resp).on_hover_cursor(CursorIcon::PointingHand).on_hover_text(t!("Pick a color"));
 
     if resp.clicked() {
         open = match open {
@@ -136,6 +138,8 @@ fn panel(ctx: &egui::Context, id: Id, button: Rect, state: &mut Open, theme: &Th
 
                 // Saturation (x) and brightness (y) for the current hue.
                 let (sq, sq_resp) = ui.allocate_exact_size(vec2(PANEL_W, SQUARE_H), Sense::click_and_drag());
+                // Pointer only: the hex and RGB boxes below are the way in by keyboard.
+                crate::ui::kit::describe(&sq_resp, egui::Role::Slider, t!("Saturation and brightness"));
                 ui.painter().add(sv_mesh(sq, state.hsva.h));
                 ui.painter().rect_stroke(sq, 1.0, Stroke::new(1.0, theme.line), StrokeKind::Inside);
                 if let Some(p) = sq_resp.interact_pointer_pos().filter(|_| sq_resp.is_pointer_button_down_on() || sq_resp.clicked()) {
@@ -149,6 +153,7 @@ fn panel(ctx: &egui::Context, id: Id, button: Rect, state: &mut Open, theme: &Th
 
                 // Hue.
                 let (hue, hue_resp) = ui.allocate_exact_size(vec2(PANEL_W, HUE_H), Sense::click_and_drag());
+                crate::ui::kit::describe(&hue_resp, egui::Role::Slider, t!("Hue"));
                 ui.painter().add(hue_mesh(hue));
                 if let Some(p) = hue_resp.interact_pointer_pos().filter(|_| hue_resp.is_pointer_button_down_on() || hue_resp.clicked()) {
                     state.hsva.h = ((p.x - hue.left()) / hue.width()).clamp(0.0, 0.9999);
@@ -171,7 +176,7 @@ fn panel(ctx: &egui::Context, id: Id, button: Rect, state: &mut Open, theme: &Th
                     ui.spacing_mut().item_spacing.x = 4.0;
                     let (sw, _) = ui.allocate_exact_size(vec2(h, h), Sense::hover());
                     ui.painter().rect(sw, 5.0, current, Stroke::new(1.0, theme.line), StrokeKind::Inside);
-                    let hex = ui.add_sized([66.0, h], egui::TextEdit::singleline(&mut state.hex).font(egui::TextStyle::Monospace).char_limit(7).align(egui::Align2::LEFT_CENTER));
+                    let hex = ui.add_sized([66.0, h], egui::TextEdit::singleline(&mut state.hex).font(egui::TextStyle::Monospace).char_limit(7).align(egui::Align2::LEFT_CENTER)).accessible_name(t!("Hex code"));
                     if hex.changed()
                         && let Some(c) = parse_hex(&state.hex)
                     {
@@ -184,8 +189,8 @@ fn panel(ctx: &egui::Context, id: Id, button: Rect, state: &mut Open, theme: &Th
                     let mut rgb = [current.r(), current.g(), current.b()];
                     let mut edited = false;
                     for (i, label) in ["R", "G", "B"].into_iter().enumerate() {
-                        ui.label(egui::RichText::new(label).size(10.5).color(theme.text_muted));
-                        edited |= ui.add_sized([34.0, h], egui::DragValue::new(&mut rgb[i]).speed(1.0)).changed();
+                        let label = ui.label(egui::RichText::new(label).size(10.5).color(theme.text_muted)).id;
+                        edited |= ui.add_sized([34.0, h], egui::DragValue::new(&mut rgb[i]).speed(1.0)).labelled_by(label).changed();
                     }
                     if edited {
                         let c = Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
@@ -202,6 +207,7 @@ fn panel(ctx: &egui::Context, id: Id, button: Rect, state: &mut Open, theme: &Th
                         for (name, c) in list {
                             let (r, resp) = ui.allocate_exact_size(vec2(SWATCH, SWATCH), Sense::click());
                             let selected = to_hex(c) == to_hex(current);
+                            crate::ui::kit::describe_selected(&resp, egui::Role::RadioButton, selected, &format!("{name} {}", to_hex(c)));
                             ui.painter().rect(r.shrink(1.0), 5.0, c, Stroke::new(1.0, theme.line), StrokeKind::Inside);
                             if selected || resp.hovered() {
                                 ui.painter().rect_stroke(r, 6.0, Stroke::new(2.0, if selected { theme.accent } else { theme.text_muted }), StrokeKind::Outside);

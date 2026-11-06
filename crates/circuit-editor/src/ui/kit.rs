@@ -7,7 +7,7 @@
 
 use std::path::Path;
 
-use eframe::egui::{self, Align, Color32, ComboBox, CursorIcon, FontId, Frame, Layout, Margin, Rect, Response, RichText, Sense, Stroke, Ui, pos2, vec2};
+use eframe::egui::{self, Align, Color32, ComboBox, CursorIcon, FontId, Frame, Layout, Margin, Rect, Response, RichText, Role, Sense, Stroke, Ui, pos2, vec2};
 
 use crate::editor::file_uri;
 pub use crate::ui::inputs::{TextArea, TextLine, input_height};
@@ -15,17 +15,19 @@ use crate::ui::theme::{Theme, mix, with_alpha};
 
 // ── From ui/dialog.rs ────────────────────────────────────────────────
 
-/// A small uppercase heading that starts a group of fields.
-pub fn section(ui: &mut Ui, theme: &Theme, title: &str) {
+/// A small uppercase heading that starts a group of fields. Its label can
+/// name a control under it ([`labelled`]).
+pub fn section(ui: &mut Ui, theme: &Theme, title: &str) -> Response {
     ui.add_space(4.0);
-    ui.label(RichText::new(title.to_uppercase()).size(10.5).strong().color(theme.text_muted));
+    let label = ui.label(RichText::new(title.to_uppercase()).size(10.5).strong().color(theme.text_muted));
     ui.add_space(2.0);
+    label
 }
 
 /// A label, the control, and an optional line of help under it.
 pub fn field<R>(ui: &mut Ui, theme: &Theme, label: &str, help: Option<&str>, add: impl FnOnce(&mut Ui) -> R) -> R {
-    ui.label(RichText::new(label).size(13.0).color(theme.text));
-    let r = add(ui);
+    let label = ui.label(RichText::new(label).size(13.0).color(theme.text));
+    let r = labelled(ui, label.id, add);
     if let Some(h) = help {
         ui.label(RichText::new(h).size(11.5).color(theme.text_muted));
     }
@@ -82,6 +84,7 @@ pub fn filter_chip(ui: &mut Ui, theme: &Theme, label: &str, color: Color32, on: 
     };
     ui.painter().rect(rect, 99.0, fill, Stroke::new(1.0, if on { with_alpha(color, 120) } else { theme.line }), egui::StrokeKind::Inside);
     ui.painter().galley(rect.center() - galley.size() / 2.0, galley, if on || resp.hovered() { color } else { theme.text_muted });
+    describe_selected(&resp, Role::Button, on, label);
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
@@ -123,6 +126,7 @@ pub fn icon_button(ui: &mut Ui, theme: &Theme, icon: Option<&Path>, fallback: &s
     if resp.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
+    describe(&resp, Role::Button, tip);
     resp.on_hover_text(tip)
 }
 
@@ -142,6 +146,7 @@ pub fn row_icon(ui: &mut Ui, theme: &Theme, icon: Option<&Path>, fallback: &str,
             ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, fallback, FontId::proportional(13.0), ink);
         }
     }
+    describe(&resp, Role::Button, tip);
     resp.on_hover_text(tip)
 }
 
@@ -150,6 +155,7 @@ pub fn row_icon(ui: &mut Ui, theme: &Theme, icon: Option<&Path>, fallback: &str,
 pub fn link(ui: &mut Ui, theme: &Theme, text: &str, font: FontId) -> Response {
     let galley = ui.painter().layout_no_wrap(text.to_string(), font, theme.accent);
     let (rect, resp) = ui.allocate_exact_size(galley.size(), Sense::click());
+    describe(&resp, Role::Link, text);
     let color = if resp.hovered() { theme.text } else { theme.accent };
     ui.painter().galley(rect.min, galley, color);
     if resp.hovered() {
@@ -174,14 +180,17 @@ pub fn toggle_row(ui: &mut Ui, theme: &Theme, on: &mut bool, title: &str, descri
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.set_width(ui.available_width() - 48.0);
-                    ui.spacing_mut().item_spacing.y = 3.0;
-                    ui.label(RichText::new(title).size(13.0).color(theme.text));
-                    ui.label(RichText::new(description).size(11.5).color(theme.text_muted));
-                });
+                let name = ui
+                    .vertical(|ui| {
+                        ui.set_width(ui.available_width() - 48.0);
+                        ui.spacing_mut().item_spacing.y = 3.0;
+                        let name = ui.label(RichText::new(title).size(13.0).color(theme.text));
+                        ui.label(RichText::new(description).size(11.5).color(theme.text_muted));
+                        name.id
+                    })
+                    .inner;
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    resp = Some(toggle(ui, on, theme));
+                    resp = Some(labelled(ui, name, |ui| toggle(ui, on, theme)));
                 });
             });
         });
@@ -269,7 +278,8 @@ pub fn field_with_button(ui: &mut Ui, field: impl FnOnce(&mut Ui), button: impl 
 pub fn search_dropdown<R>(ui: &mut Ui, id_salt: egui::Id, width: f32, selected: impl Into<egui::WidgetText>, contents: impl FnOnce(&mut Ui) -> R) -> Response {
     ui.scope(|ui| {
         ui.spacing_mut().interact_size.y = crate::ui::inputs::input_height(ui);
-        ComboBox::from_id_salt(id_salt).width(width).height(420.0).selected_text(selected).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show_ui(ui, contents).response
+        let resp = ComboBox::from_id_salt(id_salt).width(width).height(420.0).selected_text(selected).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show_ui(ui, contents).response;
+        named(ui, resp)
     })
     .inner
 }
@@ -277,7 +287,8 @@ pub fn search_dropdown<R>(ui: &mut Ui, id_salt: egui::Id, width: f32, selected: 
 pub fn dropdown<R>(ui: &mut Ui, id_salt: egui::Id, width: f32, selected: impl Into<egui::WidgetText>, contents: impl FnOnce(&mut Ui) -> R) -> Response {
     ui.scope(|ui| {
         ui.spacing_mut().interact_size.y = crate::ui::inputs::input_height(ui);
-        ComboBox::from_id_salt(id_salt).width(width).selected_text(selected).show_ui(ui, contents).response
+        let resp = ComboBox::from_id_salt(id_salt).width(width).selected_text(selected).show_ui(ui, contents).response;
+        named(ui, resp)
     })
     .inner
 }
@@ -296,7 +307,7 @@ pub fn multi_select<K: PartialEq + Clone>(ui: &mut Ui, theme: &Theme, id_salt: e
     let mut changed = false;
     ui.scope(|ui| {
         ui.spacing_mut().interact_size.y = crate::ui::inputs::input_height(ui);
-        ComboBox::from_id_salt(id_salt).width(width).selected_text(summary).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show_ui(ui, |ui| {
+        let resp = ComboBox::from_id_salt(id_salt).width(width).selected_text(summary).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show_ui(ui, |ui| {
             for (key, label) in options {
                 let mut on = picked.contains(key);
                 if checkbox(ui, theme, &mut on, crate::i18n::t(label)).changed() {
@@ -309,6 +320,7 @@ pub fn multi_select<K: PartialEq + Clone>(ui: &mut Ui, theme: &Theme, id_salt: e
                 }
             }
         });
+        named(ui, resp.response);
     });
     changed
 }
@@ -322,6 +334,8 @@ pub fn toggle(ui: &mut Ui, on: &mut bool, theme: &Theme) -> Response {
         *on = !*on;
         response.mark_changed();
     }
+    describe_selected(&response, Role::Switch, *on, "");
+    let response = named(ui, response);
     let t = ui.ctx().animate_bool_responsive(response.id, *on);
     let bg = crate::ui::theme::mix(theme.field, theme.action, t);
     let painter = ui.painter();
@@ -339,6 +353,7 @@ pub fn toggle(ui: &mut Ui, on: &mut bool, theme: &Theme) -> Response {
 /// its icon and name, and a count or mark on the right when there is one.
 pub fn nav_item(ui: &mut Ui, theme: &Theme, icon: Option<&std::path::Path>, name: &str, selected: bool, badge: Option<(String, Color32)>) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 32.0), Sense::click());
+    describe_selected(&resp, Role::Button, selected, name);
     if selected {
         ui.painter().rect_filled(rect, 6.0, with_alpha(theme.accent, 38));
     } else if resp.hovered() {
@@ -392,39 +407,43 @@ pub fn setting_row(ui: &mut Ui, theme: &Theme, title: &str, description: &str, c
         let measured = ui.scope_id().with(("settings-control", title));
         let control_w: f32 = ui.data(|d| d.get_temp(measured)).unwrap_or(0.0);
         let stacked = inner - control_w - 16.0 < 180.0;
+        // The title names the control too, for screen readers.
         let text = |ui: &mut Ui| {
             ui.spacing_mut().item_spacing.y = 3.0;
-            ui.label(RichText::new(title).size(13.5).color(theme.text));
+            let name = ui.label(RichText::new(title).size(13.5).color(theme.text));
             if !description.is_empty() {
                 ui.label(RichText::new(description).size(11.5).color(theme.text_muted));
             }
+            name.id
         };
         let drawn = if stacked {
-            text(ui);
+            let name = text(ui);
             ui.add_space(6.0);
             ui.horizontal_wrapped(|ui| {
                 ui.set_max_width(inner);
-                control(ui);
+                labelled(ui, name, control);
             })
             .response
             .rect
         } else {
             ui.horizontal(|ui| {
                 let w = inner - control_w - 16.0;
-                if description.is_empty() {
+                let name = if description.is_empty() {
                     // A name alone sits in the middle of the control's height (34: a field's).
                     let h = crate::ui::inputs::input_height(ui).max(ui.spacing().interact_size.y).max(34.0);
                     ui.allocate_ui_with_layout(vec2(w, h), Layout::left_to_right(Align::Center), |ui| {
                         ui.set_width(w);
-                        text(ui);
-                    });
+                        text(ui)
+                    })
+                    .inner
                 } else {
                     ui.vertical(|ui| {
                         ui.set_width(w);
-                        text(ui);
-                    });
-                }
-                ui.with_layout(Layout::right_to_left(Align::Center), control).response.rect
+                        text(ui)
+                    })
+                    .inner
+                };
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| labelled(ui, name, control)).response.rect
             })
             .inner
         };
@@ -445,14 +464,21 @@ pub fn setting_card(ui: &mut Ui, theme: &Theme, add: impl FnOnce(&mut Ui)) {
     Frame::new().fill(theme.panel_header).stroke(Stroke::new(1.0, theme.line)).corner_radius(8).inner_margin(Margin::symmetric(16, 12)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.spacing_mut().item_spacing.y = 3.0;
-        add(ui);
+        // A setting_title in it names the control under it.
+        with_name(ui, Name::Later, add);
     });
     ui.add_space(8.0);
 }
 
-/// A setting's name and description, above its control.
+/// A setting's name and description, above its control. In a
+/// [`setting_card`], the name names the control too, for screen readers.
 pub fn setting_title(ui: &mut Ui, theme: &Theme, label: &str, description: &str) {
-    ui.label(RichText::new(label).size(13.5).color(theme.text));
+    let name = ui.label(RichText::new(label).size(13.5).color(theme.text));
+    // Only inside a card (or another named place), so it never names what follows the card.
+    let key = egui::Id::unique(NAMED_BY);
+    if ui.data(|d| d.get_temp::<Name>(key)).is_some() {
+        ui.data_mut(|d| d.insert_temp(key, Name::Label(name.id)));
+    }
     if !description.is_empty() {
         ui.label(RichText::new(description).size(11.5).color(theme.text_muted));
     }
@@ -495,6 +521,64 @@ pub fn note(ui: &mut Ui, icons: &std::collections::HashMap<String, std::path::Pa
         });
     });
     ui.add_space(8.0);
+}
+
+// ── Names for screen readers ─────────────────────────────────────────────
+
+/// Where the name for the controls being drawn is kept (see [`labelled`]).
+const NAMED_BY: &str = "xc-kit-named-by";
+
+/// What names the controls being drawn.
+#[derive(Clone)]
+enum Name {
+    /// A label on screen.
+    Label(egui::Id),
+    /// Nothing yet: a [`setting_card`] before its [`setting_title`].
+    Later,
+}
+
+/// Runs `add` with `label` naming the controls in it that show no name of
+/// their own (text boxes, dropdowns, numbers, sliders, switches, colours),
+/// for screen readers and for tests that find controls by name. The kit's
+/// rows and fields do this with their titles.
+pub fn labelled<R>(ui: &mut Ui, label: egui::Id, add: impl FnOnce(&mut Ui) -> R) -> R {
+    with_name(ui, Name::Label(label), add)
+}
+
+/// Runs `add` with `name` for its controls, then puts back the name as it was.
+fn with_name<R>(ui: &mut Ui, name: Name, add: impl FnOnce(&mut Ui) -> R) -> R {
+    let key = egui::Id::unique(NAMED_BY);
+    let before: Option<Name> = ui.data(|d| d.get_temp(key));
+    ui.data_mut(|d| d.insert_temp(key, name));
+    let r = add(ui);
+    ui.data_mut(|d| match before {
+        Some(b) => {
+            d.insert_temp(key, b);
+        }
+        None => {
+            d.remove::<Name>(key);
+        }
+    });
+    r
+}
+
+/// Names a control by the label around it ([`labelled`]), when there is one.
+pub fn named(ui: &Ui, resp: Response) -> Response {
+    match ui.data(|d| d.get_temp::<Name>(egui::Id::unique(NAMED_BY))) {
+        Some(Name::Label(label)) => resp.labelled_by(label),
+        Some(Name::Later) | None => resp,
+    }
+}
+
+/// Tells screen readers what a control drawn by hand is (a button, a link)
+/// and what it is called.
+pub fn describe(resp: &Response, role: Role, name: &str) {
+    resp.widget_info(|| egui::WidgetInfo::labeled(role, resp.enabled(), name));
+}
+
+/// [`describe`] for something that is on or off, chosen or not.
+pub fn describe_selected(resp: &Response, role: Role, selected: bool, name: &str) {
+    resp.widget_info(|| egui::WidgetInfo::selected(role, resp.enabled(), selected, name));
 }
 
 // ── The theme ────────────────────────────────────────────────────────────
@@ -594,7 +678,8 @@ impl<'a, N: egui::emath::Numeric> Number<'a, N> {
             if let Some(d) = self.decimals {
                 drag = drag.fixed_decimals(d);
             }
-            ui.add(drag)
+            let resp = ui.add(drag);
+            named(ui, resp)
         })
     }
 }
@@ -641,7 +726,8 @@ impl<'a, N: egui::emath::Numeric> Slider<'a, N> {
             if let Some(s) = step {
                 slider = slider.step_by(s);
             }
-            let slid = ui.add(slider).changed();
+            let slider = ui.add(slider);
+            let slid = named(ui, slider).changed();
             let mut number = Number::new(value).range(range).suffix(suffix).speed(step.unwrap_or(1.0));
             if let Some(d) = decimals {
                 number = number.decimals(d);
@@ -670,6 +756,9 @@ pub fn checkbox_mixed(ui: &mut Ui, theme: &Theme, on: &mut bool, mixed: bool, te
         *on = !*on;
         resp.mark_changed();
     }
+    // "Some of them" is neither on nor off.
+    let selected = (*on || !mixed).then_some(*on);
+    resp.widget_info(|| egui::WidgetInfo { selected, ..egui::WidgetInfo::labeled(Role::CheckBox, ui.is_enabled(), galley.text()) });
     let enabled = ui.is_enabled();
     let b = Rect::from_center_size(pos2(rect.left() + side / 2.0, rect.center().y), vec2(side, side));
     let painter = ui.painter();
@@ -702,6 +791,7 @@ pub fn radio(ui: &mut Ui, theme: &Theme, selected: bool, text: impl Into<egui::W
     let side = 18.0;
     let size = vec2(side + 8.0 + galley.size().x, galley.size().y.max(side) + 4.0);
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
+    describe_selected(&resp, Role::RadioButton, selected, galley.text());
     let c = pos2(rect.left() + side / 2.0, rect.center().y);
     let painter = ui.painter();
     if selected {
