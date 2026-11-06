@@ -1809,6 +1809,63 @@ async function browseDatabase(depsRoot, dataDir) {
   }
 }
 
+/**
+ * XC Circuit's Stored Data, kept connected: one database (XC_DB_SPEC), a
+ * request per line on stdin ({ id, request }), its answer as a line on
+ * stdout ({ id, ok, ... }). Requests are answered one at a time. It ends
+ * when its input closes, or after ten minutes without a request.
+ */
+function serveDatabase(depsRoot, dataDir) {
+  const spec = JSON.parse(process.env.XC_DB_SPEC || "{}");
+  const rt = {
+    opts: { dataDir },
+    require: Module.createRequire(path.join(depsRoot, "package.json")),
+    secret: (name) => process.env[`XC_SECRET_${String(name).toUpperCase()}`],
+  };
+  let db;
+  try {
+    db = new Database({ id: "browse", ...spec }, rt);
+  } catch (e) {
+    db = { close: async () => {}, failed: e };
+  }
+  const IDLE_MS = 10 * 60 * 1000;
+  let idle = null;
+  let quitting = false;
+  const quit = async () => {
+    if (quitting) return;
+    quitting = true;
+    await Promise.race([db.close().catch(() => {}), new Promise((r) => setTimeout(r, 2000))]);
+    process.exit(0);
+  };
+  const bump = () => {
+    clearTimeout(idle);
+    idle = setTimeout(quit, IDLE_MS);
+  };
+  bump();
+  let queue = Promise.resolve();
+  const lines = require("readline").createInterface({ input: process.stdin });
+  lines.on("line", (line) => {
+    queue = queue.then(async () => {
+      bump();
+      let msg;
+      try {
+        msg = JSON.parse(line);
+      } catch {
+        return;
+      }
+      let out;
+      try {
+        if (db.failed) throw db.failed;
+        out = { id: msg.id, ok: true, ...(await browse(db, msg.request || {})) };
+      } catch (e) {
+        out = { id: msg.id, ok: false, error: e && e.message ? e.message : String(e) };
+      }
+      process.stdout.write(JSON.stringify(out, browsable) + "\n");
+    });
+  });
+  lines.on("close", () => queue.then(quit));
+}
+
 /** Values as Stored Data shows them: big numbers as text, binary data as its size. */
 function browsable(key, value) {
   if (typeof value === "bigint") return value.toString();
@@ -2365,6 +2422,10 @@ function cli() {
   };
   if (args.includes("--db-test")) {
     testDatabase(path.resolve(arg("--deps") || process.cwd()), path.resolve(arg("--data") || path.join(process.cwd(), "data")));
+    return;
+  }
+  if (args.includes("--db-serve")) {
+    serveDatabase(path.resolve(arg("--deps") || process.cwd()), path.resolve(arg("--data") || path.join(process.cwd(), "data")));
     return;
   }
   if (args.includes("--db-browse")) {

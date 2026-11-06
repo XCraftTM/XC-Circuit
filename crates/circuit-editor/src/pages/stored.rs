@@ -69,8 +69,15 @@ enum Change {
     Delete(String, Vec<String>),
 }
 
+/// A database kept connected, with what it was started for (its settings
+/// and secrets, hashed): when those change, it starts again.
+type Helper = std::sync::Arc<std::sync::Mutex<Option<(u64, circuit_runner::database::DbHelper)>>>;
+
 #[derive(Default)]
 pub struct StoredView {
+    /// One connected helper per database (by id): Stored Data's requests go
+    /// to it, without starting Node.js and connecting each time.
+    helpers: std::collections::HashMap<String, Helper>,
     show: Show,
     filter: String,
     /// The stored values by bucket, and when they were read.
@@ -197,11 +204,39 @@ impl StoredView {
         let packages = crate::bot::app_data_dir().join("packages");
         let run = project.root.join(".circuit").join("run");
         let data = project.root.join(".circuit").join("data");
+        // What the helper was started for: other settings or secrets start another.
+        let signature = {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            spec.to_string().hash(&mut h);
+            secrets.hash(&mut h);
+            h.finish()
+        };
+        let slot = self.helpers.entry(db.to_string()).or_default().clone();
         let (tx, rx) = channel();
         let ctx = ctx.clone();
         std::thread::spawn(move || {
             let cfg = circuit_runner::database::TestConfig { spec: &spec, secrets, dependencies: &deps, packages_dir: &packages, run_dir: &run, data_dir: &data };
-            let _ = tx.send(circuit_runner::database::browse_database(&cfg, &request, &mut |_| {}).map_err(|e| format!("{e:#}")));
+            let answer = (|| -> Result<Value, String> {
+                let mut held = slot.lock().map_err(|_| t!("The database gave no answer.").to_string())?;
+                // One that stopped (ten minutes without a request, say) starts again, once.
+                for attempt in 0..2 {
+                    let usable = held.as_mut().is_some_and(|(sig, h)| *sig == signature && h.alive());
+                    if !usable {
+                        *held = None;
+                        let helper = circuit_runner::database::DbHelper::start(&cfg, &mut |_| {}).map_err(|e| format!("{e:#}"))?;
+                        *held = Some((signature, helper));
+                    }
+                    let Some((_, helper)) = held.as_mut() else { break };
+                    match helper.ask(&request) {
+                        Ok(answer) => return answer,
+                        Err(e) if attempt == 1 => return Err(format!("{e:#}")),
+                        Err(_) => *held = None,
+                    }
+                }
+                Err(t!("The database gave no answer.").to_string())
+            })();
+            let _ = tx.send(answer);
             ctx.request_repaint();
         });
         self.job = Some(Job { rx, then });

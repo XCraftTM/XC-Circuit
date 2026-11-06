@@ -4,9 +4,10 @@
 //! and tables.
 
 use std::fs;
-use std::io::Read;
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
-use std::process::Stdio;
+use std::process::{Child, ChildStdin, Stdio};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, channel};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
@@ -69,6 +70,119 @@ pub fn browse_database(cfg: &TestConfig, request: &Value, log: &mut dyn FnMut(St
         Ok(answer)
     } else {
         bail!("{}", answer.get("error").and_then(Value::as_str).unwrap_or("it failed"))
+    }
+}
+
+/// A database kept connected for Stored Data: the runtime in `--db-serve`
+/// mode, answering one request after another without starting again (npm
+/// packages checked, Node.js started and the connection made once). It ends
+/// when dropped, or by itself after ten minutes without a request.
+pub struct DbHelper {
+    child: Child,
+    stdin: ChildStdin,
+    lines: Receiver<String>,
+    errors: std::sync::Arc<std::sync::Mutex<String>>,
+    next: u64,
+}
+
+impl DbHelper {
+    /// Starts it for the connection in `cfg.spec`.
+    pub fn start(cfg: &TestConfig, log: &mut dyn FnMut(String)) -> Result<DbHelper> {
+        check_node()?;
+        ensure_packages(cfg.packages_dir, "xc-circuit-bot-packages", cfg.dependencies, log, &|| false)?;
+        fs::create_dir_all(cfg.data_dir)?;
+        let runtime = crate::write_runtime(cfg.run_dir)?;
+        let mut cmd = crate::node::node_command();
+        cmd.arg(&runtime)
+            .arg("--db-serve")
+            .arg("--deps")
+            .arg(cfg.packages_dir)
+            .arg("--data")
+            .arg(cfg.data_dir)
+            .env("XC_DB_SPEC", cfg.spec.to_string())
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        for (k, v) in &cfg.secrets {
+            cmd.env(k, v);
+        }
+        let mut child = quiet(&mut cmd).spawn().context("starting Node.js")?;
+        let stdin = child.stdin.take().context("no input to the database helper")?;
+        let (tx, lines) = channel();
+        if let Some(out) = child.stdout.take() {
+            std::thread::spawn(move || {
+                for line in BufReader::new(out).lines().map_while(Result::ok) {
+                    if tx.send(line).is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+        // What it says on stderr, for when it stops: the last few lines.
+        let errors = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+        if let Some(err) = child.stderr.take() {
+            let keep = errors.clone();
+            std::thread::spawn(move || {
+                for line in BufReader::new(err).lines().map_while(Result::ok) {
+                    if let Ok(mut e) = keep.lock() {
+                        e.push_str(&line);
+                        e.push('\n');
+                        let cut = e.len().saturating_sub(2000);
+                        if cut > 0 {
+                            e.drain(..cut);
+                        }
+                    }
+                }
+            });
+        }
+        Ok(DbHelper { child, stdin, lines, errors, next: 0 })
+    }
+
+    /// Whether it still runs.
+    pub fn alive(&mut self) -> bool {
+        matches!(self.child.try_wait(), Ok(None))
+    }
+
+    /// Sends one request (see `browse` in the runtime). The outer error: the
+    /// helper itself failed (start another); the inner one: what the
+    /// database said went wrong.
+    pub fn ask(&mut self, request: &Value) -> Result<std::result::Result<Value, String>> {
+        self.next += 1;
+        let id = self.next;
+        writeln!(self.stdin, "{}", serde_json::json!({ "id": id, "request": request })).context("the database helper stopped")?;
+        self.stdin.flush().context("the database helper stopped")?;
+        let deadline = Instant::now() + TIMEOUT;
+        loop {
+            let left = deadline.saturating_duration_since(Instant::now());
+            match self.lines.recv_timeout(left) {
+                Ok(line) => {
+                    let Ok(answer) = serde_json::from_str::<Value>(line.trim()) else { continue };
+                    if answer.get("id").and_then(Value::as_u64) != Some(id) {
+                        continue;
+                    }
+                    return Ok(if answer.get("ok").and_then(Value::as_bool) == Some(true) {
+                        Ok(answer)
+                    } else {
+                        Err(answer.get("error").and_then(Value::as_str).unwrap_or("it failed").to_string())
+                    });
+                }
+                Err(RecvTimeoutError::Timeout) => {
+                    let _ = self.child.kill();
+                    bail!("no answer after {} seconds", TIMEOUT.as_secs());
+                }
+                Err(RecvTimeoutError::Disconnected) => {
+                    let said = self.errors.lock().map(|e| e.trim().to_string()).unwrap_or_default();
+                    bail!("the database helper stopped{}", if said.is_empty() { String::new() } else { format!(": {said}") });
+                }
+            }
+        }
+    }
+}
+
+impl Drop for DbHelper {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
     }
 }
 
@@ -160,6 +274,33 @@ mod tests {
         let spec = json!({ "id": "db2", "name": "Odd", "kind": "oracle" });
         let r = test_database(&TestConfig { spec: &spec, ..cfg }, &mut |_| {}).unwrap();
         assert!(!r.ok && r.error.unwrap().contains("oracle"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The kept-connected helper answers request after request, and says a
+    /// database's error as an answer, not as its own failure.
+    #[test]
+    fn a_helper_answers_one_request_after_another() {
+        if check_node().is_err() {
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("xc-db-helper-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let spec = json!({ "id": "db1", "name": "Main", "kind": "sqlite", "file": "bot.sqlite" });
+        let deps = IndexMap::new();
+        let cfg = TestConfig { spec: &spec, secrets: vec![], dependencies: &deps, packages_dir: &dir.join("packages"), run_dir: &dir.join("run"), data_dir: &dir.join("data") };
+        let mut helper = DbHelper::start(&cfg, &mut |_| {}).unwrap();
+        let started = Instant::now();
+        for n in 0..5 {
+            helper.ask(&json!({ "op": "store-set", "bucket": "global", "name": format!("v{n}"), "value": n })).unwrap().unwrap();
+        }
+        let store = helper.ask(&json!({ "op": "store" })).unwrap().unwrap();
+        assert_eq!(store["values"].as_array().unwrap().len(), 5);
+        assert!(started.elapsed() < Duration::from_secs(5), "one Node.js for all of them: {:?}", started.elapsed());
+        let err = helper.ask(&json!({ "op": "rows", "table": "nope" })).unwrap().unwrap_err();
+        assert!(err.contains("nope"), "{err}");
+        assert!(helper.alive(), "an error is an answer, not the end");
+        drop(helper);
         let _ = fs::remove_dir_all(&dir);
     }
 
