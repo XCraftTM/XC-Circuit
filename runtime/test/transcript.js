@@ -36,7 +36,15 @@ const ctx = { require: (n) => req(n) };
 (async () => {
   const a = await block.run({ fields: { channel, limit: 0, name: "transcript-${channel.name}", images: false, bots: true }, ctx });
   const b = await block.run({ fields: { channel, limit: 2, name: "t.html", bots: false }, ctx });
-  const strip = (b) => b.toString().replace(/<!--[^>]*-->/g, "");
+  // The renderer's <!-- --> markers split words; removed until none is left.
+  const strip = (b) => {
+    let s = b.toString();
+    for (let before = null; before !== s; ) {
+      before = s;
+      s = s.replace(/<!--[\s\S]*?-->/g, "");
+    }
+    return s;
+  };
   const raw1 = a.file.attachment.toString();
   const html = strip(a.file.attachment);
   assert.deepStrictEqual([a.file.name, a.count], ["transcript-${channel.name}.html", 5]);
