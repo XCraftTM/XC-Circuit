@@ -86,10 +86,12 @@ jobs:
 
   # The database blocks against real servers: MariaDB, PostgreSQL and
   # MongoDB (SQLite runs with the other runtime tests). Linux runners only
-  # have service containers, so this runs on Linux.
+  # have service containers, so this runs on Linux; on 22.04, because
+  # MongoDB 8 doesn't start on the newer kernel of ubuntu-latest
+  # (https://jira.mongodb.org/browse/SERVER-121912).
   databases:
     name: Databases
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     services:
       mariadb:
         image: mariadb:11
@@ -117,6 +119,8 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
       - uses: actions/checkout@v7
+      - name: Kernel
+        run: uname -r
       - uses: actions/setup-node@v7
         with:
           node-version: 22
