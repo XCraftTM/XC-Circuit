@@ -126,14 +126,25 @@ const groups = computed(() => (os.value === "linux" ? [GROUPS[1], GROUPS[0]] : G
   margin: 16px 0 28px;
   padding: 16px 22px;
   border-radius: 12px;
+  /* The home page's main button: aqua with white text, Run green in the dark theme. */
   background: var(--vp-c-brand-3);
-  color: var(--vp-button-brand-text, #fff);
+  color: #fff;
   text-decoration: none;
   max-width: 420px;
   transition: background 0.2s;
 }
+/* Its own colours on hover too: the docs turn a link's text aqua then. */
 .dl-main:hover {
-  background: var(--vp-c-brand-2);
+  background: var(--vp-c-brand-1);
+  color: #fff;
+}
+.dark .dl-main {
+  background: #3dff6e;
+  color: #04210d;
+}
+.dark .dl-main:hover {
+  background: #6bff8f;
+  color: #04210d;
 }
 .dl-main-title {
   font-size: 18px;
@@ -182,6 +193,7 @@ const groups = computed(() => (os.value === "linux" ? [GROUPS[1], GROUPS[0]] : G
 .dl-button:hover {
   border-color: var(--vp-c-brand-1);
   background: var(--vp-c-brand-soft);
+  color: var(--vp-c-text-1);
 }
 .dl-label {
   font-weight: 600;
