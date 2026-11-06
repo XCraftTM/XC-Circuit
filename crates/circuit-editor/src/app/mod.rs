@@ -312,7 +312,8 @@ impl eframe::App for CircuitApp {
                 (*frames, *since) = (0, std::time::Instant::now());
             }
         }
-        self.ed.ui_rects.clear();
+        self.ed.ui_rects_before = std::mem::take(&mut self.ed.ui_rects);
+        self.ed.tour_parts = self.tour.is_some();
         // The tour's practice project is never worth a "save changes?" question.
         if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close && self.tour.is_none() && self.ed.unsaved_now() {
             ctx.send_viewport_cmd(ViewportCommand::CancelClose);

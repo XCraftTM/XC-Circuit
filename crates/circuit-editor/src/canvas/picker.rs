@@ -262,6 +262,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                                 .desired_width(size.x - 210.0)
                                 .font(egui::FontId::proportional(15.0)),
                         );
+                        ed.ui_rects.insert("picker-search".into(), edit.rect);
                         // Typing always searches, also after a category was clicked.
                         if picker.opened_frames <= 2 || ui.ctx().memory(|m| m.focused().is_none()) {
                             edit.request_focus();
@@ -372,6 +373,9 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                                         ui.painter().galley(egui::pos2(chip.left() - 8.0 - galley.size().x, rect.center().y - galley.size().y / 2.0), galley, theme.text_muted);
                                     }
                                 }
+                                if ed.tour_parts && ui.clip_rect().intersects(rect) {
+                                    ed.ui_rects.insert(format!("picker:{}", def.id), rect.intersect(ui.clip_rect()));
+                                }
                                 if resp.hovered() {
                                     picker.highlighted = i;
                                 }
@@ -422,6 +426,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
             });
     });
 
+    ed.ui_rects.insert("picker".into(), area.response.rect);
     // Clicking anywhere else closes it.
     let clicked_outside = ctx.input(|i| i.pointer.any_pressed())
         && ctx.input(|i| i.pointer.interact_pos()).is_some_and(|p| !area.response.rect.contains(p))

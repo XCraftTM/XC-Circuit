@@ -109,6 +109,11 @@ pub struct Editor {
     pub prefs: crate::editor::prefs::Prefs,
     /// Where parts of the window were drawn this frame, for the tour to point at.
     pub ui_rects: HashMap<String, eframe::egui::Rect>,
+    /// While the tour runs: the canvas, picker and Inspector also note where
+    /// each pin, block row, picker entry and field went, for it to make glow.
+    pub tour_parts: bool,
+    /// `ui_rects` of the frame before: for what's drawn after the tour (the picker).
+    pub ui_rects_before: HashMap<String, eframe::egui::Rect>,
     /// Project snapshots and crash recovery copies, kept outside projects.
     pub backups: circuit_core::backup::Backups,
     /// Unsaved changes found when the project opened (left by a crash).
@@ -158,6 +163,8 @@ impl Editor {
             history: Histories::default(),
             prefs: Default::default(),
             ui_rects: HashMap::new(),
+            tour_parts: false,
+            ui_rects_before: HashMap::new(),
             backups: circuit_core::backup::Backups::new(crate::bot::app_data_dir().join("backups")),
             recovery_offer: None,
             saves: 0,

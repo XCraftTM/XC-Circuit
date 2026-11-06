@@ -48,7 +48,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
         });
         return;
     };
-    let Editor { reg, engine, project, shapes, edited, define_ctx, .. } = ed;
+    let Editor { reg, engine, project, shapes, edited, define_ctx, ui_rects, tour_parts, .. } = ed;
     let mode = project.as_ref().and_then(|p| reg.mode(&p.meta.mode));
     let Some(ws) = project.as_mut().and_then(|p| p.workspaces.get_mut(&ws_key)) else { return };
     shapes.begin();
@@ -82,6 +82,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                 let node = &ws.nodes[&node_id];
                 let pinned = f.pin == PinMode::Only || node.pins.contains(key);
                 let source = ws.links_into(&node_id, key).next().map(|l| l.from.clone());
+                let top = ui.cursor().top();
                 padded(ui, |ui| {
                     ui.horizontal(|ui| {
                         let label = ui.label(RichText::new(f.label(key)).color(theme.text_muted));
@@ -139,6 +140,10 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                         }
                     }
                 });
+                if *tour_parts {
+                    let x = ui.max_rect().x_range();
+                    ui_rects.insert(format!("field:{key}"), egui::Rect::from_x_y_ranges(x.min + 6.0..=x.max - 8.0, top + 2.0..=ui.cursor().top() - 2.0));
+                }
             }
         };
         fields(ui, false);

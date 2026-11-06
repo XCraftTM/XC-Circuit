@@ -134,7 +134,7 @@ enum NodeMenu {
 }
 
 pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
-    let Editor { reg, engine, theme, project, shapes, views, selected, edited, picker, active_workspace, activity, wire_values, multi, selected_notes, recording_frame, define_ctx, embed_edit, layout_edit, canvas_edit, selected_wire, prefs, ui_rects, .. } = ed;
+    let Editor { reg, engine, theme, project, shapes, views, selected, edited, picker, active_workspace, activity, wire_values, multi, selected_notes, recording_frame, define_ctx, embed_edit, layout_edit, canvas_edit, selected_wire, prefs, ui_rects, tour_parts, .. } = ed;
     let Some(project) = project.as_mut() else { return };
     let mode = reg.mode(&project.meta.mode).or_else(|| reg.modes.first());
     let Some(ws) = project.workspaces.get_mut(ws_key) else {
@@ -1058,7 +1058,9 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     tools(bar, row).scope(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
         let center = outer.center();
-        if tool_button(ui, theme, icon("plus").as_deref(), t!("Add block")).on_hover_text(t!("Add a block (Space or right-click on the canvas)")).clicked() {
+        let add = tool_button(ui, theme, icon("plus").as_deref(), t!("Add block"));
+        ui_rects.insert("add-block".into(), add.rect);
+        if add.on_hover_text(t!("Add a block (Space or right-click on the canvas)")).clicked() {
             *picker = Some(Picker::new(ws_key, center, to_global.inverse() * center, None));
         }
         if tool_button(ui, theme, icon("note").as_deref(), t!("Add note")).on_hover_text(t!("A note: a frame with a title and a description, to explain or group blocks")).clicked() {
@@ -1288,6 +1290,18 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     sharpen_text(&ctx, layer, to_global);
     for l in &layouts[..node_count] {
         ui_rects.insert(format!("node:{}", l.id), to_global * l.rect);
+        if *tour_parts {
+            // pin:<block>:in|out:<pin> and row:<block>:<field>, for the tour.
+            for p in l.pins.iter() {
+                let dir = if matches!(p.dir, Dir::In) { "in" } else { "out" };
+                ui_rects.insert(format!("pin:{}:{dir}:{}", l.id, p.pin), to_global * Rect::from_center_size(p.pos, vec2(12.0, 12.0)));
+            }
+            for (kind, r) in l.rows.iter() {
+                if let RowKind::Field { key, .. } = kind {
+                    ui_rects.insert(format!("row:{}:{key}", l.id), to_global * *r);
+                }
+            }
+        }
     }
 }
 
