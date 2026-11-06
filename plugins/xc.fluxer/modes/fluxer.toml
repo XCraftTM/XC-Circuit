@@ -102,6 +102,11 @@ name = "Databases"
 icon = "database"
 
 [[categories]]
+id = "files"
+name = "Files"
+icon = "folder"
+
+[[categories]]
 id = "text"
 name = "Text"
 icon = "text"

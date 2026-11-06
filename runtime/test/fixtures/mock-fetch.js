@@ -20,6 +20,7 @@ globalThis.fetch = async (url, init = {}) => {
   return {
     ok: status >= 200 && status < 300,
     status,
+    headers: { get: (name) => (String(name).toLowerCase() === "content-length" ? String(Buffer.byteLength(text)) : null) },
     text: async () => text,
     json: async () => JSON.parse(text),
     arrayBuffer: async () => Buffer.from(text),

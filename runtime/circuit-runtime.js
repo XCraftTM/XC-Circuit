@@ -270,6 +270,8 @@ class Runtime {
         setting: (name) => rt.setting(name),
         /** A secret of Bot › Settings (an API key a plugin's page asks for). */
         secret: (name) => rt.secret(name),
+        /** The bot's data folder (stored data, databases, files). */
+        dataDir: rt.opts.dataDir || process.cwd(),
       },
       util: UTIL,
       /** A file the block lists in `requires.assets` (a font …), as a path on disk. */

@@ -46,6 +46,20 @@ Timers are kept with the stored data, so they still run after the bot restarts. 
 
 **Every** is for things that repeat (every 10 minutes, every day at 9:00); it doesn't need saving.
 
+## Files
+
+The blocks in **Files** keep files in the bot's **files folder**: `.circuit/data/files` in the project while it runs from XC Circuit, `data/files` next to an exported bot. Paths are inside it (`notes.txt`, `tickets/123.json`); paths outside it are refused, so a bot can't touch the rest of the computer.
+
+| Block | What it does |
+| --- | --- |
+| **Read File** | As text, JSON, a table (CSV: a list of rows, by the first line's column names), lines, or bytes. A missing file gives nothing (or an error, if you like). |
+| **Write File** | Text, JSON, a table or bytes (a Build Canvas picture); replaces the file, or adds to its end (added text gets a line of its own; added rows no second header). |
+| **List Files** | A folder's files, newest first, matching a name like `*.png`. |
+| **File Action** | Checks that a file is there, deletes, copies or moves it, makes a folder. |
+| **Download File** | Saves a file from the web, or a message's attachment (at most 25 MB unless you say otherwise). |
+
+Each gives the file's whole **path** on disk, which Send Message's **Files** takes.
+
 ## In a database
 
 Stored values can be kept in MariaDB, MySQL, PostgreSQL, SQLite or MongoDB instead of `store.json`, and the database blocks read and write your own tables there. See [Databases](./databases).

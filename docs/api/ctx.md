@@ -110,6 +110,7 @@ Starts every **On Signal** event with that name, without waiting for them.
 | `onCall(name, fn)` | Answers Call blocks with that name: `fn(data)` starts a run and resolves to what it returns. |
 | `call(name, data)` | Runs the When Called flows with that name and resolves to the first one's return value. |
 | `setting(name)` | A setting of Bot › Settings (not a secret). |
+| `dataDir` | The bot's data folder (stored data, SQLite files, the files folder `files/`). |
 | `secret(name)` | A secret of Bot › Settings, such as an API key a [plugin's page](./build-modes#plugin-settings) asks for. |
 
 ## returnValue
