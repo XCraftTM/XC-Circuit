@@ -257,7 +257,8 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
     // as the Show block button, so only the rows in view are laid out. A line
     // too long for the width is broken into rows here (between words where it
     // can be), under its text: a narrow Console (in the side bar) shows it all.
-    let font = egui::TextStyle::Monospace.resolve(ui.style());
+    // The font and size picked in Settings › Editor › Console.
+    let font = crate::ui::fonts::console(ui.ctx(), ed.prefs.console_font_size);
     let char_w = ui.fonts_mut(|f| f.glyph_width(&font, 'm')).max(1.0);
     let gap = ui.spacing().item_spacing.x;
     // Time (8) and level (5) with their gaps; the Show block button on lines that have it.
@@ -284,7 +285,8 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
             head.into_iter().chain(l.text.split('\n').flat_map(move |part| wrap_columns(part.trim_end_matches('\r'), cols))).enumerate().map(move |(n, part)| (i, n, part))
         })
         .collect();
-    let row_h = crate::ui::kit::input_height(ui);
+    // As tall as the Show block button, or the text when it's bigger.
+    let row_h = crate::ui::kit::input_height(ui).max(ui.fonts_mut(|f| f.row_height(&font)) + 6.0);
     ui.spacing_mut().item_spacing.y = 0.0;
     ScrollArea::vertical().auto_shrink([false, false]).stick_to_bottom(true).show_rows(ui, row_h, rows.len(), |ui, range| {
         Frame::new().inner_margin(Margin::symmetric(12, 0)).show(ui, |ui| {
@@ -295,14 +297,14 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
                     ui.set_height(row_h);
                     if stacked && n > 0 {
                         ui.add_space(indent);
-                        ui.label(RichText::new(part).monospace());
+                        ui.label(RichText::new(part).font(font.clone()));
                     } else {
                         // The time and level only on a line's first row.
                         let (time, tag) = if n == 0 { (line.time.as_str(), tag) } else { ("        ", "     ") };
-                        ui.label(RichText::new(time).monospace().color(theme.text_muted));
-                        ui.label(RichText::new(tag).monospace().color(color));
+                        ui.label(RichText::new(time).font(font.clone()).color(theme.text_muted));
+                        ui.label(RichText::new(tag).font(font.clone()).color(color));
                         if !stacked {
-                            ui.label(RichText::new(part).monospace());
+                            ui.label(RichText::new(part).font(font.clone()));
                         }
                     }
                     if n == 0

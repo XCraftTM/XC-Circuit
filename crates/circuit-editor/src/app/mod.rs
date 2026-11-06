@@ -187,7 +187,6 @@ pub struct CircuitApp {
 impl CircuitApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         egui_extras::install_image_loaders(&cc.egui_ctx);
-        crate::ui::fonts::install(&cc.egui_ctx);
         let (plugin_dirs, bundled_root) = find_plugin_dirs();
         let theme_id: Option<String> = cc.storage.and_then(|s| eframe::get_value(s, KEY_THEME));
         let last_project: Option<PathBuf> = cc.storage.and_then(|s| eframe::get_value(s, KEY_PROJECT));
@@ -210,6 +209,9 @@ impl CircuitApp {
             Err(e) => panic!("could not start the block sandbox: {e:#}"),
         };
         ed.prefs = prefs;
+        if let Err(e) = crate::ui::fonts::install_with(&cc.egui_ctx, ed.prefs.console_font.as_deref()) {
+            ed.log(Level::Warn, format!("The Console's font wasn't loaded: {e}"));
+        }
         ed.apply_language();
         ed.prefs.apply_node();
         ed.restyle();

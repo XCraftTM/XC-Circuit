@@ -98,6 +98,11 @@ impl CircuitApp {
                 Ask::ResetLayout => self.reset_layout(),
                 Ask::NodeSetup => self.setup = Some(crate::pages::setup::Setup::node_only()),
                 Ask::OpenBackups => open_center(&mut self.dock, Tab::Backups),
+                Ask::ConsoleFont => {
+                    if let Err(e) = crate::ui::fonts::install_with(ctx, self.ed.prefs.console_font.as_deref()) {
+                        self.ed.log(Level::Warn, format!("The Console's font wasn't loaded: {e}"));
+                    }
+                }
             }
         }
     }

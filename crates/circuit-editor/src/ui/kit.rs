@@ -250,6 +250,16 @@ pub fn field_with_button(ui: &mut Ui, field: impl FnOnce(&mut Ui), button: impl 
 }
 
 /// A dropdown as tall as a text box, so the two line up in a row.
+/// [`dropdown`] that stays open while something inside it is clicked (a
+/// search field, say); `ui.close()` in `contents` closes it.
+pub fn search_dropdown<R>(ui: &mut Ui, id_salt: egui::Id, width: f32, selected: impl Into<egui::WidgetText>, contents: impl FnOnce(&mut Ui) -> R) -> Response {
+    ui.scope(|ui| {
+        ui.spacing_mut().interact_size.y = crate::ui::inputs::input_height(ui);
+        ComboBox::from_id_salt(id_salt).width(width).height(420.0).selected_text(selected).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show_ui(ui, contents).response
+    })
+    .inner
+}
+
 pub fn dropdown<R>(ui: &mut Ui, id_salt: egui::Id, width: f32, selected: impl Into<egui::WidgetText>, contents: impl FnOnce(&mut Ui) -> R) -> Response {
     ui.scope(|ui| {
         ui.spacing_mut().interact_size.y = crate::ui::inputs::input_height(ui);

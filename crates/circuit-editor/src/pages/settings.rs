@@ -43,6 +43,8 @@ pub enum Ask {
     ResetLayout,
     NodeSetup,
     OpenBackups,
+    /// The Console's font changed: load it.
+    ConsoleFont,
 }
 
 #[derive(Default)]
@@ -58,6 +60,10 @@ pub struct SettingsView {
     shortcut_note: Option<(crate::editor::keymap::Action, String)>,
     /// The Shortcuts page's search.
     shortcut_filter: String,
+    /// The installed fonts (name, monospaced), once read, and while they're read.
+    fonts: Option<Vec<(String, bool)>>,
+    font_list: Option<std::sync::mpsc::Receiver<Vec<(String, bool)>>>,
+    font_filter: String,
 }
 
 pub const NAV_W: f32 = 190.0;
@@ -127,7 +133,7 @@ pub fn ui(ui: &mut Ui, ed: &mut Editor, view: &mut SettingsView, asks: &mut Vec<
             ui.add_space(14.0);
             match view.section {
                 Section::Appearance => appearance(ui, ed, &theme, view),
-                Section::Editor => editor(ui, ed, &theme, asks),
+                Section::Editor => editor(ui, ed, &theme, view, asks),
                 Section::Bot => bot(ui, ed, &theme, view, asks),
                 Section::Plugins => plugins(ui, ed, &theme, asks),
                 Section::Backups => backups(ui, ed, &theme, asks),
@@ -269,7 +275,7 @@ pub fn theme_card(ui: &mut Ui, t: &Theme, page: &Theme, selected: bool, accent_o
     resp.on_hover_cursor(CursorIcon::PointingHand).clicked()
 }
 
-fn editor(ui: &mut Ui, ed: &mut Editor, theme: &Theme, asks: &mut Vec<Ask>) {
+fn editor(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView, asks: &mut Vec<Ask>) {
     let ctx = ui.ctx().clone();
     kit::group(ui, theme, t!("Window"));
     kit::setting_row(ui, theme, t!("Activity bar"), t!("The icons on the far left for Workspaces, Stored Data, Plugins and Settings."), |ui| {
@@ -285,12 +291,96 @@ fn editor(ui: &mut Ui, ed: &mut Editor, theme: &Theme, asks: &mut Vec<Ask>) {
             asks.push(Ask::ResetLayout);
         }
     });
+    console_font(ui, ed, theme, view, asks);
     kit::group(ui, theme, t!("Startup"));
     kit::setting_row(ui, theme, t!("Reopen last project"), t!("Open the project you had open last time. When off, XC Circuit starts with the example."), |ui| {
         toggle(ui, theme, &mut ed.prefs.reopen_last_project);
     });
     kit::setting_row(ui, theme, t!("Look for updates"), t!("At start, ask GitHub whether there is a newer XC Circuit, and say so in the status bar. Help › Check for Updates asks any time."), |ui| {
         toggle(ui, theme, &mut ed.prefs.check_updates);
+    });
+}
+
+/// The Console's font, picked from the fonts installed on the computer, and its size.
+fn console_font(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView, asks: &mut Vec<Ask>) {
+    let ctx = ui.ctx().clone();
+    // The list is read once, in the background: reading every font takes a moment.
+    if view.fonts.is_none() && view.font_list.is_none() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let repaint = ctx.clone();
+        std::thread::spawn(move || {
+            let _ = tx.send(crate::ui::fonts::installed_families());
+            repaint.request_repaint();
+        });
+        view.font_list = Some(rx);
+    }
+    if let Some(list) = view.font_list.as_ref().and_then(|rx| rx.try_recv().ok()) {
+        view.fonts = Some(list);
+        view.font_list = None;
+    }
+    kit::group(ui, theme, t!("Console"));
+    let builtin = t!("Built in (monospaced)");
+    kit::setting_row(ui, theme, t!("Font"), t!("The Console's text. In a monospaced font its columns line up."), |ui| {
+        let shown = ed.prefs.console_font.clone().unwrap_or_else(|| builtin.to_string());
+        let mut pick: Option<Option<String>> = None;
+        kit::search_dropdown(ui, egui::Id::unique("console-font"), 260.0, shown, |ui| {
+            let search = ui.add(crate::ui::inputs::TextLine::new(&mut view.font_filter).hint(t!("Search fonts")));
+            // Typing searches right away.
+            if ui.memory(|m| m.focused().is_none()) {
+                search.request_focus();
+            }
+            ui.add_space(4.0);
+            if kit::option(ui, ed.prefs.console_font.is_none(), builtin).clicked() {
+                pick = Some(None);
+                ui.close();
+            }
+            let Some(list) = &view.fonts else {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label(RichText::new(t!("Looking for fonts…")).color(theme.text_muted));
+                });
+                return;
+            };
+            let filter = view.font_filter.to_lowercase();
+            ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
+                // Monospaced fonts first: the Console's columns line up in them.
+                for (mono, title) in [(true, t!("Monospaced")), (false, t!("Other fonts"))] {
+                    let names: Vec<&String> = list.iter().filter(|(n, m)| *m == mono && (filter.is_empty() || n.to_lowercase().contains(&filter))).map(|(n, _)| n).collect();
+                    if names.is_empty() {
+                        continue;
+                    }
+                    ui.label(RichText::new(title).size(11.0).strong().color(theme.text_muted));
+                    for name in names {
+                        if kit::option(ui, ed.prefs.console_font.as_deref() == Some(name.as_str()), name).clicked() {
+                            pick = Some(Some(name.clone()));
+                            ui.close();
+                        }
+                    }
+                }
+            });
+        });
+        if let Some(p) = pick
+            && p != ed.prefs.console_font
+        {
+            ed.prefs.console_font = p;
+            asks.push(Ask::ConsoleFont);
+        }
+    });
+    kit::setting_row(ui, theme, t!("Font size"), t!("The Console's text size."), |ui| {
+        kit::Number::new(&mut ed.prefs.console_font_size).range(8.0..=32.0).decimals(0).suffix(" pt").show(ui, theme);
+        if crate::ui::kit::button(ui, theme, t!("Reset")).clicked() {
+            ed.prefs.console_font_size = crate::editor::prefs::CONSOLE_FONT_SIZE;
+        }
+    });
+    // What it looks like.
+    let font = crate::ui::fonts::console(&ctx, ed.prefs.console_font_size);
+    egui::Frame::new().fill(theme.panel_header).corner_radius(6).inner_margin(egui::Margin::symmetric(12, 8)).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new("12:00:00").font(font.clone()).color(theme.text_muted));
+            ui.label(RichText::new("INFO ").font(font.clone()).color(theme.accent));
+            ui.label(RichText::new(t!("Loaded 6 plugins, 268 blocks, 25 pin types, 3 themes")).font(font.clone()).color(theme.text));
+        });
     });
 }
 
