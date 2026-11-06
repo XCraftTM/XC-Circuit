@@ -34,6 +34,18 @@ The data is kept in `store.json`: in the project's `.circuit/data/` folder while
 
 A bot backs up its stored data when it starts and every 6 hours, keeping the newest 10 in a `backups` folder next to `store.json`. If the data is empty or damaged at start, the bot asks whether to restore a backup or start empty (a dialog in XC Circuit, a question in the terminal for exported bots).
 
+## Timers: later, once
+
+**Schedule** runs the **On Scheduled** blocks with the same name once, after a while (`30s`, `10m`, `1h 30m`, `3d`) or at a time (`2026-12-24 18:00`), with a **value** along: a text, or an object with what's needed later (`{ user, channel, text }`). For reminders, temporary bans, giveaways that end, a message that goes out on a day.
+
+Timers are kept with the stored data, so they still run after the bot restarts. One that was due while the bot was off runs when it starts again, with **Late** saying by how much; turn off *Run missed ones* on On Scheduled to drop those instead. Users, channels and messages in the value come back as their data (id, name …), not as live objects: find the member again with its id when you need more.
+
+- A **key** (under Advanced) replaces an earlier timer with the same key: `remind-${user.id}` gives everyone one reminder at most.
+- **Cancel Scheduled** removes timers before they run: by the id Schedule gave, by key, or all with a name.
+- **List Scheduled** gives the waiting timers, soonest first.
+
+**Every** is for things that repeat (every 10 minutes, every day at 9:00); it doesn't need saving.
+
 ## In a database
 
 Stored values can be kept in MariaDB, MySQL, PostgreSQL, SQLite or MongoDB instead of `store.json`, and the database blocks read and write your own tables there. See [Databases](./databases).

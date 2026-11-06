@@ -45,6 +45,8 @@ class Runtime {
     this.store = null;
     /** The connections of Bot › Settings › Databases, opened when first used. */
     this.databases = new Databases(this);
+    /** One-time timers (Schedule, On Scheduled), kept in the stored data. */
+    this.timers = new Timers(this);
     runtimes.add(this);
     this.runCounter = 0;
     this.log = makeLogger(this, null);
@@ -203,6 +205,7 @@ class Runtime {
       }
     }
     for (const h of this.startHandlers) h({});
+    await this.timers.start();
     this.emit("ready", {});
   }
 
@@ -267,6 +270,8 @@ class Runtime {
       util: UTIL,
       /** A file the block lists in `requires.assets` (a font …), as a path on disk. */
       asset: (name) => rt.asset(node.blockId, name),
+      /** One-time timers: schedule, cancel, list, and on(name, fn) to run when one is due. */
+      timers: rt.timers.api(),
       /** A database of Bot › Settings › Databases: its id or name, or "default". */
       db: (which) => rt.databases.get(which),
       require: (name) => rt.require(name),
@@ -1709,6 +1714,140 @@ async function testDatabase(depsRoot, dataDir) {
   }
 }
 
+// ─── One-time timers (Schedule, On Scheduled) ────────────────────────────────
+// Kept in the stored data (bucket ns:xc.timers), so they survive restarts and
+// live in a database when stored values do. Each runs once, then is gone.
+
+/** A timer that is this late counts as missed (the bot was off when it was due). */
+const MISSED_AFTER_MS = 60 * 1000;
+/** setTimeout can't wait longer than this; longer waits are split. */
+const MAX_WAIT_MS = 2 ** 31 - 1;
+
+/**
+ * A value as it can be kept: JSON, with live objects (a Discord user, a
+ * message) as their own data (toJSON, or their plain fields), dates as ISO
+ * text, and nothing circular or deeper than a few levels.
+ */
+function snapshot(value, depth = 0, seen = new WeakSet()) {
+  if (value === null || value === undefined) return value ?? null;
+  if (typeof value === "bigint") return value.toString();
+  if (typeof value !== "object") return typeof value === "function" ? undefined : value;
+  if (value instanceof Date) return value.toISOString();
+  if (seen.has(value) || depth > 5) return typeof value.id === "string" ? { id: value.id } : null;
+  seen.add(value);
+  if (typeof value.toJSON === "function" && !(value instanceof Map)) {
+    try {
+      return snapshot(value.toJSON(), depth + 1, seen);
+    } catch {}
+  }
+  if (Array.isArray(value)) return value.slice(0, 1000).map((v) => snapshot(v, depth + 1, seen) ?? null);
+  if (value instanceof Map) return Object.fromEntries([...value].slice(0, 1000).map(([k, v]) => [String(k), snapshot(v, depth + 1, seen)]));
+  const out = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (k.startsWith("_") || k === "client") continue;
+    const s = snapshot(v, depth + 1, seen);
+    if (s !== undefined) out[k] = s;
+  }
+  return out;
+}
+
+class Timers {
+  constructor(rt) {
+    this.rt = rt;
+    this.listeners = new Map(); // name -> [{ fn, catchUp }]
+    this.armed = new Map(); // id -> timeout
+    this.started = false;
+  }
+
+  get scope() {
+    return this.rt.store.scope("ns", "xc.timers");
+  }
+
+  /** Arms every saved timer: from now on, scheduling arms at once. */
+  async start() {
+    this.started = true;
+    for (const t of await this.list()) this.arm(t);
+  }
+
+  arm(t) {
+    clearTimeout(this.armed.get(t.id));
+    const wait = Math.max(0, t.due - Date.now());
+    const handle = setTimeout(() => (wait > MAX_WAIT_MS ? this.arm(t) : this.fire(t.id).catch((e) => this.rt.log.error(`Timer ${t.name}: ${e.message}`))), Math.min(wait, MAX_WAIT_MS));
+    this.armed.set(t.id, handle);
+  }
+
+  /** Saves a timer and arms it. With a `key`, a timer with the same key is replaced. */
+  async schedule({ name, due, data, key }) {
+    name = String(name ?? "").trim();
+    if (!name) throw new Error("A timer needs a name, which On Scheduled listens for");
+    const at = due instanceof Date ? due.getTime() : Number(due);
+    if (!Number.isFinite(at)) throw new Error("A timer needs a time to run at");
+    let replaced = 0;
+    if (key) replaced = await this.cancel({ key: String(key) });
+    const t = { id: UTIL.id(12), name, due: Math.round(at), data: snapshot(data), created: Date.now() };
+    if (key) t.key = String(key);
+    await this.scope.set(t.id, t);
+    if (this.started) this.arm(t);
+    return { ...t, replaced: replaced > 0 };
+  }
+
+  /** Runs a due timer once: it's removed first, so it never runs twice. */
+  async fire(id) {
+    this.armed.delete(id);
+    const t = await this.scope.get(id);
+    if (!t) return;
+    await this.scope.delete(id);
+    const late = Math.max(0, Date.now() - t.due);
+    const all = this.listeners.get(t.name) || [];
+    if (!all.length) {
+      this.rt.log.warn(`The timer "${t.name}" was due, but no On Scheduled block listens for it.`);
+      return;
+    }
+    for (const l of all) {
+      if (late > MISSED_AFTER_MS && !l.catchUp) continue;
+      l.fn({ id: t.id, name: t.name, key: t.key ?? null, data: t.data, due: new Date(t.due), late });
+    }
+  }
+
+  /** Removes timers by id, key or name (all of these that are given must match); gives how many. */
+  async cancel({ id, key, name } = {}) {
+    if (id == null && key == null && name == null) throw new Error("Say which timers: an id, a key or a name");
+    let count = 0;
+    for (const t of await this.list()) {
+      if ((id != null && t.id !== String(id)) || (key != null && t.key !== String(key)) || (name != null && t.name !== String(name))) continue;
+      clearTimeout(this.armed.get(t.id));
+      this.armed.delete(t.id);
+      await this.scope.delete(t.id);
+      count++;
+    }
+    return count;
+  }
+
+  /** The waiting timers (of one name, if given), soonest first. */
+  async list(name) {
+    const s = this.scope;
+    const out = [];
+    for (const k of await s.keys()) {
+      const t = await s.get(k);
+      if (t && typeof t === "object" && t.id && (name == null || name === "" || t.name === name)) out.push(t);
+    }
+    return out.sort((a, b) => a.due - b.due);
+  }
+
+  on(name, fn, { catchUp = true } = {}) {
+    getOr(this.listeners, String(name ?? "").trim(), () => []).push({ fn, catchUp });
+  }
+
+  api() {
+    return {
+      schedule: (o) => this.schedule(o),
+      cancel: (o) => this.cancel(o),
+      list: (name) => this.list(name),
+      on: (name, fn, opts) => this.on(name, fn, opts),
+    };
+  }
+}
+
 const UTIL = {
   sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
   isURL: (s) => {
@@ -2027,4 +2166,4 @@ if (typeof __XC_BUNDLE__ !== "undefined") {
   cli();
 }
 
-module.exports = { start, ungroupBlock, fillTemplate, templateParts, coerce, compare, preview, Store, DbStore, Database, Databases, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };
+module.exports = { start, ungroupBlock, fillTemplate, templateParts, snapshot, Timers, coerce, compare, preview, Store, DbStore, Database, Databases, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };

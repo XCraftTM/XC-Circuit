@@ -1,13 +1,13 @@
 id          = "xc.core"
 name        = "Circuit Core"
-version     = "1.0.4"
+version     = "1.0.5"
 author      = "XC Team"
 description = "Mode-independent blocks (flow, text, math, logic, stored data, databases, debug), the icon set and the built-in themes."
 icon        = "icons/block.svg"
 
 [engines]
 circuit = "^1.0"
-# The database and canvas blocks need the runtime and editor of XC Circuit 0.1.3 (ctx.db, ctx.asset, the canvas field).
+# The database and canvas blocks need the runtime and editor of XC Circuit 0.1.3 (ctx.db, ctx.asset, ctx.timers, the canvas field).
 app = "0.1.3"
 
 [contributes]

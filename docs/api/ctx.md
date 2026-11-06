@@ -160,6 +160,17 @@ A database of [Bot › Settings › Databases](/explanations/databases). `"defau
 
 A condition is `{ column, op, value }`; `op` is `"="`, `"!="`, `">"`, `">="`, `"<"`, `"<="`, `"contains"`, `"starts"`, `"ends"` (these three ignore upper and lower case), `"null"` or `"notNull"`. With `any`, one condition is enough. Table and column names must be letters, digits and `_` (a `.` between schema and table); values are always sent as parameters. `db.kind` is `"mariadb"`, `"postgres"`, `"sqlite"` or `"mongodb"`, and `db.client` the driver's own pool or client once connected.
 
+## timers
+
+```js
+const { id, due } = await ctx.timers.schedule({ name: "reminder", due: Date.now() + 600000, data: { text }, key: `remind-${user.id}` });
+await ctx.timers.cancel({ key: `remind-${user.id}` });   // or { id } or { name }; gives how many
+const waiting = await ctx.timers.list("reminder");       // soonest first
+ctx.timers.on("reminder", (t) => { /* t.data, t.due, t.late */ }, { catchUp: true });
+```
+
+One-time timers, kept with the [stored data](#store) so they survive restarts. `on` is for event blocks' `listen`; missed timers (more than a minute late) reach only listeners with `catchUp`. `data` is kept as JSON: live objects become their data.
+
 ## asset
 
 ```js
