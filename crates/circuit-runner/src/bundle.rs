@@ -57,11 +57,17 @@ pub fn build_bundle(project: &Project, reg: &Registry, mode: Option<&BuildMode>)
         .map(|(k, ws)| Ok((k.clone(), serde_json::to_value(ws)?)))
         .collect::<Result<_>>()?;
 
+    // Bot › Settings: what was saved, and the defaults of the rest.
+    let mut settings: Map<String, Value> = mode.map(|m| reg.bot_settings(m).defaults().into_iter().collect()).unwrap_or_default();
+    for (key, value) in &project.meta.settings {
+        settings.insert(key.clone(), value.clone());
+    }
+
     let value = json!({
         "project": {
             "name": project.meta.name,
             "mode": project.meta.mode,
-            "settings": project.meta.settings,
+            "settings": settings,
             "data": project.meta.data,
             "tokenEnv": mode.map(|m| m.token_env()).unwrap_or("DISCORD_TOKEN"),
         },
@@ -105,6 +111,25 @@ mod tests {
         let json = serde_json::to_value(&project.workspaces["off"]).unwrap();
         assert_eq!(json["disabled"], true);
         assert!(serde_json::to_value(&project.workspaces["on"]).unwrap().get("disabled").is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The bot gets each setting's default until another value is saved,
+    /// and never a secret.
+    #[test]
+    fn settings_have_their_defaults() {
+        let dir = std::env::temp_dir().join(format!("xc-bundle-settings-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let mut project = Project::create(&dir, "Settings", "discord-bot").unwrap();
+        let engine = circuit_plugins::BlockEngine::new().unwrap();
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+        let reg = Registry::load(&[root], &engine);
+        let mode = reg.modes.iter().find(|m| m.id == "discord-bot").unwrap();
+        let settings = |project: &Project| build_bundle(project, &reg, Some(mode)).unwrap().value["project"]["settings"].clone();
+        assert_eq!(settings(&project)["prefix"], "!");
+        assert!(settings(&project).get("token").is_none());
+        project.meta.settings.insert("prefix".into(), Value::from("?"));
+        assert_eq!(settings(&project)["prefix"], "?");
         let _ = fs::remove_dir_all(&dir);
     }
 }

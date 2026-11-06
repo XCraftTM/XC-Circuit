@@ -38,6 +38,8 @@ pub struct Registry {
     pub type_classes: HashMap<String, String>,
     pub themes: Vec<ThemeDef>,
     pub modes: Vec<BuildMode>,
+    /// Plugins' parts of Bot › Settings.
+    pub bot_settings: Vec<crate::bot_settings::SettingsFile>,
     /// Translations, one per language code (files for the same language are merged).
     pub locales: Vec<crate::LocaleDef>,
     /// Named icons: file stem → file path.
@@ -152,6 +154,17 @@ impl Registry {
                     mode.plugin = m.id.clone();
                     self.modes.retain(|old| old.id != mode.id);
                     self.modes.push(mode);
+                }
+                Err(e) => self.problem(display(&path), format!("{e:#}")),
+            }
+        }
+
+        self.bot_settings.retain(|f| f.plugin != m.id);
+        for path in expand(&plugin.dir, &c.bot_settings) {
+            match read_toml::<crate::bot_settings::SettingsFile>(&path) {
+                Ok(mut file) => {
+                    file.plugin = m.id.clone();
+                    self.bot_settings.push(file);
                 }
                 Err(e) => self.problem(display(&path), format!("{e:#}")),
             }

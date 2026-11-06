@@ -81,6 +81,8 @@ pub struct Contributes {
     pub themes: Vec<String>,
     pub icons: Vec<String>,
     pub locales: Vec<String>,
+    /// Pages and settings for Bot › Settings (TOML, see bot_settings.rs).
+    pub bot_settings: Vec<String>,
 }
 
 /// The host API version this build implements.

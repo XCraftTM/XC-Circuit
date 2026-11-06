@@ -121,6 +121,21 @@ id = "code"
 name = "Code & Debug"
 icon = "terminal"
 
+# Bot › Settings: one page per `group` (the page with that name, below).
+[[pages]]
+id = "connection"
+name = "Connection"
+icon = "plug"
+description = "How your bot logs in to Fluxer."
+order = 10
+
+[[pages]]
+id = "messages"
+name = "Messages"
+icon = "message"
+description = "Text commands, such as !help."
+order = 30
+
 [settings]
 token = { type = "secret", group = "Connection", label = "Bot token", required = true, placeholder = "Paste the token from the Fluxer developer portal", description = "Create a bot in the Fluxer developer portal and copy its token." }
 prefix = { type = "text", group = "Messages", label = "Text command prefix", default = "!", placeholder = "!", description = "What text commands start with, such as !help.", pattern = '\S{1,5}', patternHint = "1 to 5 characters, without spaces." }

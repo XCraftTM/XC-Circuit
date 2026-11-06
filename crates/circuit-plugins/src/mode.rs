@@ -24,8 +24,10 @@ pub struct BuildMode {
     /// Builder.
     pub features: Vec<String>,
     pub categories: Vec<Category>,
-    /// Settings page fields, keyed by setting id.
+    /// Bot › Settings fields, keyed by setting id (see bot_settings.rs).
     pub settings: IndexMap<String, Value>,
+    /// Bot › Settings pages: the settings' `page` names one of these.
+    pub pages: Vec<crate::bot_settings::SettingsPage>,
     /// npm packages the runtime libraries need.
     pub dependencies: IndexMap<String, String>,
     /// Intents (as blocks name them) that have to be turned on by hand for

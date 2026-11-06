@@ -1,6 +1,7 @@
 //! Plugins: manifests, their contributions (blocks, pin types, themes, build
 //! modes, icons) and the QuickJS sandbox that reads block files.
 
+pub mod bot_settings;
 pub mod engine;
 pub mod locale;
 pub mod manifest;
@@ -10,6 +11,7 @@ pub mod theme;
 pub mod ts;
 pub mod types_def;
 
+pub use bot_settings::{BotSettings, Setting, SettingsFile, SettingsPage};
 pub use engine::BlockEngine;
 pub use locale::LocaleDef;
 pub use manifest::PluginManifest;

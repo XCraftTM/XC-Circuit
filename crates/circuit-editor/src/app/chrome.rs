@@ -265,7 +265,7 @@ impl CircuitApp {
             (Tab::EmbedBuilder, self.ed.embed_edit.is_some(), egui::vec2(1060.0, 760.0)),
             (Tab::LayoutBuilder, self.ed.layout_edit.is_some(), egui::vec2(1240.0, 800.0)),
             (Tab::SlashCommands, self.ed.slash_edit.is_some(), egui::vec2(1320.0, 720.0)),
-            (Tab::BotSettings, self.bot.settings.is_some(), egui::vec2(540.0, 600.0)),
+            (Tab::BotSettings, self.bot.settings.is_some(), egui::vec2(820.0, 620.0)),
             (Tab::Export, self.bot.export.is_some(), egui::vec2(560.0, 620.0)),
             (Tab::Plugins, self.plugins.is_some(), egui::vec2(580.0, 560.0)),
             (Tab::WorkspaceExport, self.ed.ws_export.is_some(), egui::vec2(660.0, 680.0)),

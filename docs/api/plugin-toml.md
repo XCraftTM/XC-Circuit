@@ -68,6 +68,7 @@ Each entry is a list of paths or glob patterns relative to the plugin folder. `*
 | `classes` | class catalogs: the members of the values behind pin types, for completion in `${…}` | [Pin types](./pin-types#class-catalogs) |
 | `themes` | themes | [Themes](./themes) |
 | `locales` | translations | [Translations](./locales) |
+| `botSettings` | pages and settings for Bot › Settings | [Plugin settings](./build-modes#plugin-settings) |
 | `icons` | icons, by file name without extension (`icons/rocket.svg` is `rocket`) | — |
 
 Runtime libraries are named by the build mode that uses them ([`runtimeLibs`](./build-modes#keys)), and templates are found in the plugin's `templates/` folder without being listed.

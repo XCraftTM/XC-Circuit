@@ -1,6 +1,9 @@
 //! Running the bot from the editor, its Settings dialog and Export.
 
 pub mod profile;
+mod settings;
+
+pub use settings::SettingsDraft;
 
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, channel};
@@ -9,7 +12,6 @@ use std::time::{Duration, Instant};
 
 use circuit_runner::{BotEvent, ExportOptions, ExportSecret, Msg, Session, SessionConfig, build_bundle, secrets};
 use eframe::egui::{self, RichText};
-use serde_json::Value;
 
 use crate::ui::dialog::{self, Part};
 use crate::editor::{Editor, Level};
@@ -77,111 +79,6 @@ pub fn format_ms(ms: f64) -> String {
     }
 }
 
-/// One row of the Settings dialog, read from the build mode's `[settings]`.
-struct SettingField {
-    key: String,
-    group: String,
-    label: String,
-    description: Option<String>,
-    placeholder: String,
-    /// Kept in the system keyring instead of the project.
-    secret: bool,
-    /// Typed like a password, with an eye button to show it (every secret is).
-    masked: bool,
-    required: bool,
-    /// The value must match this, when not empty (`pattern` in the build mode).
-    pattern: Option<regex::Regex>,
-    /// Shown when the value doesn't match (`patternHint`).
-    pattern_hint: Option<String>,
-    value: String,
-    /// Secrets only: whether one is already stored.
-    saved: bool,
-    reveal: bool,
-    remove: bool,
-    /// When the Copy button was last used, to show that it worked.
-    copied: Option<Instant>,
-}
-
-/// How long the Copy button shows a check mark.
-const COPIED_FOR: Duration = Duration::from_millis(1500);
-
-/// A field pattern must match the whole value.
-fn compile_pattern(pattern: &str) -> Result<regex::Regex, regex::Error> {
-    regex::Regex::new(&format!("^(?:{pattern})$"))
-}
-
-/// Why a typed value isn't accepted, if it isn't. Empty values are left to `required`.
-fn pattern_problem(pattern: Option<&regex::Regex>, hint: Option<&str>, value: &str) -> Option<String> {
-    let value = value.trim();
-    match pattern {
-        Some(re) if !value.is_empty() && !re.is_match(value) => Some(hint.unwrap_or(t!("This doesn't look right.")).to_string()),
-        _ => None,
-    }
-}
-
-impl SettingField {
-    fn problem(&self) -> Option<String> {
-        pattern_problem(self.pattern.as_ref(), self.pattern_hint.as_deref(), &self.value)
-    }
-}
-
-pub struct SettingsDraft {
-    fields: Vec<SettingField>,
-    project_name: String,
-    /// Privileged intents the project's blocks need: what the platform calls
-    /// each, and the blocks that need it.
-    intents: Vec<(String, Vec<String>)>,
-    /// Where to turn them on, for this bot.
-    intents_page: Option<String>,
-}
-
-/// The privileged intents `mode` lists that the project's blocks need, with
-/// the names of those blocks.
-fn privileged_intents(project: &circuit_core::Project, reg: &circuit_plugins::Registry, mode: &circuit_plugins::BuildMode) -> Vec<(String, Vec<String>)> {
-    let mut out: Vec<(String, Vec<String>)> = mode.privileged_intents.values().map(|label| (label.clone(), Vec::new())).collect();
-    for ws in project.workspaces.values() {
-        for node in ws.nodes.values() {
-            let Some(def) = reg.block(&node.block) else { continue };
-            for (i, intent) in mode.privileged_intents.keys().enumerate() {
-                if def.intents.contains(intent) && !out[i].1.contains(&def.name) {
-                    out[i].1.push(def.name.clone());
-                }
-            }
-        }
-    }
-    out.retain(|(_, blocks)| !blocks.is_empty());
-    out
-}
-
-/// A Discord bot's application id: the first part of its token is the id,
-/// in base64.
-fn app_id_from_token(token: &str) -> Option<String> {
-    let first = token.trim().split('.').next()?;
-    let mut bits: u32 = 0;
-    let mut count = 0;
-    let mut out = Vec::new();
-    for c in first.bytes() {
-        let v = match c {
-            b'A'..=b'Z' => c - b'A',
-            b'a'..=b'z' => c - b'a' + 26,
-            b'0'..=b'9' => c - b'0' + 52,
-            b'+' | b'-' => 62,
-            b'/' | b'_' => 63,
-            b'=' => break,
-            _ => return None,
-        } as u32;
-        bits = (bits << 6) | v;
-        count += 6;
-        if count >= 8 {
-            count -= 8;
-            out.push((bits >> count) as u8);
-            bits &= (1 << count) - 1;
-        }
-    }
-    let id = String::from_utf8(out).ok()?;
-    (id.len() >= 15 && id.bytes().all(|b| b.is_ascii_digit())).then_some(id)
-}
-
 pub struct ExportDraft {
     dir: PathBuf,
     include_token: bool,
@@ -223,11 +120,9 @@ impl BotUi {
             Err(e) => return ed.log(Level::Error, format!("Could not prepare the bot: {e:#}")),
         };
         let mut env = Vec::new();
-        for (key, spec) in mode.map(|m| m.settings.iter().collect::<Vec<_>>()).unwrap_or_default() {
-            if spec.get("type").and_then(Value::as_str) == Some("secret")
-                && let Some(v) = secrets::get(&project.root, key)
-            {
-                env.push((format!("XC_SECRET_{}", key.to_uppercase()), v));
+        for s in settings::secret_settings(ed) {
+            if let Some(v) = secrets::get(&project.root, &s.key) {
+                env.push((format!("XC_SECRET_{}", s.key.to_uppercase()), v));
             }
         }
         let cfg = SessionConfig {
@@ -343,60 +238,6 @@ impl BotUi {
         });
     }
 
-    pub fn open_settings(&mut self, ed: &mut Editor) {
-        let (Some(project), Some(mode)) = (&ed.project, ed.mode()) else { return };
-        let text = |spec: &Value, key: &str| spec.get(key).and_then(Value::as_str).map(str::to_string);
-        let tr = |s: &str| crate::i18n::tr(s).into_owned();
-        let mut bad_patterns = Vec::new();
-        let fields = mode
-            .settings
-            .iter()
-            .map(|(key, spec)| {
-                let secret = text(spec, "type").as_deref() == Some("secret");
-                let pattern = text(spec, "pattern").and_then(|p| match compile_pattern(&p) {
-                    Ok(re) => Some(re),
-                    Err(e) => {
-                        bad_patterns.push(format!("The build mode's pattern for setting {key} doesn't work, so it isn't checked: {e}"));
-                        None
-                    }
-                });
-                let value = if secret {
-                    String::new()
-                } else {
-                    project.meta.settings.get(key).and_then(Value::as_str).map(str::to_string).or_else(|| text(spec, "default")).unwrap_or_default()
-                };
-                SettingField {
-                    key: key.clone(),
-                    group: text(spec, "group").map(|g| tr(&g)).unwrap_or_else(|| t!("General").into()),
-                    label: text(spec, "label").map(|l| tr(&l)).unwrap_or_else(|| key.clone()),
-                    description: text(spec, "description").map(|d| tr(&d)),
-                    placeholder: text(spec, "placeholder").map(|p| tr(&p)).unwrap_or_default(),
-                    secret,
-                    masked: secret || spec.get("sensitive").and_then(Value::as_bool).unwrap_or(false),
-                    required: spec.get("required").and_then(Value::as_bool).unwrap_or(false),
-                    pattern,
-                    pattern_hint: text(spec, "patternHint").map(|h| tr(&h)),
-                    value,
-                    saved: secret && secrets::get(&project.root, key).is_some(),
-                    reveal: false,
-                    remove: false,
-                    copied: None,
-                }
-            })
-            .collect();
-        let intents = privileged_intents(project, &ed.reg, mode);
-        let app_id = secrets::get(&project.root, "token").and_then(|t| app_id_from_token(&t));
-        let intents_page = mode.intents_page.as_ref().map(|page| match &app_id {
-            Some(id) => page.replace("{appId}", id),
-            // Without the bot's id: the list of the account's applications.
-            None => page.split("{appId}").next().unwrap_or(page).to_string(),
-        });
-        self.settings = Some(SettingsDraft { fields, project_name: project.meta.name.clone(), intents, intents_page });
-        for line in bad_patterns {
-            ed.log(Level::Warn, line);
-        }
-    }
-
     pub fn open_export(&mut self, ed: &Editor) {
         let Some(project) = &ed.project else { return };
         let folder = circuit_runner::export::folder_name(&project.meta.name);
@@ -451,162 +292,6 @@ impl BotUi {
                 self.question = None;
             }
             None => {}
-        }
-    }
-
-    /// The Bot settings tab.
-    pub fn settings_tab(&mut self, ui: &mut egui::Ui, ed: &mut Editor) {
-        let Some(draft) = &mut self.settings else { return };
-        let theme = ed.theme.clone();
-        let icon = ed.reg.icons.get("settings").cloned();
-        let subtitle = tf!("{project} · stored per project", project = draft.project_name);
-        let store = if cfg!(windows) { t!("Windows Credential Manager") } else { t!("the system keyring") };
-        let root = ed.project.as_ref().map(|p| p.root.clone());
-        let icon_of = |name: &str| ed.reg.icons.get(name).cloned();
-        let (eye, eye_off, copy, check) = (icon_of("eye"), icon_of("eye-off"), icon_of("copy"), icon_of("check"));
-        let problems = draft.fields.iter().filter(|f| f.problem().is_some()).count();
-        let (mut save, mut close, mut cancel) = (false, false, false);
-        dialog::tab(
-            ui,
-            &theme,
-            dialog::Spec { id: "bot-settings", title: t!("Bot settings"), subtitle: Some(&subtitle), icon: icon.as_deref(), width: 520.0 },
-            |ui, part| match part {
-                Part::Body => {
-                    let mut group: Option<String> = None;
-                    for f in &mut draft.fields {
-                        if group.as_ref() != Some(&f.group) {
-                            dialog::section(ui, &theme, &f.group);
-                            group = Some(f.group.clone());
-                        }
-                        let label = if f.required { format!("{} *", f.label) } else { f.label.clone() };
-                        let description = f.description.clone();
-                        dialog::field(ui, &theme, &label, description.as_deref(), |ui| {
-                            if !f.masked {
-                                dialog::text_input(ui, &mut f.value, &f.placeholder, false);
-                            } else {
-                                ui.horizontal(|ui| {
-                                    ui.spacing_mut().item_spacing.x = 6.0;
-                                    let hint = if f.saved && !f.remove { t!("•••••••• saved · type to replace") } else { f.placeholder.as_str() };
-                                    ui.allocate_ui(egui::vec2(ui.available_width() - 80.0, 34.0), |ui| {
-                                        dialog::text_input(ui, &mut f.value, hint, !f.reveal);
-                                    });
-                                    let (icon, tip) = if f.reveal { (eye_off.as_deref(), t!("Hide")) } else { (eye.as_deref(), t!("Show what you typed")) };
-                                    if dialog::icon_button(ui, &theme, icon, if f.reveal { t!("Hide") } else { "Show" }, tip).clicked() {
-                                        f.reveal = !f.reveal;
-                                    }
-                                    // Copies what was typed, or else the saved value, without showing it.
-                                    let saved_value = || if f.secret && f.saved { root.as_deref().and_then(|r| secrets::get(r, &f.key)) } else { None };
-                                    let can_copy = !f.value.is_empty() || (f.saved && !f.remove);
-                                    let copied = f.copied.is_some_and(|t| t.elapsed() < COPIED_FOR);
-                                    let (icon, tip) = if copied { (check.as_deref(), t!("Copied")) } else { (copy.as_deref(), t!("Copy without showing it")) };
-                                    if ui.add_enabled_ui(can_copy, |ui| dialog::icon_button(ui, &theme, icon, "Copy", tip)).inner.clicked() {
-                                        let value = if f.value.is_empty() { saved_value() } else { Some(f.value.trim().to_string()) };
-                                        if let Some(v) = value {
-                                            ui.ctx().copy_text(v);
-                                            f.copied = Some(Instant::now());
-                                            ui.ctx().request_repaint_after(COPIED_FOR);
-                                        }
-                                    }
-                                });
-                            }
-                            if let Some(p) = f.problem() {
-                                ui.add_space(2.0);
-                                ui.label(RichText::new(p).size(11.5).color(theme.error));
-                            }
-                            if !f.secret {
-                                return;
-                            }
-                            ui.add_space(4.0);
-                            ui.horizontal(|ui| {
-                                if f.remove {
-                                    dialog::pill(ui, t!("Will be removed"), theme.error);
-                                } else if f.saved {
-                                    dialog::pill(ui, t!("Saved"), theme.action);
-                                } else {
-                                    dialog::pill(ui, t!("Not set"), theme.warning);
-                                }
-                                if f.saved && dialog::button(ui, &theme, if f.remove { t!("Keep it") } else { t!("Remove saved value") }).clicked() {
-                                    f.remove = !f.remove;
-                                }
-                            });
-                            ui.add_space(2.0);
-                            ui.label(RichText::new(tf!("Kept in {store}, never in project files.", store = store)).size(11.5).color(theme.text_muted));
-                        });
-                    }
-                    if !draft.intents.is_empty() {
-                        dialog::section(ui, &theme, t!("Privileged intents"));
-                        ui.label(RichText::new(t!("Your blocks need these. Turn them on for your bot in the developer portal, under Bot › Privileged Gateway Intents, or it can't log in.")).size(12.0).color(theme.text_muted));
-                        ui.add_space(6.0);
-                        for (intent, blocks) in &draft.intents {
-                            ui.horizontal_wrapped(|ui| {
-                                ui.label(RichText::new(intent).strong().color(theme.text));
-                                ui.label(RichText::new(tf!("for {blocks}", blocks = blocks.join(", "))).size(12.0).color(theme.text_muted));
-                            });
-                        }
-                        if let Some(page) = &draft.intents_page {
-                            ui.add_space(6.0);
-                            if dialog::button(ui, &theme, t!("Open the developer portal")).on_hover_text(page.as_str()).clicked() {
-                                let _ = open::that(page);
-                            }
-                        }
-                    }
-                }
-                Part::Footer => {
-                    ui.add_enabled_ui(problems == 0, |ui| {
-                        if dialog::primary_button(ui, &theme, t!("Save and close")).clicked() {
-                            (save, close) = (true, true);
-                        }
-                        if dialog::secondary_button(ui, &theme, t!("Save")).clicked() {
-                            save = true;
-                        }
-                    });
-                    cancel = dialog::secondary_button(ui, &theme, t!("Cancel")).clicked();
-                    if problems > 0 {
-                        ui.label(RichText::new(tf!("{count} to fix", count = problems)).size(12.0).color(theme.warning));
-                    }
-                }
-            },
-        );
-        if save && problems == 0 {
-            let mut token_changed = false;
-            if let Some(project) = ed.project.as_mut() {
-                let mut errors = Vec::new();
-                for f in &draft.fields {
-                    if f.secret {
-                        let result = if f.remove && f.value.is_empty() {
-                            secrets::set(&project.root, &f.key, "")
-                        } else if !f.value.is_empty() {
-                            secrets::set(&project.root, &f.key, f.value.trim())
-                        } else {
-                            Ok(())
-                        };
-                        if let Err(e) = result {
-                            errors.push(format!("{}: {e:#}", f.label));
-                        } else if f.key == "token" {
-                            token_changed = true;
-                        }
-                    } else if project.meta.settings.get(&f.key).and_then(Value::as_str) != Some(f.value.as_str()) {
-                        project.meta.settings.insert(f.key.clone(), Value::String(f.value.trim().to_string()));
-                        ed.edited = true;
-                    }
-                }
-                for e in errors {
-                    ed.log(Level::Error, e);
-                }
-            }
-            ed.log(Level::Success, t!("Settings saved"));
-            // The previews show the bot of the token saved now.
-            if token_changed {
-                ed.fetch_bot_profile();
-            }
-            if close {
-                self.settings = None;
-            } else {
-                // Stay open, showing what is stored now (a typed token becomes "Saved").
-                self.open_settings(ed);
-            }
-        } else if cancel {
-            self.settings = None;
         }
     }
 
@@ -690,20 +375,15 @@ impl BotUi {
         };
         let token = if draft.include_token { secrets::get(&project.root, "token") } else { None };
         // The mode's other secrets, as lines in .env: with their values when the token goes too.
-        let secrets_out = ed
-            .mode()
-            .map(|m| {
-                m.settings
-                    .iter()
-                    .filter(|(key, spec)| *key != "token" && spec.get("type").and_then(Value::as_str) == Some("secret"))
-                    .map(|(key, spec)| ExportSecret {
-                        env: format!("XC_SECRET_{}", key.to_uppercase()),
-                        label: spec.get("label").and_then(Value::as_str).unwrap_or(key).to_string(),
-                        value: if draft.include_token { secrets::get(&project.root, key) } else { None },
-                    })
-                    .collect()
+        let secrets_out = settings::secret_settings(ed)
+            .into_iter()
+            .filter(|s| s.key != "token")
+            .map(|s| ExportSecret {
+                env: format!("XC_SECRET_{}", s.key.to_uppercase()),
+                label: s.text("label").unwrap_or(&s.key).to_string(),
+                value: if draft.include_token { secrets::get(&project.root, &s.key) } else { None },
             })
-            .unwrap_or_default();
+            .collect();
         let token_env = ed.mode().map(|m| m.token_env().to_string()).unwrap_or_else(|| "DISCORD_TOKEN".into());
         let opts = ExportOptions { name: project.meta.name.clone(), token, token_env, secrets: secrets_out, install: draft.install };
         let dir = draft.dir.clone();
@@ -822,63 +502,5 @@ mod tests {
         let old = Instant::now() - TIME_SHOWN - Duration::from_millis(1);
         let a = Activity { at: old, error: None, ms: Some((12.0, old)) };
         assert!(a.time_shown().is_none() && a.glow() == 0.0 && !a.live());
-    }
-
-    #[test]
-    fn patterns_match_the_whole_value() {
-        let re = compile_pattern(r"\d{3}").unwrap();
-        assert_eq!(pattern_problem(Some(&re), None, "123"), None);
-        assert_eq!(pattern_problem(Some(&re), None, " 123 "), None, "surrounding spaces are trimmed, as on save");
-        assert!(pattern_problem(Some(&re), None, "1234").is_some(), "anchored at both ends");
-        assert_eq!(pattern_problem(Some(&re), Some("Three digits"), "12").as_deref(), Some("Three digits"));
-        assert_eq!(pattern_problem(Some(&re), None, ""), None, "empty is left to required");
-        assert!(compile_pattern("(").is_err());
-    }
-
-    /// Bot settings names the privileged intents the blocks need, and the
-    /// developer portal page of the bot (its id is the token's first part).
-    #[test]
-    fn lists_privileged_intents_and_the_bot_page() {
-        let fake_token = ["MTIzNDU2Nzg5MDEyMzQ1Njc4OQ", "GhIjKl", "abcdefghijklmnopqrstuvwxyz0123456789AB"].join(".");
-        assert_eq!(app_id_from_token(&fake_token).as_deref(), Some("1234567890123456789"));
-        assert_eq!(app_id_from_token("not a token"), None);
-
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let ed = Editor::new(vec![root.join("plugins")], None).unwrap();
-        let mode = ed.reg.modes.iter().find(|m| m.id == "discord-bot").unwrap();
-        let dir = std::env::temp_dir().join(format!("xc-intents-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let mut project = circuit_core::Project::create(&dir, "Intents", "discord-bot").unwrap();
-        let ws = project.workspaces.values_mut().next().unwrap();
-        for (id, block) in [("a", "discord.on_member_join@1"), ("b", "discord.on_message@1"), ("c", "core.log@1")] {
-            ws.nodes.insert(id.into(), circuit_core::Node { block: block.into(), ..Default::default() });
-        }
-        let found = privileged_intents(&project, &ed.reg, mode);
-        let names: Vec<&str> = found.iter().map(|(i, _)| i.as_str()).collect();
-        assert_eq!(names, ["Server Members Intent", "Message Content Intent"], "{found:?}");
-        assert_eq!(found[0].1, ["Member Joins"], "{found:?}");
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn discord_settings_check_their_values() {
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../plugins/xc.discord/modes/discord.toml");
-        let mode: circuit_plugins::BuildMode = toml::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-        let check = |key: &str, value: &str| {
-            let spec = &mode.settings[key];
-            let re = compile_pattern(spec["pattern"].as_str().unwrap()).unwrap();
-            pattern_problem(Some(&re), spec.get("patternHint").and_then(Value::as_str), value)
-        };
-        // Made-up values in the shape Discord uses.
-        // Put together here, so secret scanners don't take it for a real token.
-        let fake_token = ["MTIzNDU2Nzg5MDEyMzQ1Njc4OQ", "GhIjKl", "abcdefghijklmnopqrstuvwxyz0123456789AB"].join(".");
-        assert_eq!(check("token", &fake_token), None);
-        assert!(check("token", "not a token").is_some());
-        assert!(check("token", "abc.def").is_some());
-        assert_eq!(check("devServer", "123456789012345678"), None);
-        assert!(check("devServer", "12345").is_some());
-        assert!(check("devServer", "my server").is_some());
-        assert_eq!(check("prefix", "!"), None);
-        assert!(check("prefix", "a b").is_some());
     }
 }

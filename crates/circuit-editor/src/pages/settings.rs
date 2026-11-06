@@ -61,7 +61,7 @@ pub struct SettingsView {
     shortcut_filter: String,
 }
 
-const NAV_W: f32 = 190.0;
+pub const NAV_W: f32 = 190.0;
 const CONTENT_MAX: f32 = 680.0;
 
 pub fn ui(ui: &mut Ui, ed: &mut Editor, native: &NativeHost, view: &mut SettingsView, asks: &mut Vec<Ask>) {
@@ -77,19 +77,7 @@ pub fn ui(ui: &mut Ui, ed: &mut Editor, native: &NativeHost, view: &mut Settings
     nav_ui.label(RichText::new(t!("SETTINGS")).size(11.0).strong().color(theme.text_muted));
     nav_ui.add_space(8.0);
     for (section, name, icon) in Section::ALL {
-        let (rect, resp) = nav_ui.allocate_exact_size(vec2(NAV_W - 16.0, 32.0), Sense::click());
-        let selected = view.section == section;
-        if selected {
-            nav_ui.painter().rect_filled(rect, 6.0, with_alpha(theme.accent, 38));
-        } else if resp.hovered() {
-            nav_ui.painter().rect_filled(rect, 6.0, theme.panel_header);
-        }
-        let tint = if selected { theme.accent } else { theme.text_muted };
-        if let Some(path) = ed.reg.icons.get(icon) {
-            egui::Image::from_uri(file_uri(path)).tint(tint).paint_at(&nav_ui, Rect::from_center_size(rect.left_center() + vec2(18.0, 0.0), vec2(16.0, 16.0)));
-        }
-        nav_ui.painter().text(rect.left_center() + vec2(36.0, 0.0), Align2::LEFT_CENTER, crate::i18n::t(name), FontId::proportional(13.5), if selected { theme.text } else { theme.text_muted });
-        if resp.on_hover_cursor(CursorIcon::PointingHand).clicked() {
+        if nav_item(&mut nav_ui, &theme, ed.reg.icons.get(icon).map(|p| p.as_path()), crate::i18n::t(name), view.section == section, None).clicked() {
             view.section = section;
             view.recording = None;
         }
@@ -118,15 +106,54 @@ pub fn ui(ui: &mut Ui, ed: &mut Editor, native: &NativeHost, view: &mut Settings
     });
 }
 
+/// One entry of a settings list on the left (here and in Bot › Settings):
+/// its icon and name, and a count or mark on the right when there is one.
+pub fn nav_item(ui: &mut Ui, theme: &Theme, icon: Option<&std::path::Path>, name: &str, selected: bool, badge: Option<(String, Color32)>) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 32.0), Sense::click());
+    if selected {
+        ui.painter().rect_filled(rect, 6.0, with_alpha(theme.accent, 38));
+    } else if resp.hovered() {
+        ui.painter().rect_filled(rect, 6.0, theme.panel_header);
+    }
+    let tint = if selected { theme.accent } else { theme.text_muted };
+    if let Some(path) = icon {
+        egui::Image::from_uri(file_uri(path)).tint(tint).paint_at(ui, Rect::from_center_size(rect.left_center() + vec2(18.0, 0.0), vec2(16.0, 16.0)));
+    }
+    let mut right = rect.right() - 8.0;
+    if let Some((text, color)) = &badge {
+        let galley = ui.painter().layout_no_wrap(text.clone(), FontId::proportional(11.0), theme.panel);
+        let size = vec2((galley.size().x + 10.0).max(18.0), 18.0);
+        let pill = Rect::from_center_size(pos2(right - size.x / 2.0, rect.center().y), size);
+        ui.painter().rect_filled(pill, 9.0, *color);
+        ui.painter().galley(pill.center() - galley.size() / 2.0, galley, theme.panel);
+        right = pill.left() - 6.0;
+    }
+    // A name too long for the list is cut short; the whole name shows on hover.
+    let font = FontId::proportional(13.5);
+    let color = if selected { theme.text } else { theme.text_muted };
+    let galley = ui.painter().layout(name.to_string(), font, color, f32::INFINITY);
+    let room = right - (rect.left() + 36.0);
+    let resp = if galley.size().x > room {
+        let job = egui::text::LayoutJob { wrap: egui::text::TextWrapping::truncate_at_width(room), ..egui::text::LayoutJob::simple_singleline(name.to_string(), FontId::proportional(13.5), color) };
+        let cut = ui.painter().layout_job(job);
+        ui.painter().galley(pos2(rect.left() + 36.0, rect.center().y - cut.size().y / 2.0), cut, color);
+        resp.on_hover_text(name)
+    } else {
+        ui.painter().galley(pos2(rect.left() + 36.0, rect.center().y - galley.size().y / 2.0), galley, color);
+        resp
+    };
+    resp.on_hover_cursor(CursorIcon::PointingHand)
+}
+
 /// A group heading.
-fn group(ui: &mut Ui, theme: &Theme, title: &str) {
+pub fn group(ui: &mut Ui, theme: &Theme, title: &str) {
     ui.add_space(10.0);
     ui.label(RichText::new(title.to_uppercase()).size(11.0).strong().color(theme.text_muted));
     ui.add_space(6.0);
 }
 
 /// One setting: its name and description on the left, the control on the right.
-fn row(ui: &mut Ui, theme: &Theme, title: &str, description: &str, control: impl FnOnce(&mut Ui)) {
+pub fn row(ui: &mut Ui, theme: &Theme, title: &str, description: &str, control: impl FnOnce(&mut Ui)) {
     egui::Frame::new().fill(theme.panel_header).stroke(Stroke::new(1.0, theme.line)).corner_radius(8).inner_margin(egui::Margin::symmetric(16, 12)).show(ui, |ui| {
         let inner = ui.available_width();
         ui.set_width(inner);

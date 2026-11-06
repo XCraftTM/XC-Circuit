@@ -121,13 +121,10 @@ pub fn template(ed: &crate::editor::Editor, code: &str, name: &str, english_name
         strings.push(mode.name.clone());
         strings.push(mode.description.clone());
         strings.extend(mode.categories.iter().map(|c| c.name.clone()));
-        for spec in mode.settings.values() {
-            for key in ["group", "label", "description", "placeholder", "patternHint"] {
-                if let Some(s) = spec.get(key).and_then(|v| v.as_str()).filter(|s| s.chars().any(char::is_alphabetic)) {
-                    strings.push(s.to_string());
-                }
-            }
-        }
+        settings_strings(&mode.pages, &mode.settings, &mut strings);
+    }
+    for file in &reg.bot_settings {
+        settings_strings(&file.pages, &file.settings, &mut strings);
     }
     // The starters New Project offers.
     for starter in crate::pages::new_project::templates(ed.examples_dir.as_deref(), reg) {
@@ -141,6 +138,29 @@ pub fn template(ed: &crate::editor::Editor, code: &str, name: &str, english_name
     }
 
     out
+}
+
+/// The texts of Bot › Settings pages and their settings.
+fn settings_strings(pages: &[circuit_plugins::SettingsPage], settings: &indexmap::IndexMap<String, serde_json::Value>, out: &mut Vec<String>) {
+    let mut add = |s: Option<&str>| {
+        if let Some(s) = s.filter(|s| s.chars().any(char::is_alphabetic)) {
+            out.push(s.to_string());
+        }
+    };
+    for page in pages {
+        add(Some(&page.name));
+        add(page.description.as_deref());
+    }
+    for spec in settings.values() {
+        for key in ["group", "label", "description", "placeholder", "patternHint"] {
+            add(spec.get(key).and_then(|v| v.as_str()));
+        }
+        match spec.get("choices") {
+            Some(serde_json::Value::Object(map)) => map.values().for_each(|l| add(l.as_str())),
+            Some(serde_json::Value::Array(list)) => list.iter().for_each(|l| add(l.as_str())),
+            _ => {}
+        }
+    }
 }
 
 fn toml_quote(s: &str) -> String {
