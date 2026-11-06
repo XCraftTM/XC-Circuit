@@ -42,7 +42,16 @@ impl CircuitApp {
         ui.allocate_rect(area, egui::Sense::hover());
         let ui = &mut view_ui;
         match view {
-            SideView::Workspaces => crate::pages::sidebar::panel(ui, &mut self.ed),
+            SideView::Workspaces => {
+                // The Problems panel's entries, counted per workspace.
+                let mut counts = std::collections::HashMap::new();
+                for (_, _, at) in self.problems_found.iter().flat_map(|(_, p)| p) {
+                    if let Some((ws, _)) = at {
+                        *counts.entry(ws.clone()).or_insert(0) += 1;
+                    }
+                }
+                crate::pages::sidebar::panel(ui, &mut self.ed, &counts);
+            }
             SideView::StoredData => {
                 let running = self.bot.state != BotState::Stopped;
                 crate::pages::stored::panel(ui, &mut self.ed, &mut self.stored, running);

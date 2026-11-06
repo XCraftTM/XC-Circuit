@@ -78,3 +78,32 @@ fn projects_start_from_templates() {
     }
     let _ = std::fs::remove_dir_all(base);
 }
+
+/// Every tab has an icon, and it's one the bundled plugins have.
+#[test]
+fn every_tab_has_an_icon() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+    let tabs = [
+        Tab::Canvas("x".into()),
+        Tab::Inspector,
+        Tab::Console,
+        Tab::Problems,
+        Tab::Settings,
+        Tab::Backups,
+        Tab::Plugin("p".into(), "q".into()),
+        Tab::EmbedBuilder,
+        Tab::LayoutBuilder,
+        Tab::CanvasBuilder,
+        Tab::SlashCommands,
+        Tab::BotSettings,
+        Tab::Export,
+        Tab::Plugins,
+        Tab::WorkspaceExport,
+        Tab::WorkspaceImport,
+        Tab::Start,
+    ];
+    for tab in tabs {
+        assert!(ed.reg.icons.contains_key(tab.icon()), "{tab:?}: no icon {}", tab.icon());
+    }
+}

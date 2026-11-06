@@ -404,6 +404,10 @@ impl eframe::App for CircuitApp {
             .exact_size(24.0)
             .frame(Frame::new().fill(theme.status_bar).inner_margin(Margin::symmetric(4, 0)))
             .show(ui, |ui| self.status_bar(ui));
+        let key = (self.ed.history.revision(), self.ed.reloads, self.ed.prefs.language.clone());
+        if self.problems_found.as_ref().is_none_or(|(k, _)| *k != key) {
+            self.problems_found = Some((key, panels::collect_problems(&self.ed)));
+        }
         if self.ed.prefs.activity_bar && self.setup.is_none() && self.tour.is_none() && self.ed.project.is_some() {
             egui::Panel::left("activity")
                 .exact_size(ACTIVITY_W)
@@ -422,10 +426,6 @@ impl eframe::App for CircuitApp {
                 .size_range(200.0..=560.0)
                 .frame(Frame::new().fill(theme.panel))
                 .show(ui, |ui| self.side_bar(ui, view));
-        }
-        let key = (self.ed.history.revision(), self.ed.reloads, self.ed.prefs.language.clone());
-        if self.problems_found.as_ref().is_none_or(|(k, _)| *k != key) {
-            self.problems_found = Some((key, panels::collect_problems(&self.ed)));
         }
         let mut problems = self.problems_found.as_ref().map(|(_, p)| p.clone()).unwrap_or_default();
         problems.extend(self.native.problems());
@@ -467,6 +467,7 @@ impl eframe::App for CircuitApp {
                 start: &mut self.start,
                 has_example,
                 start_pick: None,
+                tab_font: egui::TextStyle::Button.resolve(ui.style()),
             };
             let size = ui.available_size();
             if let Some(before) = self.dock_size

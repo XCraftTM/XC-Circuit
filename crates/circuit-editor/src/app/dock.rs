@@ -19,6 +19,50 @@ pub(super) struct Viewer<'a> {
     pub(super) start: &'a mut crate::pages::start_page::StartPage,
     pub(super) has_example: bool,
     pub(super) start_pick: Option<crate::pages::start_page::Pick>,
+    /// The tab titles' font, for the room left for their icons.
+    pub(super) tab_font: egui::FontId,
+}
+
+/// Room before a tab's title for its icon.
+const TAB_ICON_ROOM: f32 = 20.0;
+
+impl Tab {
+    /// The icon shown before the tab's title.
+    pub(super) fn icon(&self) -> &'static str {
+        match self {
+            Tab::Canvas(_) => "workspace",
+            Tab::Inspector => "pointer",
+            Tab::Console => "terminal",
+            Tab::Problems => "alert",
+            Tab::Settings => "settings",
+            Tab::Backups => "clock",
+            Tab::Plugin(..) | Tab::Plugins => "plug",
+            Tab::EmbedBuilder => "embed",
+            Tab::LayoutBuilder => "layers",
+            Tab::CanvasBuilder => "palette",
+            Tab::SlashCommands => "slash",
+            Tab::BotSettings => "bolt",
+            Tab::Export | Tab::WorkspaceExport => "package",
+            Tab::WorkspaceImport => "folder-plus",
+            Tab::Start => "block",
+        }
+    }
+}
+
+/// A tab's title with room before it for the icon. The text keeps the
+/// dock's colour (a placeholder it fills in), active or not.
+fn with_icon_room(text: String, font: egui::FontId) -> WidgetText {
+    let mut job = egui::text::LayoutJob::default();
+    job.append(&text, TAB_ICON_ROOM, egui::TextFormat { font_id: font, color: egui::Color32::PLACEHOLDER, ..Default::default() });
+    WidgetText::LayoutJob(job.into())
+}
+
+/// Paints an icon file (once its texture is loaded) into `rect`.
+fn paint_icon(ctx: &egui::Context, painter: &egui::Painter, path: &Path, rect: egui::Rect, tint: egui::Color32) {
+    let size = egui::load::SizeHint::Size { width: (rect.width() * 2.0) as u32, height: (rect.height() * 2.0) as u32, maintain_aspect_ratio: true };
+    if let Ok(egui::load::TexturePoll::Ready { texture }) = ctx.try_load_texture(&crate::editor::file_uri(path), egui::TextureOptions::LINEAR, size) {
+        painter.image(texture.id, rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), tint);
+    }
 }
 
 impl TabViewer for Viewer<'_> {
@@ -34,14 +78,14 @@ impl TabViewer for Viewer<'_> {
     }
 
     fn title(&mut self, tab: &mut Tab) -> WidgetText {
-        match tab {
+        let text: String = match tab {
             Tab::Inspector => t!("Inspector").into(),
             Tab::Console => t!("Console").into(),
-            Tab::Problems => tf!("Problems  {count}", count = self.problem_count).into(),
+            Tab::Problems => tf!("Problems  {count}", count = self.problem_count),
             Tab::Settings => t!("Settings").into(),
             Tab::Backups => t!("Backups").into(),
-            Tab::Plugin(plugin, panel) => self.native.panel_title(plugin, panel).unwrap_or_else(|| panel.clone()).into(),
-            Tab::Canvas(key) => self.ed.workspace(key).map(|w| w.name.clone()).unwrap_or_else(|| key.clone()).into(),
+            Tab::Plugin(plugin, panel) => self.native.panel_title(plugin, panel).unwrap_or_else(|| panel.clone()),
+            Tab::Canvas(key) => self.ed.workspace(key).map(|w| w.name.clone()).unwrap_or_else(|| key.clone()),
             Tab::EmbedBuilder => t!("Embed Builder").into(),
             Tab::LayoutBuilder => t!("Layout Builder").into(),
             Tab::CanvasBuilder => t!("Canvas Builder").into(),
@@ -52,14 +96,23 @@ impl TabViewer for Viewer<'_> {
             Tab::Start => t!("Start").into(),
             Tab::WorkspaceExport => t!("Export workspaces").into(),
             Tab::WorkspaceImport => t!("Import workspaces").into(),
-        }
+        };
+        with_icon_room(text, self.tab_font.clone())
     }
 
     fn on_tab_button(&mut self, tab: &mut Tab, response: &egui::Response) {
-        if self.focused_tab.as_ref() == Some(tab) {
-            let r = response.rect;
+        let r = response.rect;
+        let painter = response.ctx.layer_painter(response.layer_id);
+        let focused = self.focused_tab.as_ref() == Some(tab);
+        if focused {
             let line = egui::Rect::from_min_max(r.left_top(), egui::pos2(r.right(), r.top() + 2.0));
-            response.ctx.layer_painter(response.layer_id).rect_filled(line, 0.0, self.ed.theme.accent);
+            painter.rect_filled(line, 0.0, self.ed.theme.accent);
+        }
+        // The icon, in the room the title leaves before its text.
+        if let Some(path) = self.ed.reg.icons.get(tab.icon()) {
+            let tint = if focused { self.ed.theme.accent } else if response.hovered() { self.ed.theme.text } else { self.ed.theme.text_muted };
+            let at = egui::Rect::from_center_size(egui::pos2(r.left() + 8.0 + TAB_ICON_ROOM / 2.0 - 1.0, r.center().y), egui::vec2(14.0, 14.0));
+            paint_icon(&response.ctx, &painter, path, at, tint);
         }
     }
 

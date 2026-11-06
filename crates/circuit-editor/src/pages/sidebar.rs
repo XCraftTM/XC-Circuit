@@ -1,7 +1,9 @@
 //! The Workspaces panel: the project's workspaces as a tree with folders, and
 //! its slash commands. Drag a workspace onto a folder to move it there;
-//! double-click a name to rename it.
+//! double-click a name to rename it. Each workspace shows its problems,
+//! whether its blocks just ran (or failed), and whether it's turned off.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use circuit_core::Workspace;
@@ -42,6 +44,7 @@ enum Do {
     /// Turns a workspace on (true) or off.
     SetEnabled(String, bool),
     DeleteWorkspace(String),
+    Duplicate(String),
     NewWorkspace(Option<String>),
     NewFolder,
     DeleteFolder(String),
@@ -58,13 +61,69 @@ struct Icons {
 
 impl Icons {
     fn new(ed: &Editor) -> Icons {
-        let names = ["workspace", "folder", "folder-plus", "plus", "slash", "more"];
+        let names = ["workspace", "folder", "folder-plus", "plus", "slash", "more", "pencil", "copy", "eye", "eye-off", "package", "trash", "pointer"];
         Icons { paths: names.iter().filter_map(|n| Some((*n, ed.reg.icons.get(*n)?.clone()))).collect() }
     }
 
     fn paint(&self, ui: &Ui, name: &str, center: egui::Pos2, size: f32, tint: Color32) {
         if let Some(path) = self.paths.get(name) {
             egui::Image::from_uri(file_uri(path)).tint(tint).paint_at(ui, Rect::from_center_size(center, vec2(size, size)));
+        }
+    }
+}
+
+/// A menu entry with its icon.
+fn item(ui: &mut Ui, theme: &Theme, icons: &Icons, icon: &str, text: impl Into<egui::WidgetText>, danger: bool) -> Response {
+    let tint = if danger { theme.error } else { theme.text_muted };
+    match icons.paths.get(icon) {
+        Some(p) => ui.add(egui::Button::image_and_text(egui::Image::from_uri(file_uri(p)).fit_to_exact_size(vec2(14.0, 14.0)).tint(tint), text)),
+        None => ui.button(text),
+    }
+}
+
+/// A small rounded label drawn right-aligned at `right`; gives where it starts.
+fn pill(ui: &Ui, right: f32, y: f32, text: &str, fill: Color32, ink: Color32) -> f32 {
+    let galley = ui.painter().layout_no_wrap(text.to_string(), FontId::proportional(10.5), ink);
+    let size = vec2((galley.size().x + 10.0).max(18.0), 16.0);
+    let rect = Rect::from_min_size(pos2(right - size.x, y - size.y / 2.0), size);
+    ui.painter().rect_filled(rect, 8.0, fill);
+    ui.painter().galley(rect.center() - galley.size() / 2.0, galley, ink);
+    rect.left()
+}
+
+/// What the list shows about a workspace besides its name.
+#[derive(Default, Clone, Copy)]
+struct Marks {
+    problems: usize,
+    /// Its blocks ran in the last two seconds.
+    live: bool,
+    /// One of them failed in the last 30 seconds.
+    failed: bool,
+    off: bool,
+}
+
+impl Marks {
+    /// The room they take at the row's right end, before the ⋯ button.
+    fn width(&self) -> f32 {
+        (if self.off { 30.0 } else { 0.0 }) + (if self.problems > 0 { 26.0 } else { 0.0 }) + (if self.live || self.failed { 14.0 } else { 0.0 })
+    }
+
+    /// Paints them, right to left from `right`.
+    fn paint(&self, ui: &Ui, theme: &Theme, right: f32, y: f32) {
+        let mut x = right;
+        if self.live || self.failed {
+            let color = if self.failed { theme.error } else { theme.action };
+            ui.painter().circle_filled(pos2(x - 5.0, y), 4.0, color);
+            if self.live {
+                ui.painter().circle_stroke(pos2(x - 5.0, y), 6.5, Stroke::new(1.0, with_alpha(color, 110)));
+            }
+            x -= 14.0;
+        }
+        if self.problems > 0 {
+            x = pill(ui, x, y, &self.problems.to_string(), theme.warning, Color32::from_rgb(0x1E, 0x1F, 0x22)) - 4.0;
+        }
+        if self.off {
+            pill(ui, x, y, t!("off"), theme.field, theme.text_muted);
         }
     }
 }
@@ -78,7 +137,7 @@ fn chevron(ui: &Ui, center: egui::Pos2, open: bool, color: Color32) {
 
 /// One tree row. Returns its response (click, double-click, drag, drop, context menu).
 #[allow(clippy::too_many_arguments)]
-fn row(ui: &mut Ui, theme: &Theme, icons: &Icons, id: Id, depth: usize, open: Option<bool>, icon: Option<&str>, label: &str, active: bool, strong: bool) -> (Response, Rect) {
+fn row(ui: &mut Ui, theme: &Theme, icons: &Icons, id: Id, depth: usize, open: Option<bool>, icon: Option<&str>, label: &str, active: bool, strong: bool, right: f32, dim: bool) -> (Response, Rect) {
     let h = if theme.touch { ROW_TOUCH_H } else { ROW_H };
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), h), Sense::hover());
     let resp = ui.interact(rect, id, Sense::click_and_drag());
@@ -103,10 +162,11 @@ fn row(ui: &mut Ui, theme: &Theme, icons: &Icons, id: Id, depth: usize, open: Op
         x += ICON + 7.0;
     }
     let font = if strong { FontId::proportional(11.5) } else { FontId::proportional(13.0) };
-    let color = if strong { theme.text_muted } else { theme.text };
+    let color = if strong || dim { theme.text_muted } else { theme.text };
     let text = if strong { label.to_uppercase() } else { label.to_string() };
     let galley = ui.painter().layout_no_wrap(text, font, color);
-    let clip = Rect::from_min_max(pos2(x, rect.top()), pos2(rect.right() - 4.0, rect.bottom()));
+    // Long names stop before the marks and buttons on the right.
+    let clip = Rect::from_min_max(pos2(x, rect.top()), pos2((rect.right() - 4.0 - right).max(x), rect.bottom()));
     ui.painter().with_clip_rect(clip).galley(pos2(x, rect.center().y - galley.size().y / 2.0), galley, color);
     (resp, Rect::from_min_max(pos2(x - 3.0, rect.top() + 2.0), pos2(rect.right() - 6.0, rect.bottom() - 2.0)))
 }
@@ -146,7 +206,8 @@ fn rename_box(ui: &mut Ui, area: Rect, state: &mut Renaming) -> Option<bool> {
     None
 }
 
-pub fn panel(ui: &mut Ui, ed: &mut Editor) {
+/// The Workspaces panel. `problems` counts the Problems panel's entries per workspace.
+pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
     let theme = ed.theme.clone();
     let icons = Icons::new(ed);
     let Some(project) = ed.project.as_ref() else {
@@ -172,13 +233,30 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
         }
     }
     let active = ed.active_workspace.clone();
+    // What the running bot did lately, per workspace: when its blocks last ran, and whether one failed lately.
+    let mut ran: HashMap<&str, (std::time::Instant, bool, Option<&str>)> = HashMap::new();
+    for ((ws, _), a) in &ed.activity {
+        let failed = a.error.is_some() && a.at.elapsed() < crate::bot::TIME_SHOWN;
+        let e = ran.entry(ws.as_str()).or_insert((a.at, false, None));
+        if a.at > e.0 {
+            e.0 = a.at;
+        }
+        if failed {
+            e.1 = true;
+            e.2 = a.error.as_deref();
+        }
+    }
+    if ran.values().any(|(at, _, _)| at.elapsed() < crate::bot::GLOW) {
+        ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
+    }
+    let reg = &ed.reg;
 
     ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = 0.0;
         ui.add_space(4.0);
 
         // The project: collapses everything; dropping a workspace here takes it out of its folder.
-        let (resp, _) = row(ui, &theme, &icons, Id::new("sidebar-project"), 0, Some(is_open(PROJECT_ROW)), None, &project.meta.name, false, true);
+        let (resp, _) = row(ui, &theme, &icons, Id::new("sidebar-project"), 0, Some(is_open(PROJECT_ROW)), None, &project.meta.name, false, true, 54.0, false);
         let buttons = resp.rect;
         if row_button(ui, &theme, &icons, Rect::from_center_size(pos2(buttons.right() - 16.0, buttons.center().y), vec2(22.0, 22.0)), Id::new("sidebar-new-folder"), "folder-plus", t!("New folder")).clicked() {
             todo.push(Do::NewFolder);
@@ -191,20 +269,21 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
             todo.push(Do::Move((*key).clone(), None));
         }
         resp.context_menu(|ui| {
-            if ui.button(t!("New workspace")).clicked() {
+            ui.set_min_width(200.0);
+            if item(ui, &theme, &icons, "plus", t!("New workspace"), false).clicked() {
                 todo.push(Do::NewWorkspace(None));
                 ui.close();
             }
-            if ui.button(t!("New folder")).clicked() {
+            if item(ui, &theme, &icons, "folder-plus", t!("New folder"), false).clicked() {
                 todo.push(Do::NewFolder);
                 ui.close();
             }
             ui.separator();
-            if ui.button(t!("Import workspaces…")).clicked() {
+            if item(ui, &theme, &icons, "folder", t!("Import workspaces…"), false).clicked() {
                 todo.push(Do::Import);
                 ui.close();
             }
-            if ui.add_enabled(!project.workspaces.is_empty(), egui::Button::new(t!("Export all workspaces…"))).clicked() {
+            if ui.add_enabled_ui(!project.workspaces.is_empty(), |ui| item(ui, &theme, &icons, "package", t!("Export all workspaces…"), false)).inner.clicked() {
                 todo.push(Do::Export(crate::editor::exchange::Preselect::All));
                 ui.close();
             }
@@ -214,11 +293,45 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
             let workspace_row = |ui: &mut Ui, key: &String, ws: &Workspace, depth: usize, todo: &mut Vec<Do>, renaming: &mut Option<Renaming>| {
                 let target = Target::Workspace(key.clone());
                 let editing = renaming.as_ref().is_some_and(|r| r.target == target);
-                // A workspace that is turned off says so after its name.
-                let off_label = tf!("{name} (off)", name = ws.name);
-                let label = if editing { "" } else if ws.disabled { off_label.as_str() } else { ws.name.as_str() };
-                let (resp, label_area) = row(ui, &theme, &icons, Id::new(("sidebar-ws", key)), depth, None, Some("workspace"), label, active.as_deref() == Some(key.as_str()), false);
-                let resp = if ws.disabled { resp.on_hover_text(t!("Turned off: its blocks don't run. Right-click › Turn on.")) } else { resp };
+                let activity = ran.get(key.as_str());
+                let marks = Marks {
+                    problems: problems.get(key).copied().unwrap_or(0),
+                    live: activity.is_some_and(|(at, _, _)| at.elapsed() < crate::bot::GLOW),
+                    failed: activity.is_some_and(|(_, failed, _)| *failed),
+                    off: ws.disabled,
+                };
+                let label = if editing { "" } else { ws.name.as_str() };
+                let room = 32.0 + marks.width();
+                let (resp, label_area) = row(ui, &theme, &icons, Id::new(("sidebar-ws", key)), depth, None, Some("workspace"), label, active.as_deref() == Some(key.as_str()), false, room, ws.disabled);
+                if !editing {
+                    marks.paint(ui, &theme, resp.rect.right() - 34.0, resp.rect.center().y);
+                }
+                // On hover: what's in it, its problems, what the bot did with it.
+                let events = ws.nodes.values().filter(|n| reg.block(&n.block).is_some_and(|d| d.kind == circuit_core::BlockKind::Event)).count();
+                let blocks = match ws.nodes.len() {
+                    1 => t!("1 block").to_string(),
+                    n => tf!("{count} blocks", count = n),
+                };
+                let events = match events {
+                    1 => t!("1 event").to_string(),
+                    n => tf!("{count} events", count = n),
+                };
+                let mut tip = vec![format!("{blocks} · {events}")];
+                match marks.problems {
+                    0 => {}
+                    1 => tip.push(t!("1 problem: see the Problems panel").to_string()),
+                    n => tip.push(tf!("{count} problems: see the Problems panel", count = n)),
+                }
+                if let Some((at, _, error)) = activity {
+                    tip.push(match error {
+                        Some(e) => tf!("A block failed {ago}: {error}", ago = crate::bot::ago(at.elapsed()), error = e),
+                        None => tf!("Its blocks ran {ago}", ago = crate::bot::ago(at.elapsed())),
+                    });
+                }
+                if ws.disabled {
+                    tip.push(t!("Turned off: its blocks don't run. Right-click › Turn on.").to_string());
+                }
+                let resp = resp.on_hover_text(tip.join("\n"));
                 if editing && let Some(r) = renaming.as_mut() {
                     match rename_box(ui, label_area, r) {
                         Some(true) => todo.push(Do::Rename(target.clone(), r.text.clone())),
@@ -235,24 +348,31 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
                     todo.push(Do::Open(key.clone()));
                 }
                 let mut menu = |ui: &mut Ui| {
-                    if ui.button(t!("Open")).clicked() {
+                    ui.set_min_width(200.0);
+                    if item(ui, &theme, &icons, "pointer", t!("Open"), false).clicked() {
                         todo.push(Do::Open(key.clone()));
                         ui.close();
                     }
-                    if ui.button(t!("Rename")).clicked() {
+                    if item(ui, &theme, &icons, "pencil", t!("Rename"), false).on_hover_text(t!("Or double-click its name")).clicked() {
                         todo.push(Do::StartRename(target.clone(), ws.name.clone()));
                         ui.close();
                     }
-                    let (switch, tip) = if ws.disabled {
-                        (t!("Turn on"), t!("Its blocks run again when the bot runs."))
+                    if item(ui, &theme, &icons, "copy", t!("Duplicate"), false).on_hover_text(t!("A copy with all its blocks, turned off so it doesn't answer twice")).clicked() {
+                        todo.push(Do::Duplicate(key.clone()));
+                        ui.close();
+                    }
+                    ui.separator();
+                    let (switch, tip, icon) = if ws.disabled {
+                        (t!("Turn on"), t!("Its blocks run again when the bot runs."), "eye")
                     } else {
-                        (t!("Turn off"), t!("The bot leaves it out: its events don't fire and its blocks don't run, until you turn it on again."))
+                        (t!("Turn off"), t!("The bot leaves it out: its events don't fire and its blocks don't run, until you turn it on again."), "eye-off")
                     };
-                    if ui.button(switch).on_hover_text(tip).clicked() {
+                    if item(ui, &theme, &icons, icon, switch, false).on_hover_text(tip).clicked() {
                         todo.push(Do::SetEnabled(key.clone(), ws.disabled));
                         ui.close();
                     }
-                    ui.menu_button(t!("Move to"), |ui| {
+                    let folder_icon = icons.paths.get("folder").map(|p| egui::Image::from_uri(file_uri(p)).fit_to_exact_size(vec2(14.0, 14.0)).tint(theme.text_muted));
+                    let moves = |ui: &mut Ui| {
                         if ws.folder.is_some() && ui.button(t!("No folder")).clicked() {
                             todo.push(Do::Move(key.clone(), None));
                             ui.close();
@@ -263,13 +383,24 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
                                 ui.close();
                             }
                         }
-                    });
-                    if ui.button(t!("Export…")).clicked() {
+                        if folders.iter().all(|f| ws.folder.as_ref() == Some(f)) && ws.folder.is_none() {
+                            ui.label(RichText::new(t!("No folders yet")).color(theme.text_muted));
+                        }
+                    };
+                    match folder_icon {
+                        Some(image) => {
+                            ui.menu_image_text_button(image, t!("Move to"), moves);
+                        }
+                        None => {
+                            ui.menu_button(t!("Move to"), moves);
+                        }
+                    }
+                    if item(ui, &theme, &icons, "package", t!("Export…"), false).clicked() {
                         todo.push(Do::Export(crate::editor::exchange::Preselect::Workspace(key.clone())));
                         ui.close();
                     }
                     ui.separator();
-                    if ui.button(RichText::new(t!("Delete workspace")).color(theme.error)).clicked() {
+                    if item(ui, &theme, &icons, "trash", RichText::new(t!("Delete workspace")).color(theme.error), true).clicked() {
                         todo.push(Do::DeleteWorkspace(key.clone()));
                         ui.close();
                     }
@@ -282,7 +413,18 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
                 let target = Target::Folder(folder.clone());
                 let editing = renaming.as_ref().is_some_and(|r| r.target == target);
                 let open = is_open(folder);
-                let (resp, label_area) = row(ui, &theme, &icons, Id::new(("sidebar-folder", folder)), 1, Some(open), Some("folder"), if editing { "" } else { folder }, false, false);
+                let inside: Vec<&String> = project.workspaces.iter().filter(|(_, w)| w.folder.as_ref() == Some(folder)).map(|(k, _)| k).collect();
+                let folder_problems: usize = inside.iter().map(|k| problems.get(*k).copied().unwrap_or(0)).sum();
+                let (resp, label_area) = row(ui, &theme, &icons, Id::new(("sidebar-folder", folder)), 1, Some(open), Some("folder"), if editing { "" } else { folder }, false, false, 60.0, false);
+                if !editing {
+                    // How many workspaces it holds, and (closed) their problems.
+                    let y = resp.rect.center().y;
+                    let mut x = resp.rect.right() - 34.0;
+                    if !open && folder_problems > 0 {
+                        x = pill(ui, x, y, &folder_problems.to_string(), theme.warning, Color32::from_rgb(0x1E, 0x1F, 0x22)) - 4.0;
+                    }
+                    ui.painter().text(pos2(x, y), Align2::RIGHT_CENTER, inside.len().to_string(), FontId::proportional(11.0), theme.text_muted);
+                }
                 if editing && let Some(r) = renaming.as_mut() {
                     match rename_box(ui, label_area, r) {
                         Some(true) => todo.push(Do::Rename(target.clone(), r.text.clone())),
@@ -300,21 +442,22 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
                         todo.push(Do::Move((*key).clone(), Some(folder.clone())));
                     }
                     let mut menu = |ui: &mut Ui| {
-                        if ui.button(t!("New workspace here")).clicked() {
+                        ui.set_min_width(200.0);
+                        if item(ui, &theme, &icons, "plus", t!("New workspace here"), false).clicked() {
                             todo.push(Do::NewWorkspace(Some(folder.clone())));
                             ui.close();
                         }
-                        if ui.button(t!("Rename")).clicked() {
+                        if item(ui, &theme, &icons, "pencil", t!("Rename"), false).on_hover_text(t!("Or double-click its name")).clicked() {
                             todo.push(Do::StartRename(target.clone(), folder.clone()));
                             ui.close();
                         }
-                        let filled = project.workspaces.values().any(|w| w.folder.as_ref() == Some(folder));
-                        if ui.add_enabled(filled, egui::Button::new(t!("Export folder…"))).clicked() {
+                        let filled = !inside.is_empty();
+                        if ui.add_enabled_ui(filled, |ui| item(ui, &theme, &icons, "package", t!("Export folder…"), false)).inner.clicked() {
                             todo.push(Do::Export(crate::editor::exchange::Preselect::Folder(folder.clone())));
                             ui.close();
                         }
                         ui.separator();
-                        if ui.button(t!("Delete folder")).on_hover_text(t!("Its workspaces move out of it; none are deleted")).clicked() {
+                        if item(ui, &theme, &icons, "trash", RichText::new(t!("Delete folder")).color(theme.error), true).on_hover_text(t!("Its workspaces move out of it; none are deleted")).clicked() {
                             todo.push(Do::DeleteFolder(folder.clone()));
                             ui.close();
                         }
@@ -354,19 +497,19 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor) {
             ui.painter().hline(line.x_range(), line.top(), Stroke::new(1.0, theme.line));
             ui.add_space(4.0);
             let open = is_open(SLASH_ROW);
-            let (resp, area) = row(ui, &theme, &icons, Id::new("sidebar-slash"), 0, Some(open), None, t!("Slash commands"), false, true);
+            let (resp, area) = row(ui, &theme, &icons, Id::new("sidebar-slash"), 0, Some(open), None, t!("Slash commands"), false, true, 30.0, false);
             ui.painter().text(pos2(area.right() - 4.0, area.center().y), Align2::RIGHT_CENTER, commands.len().to_string(), FontId::proportional(11.5), theme.text_muted);
             if resp.clicked() {
                 todo.push(Do::Toggle(SLASH_ROW.into()));
             }
             if open {
                 for name in &commands {
-                    let (resp, _) = row(ui, &theme, &icons, Id::new(("sidebar-cmd", name)), 1, None, Some("slash"), name, false, false);
+                    let (resp, _) = row(ui, &theme, &icons, Id::new(("sidebar-cmd", name)), 1, None, Some("slash"), name, false, false, 0.0, false);
                     if resp.on_hover_text(t!("Edit in the Slash Command Builder")).clicked() {
                         todo.push(Do::SlashCommands);
                     }
                 }
-                let (resp, _) = row(ui, &theme, &icons, Id::new("sidebar-cmd-new"), 1, None, Some("plus"), t!("Edit commands…"), false, false);
+                let (resp, _) = row(ui, &theme, &icons, Id::new("sidebar-cmd-new"), 1, None, Some("plus"), t!("Edit commands…"), false, false, 0.0, false);
                 if resp.clicked() {
                     todo.push(Do::SlashCommands);
                 }
@@ -445,6 +588,17 @@ fn apply(ed: &mut Editor, ctx: &egui::Context, todo: Vec<Do>, renaming: &mut Opt
                     ed.edited = true;
                 }
             }
+            Do::Duplicate(key) => {
+                let Some(ws) = project.workspaces.get(&key) else { continue };
+                let name = unique(&tf!("{name} copy", name = ws.name), |n| project.workspaces.values().any(|w| w.name == n));
+                // Turned off, so the copy's events don't answer a second time.
+                let copy = Workspace { name: name.clone(), disabled: true, ..ws.clone() };
+                let new_key = project.new_workspace_key(&name);
+                project.workspaces.insert(new_key.clone(), copy);
+                ed.actions.push(Action::OpenWorkspace(new_key));
+                ed.log(crate::editor::Level::Info, tf!("{name} is a copy of {original}, turned off so it doesn't answer twice. Right-click › Turn on when it's ready.", name = name, original = ws_name(&key, ed)));
+                ed.edited = true;
+            }
             Do::DeleteWorkspace(key) => {
                 // The file goes on save, so Don't save brings the workspace back.
                 project.remove_workspace(&key);
@@ -493,6 +647,11 @@ fn apply(ed: &mut Editor, ctx: &egui::Context, todo: Vec<Do>, renaming: &mut Opt
     }
 }
 
+/// A workspace's name, by its key.
+fn ws_name(key: &str, ed: &Editor) -> String {
+    ed.project.as_ref().and_then(|p| p.workspaces.get(key)).map(|w| w.name.clone()).unwrap_or_else(|| key.to_string())
+}
+
 fn uncollapse(ctx: &egui::Context, key: &str) {
     ctx.data_mut(|d| d.get_persisted_mut_or_default::<Vec<String>>(Id::new(COLLAPSED_KEY)).retain(|c| c != key));
 }
@@ -505,7 +664,7 @@ mod tests {
 
     fn frame(ctx: &egui::Context, ed: &mut Editor, events: Vec<Event>) {
         let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(260.0, 600.0))), events, ..Default::default() };
-        let mut out = ctx.run_ui(raw, |ui| panel(ui, ed));
+        let mut out = ctx.run_ui(raw, |ui| panel(ui, ed, &HashMap::new()));
         out.textures_delta.clear();
     }
 
@@ -567,5 +726,40 @@ mod tests {
         click(&ctx, &mut ed, pos2(260.0 - 16.0, row_at(0).y));
         assert_eq!(ed.project.as_ref().unwrap().meta.folders, ["Commands", "Events", "New folder"]);
         assert!(ed.unsaved_now());
+    }
+
+    /// Duplicate makes a copy with every block, turned off, and opens it;
+    /// the list draws marks for problems, activity and turned-off workspaces.
+    #[test]
+    fn duplicates_and_marks() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&root.join("examples/DemoBot"));
+        let ctx = egui::Context::default();
+        let blocks = ed.project.as_ref().unwrap().workspaces["welcome"].nodes.len();
+        apply(&mut ed, &ctx, vec![Do::Duplicate("welcome".into())], &mut None);
+        let p = ed.project.as_ref().unwrap();
+        let (key, copy) = p.workspaces.iter().find(|(_, w)| w.name == "Welcome copy").expect("a copy");
+        assert!(copy.disabled, "turned off");
+        assert_eq!(copy.nodes.len(), blocks);
+        assert_eq!(copy.folder.as_deref(), Some("Events"), "in the same folder");
+        assert!(ed.actions.iter().any(|a| matches!(a, Action::OpenWorkspace(k) if k == key)));
+        apply(&mut ed, &ctx, vec![Do::Duplicate("welcome".into())], &mut None);
+        assert!(ed.project.as_ref().unwrap().workspaces.values().any(|w| w.name == "Welcome copy 2"), "a second copy gets its own name");
+
+        // Marks: room for each, and drawing them all doesn't fail.
+        let all = Marks { problems: 3, live: true, failed: true, off: true };
+        assert!(all.width() > Marks::default().width());
+        assert_eq!(Marks::default().width(), 0.0);
+        let node = ed.project.as_ref().unwrap().workspaces["welcome"].nodes.keys().next().unwrap().clone();
+        ed.activity.insert(("welcome".into(), node), crate::bot::Activity { at: std::time::Instant::now(), error: Some("Missing Permissions".into()), ms: None });
+        let mut problems = HashMap::new();
+        problems.insert("welcome".to_string(), 2);
+        crate::ui::fonts::install(&ctx);
+        for _ in 0..2 {
+            let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(260.0, 600.0))), ..Default::default() };
+            let mut out = ctx.run_ui(raw, |ui| panel(ui, &mut ed, &problems));
+            out.textures_delta.clear();
+        }
     }
 }
