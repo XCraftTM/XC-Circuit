@@ -36,6 +36,8 @@ mod menus;
 mod plugins;
 mod projects;
 #[cfg(test)]
+mod a11y;
+#[cfg(test)]
 mod tests;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -276,6 +278,22 @@ impl CircuitApp {
             None => default_layout(),
         };
 
+        let mut app = Self::with_editor(cc, ed, dock, bundled_plugins);
+        app.frame_stats = std::env::var_os("XC_FRAME_STATS").map(|_| (0, std::time::Instant::now()));
+        app.fps = std::env::var_os("XC_FPS_OUT").map(|out| fps::Run::new(PathBuf::from(out), graphics.clone()));
+        // A crash the user hasn't been told about yet.
+        app.crash_offer = crate::app::crash::newest_since(app.ed.prefs.last_crash_seen);
+        if app.ed.prefs.check_updates {
+            app.updater.check(false);
+            app.block_updates.check(false);
+        }
+        app
+    }
+
+    /// The window around an editor that is ready (plugins loaded, language and
+    /// theme applied): without looking for updates or crashes, so tests can
+    /// build it too.
+    fn with_editor(cc: &eframe::CreationContext<'_>, mut ed: Editor, dock: Dock<Tab>, bundled_plugins: Option<PathBuf>) -> Self {
         let mut plugin_host = crate::plugins::host::PluginHost::new(cc.storage.and_then(|s| eframe::get_value(s, KEY_PLUGIN_STORAGE)).unwrap_or_default());
         plugin_host.sync(&mut ed, bundled_plugins.as_deref());
 
@@ -283,13 +301,6 @@ impl CircuitApp {
         let mut watcher = crate::plugins::watch::PluginWatcher::new(move || repaint.request_repaint());
         watcher.watch(&ed.watch_dirs());
         let setup = (!ed.prefs.setup_done).then(crate::pages::setup::Setup::new);
-        let last_crash_seen = ed.prefs.last_crash_seen;
-        let mut updater = crate::app::updater::Updater::default();
-        let mut block_updates = crate::plugins::updates::BlockUpdates::default();
-        if ed.prefs.check_updates {
-            updater.check(false);
-            block_updates.check(false);
-        }
         CircuitApp {
             ed,
             dock,
@@ -303,10 +314,9 @@ impl CircuitApp {
             dock_size: None,
             activity_slots: Vec::new(),
             start: Default::default(),
-            updater,
-            block_updates,
-            // A crash the user hasn't been told about yet.
-            crash_offer: crate::app::crash::newest_since(last_crash_seen),
+            updater: Default::default(),
+            block_updates: Default::default(),
+            crash_offer: None,
             bot: BotUi::new(),
             stored: Default::default(),
             watcher,
@@ -322,8 +332,8 @@ impl CircuitApp {
             last_recovery: std::time::Instant::now(),
             last_check: std::time::Instant::now(),
             reveal: crate::app::reveal::Reveal::new(cc),
-            frame_stats: std::env::var_os("XC_FRAME_STATS").map(|_| (0, std::time::Instant::now())),
-            fps: std::env::var_os("XC_FPS_OUT").map(|out| fps::Run::new(PathBuf::from(out), graphics.clone())),
+            frame_stats: None,
+            fps: None,
         }
     }
 

@@ -53,5 +53,7 @@ png = "0.18"
 winresource = "0.1"
 
 [dev-dependencies]
+# Walks the screens with its accessibility check: every control has a name.
+egui_kittest = { version = "0.37", features = ["eframe"] }
 toml.workspace = true
 ron = "0.12"

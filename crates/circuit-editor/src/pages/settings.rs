@@ -22,7 +22,7 @@ pub enum Section {
 }
 
 impl Section {
-    const ALL: [(Section, &'static str, &'static str); 7] = [
+    pub(crate) const ALL: [(Section, &'static str, &'static str); 7] = [
         (Section::Appearance, n("Appearance"), "palette"),
         (Section::Editor, n("Editor"), "workspace"),
         (Section::Bot, n("Bot"), "bolt"),

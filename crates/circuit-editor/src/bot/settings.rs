@@ -253,6 +253,17 @@ impl SettingsDraft {
         let on = || self.fields.iter().filter(move |f| f.page == page);
         (own + on().filter(|f| f.problem().is_some()).count(), on().filter(|f| f.missing()).count())
     }
+
+    /// The pages in the list, for tests that walk them.
+    #[cfg(test)]
+    pub fn page_ids(&self) -> Vec<String> {
+        self.pages.iter().map(|p| p.id.clone()).collect()
+    }
+
+    #[cfg(test)]
+    pub fn show_page(&mut self, id: &str) {
+        self.page = id.into();
+    }
 }
 
 /// The privileged intents `mode` lists that the project's blocks need, with
