@@ -95,7 +95,8 @@ async function runBot(done) {
   child.stderr.on("data", (d) => (err += d));
   const exited = new Promise((r) => child.on("exit", r));
   const started = Date.now();
-  while (!done(seen) && Date.now() - started < 20000) await new Promise((r) => setTimeout(r, 100));
+  // Every alert checks 1 to 5 s after the start; 7 s gives each time to save what it saw.
+  while (!(done(seen) && Date.now() - started > 7000) && Date.now() - started < 25000) await new Promise((r) => setTimeout(r, 100));
   child.stdin.write("stop\n");
   await exited;
   if (err.trim()) seen.push(`stderr: ${err.trim()}`);
@@ -104,7 +105,7 @@ async function runBot(done) {
 
 const asked = () => fs.readFileSync(`${answersFile}.log`, "utf8");
 // Every alert checks once, 1 to 5 s after the start: all have been asked when the broken one has warned.
-const checked = (seen) => seen.some((s) => s.includes("broken.example")) && asked().includes("blog.example") && asked().includes("helix/streams") && asked().includes("api.kick.com") && asked().includes("feeds/videos.xml") && asked().includes("steampowered") && asked().includes("bsky");
+const checked = (seen) => seen.some((s) => s.includes("broken.example")) && asked().split("blog.example").length > 2 && asked().includes("helix/streams") && asked().includes("api.kick.com") && asked().includes("feeds/videos.xml") && asked().includes("steampowered") && asked().includes("bsky");
 
 (async () => {
   // First run: what's there is only remembered, except where announceOld is on.
