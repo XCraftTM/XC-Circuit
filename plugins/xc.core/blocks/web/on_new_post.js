@@ -46,9 +46,16 @@ function decode(s) {
 
 /** Text without HTML, in one paragraph per line, at most `max` characters. */
 function plainText(html, max = 1000) {
-  const text = decode(String(html ?? "").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1"))
-    .replace(/<(br|\/p|\/div|\/li)\s*\/?>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
+  let s = String(html ?? "")
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/<(br|\/p|\/div|\/li)\s*\/?>/gi, "\n");
+  // Tags are removed until none is left, so "<scr<b>ipt>" can't leave one
+  // behind; entities are decoded after that, so &lt;b&gt; stays text.
+  for (let before = null; before !== s; ) {
+    before = s;
+    s = s.replace(/<[^<>]*>/g, "");
+  }
+  const text = decode(s)
     .replace(/[ \t]+/g, " ")
     .replace(/\n\s*\n+/g, "\n\n")
     .trim();

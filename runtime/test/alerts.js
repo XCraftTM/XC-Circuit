@@ -103,11 +103,22 @@ async function runBot(done) {
   return seen;
 }
 
-const asked = () => fs.readFileSync(`${answersFile}.log`, "utf8");
+/** The requests the bot made, as "METHOD url", and the hosts it asked. */
+const requests = () => fs.readFileSync(`${answersFile}.log`, "utf8").split("\n").filter(Boolean);
+const asked = (host) => requests().filter((r) => new URL(r.split(" ")[1]).host === host).length;
 // Every alert checks once, 1 to 5 s after the start: all have been asked when the broken one has warned.
-const checked = (seen) => seen.some((s) => s.includes("broken.example")) && asked().split("blog.example").length > 2 && asked().includes("helix/streams") && asked().includes("api.kick.com") && asked().includes("feeds/videos.xml") && asked().includes("steampowered") && asked().includes("bsky");
+const checked = (seen) =>
+  seen.some((s) => s.includes("broken.example")) &&
+  asked("blog.example") >= 2 &&
+  ["api.twitch.tv", "api.kick.com", "www.youtube.com", "api.steampowered.com", "public.api.bsky.app"].every((h) => asked(h) > 0);
 
 (async () => {
+  // Feed text: nested tags can't leave one behind; encoded ones stay text.
+  const { parseFeed } = require(blocks["core.on_new_post"].file);
+  const [tricky] = parseFeed("<rss><item><guid>t</guid><title>T</title><description><![CDATA[<p>a <scr<b>ipt>alert(1)</script> b</p><p>x &amp;lt;b&amp;gt; y</p>]]></description></item></rss>");
+  assert.strictEqual(tricky.text, "a alert(1) b\nx <b> y");
+  assert.ok(!/<script/i.test(tricky.text));
+
   // First run: what's there is only remembered, except where announceOld is on.
   const first = await runBot((s) => checked(s) && s.some((x) => x.includes("steam:")) && s.some((x) => x.includes("bluesky:")) && s.filter((x) => x.includes("filtered:")).length >= 1);
   const text = first.join("\n");
@@ -118,7 +129,7 @@ const checked = (seen) => seen.some((s) => s.includes("broken.example")) && aske
   assert.ok(!text.includes("youtube:") && !text.includes("blog:") && !text.includes("twitch:") && !text.includes("kick:"), `nothing old announced without announceOld:\n${text}`);
   assert.strictEqual(first.filter((s) => s.includes("broken.example")).length, 1, "a failing source is reported once");
   assert.ok(first.some((s) => s.startsWith("warn:") && s.includes("RSS or Atom feed https://broken.example/feed") && s.includes("answered 500")), text);
-  assert.ok(asked().includes("POST https://id.twitch.tv/oauth2/token") && asked().includes("user_login=streamer"), "Twitch: a token, then the stream by its name");
+  assert.ok(requests().includes("POST https://id.twitch.tv/oauth2/token") && requests().includes("GET https://api.twitch.tv/helix/streams?user_login=streamer"), "Twitch: a token, then the stream by its name");
 
   // While the bot is off: a new blog post, a new video and a Short, the streamer goes live.
   answers["https://blog.example/feed"] = { body: rss(3, 2, 1) };
@@ -137,7 +148,7 @@ const checked = (seen) => seen.some((s) => s.includes("broken.example")) && aske
   assert.deepStrictEqual(second.filter((s) => s.includes("youtube:")), ["info: youtube: Second video | https://www.youtube.com/watch?v=vid22 | https://i.ytimg.com/vi/vid22/hq.jpg"], `the new video, not the Short:\n${text2}`);
   assert.deepStrictEqual(second.filter((s) => s.includes("twitch:")), ["info: twitch: Live now | Chess | 42 | https://www.twitch.tv/streamer"], text2);
   assert.deepStrictEqual(second.filter((s) => s.includes("kick:")), ["info: kick: Kick live | Just Chatting | https://kick.com/kicker | https://k/t.jpg"], text2);
-  assert.ok(asked().includes("POST https://id.kick.com/oauth/token") && asked().includes("slug=kicker"));
+  assert.ok(requests().includes("POST https://id.kick.com/oauth/token") && requests().includes("GET https://api.kick.com/public/v1/channels?slug=kicker"));
   assert.ok(!text2.includes("bluesky:") && !text2.includes("steam:"), "seen posts aren't announced again after a restart");
   assert.ok(!text2.includes("filtered: Post 1"), "nor the filtered one");
   fs.rmSync(dir, { recursive: true, force: true });
