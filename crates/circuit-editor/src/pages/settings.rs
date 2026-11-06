@@ -63,6 +63,18 @@ pub struct SettingsView {
 }
 
 pub const NAV_W: f32 = 190.0;
+/// Narrower than this (the page beside the list too cramped), the list of
+/// pages becomes a dropdown above the page: in a narrow dock column, say.
+pub const NARROW_W: f32 = NAV_W + 360.0;
+
+/// The strip at the top of a narrow settings tab, holding its pages' dropdown.
+/// Returns the strip's inside, for the dropdown, and where the page goes.
+pub fn narrow_bar(ui: &Ui, theme: &Theme, full: Rect) -> (Rect, Rect) {
+    let bar = Rect::from_min_size(full.min, vec2(full.width(), 54.0));
+    ui.painter().rect_filled(bar, 0.0, theme.frame);
+    ui.painter().hline(bar.x_range(), bar.bottom(), Stroke::new(1.0, theme.line));
+    (bar.shrink2(vec2(12.0, 10.0)), Rect::from_min_max(pos2(full.left(), bar.bottom() + 1.0), full.max))
+}
 const CONTENT_MAX: f32 = 680.0;
 
 pub fn ui(ui: &mut Ui, ed: &mut Editor, native: &NativeHost, view: &mut SettingsView, asks: &mut Vec<Ask>) {
@@ -70,25 +82,46 @@ pub fn ui(ui: &mut Ui, ed: &mut Editor, native: &NativeHost, view: &mut Settings
     let full = ui.max_rect();
     ui.painter().rect_filled(full, 0.0, theme.panel);
 
-    // Section list.
-    let nav = Rect::from_min_size(full.min, vec2(NAV_W, full.height()));
-    ui.painter().rect_filled(nav, 0.0, theme.frame);
-    ui.painter().vline(nav.right(), nav.y_range(), Stroke::new(1.0, theme.line));
-    let mut nav_ui = ui.new_child(egui::UiBuilder::new().max_rect(nav.shrink2(vec2(8.0, 14.0))).layout(Layout::top_down(Align::Min)));
-    nav_ui.label(RichText::new(t!("SETTINGS")).size(11.0).strong().color(theme.text_muted));
-    nav_ui.add_space(8.0);
-    for (section, name, icon) in Section::ALL {
-        if kit::nav_item(&mut nav_ui, &theme, ed.reg.icons.get(icon).map(|p| p.as_path()), crate::i18n::t(name), view.section == section, None).clicked() {
+    // Section list: on the left, or (narrow) a dropdown above the page.
+    let narrow = full.width() < NARROW_W;
+    let content = if narrow {
+        let (inside, content) = narrow_bar(ui, &theme, full);
+        let mut bar_ui = ui.new_child(egui::UiBuilder::new().max_rect(inside).layout(Layout::left_to_right(Align::Center)));
+        let shown = Section::ALL.iter().find(|(s, ..)| *s == view.section).map(|(_, n, _)| crate::i18n::t(n)).unwrap_or("");
+        let mut picked = None;
+        kit::dropdown(&mut bar_ui, egui::Id::new("settings-pages"), inside.width().min(320.0), shown, |ui| {
+            for (section, name, _) in Section::ALL {
+                if kit::option(ui, view.section == section, crate::i18n::t(name)).clicked() {
+                    picked = Some(section);
+                }
+            }
+        });
+        if let Some(section) = picked {
             view.section = section;
             view.recording = None;
         }
-    }
+        content
+    } else {
+        let nav = Rect::from_min_size(full.min, vec2(NAV_W, full.height()));
+        ui.painter().rect_filled(nav, 0.0, theme.frame);
+        ui.painter().vline(nav.right(), nav.y_range(), Stroke::new(1.0, theme.line));
+        let mut nav_ui = ui.new_child(egui::UiBuilder::new().max_rect(nav.shrink2(vec2(8.0, 14.0))).layout(Layout::top_down(Align::Min)));
+        nav_ui.label(RichText::new(t!("SETTINGS")).size(11.0).strong().color(theme.text_muted));
+        nav_ui.add_space(8.0);
+        for (section, name, icon) in Section::ALL {
+            if kit::nav_item(&mut nav_ui, &theme, ed.reg.icons.get(icon).map(|p| p.as_path()), crate::i18n::t(name), view.section == section, None).clicked() {
+                view.section = section;
+                view.recording = None;
+            }
+        }
+        Rect::from_min_max(pos2(nav.right() + 1.0, full.top()), full.max)
+    };
 
     // The section's settings.
-    let content = Rect::from_min_max(pos2(nav.right() + 1.0, full.top()), full.max);
+    let side = if narrow { 16 } else { 32 };
     let mut content_ui = ui.new_child(egui::UiBuilder::new().max_rect(content).layout(Layout::top_down(Align::Min)));
     ScrollArea::vertical().id_salt(("settings", view.section as u8)).auto_shrink([false, false]).show(&mut content_ui, |ui| {
-        egui::Frame::new().inner_margin(egui::Margin { left: 32, right: 32, top: 24, bottom: 32 }).show(ui, |ui| {
+        egui::Frame::new().inner_margin(egui::Margin { left: side, right: side, top: 24, bottom: 32 }).show(ui, |ui| {
             // At most this wide, and never wider than the page (set_max_width sets the width).
             ui.set_max_width(ui.available_width().min(CONTENT_MAX));
             let title = Section::ALL.iter().find(|(s, ..)| *s == view.section).map(|(_, n, _)| crate::i18n::t(n)).unwrap_or("");

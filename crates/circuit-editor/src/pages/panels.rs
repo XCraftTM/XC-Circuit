@@ -439,7 +439,8 @@ pub fn problems(ui: &mut Ui, ed: &mut Editor, items: Vec<ProblemItem>) {
                 ui.label(RichText::new(t!("No problems")).color(theme.text_muted));
             }
             for (source, message, target) in items {
-                ui.horizontal(|ui| {
+                // Wrapping: a long message (or a narrow panel) goes on to more lines.
+                ui.horizontal_wrapped(|ui| {
                     ui.label(RichText::new("⚠").color(theme.warning));
                     let resp = ui.add(egui::Label::new(RichText::new(&message)).sense(egui::Sense::click()));
                     ui.label(RichText::new(&source).size(11.0).color(with_alpha(theme.text_muted, 200)));

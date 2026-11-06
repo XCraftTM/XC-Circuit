@@ -13,7 +13,7 @@ use super::BotUi;
 use super::databases::{self, DatabasesDraft};
 use crate::ui::kit;
 use crate::editor::{Editor, Level};
-use crate::pages::settings::NAV_W;
+use crate::pages::settings::{NARROW_W, NAV_W, narrow_bar};
 use crate::ui::theme::Theme;
 
 /// The page of privileged intents, shown for build modes that have them.
@@ -391,49 +391,78 @@ impl BotUi {
 
         egui::CentralPanel::default().frame(Frame::new().fill(theme.panel)).show(ui, |ui| {
             let full = ui.max_rect();
-            // The pages.
-            let nav = Rect::from_min_size(full.min, vec2(NAV_W, full.height()));
-            ui.painter().rect_filled(nav, 0.0, theme.frame);
-            ui.painter().vline(nav.right(), nav.y_range(), Stroke::new(1.0, theme.line));
-            let mut nav_ui = ui.new_child(egui::UiBuilder::new().max_rect(nav.shrink2(vec2(8.0, 14.0))).layout(Layout::top_down(Align::Min)));
-            nav_ui.label(RichText::new(t!("BOT SETTINGS")).size(11.0).strong().color(theme.text_muted));
-            nav_ui.add_space(2.0);
-            nav_ui.add(egui::Label::new(RichText::new(tf!("{project} · stored per project", project = draft.project_name)).size(11.5).color(theme.text_muted)).truncate());
-            nav_ui.add_space(8.0);
-            let mut picked = None;
-            for p in &draft.pages {
-                let (bad, missing) = draft.page_marks(&p.id);
-                let badge = if bad > 0 {
-                    Some((bad.to_string(), theme.error))
-                } else if missing > 0 {
-                    Some((missing.to_string(), theme.warning))
-                } else if p.id == INTENTS && !draft.intents.is_empty() {
-                    Some((draft.intents.len().to_string(), theme.text_muted))
-                } else {
-                    None
+            // The pages: on the left, or (narrow) a dropdown above the page.
+            let narrow = full.width() < NARROW_W;
+            if narrow {
+                let (inside, _) = narrow_bar(ui, &theme, full);
+                let mut bar_ui = ui.new_child(egui::UiBuilder::new().max_rect(inside).layout(Layout::left_to_right(Align::Center)));
+                // Each page with what it still needs, as the list shows it.
+                let label = |p: &PageInfo| {
+                    let (bad, missing) = draft.page_marks(&p.id);
+                    match (bad, missing) {
+                        (0, 0) => p.name.clone(),
+                        (0, m) => format!("{}  ({m})", p.name),
+                        (b, _) => format!("{}  ({b})", p.name),
+                    }
                 };
-                let icon = p.icon.as_deref().and_then(|i| ed.reg.icons.get(i)).map(|p| p.as_path());
-                let resp = kit::nav_item(&mut nav_ui, &theme, icon, &p.name, draft.page == p.id, badge);
-                let resp = if bad > 0 {
-                    resp.on_hover_text(tf!("{count} to fix", count = bad))
-                } else if missing > 0 {
-                    resp.on_hover_text(t!("Something required isn't set yet"))
-                } else {
-                    resp
-                };
-                if resp.clicked() {
-                    picked = Some(p.id.clone());
+                let shown = draft.pages.iter().find(|p| p.id == draft.page).map(label).unwrap_or_default();
+                let mut picked = None;
+                kit::dropdown(&mut bar_ui, egui::Id::new("bot-settings-pages"), inside.width().min(320.0), shown, |ui| {
+                    for p in &draft.pages {
+                        if kit::option(ui, draft.page == p.id, label(p)).clicked() {
+                            picked = Some(p.id.clone());
+                        }
+                    }
+                });
+                if let Some(p) = picked {
+                    draft.page = p;
                 }
             }
-            if let Some(p) = picked {
-                draft.page = p;
+            let nav = if narrow { Rect::from_min_size(full.min, vec2(0.0, 54.0)) } else { Rect::from_min_size(full.min, vec2(NAV_W, full.height())) };
+            if !narrow {
+                ui.painter().rect_filled(nav, 0.0, theme.frame);
+                ui.painter().vline(nav.right(), nav.y_range(), Stroke::new(1.0, theme.line));
+                let mut nav_ui = ui.new_child(egui::UiBuilder::new().max_rect(nav.shrink2(vec2(8.0, 14.0))).layout(Layout::top_down(Align::Min)));
+                nav_ui.label(RichText::new(t!("BOT SETTINGS")).size(11.0).strong().color(theme.text_muted));
+                nav_ui.add_space(2.0);
+                nav_ui.add(egui::Label::new(RichText::new(tf!("{project} · stored per project", project = draft.project_name)).size(11.5).color(theme.text_muted)).truncate());
+                nav_ui.add_space(8.0);
+                let mut picked = None;
+                for p in &draft.pages {
+                    let (bad, missing) = draft.page_marks(&p.id);
+                    let badge = if bad > 0 {
+                        Some((bad.to_string(), theme.error))
+                    } else if missing > 0 {
+                        Some((missing.to_string(), theme.warning))
+                    } else if p.id == INTENTS && !draft.intents.is_empty() {
+                        Some((draft.intents.len().to_string(), theme.text_muted))
+                    } else {
+                        None
+                    };
+                    let icon = p.icon.as_deref().and_then(|i| ed.reg.icons.get(i)).map(|p| p.as_path());
+                    let resp = kit::nav_item(&mut nav_ui, &theme, icon, &p.name, draft.page == p.id, badge);
+                    let resp = if bad > 0 {
+                        resp.on_hover_text(tf!("{count} to fix", count = bad))
+                    } else if missing > 0 {
+                        resp.on_hover_text(t!("Something required isn't set yet"))
+                    } else {
+                        resp
+                    };
+                    if resp.clicked() {
+                        picked = Some(p.id.clone());
+                    }
+                }
+                if let Some(p) = picked {
+                    draft.page = p;
+                }
             }
 
-            // The page shown.
-            let content = Rect::from_min_max(pos2(nav.right() + 1.0, full.top()), full.max);
+            // The page shown: right of the list, or under the dropdown.
+            let content = if narrow { Rect::from_min_max(pos2(full.left(), full.top() + 55.0), full.max) } else { Rect::from_min_max(pos2(nav.right() + 1.0, full.top()), full.max) };
+            let side = if narrow { 16 } else { 28 };
             let mut content_ui = ui.new_child(egui::UiBuilder::new().max_rect(content).layout(Layout::top_down(Align::Min)));
             ScrollArea::vertical().id_salt(("bot-settings", draft.page.as_str())).auto_shrink([false, false]).show(&mut content_ui, |ui| {
-                Frame::new().inner_margin(Margin { left: 28, right: 28, top: 22, bottom: 28 }).show(ui, |ui| {
+                Frame::new().inner_margin(Margin { left: side, right: side, top: 22, bottom: 28 }).show(ui, |ui| {
                     ui.set_max_width(ui.available_width().min(CONTENT_MAX));
                     let Some(page) = draft.pages.iter().find(|p| p.id == draft.page) else { return };
                     ui.label(RichText::new(&page.name).size(20.0).strong().color(theme.text));
