@@ -28,6 +28,10 @@ XC Circuit loads plugins from:
 
 Plugin files are watched: saving a block, a theme or an editor script reloads it right away.
 
+## Turning plugins off and removing them
+
+The **Plugins view** in the side bar (the plug icon) lists every plugin. A plugin you installed has a switch, which turns it off (it stays listed, to turn on again), and a trash can, which removes it after you confirm. The plugins that come with the app say *Built in* and can't be turned off or removed. To make, test and share plugins, see the [Plugin guide](/plugins/).
+
 ## Block updates
 
 The bundled blocks (Circuit Core, Discord Bot, Fluxer Bot) can get new versions without a new app version. When XC Circuit checks for updates (at start, unless turned off in Settings, and from Help › Check for Updates), it also asks the repository for newer versions of these plugins. If there are some, it lists them; **Update** downloads them, checks them and loads them right away. Projects keep working: blocks that changed are upgraded when a project opens, as after an app update.

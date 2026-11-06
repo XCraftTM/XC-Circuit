@@ -41,6 +41,7 @@ export default defineConfig({
     nav: [
       { text: "Tutorials", link: "/tutorials/", activeMatch: "/tutorials/" },
       { text: "Explanations", link: "/explanations/", activeMatch: "/explanations/" },
+      { text: "Plugins", link: "/plugins/", activeMatch: "/plugins/" },
       { text: "API", link: "/api/", activeMatch: "/api/" },
       { text: "Download", link: "/download" },
       {
@@ -91,7 +92,26 @@ export default defineConfig({
           ],
         },
       ],
+      "/plugins/": [
+        {
+          text: "Plugin guide",
+          items: [
+            { text: "Make a plugin", link: "/plugins/" },
+            { text: "Recipes", link: "/plugins/recipes" },
+            { text: "Share and update", link: "/plugins/share" },
+          ],
+        },
+        {
+          text: "Tutorials",
+          items: [
+            { text: "Your first block", link: "/tutorials/first-block" },
+            { text: "Your first editor plugin", link: "/tutorials/first-editor-plugin" },
+          ],
+        },
+        { text: "Reference", items: [{ text: "Every key and function", link: "/api/" }] },
+      ],
       "/api/": [
+        { text: "Plugin guide", items: [{ text: "Make a plugin", link: "/plugins/" }, { text: "Recipes", link: "/plugins/recipes" }, { text: "Share and update", link: "/plugins/share" }] },
         { text: "Reference", items: [{ text: "What do you want to do?", link: "/api/" }] },
         {
           text: "Blocks",

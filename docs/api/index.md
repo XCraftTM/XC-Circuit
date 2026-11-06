@@ -1,6 +1,6 @@
 # API reference
 
-Every key and function plugins can use. New here? Start with the tutorials [Your first block](/tutorials/first-block) and [Your first editor plugin](/tutorials/first-editor-plugin).
+Every key and function plugins can use. New here? Start with the [Plugin guide](/plugins/) (how to make, test and share a plugin, with [recipes](/plugins/recipes)) and the tutorials [Your first block](/tutorials/first-block) and [Your first editor plugin](/tutorials/first-editor-plugin).
 
 ## What do you want to do?
 
