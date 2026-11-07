@@ -37,9 +37,10 @@ const PERMISSIONS = {
   PrioritySpeaker: "Priority Speaker",
 };
 
-/** Permission flag names from text such as "Send Messages, manage roles". */
-function permissionList(text) {
-  const wanted = String(text || "").split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+/** Permission flag names from a list of them (the field's choices), or text such as "Send Messages, manage roles" (older projects). */
+function permissionList(given) {
+  const items = Array.isArray(given) ? given : String(given || "").split(/[,\n]/);
+  const wanted = items.map((s) => String(s).trim()).filter(Boolean);
   const squash = (s) => s.toLowerCase().replace(/[^a-z]/g, "");
   return wanted.map((w) => {
     const hit = Object.entries(PERMISSIONS).find(([flag, label]) => squash(flag) === squash(w) || squash(label) === squash(w));
@@ -58,7 +59,7 @@ module.exports = {
     name: "Set Channel Permissions",
     description: "Allows or denies permissions on one channel for a role or a member, such as giving a ticket's creator access.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "roles",
@@ -76,8 +77,8 @@ module.exports = {
     who: { type: "select", pin: false, default: "target", choices: WHO, description: "Whose permissions change." },
     target: { type: "any", pin: "only", required: true, show: { who: ["target"] }, description: "A role, member or user (or an id)." },
     mode: { type: "select", pin: false, default: "change", choices: MODES, description: "Change permissions, or remove the override." },
-    allow: { type: "text", default: "View Channel, Send Messages", show: { mode: ["change"] }, description: "Permissions to allow, comma separated." },
-    deny: { type: "text", default: "", show: { mode: ["change"] }, description: "Permissions to deny, comma separated." },
+    allow: { type: "multiselect", default: ["ViewChannel", "SendMessages"], choices: PERMISSIONS, show: { mode: ["change"] }, description: "Permissions to allow." },
+    deny: { type: "multiselect", default: [], choices: PERMISSIONS, show: { mode: ["change"] }, description: "Permissions to deny." },
     reason: { type: "text", default: "", advanced: true, description: "Shown in the audit log." },
   },
   outputs: {

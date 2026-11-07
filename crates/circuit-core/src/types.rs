@@ -80,6 +80,8 @@ impl PinType {
         }
         match s {
             "action" => PinType::Action,
+            // Several of the field's choices: a list of their keys.
+            "multiselect" => PinType::List(Box::new(PinType::Text)),
             "text" | "string" | "textarea" | "select" | "color" | "code" | "file" => PinType::Text,
             "number" => PinType::Number,
             "boolean" | "bool" => PinType::Boolean,

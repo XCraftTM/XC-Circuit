@@ -132,7 +132,12 @@ impl FieldDef {
     }
 
     pub fn is_select(&self) -> bool {
-        self.type_name == "select" || self.choices.is_some()
+        self.type_name == "select" || (self.choices.is_some() && !self.is_multiselect())
+    }
+
+    /// Several of its choices can be picked: its value is a list of their keys.
+    pub fn is_multiselect(&self) -> bool {
+        self.type_name == "multiselect"
     }
 }
 

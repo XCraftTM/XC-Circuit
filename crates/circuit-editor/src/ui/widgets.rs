@@ -10,13 +10,14 @@ use crate::ui::theme::{Theme, hex_color};
 /// Whether a field can be edited inline at all (lists, objects and plugin types must be connected).
 pub fn is_inline_editable(field: &FieldDef) -> bool {
     field.is_select()
+        || field.is_multiselect()
         || matches!(field.type_name.as_str(), "color" | "textarea")
         || matches!(field.ty.required(), PinType::Text | PinType::Number | PinType::Boolean | PinType::Any | PinType::Date)
 }
 
 /// Whether a field is edited as free text (and so can be expanded on the canvas).
 pub fn is_plain_text(field: &FieldDef) -> bool {
-    !field.is_select() && field.type_name != "color" && is_inline_editable(field) && !matches!(field.ty.required(), PinType::Boolean | PinType::Number)
+    !field.is_select() && !field.is_multiselect() && field.type_name != "color" && is_inline_editable(field) && !matches!(field.ty.required(), PinType::Boolean | PinType::Number)
 }
 
 /// A field value as the text a text box shows.
@@ -38,6 +39,9 @@ pub fn value_editor(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Val
 fn editor(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width: f32, multiline: bool, theme: &Theme) -> bool {
     if field.is_select() {
         return select(ui, id, field, value, width, multiline);
+    }
+    if field.is_multiselect() {
+        return multiselect(ui, id, field, value, width);
     }
     if field.type_name == "color" {
         return color(ui, id, value, width, theme);
@@ -151,6 +155,95 @@ fn select(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width:
     }
 }
 
+/// The picked choices of a multi-select value, by key: a list, or (as older
+/// projects typed them) text with commas whose items name a key or a label.
+/// Items that match no choice are kept as they are.
+pub fn chosen(field: &FieldDef, value: &Value) -> Vec<String> {
+    let squash = |s: &str| s.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>().to_lowercase();
+    let choices = field.choice_list();
+    let items: Vec<String> = match value {
+        Value::Array(list) => list.iter().map(|v| v.as_str().map(str::to_string).unwrap_or_else(|| v.to_string())).collect(),
+        Value::String(text) => text.split([',', '\n']).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect(),
+        _ => Vec::new(),
+    };
+    let mut out: Vec<String> = Vec::new();
+    for item in items {
+        let key = choices.iter().find(|(_, k, l)| *k == item || squash(k) == squash(&item) || squash(l) == squash(&item)).map(|(_, k, _)| k.clone()).unwrap_or(item);
+        if !out.contains(&key) {
+            out.push(key);
+        }
+    }
+    out
+}
+
+/// A dropdown of checkboxes, with a search when there are many.
+fn multiselect(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width: f32) -> bool {
+    let choices = field.choice_list();
+    let mut picked = chosen(field, value);
+    let label_of = |k: &str| choices.iter().find(|(_, key, _)| key == k).map(|(_, _, l)| l.clone()).unwrap_or_else(|| k.to_string());
+    let shown = match picked.len() {
+        0 => t!("None").to_string(),
+        1..=2 => picked.iter().map(|k| label_of(k)).collect::<Vec<_>>().join(", "),
+        n => tf!("{first} and {count} more", first = label_of(&picked[0]), count = n - 1),
+    };
+    let mut changed = false;
+    let search_id = id.with("search");
+    let resp = ComboBox::from_id_salt(id)
+        .width(width)
+        .selected_text(shown)
+        // Ticking boxes leaves it open; a click outside closes it.
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show_ui(ui, |ui| {
+            ui.set_min_width(width.max(220.0));
+            let mut search: String = ui.data(|d| d.get_temp(search_id)).unwrap_or_default();
+            if choices.len() > 8 {
+                ui.add(kit::TextLine::new(&mut search).hint(t!("Search…")).compact());
+                ui.add_space(4.0);
+            }
+            let wanted = search.trim().to_lowercase();
+            egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
+                let mut last_group: Option<&String> = None;
+                for (group, key, text) in &choices {
+                    if !wanted.is_empty() && !text.to_lowercase().contains(&wanted) && !key.to_lowercase().contains(&wanted) {
+                        continue;
+                    }
+                    if group.as_ref() != last_group {
+                        if let Some(g) = group {
+                            ui.label(egui::RichText::new(g.to_uppercase()).small().weak());
+                        }
+                        last_group = group.as_ref();
+                    }
+                    let mut on = picked.contains(key);
+                    if ui.checkbox(&mut on, text).changed() {
+                        if on {
+                            picked.push(key.clone());
+                        } else {
+                            picked.retain(|k| k != key);
+                        }
+                        changed = true;
+                    }
+                }
+            });
+            if !picked.is_empty() {
+                ui.add_space(4.0);
+                if ui.link(t!("Clear")).clicked() {
+                    picked.clear();
+                    changed = true;
+                }
+            }
+            ui.data_mut(|d| d.insert_temp(search_id, search));
+        })
+        .response;
+    kit::named(ui, resp);
+    if changed {
+        // In the choices' order; ones that match no choice after them.
+        let index = |k: &String| choices.iter().position(|(_, key, _)| key == k).unwrap_or(usize::MAX);
+        picked.sort_by_key(index);
+        *value = Value::Array(picked.into_iter().map(Value::String).collect());
+    }
+    changed
+}
+
 fn color(ui: &mut Ui, id: egui::Id, value: &mut Value, width: f32, theme: &Theme) -> bool {
     let mut c = value.as_str().and_then(hex_color).unwrap_or(Color32::WHITE);
     let changed = crate::builders::color::color_button(ui, id, &mut c, theme, Some(width.clamp(96.0, 180.0)));
@@ -163,6 +256,18 @@ fn color(ui: &mut Ui, id: egui::Id, value: &mut Value, width: f32, theme: &Theme
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A multi-select reads a list of keys, and the text older projects typed
+    /// ("View Channel, send messages"): by key or label, any case.
+    #[test]
+    fn multiselect_reads_lists_and_typed_text() {
+        let field: FieldDef = serde_json::from_value(serde_json::json!({ "type": "multiselect", "choices": { "ViewChannel": "View Channel", "SendMessages": "Send Messages", "ManageRoles": "Manage Roles" } })).unwrap();
+        assert!(field.is_multiselect() && !field.is_select());
+        assert_eq!(circuit_core::types::PinType::parse("multiselect"), circuit_core::types::PinType::List(Box::new(circuit_core::types::PinType::Text)), "it takes a list of texts by wire");
+        assert_eq!(chosen(&field, &serde_json::json!(["SendMessages"])), ["SendMessages"]);
+        assert_eq!(chosen(&field, &serde_json::json!("View Channel, send messages, Mystery")), ["ViewChannel", "SendMessages", "Mystery"], "unknown ones are kept");
+        assert!(chosen(&field, &Value::Null).is_empty());
+    }
 
     /// The button keeps its whole text and stays inside the row, however long
     /// it is in this language, and the text box is just as tall.

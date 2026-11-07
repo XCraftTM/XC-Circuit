@@ -1,11 +1,13 @@
 id          = "xc.discord"
 name        = "Discord Bot"
-version     = "1.1.0"
+version     = "1.2.0"
 author      = "XC Team"
 description = "Blocks, pin types and the build mode for Discord bots made with discord.js."
 
 [engines]
 circuit = "^1.0"
+# Multi-select fields need this app or newer.
+app = "0.1.6"
 
 [dependencies]
 "xc.core" = "^1.0"

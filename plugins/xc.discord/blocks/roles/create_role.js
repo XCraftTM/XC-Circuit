@@ -37,9 +37,10 @@ const PERMISSIONS = {
   PrioritySpeaker: "Priority Speaker",
 };
 
-/** Permission flag names from text such as "Send Messages, manage roles". */
-function permissionList(text) {
-  const wanted = String(text || "").split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+/** Permission flag names from a list of them (the field's choices), or text such as "Send Messages, manage roles" (older projects). */
+function permissionList(given) {
+  const items = Array.isArray(given) ? given : String(given || "").split(/[,\n]/);
+  const wanted = items.map((s) => String(s).trim()).filter(Boolean);
   const squash = (s) => s.toLowerCase().replace(/[^a-z]/g, "");
   return wanted.map((w) => {
     const hit = Object.entries(PERMISSIONS).find(([flag, label]) => squash(flag) === squash(w) || squash(label) === squash(w));
@@ -55,7 +56,7 @@ module.exports = {
     name: "Create Role",
     description: "Makes a new role in a server. The bot needs Manage Roles.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "roles",
@@ -74,7 +75,7 @@ module.exports = {
     color: { type: "color", default: "#99AAB5", description: "The name color in the member list." },
     hoist: { type: "boolean", default: false, label: "Show separately", description: "List its members in their own group." },
     mentionable: { type: "boolean", default: false, description: "Anyone can @mention it." },
-    permissions: { type: "text", default: "", description: "Comma separated, such as Send Messages, Manage Messages. Empty = none." },
+    permissions: { type: "multiselect", default: [], choices: PERMISSIONS, description: "What the role may do. None picked: nothing beyond @everyone." },
     emoji: { type: "text", default: "", advanced: true, label: "Icon emoji", description: "An emoji shown next to members' names (needs boost level 2)." },
     position: { type: "number", default: 0, min: 0, step: 1, advanced: true, description: "Its place in the role list (0 = just above @everyone)." },
     reason: { type: "text", default: "", advanced: true, description: "Shown in the audit log." },

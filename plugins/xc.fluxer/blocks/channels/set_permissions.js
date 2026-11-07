@@ -1,3 +1,34 @@
+// Fluxer's permissions, by their flag names (as @fluxerjs/util names them).
+const PERMISSIONS = {
+  ViewChannel: "View Channel",
+  SendMessages: "Send Messages",
+  ReadMessageHistory: "Read Message History",
+  AddReactions: "Add Reactions",
+  EmbedLinks: "Embed Links",
+  AttachFiles: "Attach Files",
+  MentionEveryone: "Mention Everyone",
+  UseExternalEmojis: "Use External Emojis",
+  UseExternalStickers: "Use External Stickers",
+  SendTtsMessages: "Send Text-to-Speech Messages",
+  PinMessages: "Pin Messages",
+  ManageMessages: "Manage Messages",
+  BypassSlowmode: "Bypass Slowmode",
+  ManageChannels: "Manage Channel",
+  ManageRoles: "Manage Permissions",
+  ManageWebhooks: "Manage Webhooks",
+  CreateInstantInvite: "Create Invite",
+  ViewChannelMembers: "View Channel Members",
+  Connect: "Connect",
+  Speak: "Speak",
+  Stream: "Video",
+  UseVad: "Use Voice Activity",
+  MuteMembers: "Mute Members",
+  DeafenMembers: "Deafen Members",
+  MoveMembers: "Move Members",
+  PrioritySpeaker: "Priority Speaker",
+  UpdateRtcRegion: "Change Voice Region",
+};
+
 const FOR = { role: "A role", member: "A member", everyone: "Everyone" };
 const MODES = { change: "Allow or deny", reset: "Reset (back to the role's)" };
 
@@ -8,7 +39,7 @@ module.exports = {
     name: "Set Channel Permissions",
     description: "Allows or denies permissions in one channel for a role, a member or everyone, or resets them. For private channels and locking.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "channels",
@@ -25,8 +56,8 @@ module.exports = {
     for: { type: "select", pin: false, default: "role", choices: FOR, description: "Whose permissions." },
     who: { type: "any", pin: true, show: { for: ["role", "member"] }, description: "The role or member (or their id)." },
     mode: { type: "select", pin: false, default: "change", choices: MODES, description: "What to do." },
-    allow: { type: "text", default: "", show: { mode: ["change"] }, description: "Permissions to allow, with commas: ViewChannel, SendMessages." },
-    deny: { type: "text", default: "", show: { mode: ["change"] }, description: "Permissions to deny, with commas. Deny SendMessages to lock a channel." },
+    allow: { type: "multiselect", default: [], choices: PERMISSIONS, show: { mode: ["change"] }, description: "Permissions to allow." },
+    deny: { type: "multiselect", default: [], choices: PERMISSIONS, show: { mode: ["change"] }, description: "Permissions to deny. Deny Send Messages to lock a channel." },
   },
   outputs: {
     channel: { type: "fluxer.channel", description: "The same channel." },
@@ -48,7 +79,8 @@ module.exports = {
       await channel.permissionOverwrites.delete(targetId);
       return { channel };
     }
-    const list = (s) => String(s ?? "").split(/[,\s]+/).map((p) => p.trim()).filter(Boolean);
+    // A list of flag names (the field's choices), or text with commas (older projects).
+    const list = (s) => (Array.isArray(s) ? s : String(s ?? "").split(/[,\s]+/)).map((p) => String(p).trim()).filter(Boolean);
     const allow = list(f.allow);
     const deny = list(f.deny);
     if (!allow.length && !deny.length) throw new Error("Name permissions to allow or deny");

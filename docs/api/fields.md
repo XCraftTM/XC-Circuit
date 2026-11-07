@@ -43,6 +43,7 @@ Besides the [type strings](#type-strings), a field's `type` can name an editor:
 | `number` | number box | number |
 | `boolean` | switch | `true` / `false` |
 | `select` | drop-down of `choices` | the chosen value |
+| `multiselect` | drop-down of `choices` with a checkbox each (and a search when there are many) | a list of the chosen keys; text with commas from older projects is read too |
 | `color` | swatch with a colour picker | `"#RRGGBB"` |
 | `embed` | the Embed Builder (Discord) | embed object |
 | `slash-command-ref` | a slash command of the project (Discord) | its name |

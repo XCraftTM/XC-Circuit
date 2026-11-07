@@ -37,9 +37,10 @@ const PERMISSIONS = {
   PrioritySpeaker: "Priority Speaker",
 };
 
-/** Permission flag names from text such as "Send Messages, manage roles". */
-function permissionList(text) {
-  const wanted = String(text || "").split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+/** Permission flag names from a list of them (the field's choices), or text such as "Send Messages, manage roles" (older projects). */
+function permissionList(given) {
+  const items = Array.isArray(given) ? given : String(given || "").split(/[,\n]/);
+  const wanted = items.map((s) => String(s).trim()).filter(Boolean);
   const squash = (s) => s.toLowerCase().replace(/[^a-z]/g, "");
   return wanted.map((w) => {
     const hit = Object.entries(PERMISSIONS).find(([flag, label]) => squash(flag) === squash(w) || squash(label) === squash(w));
@@ -57,7 +58,7 @@ module.exports = {
     name: "Edit Role",
     description: "Changes a role's name, color, permissions and more. Empty fields stay as they are.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "roles",
@@ -76,7 +77,7 @@ module.exports = {
     color: { type: "text", default: "", description: "New color such as #FF5CA8. Empty keeps it." },
     hoist: { type: "select", pin: false, default: "keep", choices: KEEP, label: "Show separately", description: "List its members in their own group." },
     mentionable: { type: "select", pin: false, default: "keep", choices: KEEP, description: "Anyone can @mention it." },
-    permissions: { type: "text", default: "", description: "Replaces all its permissions (comma separated). Empty keeps them." },
+    permissions: { type: "multiselect", default: [], choices: PERMISSIONS, description: "Replaces all its permissions. None picked keeps them." },
     position: { type: "number", default: 0, min: 0, step: 1, advanced: true, description: "Its place in the role list (0 keeps it). Higher is above." },
     emoji: { type: "text", default: "", advanced: true, label: "Icon emoji", description: "An emoji shown next to members' names. Empty keeps it." },
     reason: { type: "text", default: "", advanced: true, description: "Shown in the audit log." },
@@ -90,7 +91,7 @@ module.exports = {
     if (f.color) edit.color = f.color;
     if (tri(f.hoist) !== undefined) edit.hoist = tri(f.hoist);
     if (tri(f.mentionable) !== undefined) edit.mentionable = tri(f.mentionable);
-    if (String(f.permissions || "").trim()) edit.permissions = permissionList(f.permissions);
+    if (permissionList(f.permissions).length) edit.permissions = permissionList(f.permissions);
     if (f.position > 0) edit.position = Math.floor(f.position);
     if (f.emoji) edit.unicodeEmoji = f.emoji;
     return { role: await f.role.edit(edit) };
