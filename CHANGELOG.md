@@ -2,7 +2,7 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## Unreleased
+## 0.1.8
 
 ### Added
 - **A Modal Builder for forms**: Show Modal's form is now designed in one place, like a layout: a title, and up to 5 questions (a box to type into, a select menu or a file upload, each with a hint) and texts, with a preview that looks like Discord's. **Edit form…** on the block opens it; the answer ids are listed there to copy into Modal Submitted. The separate Text Input, Form Field, File Upload and Form Text blocks are no longer needed and left the block picker; forms built from them keep working.
@@ -13,8 +13,6 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **Problem counts show a warning sign**: the number of problems next to a workspace (or a closed folder) in the Workspaces list now has a warning triangle in front of it.
 - **Create Channel: Position is on the block**: the channel's place in the list (0 at the top, -1 at the end) is now a normal input you can type or connect, instead of an advanced setting.
 - **Pins of advanced settings start hidden**: a new block shows only its usual pins; an advanced one (such as Insert Row's More values) appears once turned on with its pin button in the Inspector.
-
-## 0.1.8
 
 ### Fixed
 - **Updating from inside the app works while an AI client is connected**: Setup couldn't replace XC Circuit while an AI client (Claude, Cursor …) had its MCP server running, so it undid the update. It now moves the running copy aside and finishes. Setup also keeps a log of the update now, `setup.log` in the `xc-circuit-update` folder in your temporary files.
