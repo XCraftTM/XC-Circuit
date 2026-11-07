@@ -295,7 +295,18 @@ const message = (content, extra = {}) => ({
   const invite = await run("fluxer.create_invite", { channel: channel("c1"), hours: 2, uses: 3 });
   assert.strictEqual(invite.url, "https://fluxer.gg/abc?age=7200&uses=3");
   assert.deepStrictEqual(run("fluxer.server_info", { server }).members, 3);
-  assert.deepStrictEqual(run("fluxer.bot_info", {}), { bot: client.user, servers: 1, ping: 42, uptime: 5 });
+  assert.deepStrictEqual(await run("fluxer.bot_info", {}), { bot: client.user, servers: 1, ping: 42, uptime: 5 });
+  // fluxer.js gives no ping: a request to Fluxer is timed instead.
+  {
+    const ws = client.ws;
+    const rest = client.rest;
+    client.ws = undefined;
+    client.rest = { get: (route) => new Promise((done) => setTimeout(() => done({ route }), 20)) };
+    const timed = (await run("fluxer.bot_info", {})).ping;
+    assert.ok(timed >= 15 && timed < 1000, `timed ${timed}`);
+    client.ws = ws;
+    client.rest = rest;
+  }
   calls.length = 0;
   run("fluxer.set_status", { status: "idle", text: "Helping" });
   assert.deepStrictEqual(calls, [["presence", { status: "idle", customStatus: { text: "Helping" } }]]);
