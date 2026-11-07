@@ -835,6 +835,7 @@ pub const UI_STRINGS: &[&str] = &[
     "This block's plugin is not loaded.",
     "required",
     "pin",
+    "Show its pin on the block, to connect it",
     "Switch between typing a value and connecting a pin",
     "Optional: connect what goes there. Unconnected, the name is looked up in the event and earlier blocks.",
     "Open Embed Builder",

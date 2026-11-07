@@ -14,7 +14,7 @@ module.exports = {
     name: "Send Message",
     description: "Replies to a command or button, or sends, replies to and edits messages in channels.",
     author: "XC Team",
-    version: "3.3.0",
+    version: "3.4.0",
   },
   search: {
     category: "send",
@@ -57,7 +57,7 @@ module.exports = {
       show: { mode: ["reply", "followup", "defer"] },
     },
     split: { type: "boolean", default: false, advanced: true, label: "Split long text", description: "Send text over 2000 characters as several messages." },
-    files: { type: "list<any>", pin: "only", multi: true, advanced: true, description: "Attachments: web addresses, file paths or Discord attachments." },
+    files: { type: "list<any>", pin: "only", multi: true, description: "Files to send: a picture from Build Canvas, a file path (Read, Write or Download File), a web address or attachments of other messages." },
     mentions: { type: "select", pin: false, default: "all", advanced: true, label: "Who gets pinged", choices: MENTIONS, description: "Which mentions in the text notify people." },
     replyPing: { type: "boolean", default: true, advanced: true, label: "Ping the author", show: { mode: ["msgReply"] }, description: "Notify the person being replied to." },
     silent: { type: "boolean", default: false, advanced: true, description: "Send without a notification sound (@silent)." },
@@ -81,7 +81,7 @@ module.exports = {
     } else {
       add.message = { type: "discord.message", pin: "only", required: true, description: "The message to reply to or edit." };
     }
-    const hide = mode === "defer" ? ["text", "embeds", "split"] : [];
+    const hide = mode === "defer" ? ["text", "embeds", "split", "files"] : [];
     if (mode !== "defer" && values.format === "layout") {
       // A Components V2 message has no text or embeds of its own: they are in the layout.
       add.layout = { type: "discord.layout", pin: "only", required: true, description: "The message from Build Layout." };

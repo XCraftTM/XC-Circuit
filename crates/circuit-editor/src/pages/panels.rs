@@ -82,6 +82,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
             for (key, f) in shape.visible_fields().filter(|(_, f)| f.advanced == advanced) {
                 let node = &ws.nodes[&node_id];
                 let pinned = f.pin == PinMode::Only || node.pins.contains(key);
+                let shown_as_pin = node.pins.contains(key);
                 let source = ws.links_into(&node_id, key).next().map(|l| l.from.clone());
                 let top = ui.cursor().top();
                 padded(ui, |ui| {
@@ -93,12 +94,16 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                         if f.required {
                             ui.label(RichText::new(t!("required")).size(10.0).color(theme.warning));
                         }
-                        if matches!(f.pin, PinMode::Auto | PinMode::Pin) && source.is_none() {
+                        // An advanced field that can only be connected: the chip puts its pin on the block.
+                        let only_advanced = f.advanced && f.pin == PinMode::Only;
+                        if (matches!(f.pin, PinMode::Auto | PinMode::Pin) || only_advanced) && source.is_none() {
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 // The chip shows whether it's on; the fonts have no filled circle.
                                 let text = t!("pin");
-                                let color = if pinned { theme.pin_color(&f.ty, reg) } else { theme.text_muted };
-                                if kit::filter_chip(ui, &theme, text, color, pinned).on_hover_text(t!("Switch between typing a value and connecting a pin")).clicked() {
+                                let on = if only_advanced { shown_as_pin } else { pinned };
+                                let color = if on { theme.pin_color(&f.ty, reg) } else { theme.text_muted };
+                                let tip = if only_advanced { t!("Show its pin on the block, to connect it") } else { t!("Switch between typing a value and connecting a pin") };
+                                if kit::filter_chip(ui, &theme, text, color, on).on_hover_text(tip).clicked() {
                                     toggle = Some(key.clone());
                                 }
                             });

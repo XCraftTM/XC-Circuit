@@ -24,7 +24,7 @@ fields: {
 | `required` | boolean | Empty is a problem (listed in Problems). |
 | `pin` | `"auto"` · `true` · `false` · `"only"` | `"auto"` (default): filled in on the block, with a pin toggle. `true`: starts as a pin. `false`: never a pin. `"only"`: must be connected (inputs whose pin type has [`fromId`](./pin-types#finding-values-by-id), such as channels, can still be switched to a box for an id). |
 | `multi` | boolean | The pin accepts several wires; the block gets their values as one list. |
-| `advanced` | boolean | Not shown on the block; the Inspector lists it under *Advanced*. |
+| `advanced` | boolean | Not shown on the block; the Inspector lists it under *Advanced*. Once it's a pin (with the **pin** chip there, also for `pin: "only"` fields, or by connecting it), it shows on the block too. |
 | `show` | object | Shown only when other fields have one of these values: `{ mode: ["send", "edit"] }`. |
 | `choices` | object | For `select`: value → label. A nested object makes a group: `{ "Text": { plain: "Plain", bold: "Bold" } }`. |
 | `template` | boolean | Whether `${…}` in the text is filled in. Default: yes for text fields. |

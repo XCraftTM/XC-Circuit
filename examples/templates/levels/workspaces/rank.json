@@ -16,7 +16,7 @@
       "block": "core.leaderboard@1",
       "at": [
         360,
-        530
+        580
       ],
       "values": {
         "scope": "user",

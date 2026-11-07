@@ -22,7 +22,7 @@ module.exports = {
     name: "Send Message",
     description: "Sends a message to a channel or a person, replies to a message, or edits one, with text, embeds and files.",
     author: "XC Team",
-    version: "1.1.0",
+    version: "1.2.0",
   },
   search: {
     category: "send",
@@ -43,7 +43,7 @@ module.exports = {
     mode: { type: "select", pin: false, default: "reply", choices: MODES, description: "What kind of message to send." },
     text: { type: "textarea", template: true, default: "", description: "The message text. ${…} holds JavaScript, such as ${author.username}." },
     embeds: { type: "list<fluxer.embed>", pin: true, multi: true, description: "Embeds to attach, from Build Embed." },
-    files: { type: "list<any>", pin: "only", multi: true, advanced: true, description: "Files to send: a picture from Build Canvas, web addresses, file paths or attachments of other messages. Not when editing." },
+    files: { type: "list<any>", pin: "only", multi: true, description: "Files to send: a picture from Build Canvas, web addresses, file paths or attachments of other messages." },
     // Not "ping": a ${ping} in the text (Bot Info's ping) would read this switch.
     pingAuthor: { type: "boolean", default: true, advanced: true, label: "Ping the author", show: { mode: ["reply"] }, description: "Notify the person being replied to." },
     deleteAfter: { type: "number", default: 0, min: 0, advanced: true, label: "Delete after (s)", description: "Delete the sent message after this many seconds. 0 keeps it." },
@@ -57,7 +57,8 @@ module.exports = {
     if (mode === "send") add.channel = { type: "fluxer.channel", pin: "only", required: true, description: "Where to send the message." };
     else if (mode === "dm") add.user = { type: "fluxer.user", pin: "only", required: true, description: "Who gets the direct message (a member works too)." };
     else add.message = { type: "fluxer.message", pin: "only", required: true, description: mode === "edit" ? "The message to edit (the bot's own)." : "The message to reply to." };
-    return { add };
+    // Fluxer can't add files to a message that was sent.
+    return { add, hide: mode === "edit" ? ["files"] : [] };
   },
   async run({ fields, ctx }) {
     const embeds = [fields.embeds].flat().filter(Boolean);

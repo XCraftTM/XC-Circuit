@@ -443,3 +443,21 @@ fn wire_hit_test() {
     assert!(wire_distance(a, b, pos2(100.0, 0.0)) > 10.0);
     assert_eq!(wire_distance(a, b, pos2(500.0, 500.0)), f32::INFINITY);
 }
+
+/// Send Message shows its Files on the block; an advanced input (Components)
+/// shows there once it's a pin, so it can be connected.
+#[test]
+fn files_and_pinned_advanced_inputs_show_on_the_block() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+    let def = ed.reg.block("discord.send_message").unwrap();
+    let values = serde_json::json!({ "mode": "send" });
+    let shape = circuit_core::BlockShape::build(def, values.as_object().unwrap(), None);
+    let keys = |pins: &[String]| {
+        let l = layout::layout_node("1", [0.0, 0.0], pins, None, Some(def), Some(&shape), &Default::default(), &Default::default());
+        l.rows.iter().filter_map(|(r, _)| if let layout::RowKind::Field { key, .. } = r { Some(key.clone()) } else { None }).collect::<Vec<_>>()
+    };
+    let plain = keys(&[]);
+    assert!(plain.contains(&"files".to_string()) && !plain.contains(&"components".to_string()), "{plain:?}");
+    assert!(keys(&["components".to_string()]).contains(&"components".to_string()));
+}

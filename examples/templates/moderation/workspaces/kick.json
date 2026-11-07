@@ -58,7 +58,7 @@
       "block": "discord.send_message@3",
       "at": [
         1000,
-        474
+        520
       ],
       "values": {
         "mode": "reply",

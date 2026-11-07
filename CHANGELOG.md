@@ -2,6 +2,12 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
+## Unreleased
+
+### Fixed
+- **Send Message takes files again**: its Files input was under Advanced, and inputs there had no pin on the block, so nothing could be connected to it. Files now shows on the block (Discord and Fluxer; not when deferring, or when editing on Fluxer), ready for a picture from Build Canvas, a file path from Read, Write or Download File, a web address or another message's attachments.
+- **Advanced inputs can be connected**: in the Inspector's Advanced part, inputs that can only be connected (such as Components) have the **pin** chip, which puts their pin on the block; inputs that are pins or connected always show on the block.
+
 ## 0.1.6
 
 ### Added

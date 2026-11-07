@@ -57,7 +57,9 @@ pub(super) fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], width: Opt
         rows.extend(shape.flows.iter().map(|f| RowKind::Flow(f.clone())));
     }
     for (key, f) in shape.visible_fields() {
-        if f.advanced {
+        // Advanced fields stay in the Inspector, unless they were made pins
+        // (there, or by connecting them).
+        if f.advanced && !pins_on.contains(key) {
             continue;
         }
         let pinned = f.pin == PinMode::Only || pins_on.contains(key);

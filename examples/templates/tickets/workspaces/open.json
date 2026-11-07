@@ -38,7 +38,7 @@
       "block": "discord.button@1",
       "at": [
         680,
-        446
+        520
       ],
       "values": {
         "label": "Close ticket",
@@ -50,7 +50,7 @@
       "block": "discord.mention@1",
       "at": [
         680,
-        731
+        810
       ]
     },
     "6": {
@@ -68,7 +68,7 @@
       "block": "discord.mention@1",
       "at": [
         1000,
-        474
+        520
       ]
     },
     "8": {
