@@ -2,7 +2,7 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## Unreleased
+## 0.1.9
 
 ### Added
 - **Voice Changed: tick several changes**: Change is now a list with checkboxes, so one event can run for joins and leaves (or any other mix). Projects that picked one change keep it.
@@ -12,6 +12,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **${…} works in Check, Set Variable and other fields that take any value**: those fields kept ${…} as plain text, so Check compared the words `${#1.after.id}` instead of the id. They fill it in now, and a field that is only one ${…}, such as `${#1.after}`, gets the value itself (the channel), as a wire would give it.
 - **Comparing Discord ids is exact**: Check, If and the other comparisons compared long ids (18-19 digits) as numbers, which can't hold that many digits exactly, so two different ids that differ only in their last digits could count as equal. Whole numbers that long are now compared exactly.
 - **Send Message shows Components again**: since advanced pins start hidden, new Send Message blocks had no Components input for buttons and select menus. It's a normal input again. On a block made in between, click the small dot next to Components to make it a pin.
+- **Multi-selects fit on the block**: with several things ticked (Voice Changed's changes, permissions), the box grew past the block's edge. Long picks now end in … and hovering shows them all.
 - **Modal Builder: Cancel and Submit keep their size**: with a short form, the preview's Submit button stretched to fill the space below it.
 
 ## 0.1.8
