@@ -2,7 +2,7 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## Unreleased
+## 0.1.5
 
 ### Changed
 - **Embed previews are as wide as Discord makes them**: an embed is as wide as its content needs (a short "Pong!" makes a small card), up to Discord's widest (516 points), on blocks and in the Embed Builder, instead of always filling the room. Layout previews on blocks stop at the width the Layout Builder shows them at, however wide the block is made.
