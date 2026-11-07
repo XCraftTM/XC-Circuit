@@ -7,7 +7,7 @@ module.exports = {
     name: "Set Variable",
     description: "Remembers a value under a name until the bot stops. Use Stored Data to keep it after restarts.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "variables",
@@ -18,7 +18,7 @@ module.exports = {
     icon: "function",
   },
   fields: {
-    name: { type: "text", pin: false, required: true, default: "", description: "The variable name." },
+    name: { type: "text", required: true, default: "", description: "The variable name. Connect a text to choose it while the bot runs." },
     scope: { type: "select", pin: false, default: "run", choices: SCOPES, description: "Who can read it." },
     value: { type: "any", pin: true, description: "The value to remember." },
   },

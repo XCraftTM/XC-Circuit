@@ -98,6 +98,10 @@ impl Registry {
             reg.plugins.push(plugin);
         }
         reg.mark_id_fields();
+        // Blocks' define() can then list what a connected value has (Get Property).
+        if let Err(e) = engine.set_classes(&reg.type_classes, &reg.classes) {
+            reg.problem("class catalogs", format!("{e:#}"));
+        }
         reg
     }
 

@@ -1,6 +1,7 @@
 //! The editor-side QuickJS sandbox. It reads block files and runs the
 //! editor-only hooks (`define()`). Bot code never runs here.
 
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -78,8 +79,29 @@ globalThis.__migrate = function (key, values, from) {
   }
 };
 
+// The class catalogs (contributes.classes): what the values behind pin types have.
+globalThis.__classes = { roots: {}, classes: {} };
+globalThis.__setClasses = function (json) {
+  try {
+    __classes = JSON.parse(json);
+    return JSON.stringify({ ok: true });
+  } catch (e) {
+    return __error(e);
+  }
+};
+
 globalThis.circuit = {
   types: {
+    // "discord.user" -> { username: "Text", id: "Text", … }: the properties a
+    // pin type's values have, from the class catalogs; null when unknown.
+    members(type) {
+      const cls = __classes.roots[String(type || "").trim().replace(/\?$/, "")];
+      const def = cls && __classes.classes[cls];
+      if (!def) return null;
+      const out = {};
+      for (const m of def.members.filter((m) => m.kind !== "method").sort((a, b) => a.name.localeCompare(b.name))) out[m.name] = m.type || "any";
+      return out;
+    },
     // "object<{ name: text, xp: number }>" -> { name: "text", xp: "number" }
     shape(type) {
       const m = /^object<\{(.*)\}>$/.exec(String(type || "").trim());
@@ -155,6 +177,20 @@ impl BlockEngine {
             ),
         )?;
         Ok(serde_json::from_value(value)?)
+    }
+
+    /// Gives blocks' `define()` the class catalogs, for `circuit.types.members`:
+    /// each pin type's class (`roots`) and the properties classes have.
+    pub fn set_classes(&self, roots: &HashMap<String, String>, classes: &HashMap<String, crate::ClassDef>) -> Result<()> {
+        let classes: serde_json::Map<String, Value> = classes
+            .iter()
+            .map(|(name, c)| {
+                let members: Vec<Value> = c.members.iter().map(|m| serde_json::json!({ "name": m.name, "kind": m.kind, "type": m.ty })).collect();
+                (name.clone(), serde_json::json!({ "members": members }))
+            })
+            .collect();
+        self.call("__setClasses", (serde_json::json!({ "roots": roots, "classes": classes }).to_string(),))?;
+        Ok(())
     }
 
     /// Runs a block's `migrate(values, fromVersion)` to upgrade saved values.

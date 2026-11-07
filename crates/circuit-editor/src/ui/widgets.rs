@@ -135,6 +135,9 @@ pub fn select_width(ui: &Ui, field: &FieldDef, value: &Value) -> Option<f32> {
 }
 
 fn select(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width: f32, full: bool) -> bool {
+    if field.custom {
+        return select_or_custom(ui, id, field, value, width, full);
+    }
     let choices: Vec<(Option<String>, String, String)> = field.choice_list();
     let current = value.as_str().unwrap_or_default().to_string();
     let label = choices.iter().find(|(_, k, _)| *k == current).map(|(_, _, l)| l.clone()).unwrap_or(current.clone());
@@ -166,6 +169,78 @@ fn select(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width:
         }
         _ => false,
     }
+}
+
+/// A select with Custom… at the end of its list: picking it (or a value that
+/// isn't one of the choices) shows a text box under the list for any other
+/// value. Custom stays chosen while typing, even when the text matches a choice.
+fn select_or_custom(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width: f32, full: bool) -> bool {
+    let choices: Vec<(Option<String>, String, String)> = field.choice_list();
+    let current = match &*value {
+        Value::String(s) => s.clone(),
+        Value::Null => String::new(),
+        other => other.to_string(),
+    };
+    let sticky = id.with("custom");
+    let mut custom = ui.data(|d| d.get_temp::<bool>(sticky)).unwrap_or(false) || !choices.iter().any(|(_, k, _)| *k == current);
+    let label = if custom { t!("Custom…").to_string() } else { choices.iter().find(|(_, k, _)| *k == current).map(|(_, _, l)| l.clone()).unwrap_or_default() };
+    let (mut picked, mut chose_custom) = (None, false);
+    let was_custom = custom;
+    let mut changed = false;
+    ui.vertical(|ui| {
+        {
+            let list = |ui: &mut Ui| {
+                let mut last_group: Option<&String> = None;
+                for (group, key, text) in &choices {
+                    if group.as_ref() != last_group {
+                        if let Some(g) = group {
+                            ui.label(egui::RichText::new(g.to_uppercase()).small().weak());
+                        }
+                        last_group = group.as_ref();
+                    }
+                    if kit::option(ui, !was_custom && *key == current, text).clicked() {
+                        picked = Some(key.clone());
+                    }
+                }
+                ui.separator();
+                if kit::option(ui, was_custom, t!("Custom…")).clicked() {
+                    chose_custom = true;
+                }
+            };
+            if full {
+                kit::dropdown(ui, id, width, label, list);
+            } else {
+                let resp = ComboBox::from_id_salt(id).width(width).selected_text(label).show_ui(ui, list).response;
+                kit::named(ui, resp);
+            }
+        }
+        if let Some(k) = picked {
+            ui.data_mut(|d| d.insert_temp(sticky, false));
+            custom = false;
+            if k != current {
+                *value = Value::String(k);
+                changed = true;
+            }
+        } else if chose_custom {
+            ui.data_mut(|d| d.insert_temp(sticky, true));
+            custom = true;
+        }
+        if custom {
+            let mut text = current.clone();
+            let hint = field.placeholder.clone().unwrap_or_else(|| t!("Type it…").to_string());
+            let edited = if full {
+                ui.add(kit::TextLine::new(&mut text).hint(hint).width(width).compact()).changed()
+            } else {
+                let resp = ui.add(TextEdit::singleline(&mut text).id(id.with("custom-text")).desired_width(width).hint_text(hint));
+                kit::named(ui, resp).changed()
+            };
+            if edited {
+                *value = Value::String(text);
+                changed = true;
+            }
+        }
+    });
+    changed
 }
 
 /// The picked choices of a multi-select value, by key: a list, or (as older

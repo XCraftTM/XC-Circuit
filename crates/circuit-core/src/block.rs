@@ -92,6 +92,10 @@ pub struct FieldDef {
     pub step: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placeholder: Option<String>,
+    /// A select whose list ends in Custom…, which shows a text box for any
+    /// other value. The value stays one text, so it can be connected too.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub custom: bool,
     #[serde(skip)]
     pub ty: PinType,
     /// Its pin type can be looked up from an id (`fromId`): instead of

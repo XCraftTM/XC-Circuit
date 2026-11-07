@@ -1233,6 +1233,8 @@ pub const UI_STRINGS: &[&str] = &[
     "Voice channel id",
     "Channel id",
     "Id",
+    "Custom…",
+    "Type it…",
     "Search…",
     "{first} and {count} more",
 ];

@@ -21,6 +21,8 @@ export interface FieldDef {
   max?: number;
   step?: number;
   placeholder?: string;
+  /** With `choices`: the list ends in Custom…, which shows a text box for any other value. */
+  custom?: boolean;
 }
 
 export interface OutputDef {

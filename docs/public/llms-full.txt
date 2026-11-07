@@ -2264,6 +2264,7 @@ fields: {
 | `templateParts` | boolean | Instead of filling `${…}` in, give the block `{ strings, values }`: the text around them and their values, as a JavaScript tagged template gets them. SQL Query uses it to send the values as parameters. |
 | `min`, `max`, `step` | number | For numbers. |
 | `placeholder` | text | Grey hint in an empty text box. |
+| `custom` | boolean | For a field with `choices`: the list ends in **Custom…**, which shows a text box for any other value (and so does a value that isn't one of the choices). The value stays one text, so a `text` field like this can still be connected. Get Property uses it for the properties of the connected value. |
 
 ## Field editors
 

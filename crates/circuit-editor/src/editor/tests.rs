@@ -245,3 +245,29 @@ fn templates_open_without_surprises() {
     let surprises: Vec<&String> = found.iter().filter(|p| !left_to_you.iter().any(|l| p.ends_with(l))).collect();
     assert!(surprises.is_empty(), "templates open with problems:\n{surprises:#?}");
 }
+
+/// Get Property lists what the connected value has (a Discord user's
+/// username, id …, from the class catalogs) with Custom… for any other, and
+/// its Property can be connected.
+#[test]
+fn get_property_lists_the_connected_values_properties() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+    let def = ed.reg.block("core.get_property").unwrap();
+    let shape = |connected: Value| {
+        let d = ed.engine.define(&ed.reg.engine_keys[&def.id], &Map::new(), connected.as_object().unwrap(), &serde_json::json!({ "data": {} })).unwrap();
+        circuit_core::BlockShape::build(def, &Map::new(), Some(&d))
+    };
+    let field = |s: &circuit_core::BlockShape| s.fields.iter().find(|(k, _)| k == "path").map(|(_, f)| f.clone()).unwrap();
+    let user = field(&shape(serde_json::json!({ "object": "discord.user" })));
+    assert!(user.custom && user.is_select(), "{user:?}");
+    let keys: Vec<String> = user.choice_list().into_iter().map(|(_, k, _)| k).collect();
+    assert!(keys.contains(&"username".to_string()) && keys.contains(&"id".to_string()), "{keys:?}");
+    assert!(!keys.contains(&"send".to_string()), "methods aren't properties");
+    // An object of a known shape, and one of no known shape (a plain text box).
+    let typed = field(&shape(serde_json::json!({ "object": "object<{ name: text, xp: number }>" })));
+    assert_eq!(typed.choice_list().into_iter().map(|(_, k, _)| k).collect::<Vec<_>>(), ["name", "xp"]);
+    let plain = field(&shape(serde_json::json!({ "object": "any" })));
+    assert!(!plain.is_select() && !plain.custom);
+    assert_ne!(plain.pin, circuit_core::PinMode::Inline, "Property can be connected");
+}

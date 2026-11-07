@@ -7,7 +7,7 @@ module.exports = {
     name: "Get Variable",
     description: "Reads a value remembered with Set Variable.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "variables",
@@ -19,7 +19,7 @@ module.exports = {
   },
   pure: false,
   fields: {
-    name: { type: "text", pin: false, required: true, default: "", description: "The variable name." },
+    name: { type: "text", required: true, default: "", description: "The variable name. Connect a text to choose it while the bot runs." },
     scope: { type: "select", pin: false, default: "run", choices: SCOPES, description: "Where it was set." },
     fallback: { type: "any", advanced: true, label: "If missing", description: "Returned when the variable is not set." },
   },

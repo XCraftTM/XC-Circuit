@@ -5,7 +5,7 @@ module.exports = {
     name: "Get Property",
     description: "Reads a property from an object, such as `username` from a user. Use dots for deeper ones: `guild.name`.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "lists",
@@ -17,15 +17,16 @@ module.exports = {
   },
   fields: {
     object: { type: "object", pin: "only", required: true, description: "The object to read from." },
-    path: { type: "text", pin: false, required: true, default: "", label: "Property", description: "The property name, such as id or guild.name." },
+    path: { type: "text", required: true, default: "", label: "Property", description: "The property name, such as id or guild.name. Picked from a list when the object's properties are known (Custom… for any other), or connected." },
   },
   outputs: {
     value: { type: "any", description: "The property's value." },
   },
   define({ connected }) {
-    // Known object shapes offer their keys.
-    const shape = circuit.types.shape(connected.object);
-    return shape ? { set: { path: { type: "select", choices: circuit.object.keysToChoices(shape) } } } : {};
+    // Known objects offer their properties (Custom… for any other): an
+    // object<{…}>, or a value such as a Discord user from the class catalogs.
+    const shape = circuit.types.shape(connected.object) || circuit.types.members?.(connected.object);
+    return shape ? { set: { path: { choices: circuit.object.keysToChoices(shape), custom: true } } } : {};
   },
   run({ fields }) {
     let v = fields.object;
