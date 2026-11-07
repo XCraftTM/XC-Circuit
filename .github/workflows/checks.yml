@@ -84,6 +84,7 @@ jobs:
           node runtime/test/fluxer_more.js
           node runtime/test/store.js
           node runtime/test/conversions.js
+          node runtime/test/from_id.js
           node runtime/test/permissions.js
           node runtime/test/discord_forms.js
           node runtime/test/backups.js < /dev/null

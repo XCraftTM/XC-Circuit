@@ -1,7 +1,7 @@
 # Pin types
 
 ::: info In short
-Types of values on wires (`discord.member`, `fluxer.message`…): their name, colour, how to check a value, and what they convert to.
+Types of values on wires (`discord.member`, `fluxer.message`…): their name, colour, how to check a value, what they convert to, and how to find one by its id.
 :::
 
 Pin types are the types of values that go through wires besides the basic ones (`text`, `number`, `boolean`, `date`, `object`, `list<…>`, `any`). They're TOML files listed in a plugin's `contributes.pinTypes`, each with one `[[type]]` table per type.
@@ -32,6 +32,7 @@ via = "v => v.user"
 | `icon` | An icon name. |
 | `check` | A JavaScript function (as text) that tells whether a value is of this type. The runtime uses it to recognise values to [convert](#conversions). |
 | `description` | What the type is, for tooltips. |
+| `fromId` | A JavaScript function (as text), `(id, ctx) => value`, that finds a value of this type by its id. Inputs of this type (or of a type that extends it) can then take an id instead. See [Finding values by id](#finding-values-by-id). |
 
 ## Conversions
 
@@ -44,6 +45,23 @@ via = "v => v.user"
 ```
 
 Now a Member output connects to a User input, and the block gets the member's user. The runtime converts a wired value when it passes this type's `check`, so a type needs `check` for its conversions to work. Lists are converted item by item; inputs of type `any` get the value as it is.
+
+## Finding values by id
+
+With `fromId`, an input of this type can also be given an id: typed into the block or wired in as text. The runtime finds the value before the block runs, so the block always gets the real thing.
+
+```toml
+[[type]]
+id = "discord.channel"
+fromId = "(id, ctx) => ctx.discord.client.channels.fetch(id)"
+```
+
+- The function gets the id without spaces or mention marks (`<#123>` becomes `123`) and the block's [`ctx`](./ctx). It can return a promise.
+- Types that `extend` it use it too: a `discord.thread` input takes a thread's id.
+- In the editor, such inputs start as pins (also when the block says `pin: "only"`) and can be switched to a box for the id, with the pin toggle.
+- An empty box gives the block nothing, as an unconnected pin does. An id that finds nothing stops the block with "Channel: no channel with the id …".
+
+The Discord and Fluxer plugins have it on their channel types, so every channel input (categories, threads and voice channels too) takes a channel id.
 
 ## Class catalogs
 

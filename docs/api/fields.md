@@ -22,7 +22,7 @@ fields: {
 | `description` | text | Help shown on hover and in the Inspector. |
 | `default` | any | The value of a new block. |
 | `required` | boolean | Empty is a problem (listed in Problems). |
-| `pin` | `"auto"` · `true` · `false` · `"only"` | `"auto"` (default): filled in on the block, with a pin toggle. `true`: starts as a pin. `false`: never a pin. `"only"`: must be connected. |
+| `pin` | `"auto"` · `true` · `false` · `"only"` | `"auto"` (default): filled in on the block, with a pin toggle. `true`: starts as a pin. `false`: never a pin. `"only"`: must be connected (inputs whose pin type has [`fromId`](./pin-types#finding-values-by-id), such as channels, can still be switched to a box for an id). |
 | `multi` | boolean | The pin accepts several wires; the block gets their values as one list. |
 | `advanced` | boolean | Not shown on the block; the Inspector lists it under *Advanced*. |
 | `show` | object | Shown only when other fields have one of these values: `{ mode: ["send", "edit"] }`. |

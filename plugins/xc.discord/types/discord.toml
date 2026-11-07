@@ -37,6 +37,8 @@ color = "#7B83FF"
 icon = "hash"
 check = "v => typeof v?.isTextBased === 'function'"
 description = "A text, voice, thread or forum channel."
+# A channel id typed into the block (or a text wired in) is looked up.
+fromId = "(id, ctx) => ctx.discord.client.channels.fetch(id)"
 
 [[type]]
 id = "discord.thread"

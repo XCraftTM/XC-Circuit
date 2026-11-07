@@ -23,6 +23,10 @@ pub struct PinTypeDef {
     pub check: Option<String>,
     pub description: Option<String>,
     pub converts: Vec<Conversion>,
+    /// JavaScript `(id, ctx) => value` the runtime uses to find a value by
+    /// its id (a channel by its id), for inputs given an id instead.
+    #[serde(rename = "fromId")]
+    pub from_id: Option<String>,
 }
 
 /// A class catalog (`contributes.classes`): what the values behind pin types

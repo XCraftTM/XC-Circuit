@@ -86,7 +86,8 @@ impl Project {
                 // One damaged file shouldn't keep the whole project from opening.
                 let read = fs::read_to_string(&path).map_err(anyhow::Error::from).and_then(|text| Ok(serde_json::from_str::<Workspace>(&text)?));
                 match read {
-                    Ok(ws) => {
+                    Ok(mut ws) => {
+                        ws.pin_wired_fields();
                         workspaces.insert(stem, ws);
                     }
                     Err(e) => unreadable.push((stem, format!("{e:#}"))),

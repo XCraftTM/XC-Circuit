@@ -11,13 +11,15 @@ use crate::ui::theme::{Theme, hex_color};
 pub fn is_inline_editable(field: &FieldDef) -> bool {
     field.is_select()
         || field.is_multiselect()
+        // A channel (or another value found by its id): its id, typed in.
+        || field.by_id
         || matches!(field.type_name.as_str(), "color" | "textarea")
         || matches!(field.ty.required(), PinType::Text | PinType::Number | PinType::Boolean | PinType::Any | PinType::Date)
 }
 
 /// Whether a field is edited as free text (and so can be expanded on the canvas).
 pub fn is_plain_text(field: &FieldDef) -> bool {
-    !field.is_select() && !field.is_multiselect() && field.type_name != "color" && is_inline_editable(field) && !matches!(field.ty.required(), PinType::Boolean | PinType::Number)
+    !field.is_select() && !field.is_multiselect() && !field.by_id && field.type_name != "color" && is_inline_editable(field) && !matches!(field.ty.required(), PinType::Boolean | PinType::Number)
 }
 
 /// A field value as the text a text box shows.
@@ -85,7 +87,7 @@ fn editor(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width:
                 Value::Null => String::new(),
                 other => other.to_string(),
             };
-            let hint = field.placeholder.clone().unwrap_or_default();
+            let hint = field.placeholder.clone().unwrap_or_else(|| if field.by_id { id_hint(field) } else { String::new() });
             let changed = if multiline && field.type_name == "textarea" {
                 ui.add(crate::ui::kit::TextArea::new(id, &mut s).hint(hint).rows(3)).changed()
             } else if multiline {
@@ -103,6 +105,17 @@ fn editor(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width:
             ui.label(egui::RichText::new(t!("connect a value")).italics().color(theme.text_muted));
             false
         }
+    }
+}
+
+/// What an id box asks for: "Channel id", "Thread id".
+pub fn id_hint(field: &FieldDef) -> String {
+    let kind = field.type_name.trim_end_matches('?').rsplit('.').next().unwrap_or("").replace('_', " ");
+    match kind.as_str() {
+        "thread" => t!("Thread id").to_string(),
+        "voice channel" => t!("Voice channel id").to_string(),
+        "channel" => t!("Channel id").to_string(),
+        _ => t!("Id").to_string(),
     }
 }
 
@@ -256,6 +269,19 @@ fn color(ui: &mut Ui, id: egui::Id, value: &mut Value, width: f32, theme: &Theme
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A channel field switched off its pin is a box for the channel's id.
+    #[test]
+    fn id_fields_are_typed_as_an_id() {
+        let mut f = FieldDef { type_name: "discord.channel?".into(), ..Default::default() };
+        f.ty = PinType::parse(&f.type_name);
+        assert!(!is_inline_editable(&f));
+        f.by_id = true;
+        assert!(is_inline_editable(&f) && !is_plain_text(&f));
+        assert_eq!(id_hint(&f), "Channel id");
+        f.type_name = "discord.voice_channel".into();
+        assert_eq!(id_hint(&f), "Voice channel id");
+    }
 
     /// A multi-select reads a list of keys, and the text older projects typed
     /// ("View Channel, send messages"): by key or label, any case.

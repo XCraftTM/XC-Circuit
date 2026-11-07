@@ -248,7 +248,12 @@ pub fn node_shape(reg: &Registry, engine: &BlockEngine, cache: &mut ShapeCache, 
     } else {
         None
     };
-    let shape = Arc::new(BlockShape::build_with(def, &node.values, define.as_ref(), &known));
+    let mut shape = BlockShape::build_with(def, &node.values, define.as_ref(), &known);
+    // Fields it added itself that can take an id (Send Message's channel).
+    for (_, f) in shape.fields.iter_mut() {
+        reg.mark_id_field(f);
+    }
+    let shape = Arc::new(shape);
     cache.blocks.entry(ws_key.to_string()).or_default().insert(node_id.to_string(), (hash, shape.clone()));
     Some(shape)
 }

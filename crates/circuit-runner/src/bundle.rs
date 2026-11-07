@@ -81,12 +81,13 @@ pub fn build_bundle(project: &Project, reg: &Registry, mode: Option<&BuildMode>)
         libs.push(json!({ "source": source, "file": path.display().to_string() }));
     }
 
-    // Pin types that convert into others, for the runtime to apply on wires.
+    // Pin types that convert into others, for the runtime to apply on wires,
+    // and those found by an id (a channel id typed in), with the types they extend.
     let types: Map<String, Value> = reg
         .types
         .iter()
-        .filter(|(_, t)| t.check.is_some() && !t.converts.is_empty())
-        .map(|(id, t)| (id.clone(), json!({ "check": t.check, "converts": t.converts.iter().map(|c| json!({ "to": c.to, "via": c.via })).collect::<Vec<_>>() })))
+        .filter(|(id, t)| (t.check.is_some() && !t.converts.is_empty()) || reg.id_types.contains(*id))
+        .map(|(id, t)| (id.clone(), json!({ "check": t.check, "converts": t.converts.iter().map(|c| json!({ "to": c.to, "via": c.via })).collect::<Vec<_>>(), "fromId": t.from_id, "extends": t.extends })))
         .collect();
 
     let workspaces: Map<String, Value> = enabled()
@@ -147,6 +148,25 @@ mod tests {
         let json = serde_json::to_value(&project.workspaces["off"]).unwrap();
         assert_eq!(json["disabled"], true);
         assert!(serde_json::to_value(&project.workspaces["on"]).unwrap().get("disabled").is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Channel types go to the runtime with how to find one by its id, and
+    /// threads with the type they extend (to find them the same way).
+    #[test]
+    fn channel_types_bring_their_id_lookup() {
+        let dir = std::env::temp_dir().join(format!("xc-bundle-ids-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let project = Project::create(&dir, "Ids", "none").unwrap();
+        let engine = circuit_plugins::BlockEngine::new().unwrap();
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+        let reg = Registry::load(&[root], &engine);
+        let bundle = build_bundle(&project, &reg, None).unwrap();
+        let types = &bundle.value["types"];
+        assert!(types["discord.channel"]["fromId"].as_str().is_some_and(|s| s.contains("channels.fetch")));
+        assert!(types["fluxer.channel"]["fromId"].as_str().is_some());
+        assert_eq!(types["discord.thread"]["extends"], "discord.channel");
+        assert!(types.get("discord.user").is_none_or(|t| t["fromId"].is_null()));
         let _ = fs::remove_dir_all(&dir);
     }
 

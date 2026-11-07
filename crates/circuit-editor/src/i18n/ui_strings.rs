@@ -1207,6 +1207,10 @@ pub const UI_STRINGS: &[&str] = &[
     "     Nothing matches",
     "> only commands    # only blocks and the texts in them",
     "connect a value",
+    "Thread id",
+    "Voice channel id",
+    "Channel id",
+    "Id",
     "Search…",
     "{first} and {count} more",
 ];

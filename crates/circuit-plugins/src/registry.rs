@@ -34,6 +34,9 @@ pub struct Registry {
     pub disabled: Vec<LoadedPlugin>,
     pub blocks: IndexMap<String, BlockDef>,
     pub types: IndexMap<String, PinTypeDef>,
+    /// Pin types that can be found by an id (their own `fromId`, or one of
+    /// a type they extend).
+    pub id_types: std::collections::HashSet<String>,
     /// Class catalogs: class name → members, shared with text boxes.
     pub classes: std::sync::Arc<HashMap<String, crate::ClassDef>>,
     /// The class behind each pin type, from the catalogs' `roots`.
@@ -94,7 +97,52 @@ impl Registry {
             reg.load_plugin(&plugin, engine);
             reg.plugins.push(plugin);
         }
+        reg.mark_id_fields();
         reg
+    }
+
+    /// Fields whose type (or one it extends) can be found by an id (see
+    /// [`Registry::mark_id_field`]).
+    fn mark_id_fields(&mut self) {
+        self.id_types = self
+            .types
+            .keys()
+            .filter(|id| {
+                let mut at = Some(id.as_str());
+                for _ in 0..16 {
+                    let Some(t) = at.and_then(|a| self.types.get(a)) else { break };
+                    if t.from_id.is_some() {
+                        return true;
+                    }
+                    at = t.extends.as_deref();
+                }
+                false
+            })
+            .cloned()
+            .collect();
+        let types = std::mem::take(&mut self.id_types);
+        for def in self.blocks.values_mut() {
+            for f in def.fields.values_mut() {
+                Self::mark(&types, f);
+            }
+        }
+        self.id_types = types;
+    }
+
+    /// When a field's type can be found by an id, the field can be switched
+    /// from its pin to a box for the id: `pin: "only"` becomes a pin that can
+    /// be turned off. For the fields a block adds in `define()` too.
+    pub fn mark_id_field(&self, f: &mut circuit_core::FieldDef) {
+        Self::mark(&self.id_types, f);
+    }
+
+    fn mark(types: &std::collections::HashSet<String>, f: &mut circuit_core::FieldDef) {
+        if !f.by_id && types.contains(f.type_name.trim_end_matches('?')) {
+            f.by_id = true;
+            if f.pin == circuit_core::block::PinMode::Only {
+                f.pin = circuit_core::block::PinMode::Pin;
+            }
+        }
     }
 
     fn problem(&mut self, source: impl Into<String>, message: impl Into<String>) {
@@ -441,6 +489,31 @@ version = \"{version}\"
     }
 
     /// A plugin turned off isn't loaded (its blocks aren't there) but is still listed.
+    /// Channel inputs (categories, threads and voice channels too) can be
+    /// switched from their pin to a box for the channel's id.
+    #[test]
+    fn channel_fields_can_take_an_id() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+        let engine = BlockEngine::new().unwrap();
+        let reg = Registry::load(&[root], &engine);
+        for t in ["discord.channel", "discord.thread", "discord.voice_channel", "fluxer.channel"] {
+            assert!(reg.id_types.contains(t), "{t}");
+        }
+        assert!(!reg.id_types.contains("discord.user"));
+        for (block, key) in [("discord.delete_channel", "channel"), ("discord.create_channel", "category"), ("fluxer.create_invite", "channel")] {
+            let f = &reg.block(block).unwrap_or_else(|| panic!("{block}")).fields[key];
+            assert!(f.by_id, "{block}.{key}");
+            assert_eq!(f.pin, circuit_core::block::PinMode::Pin, "{block}.{key}: starts as a pin that can be turned off");
+        }
+        // Fields a block adds itself are marked when its shape is built.
+        let mut added = circuit_core::FieldDef { type_name: "discord.channel".into(), pin: circuit_core::block::PinMode::Only, ..Default::default() };
+        reg.mark_id_field(&mut added);
+        assert!(added.by_id && added.pin == circuit_core::block::PinMode::Pin);
+        let mut user = circuit_core::FieldDef { type_name: "discord.user".into(), pin: circuit_core::block::PinMode::Only, ..Default::default() };
+        reg.mark_id_field(&mut user);
+        assert!(!user.by_id && user.pin == circuit_core::block::PinMode::Only);
+    }
+
     #[test]
     fn plugins_turned_off_are_listed_not_loaded() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");

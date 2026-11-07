@@ -94,6 +94,11 @@ pub struct FieldDef {
     pub placeholder: Option<String>,
     #[serde(skip)]
     pub ty: PinType,
+    /// Its pin type can be looked up from an id (`fromId`): instead of
+    /// being wired, it can be switched to a box for typing the id. Set by
+    /// the registry.
+    #[serde(skip)]
+    pub by_id: bool,
 }
 
 impl FieldDef {

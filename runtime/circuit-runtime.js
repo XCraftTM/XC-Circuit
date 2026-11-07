@@ -32,6 +32,8 @@ class Runtime {
     this.require = Module.createRequire(path.join(opts.depsRoot, "package.json"));
     this.blocks = new Map(); // block id -> definition object
     this.conversions = new Map(); // pin type -> ways to turn other types into it
+    this.fromIds = new Map(); // pin type -> (id, ctx) => its value with that id
+    this.typeParents = new Map(); // pin type -> the type it extends
     this.libs = new Map(); // lib id -> api
     this.workspaces = new Map(); // key -> graph
     this.globalVars = new Map();
@@ -118,6 +120,16 @@ class Runtime {
    * A wired value as its input's type wants it: a Member wired into a User
    * input becomes the member's user (one by one in lists).
    */
+  /** How to find a value of `type` (or a type it extends) by its id, or null. */
+  fromIdFor(type) {
+    let t = String(type || "").replace(/\?$/, "");
+    for (let i = 0; i < 16 && t; i++) {
+      if (this.fromIds.has(t)) return this.fromIds.get(t);
+      t = this.typeParents.get(t);
+    }
+    return null;
+  }
+
   convert(value, type) {
     if (value == null || !this.conversions.size) return value;
     const target = String(type || "").replace(/\?$/, "");
@@ -165,6 +177,17 @@ class Runtime {
     if (this.store.note) this.log.warn(this.store.note);
     this.log.info(`Runtime ready · Node ${process.version}`);
     this.conversions = compileConversions(this.bundle.types, this.log);
+    for (const [id, t] of Object.entries(this.bundle.types || {})) {
+      if (t.extends) this.typeParents.set(id, t.extends);
+      if (!t.fromId) continue;
+      try {
+        const fn = (0, eval)(`(${t.fromId})`);
+        if (typeof fn === "function") this.fromIds.set(id, fn);
+        else this.log.warn(`Pin type ${id} fromId isn't a function`);
+      } catch (e) {
+        this.log.warn(`Pin type ${id} fromId: ${e.message}`);
+      }
+    }
     for (const [id, b] of Object.entries(this.bundle.blocks)) {
       try {
         this.blocks.set(id, ungroupBlock(this.loadModule(esmToCommonJs(b.source), b.file)));
@@ -581,6 +604,20 @@ class GraphNode {
       }
       if (templated(f) && !wired.has(k) && typeof fields[k] === "string") fields[k] = fillTemplate(fields[k], run, fields, placed);
       fields[k] = coerce(fields[k], f.type);
+      // An id (typed, or a text wired in) where a channel goes: the channel itself.
+      const value = fields[k];
+      if (typeof value === "string" || typeof value === "number") {
+        const find = this.graph.rt.fromIdFor(f.type);
+        // An empty id box is nothing, as an unconnected pin is.
+        if (find && !String(value).trim()) fields[k] = null;
+        else if (find) {
+          const id = String(value).trim().replace(/^<[#@&!]*|>$/g, "");
+          const ctx = this.graph.rt.ctxFor(run, this, path);
+          const found = /^[\w-]+$/.test(id) ? await Promise.resolve().then(() => find(id, ctx)).catch(() => null) : null;
+          if (!found) throw new Error(`${f.label || k}: no ${String(f.type).replace(/\?$/, "").split(".").pop().replace(/_/g, " ")} with the id "${value}"`);
+          fields[k] = found;
+        }
+      }
     }
     return fields;
   }

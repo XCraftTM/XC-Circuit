@@ -144,6 +144,23 @@ pub struct Clip {
 pub const CLIP_FORMAT: &str = "xc-circuit-clip/1";
 
 impl Workspace {
+    /// Fields with a wire into them are pins, as when the wire is drawn in
+    /// the editor. Workspace files written by hand (or by older versions)
+    /// may leave them out of `pins`; a field that can also be typed (a
+    /// channel's id) would then show its box next to the wire.
+    pub fn pin_wired_fields(&mut self) {
+        for link in &self.links {
+            if link.to.pin == "in" {
+                continue;
+            }
+            if let Some(n) = self.nodes.get_mut(&link.to.node)
+                && !n.pins.contains(&link.to.pin)
+            {
+                n.pins.push(link.to.pin.clone());
+            }
+        }
+    }
+
     /// Copies the given blocks, the wires between them and their zones.
     pub fn extract(&self, ids: &[String]) -> Clip {
         self.extract_with_notes(ids, &[])
@@ -443,6 +460,17 @@ fn round_rect<S: Serializer>(r: &[f32; 4], s: S) -> Result<S::Ok, S::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A workspace file whose wired fields aren't in `pins` gets them when it
+    /// loads; action wires (into `in`) don't add pins.
+    #[test]
+    fn wired_fields_are_pins() {
+        let json = r#"{ "name": "t", "nodes": { "1": { "block": "a@1" }, "2": { "block": "b@1", "pins": ["text"] } }, "links": ["1.next > 2.in", "1.channel > 2.channel", "1.text > 2.text"] }"#;
+        let mut ws: Workspace = serde_json::from_str(json).unwrap();
+        ws.pin_wired_fields();
+        assert_eq!(ws.nodes["2"].pins, ["text", "channel"]);
+        assert!(ws.nodes["1"].pins.is_empty());
+    }
 
     #[test]
     fn info_blocks_go_into_the_paths_that_read_them() {

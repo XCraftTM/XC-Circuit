@@ -40,6 +40,8 @@ color = "#6C7BFF"
 icon = "hash"
 check = "v => typeof v?.isTextBased === 'function'"
 description = "A text, voice or category channel, or a direct message."
+# A channel id typed into the block (or a text wired in) is looked up.
+fromId = "(id, ctx) => ctx.fluxer.channel(id)"
 
 [[type]]
 id = "fluxer.server"
