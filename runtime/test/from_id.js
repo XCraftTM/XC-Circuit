@@ -2,7 +2,8 @@
 // an id instead, typed into the block or as a text wired in, also as a
 // mention (<#id>); the runtime looks it up before the block runs. Types that
 // extend it (a thread) look it up the same way, and an unknown id stops the
-// block with a clear message.
+// block with a clear message. Inputs a block adds in define() (Send
+// Message's channel) take an id as well.
 // Usage: node runtime/test/from_id.js
 "use strict";
 
@@ -40,6 +41,12 @@ const bundle = {
           ctx.log.info("none " + JSON.stringify(fields.none ?? null));
         } }`),
     },
+    "t.added": {
+      file: "added.js",
+      source: blockSource(`{ id: "t.added", kind: "action", info: { name: "Added" }, fields: { mode: { type: "select", default: "reply" } },
+        define({ values }) { return values.mode === "send" ? { add: { channel: { type: "t.channel", pin: "only" } } } : {}; },
+        run({ fields, ctx }) { ctx.log.info("added " + fields.channel?.kind + " " + fields.channel?.id); } }`),
+    },
     "t.bad": {
       file: "bad.js",
       source: blockSource(`{ id: "t.bad", kind: "action", info: { name: "Bad" }, fields: { channel: { type: "t.channel", label: "Channel" } },
@@ -54,9 +61,10 @@ const bundle = {
         s: { block: "t.start@1", at: [0, 0] },
         txt: { block: "t.text@1", at: [0, 0] },
         show: { block: "t.show@1", at: [0, 0], values: { channel: " 42 ", thread: 42, none: "" } },
+        added: { block: "t.added@1", at: [0, 0], values: { mode: "send", channel: "<#42>" } },
         bad: { block: "t.bad@1", at: [0, 0], values: { channel: "999" } },
       },
-      links: ["s.next > show.in", "show.next > bad.in", "txt.text > show.wired"],
+      links: ["s.next > show.in", "show.next > added.in", "added.next > bad.in", "txt.text > show.wired"],
     },
   },
 };
@@ -75,7 +83,7 @@ const events = () =>
     .filter((l) => l.startsWith("@@xc "))
     .map((l) => JSON.parse(l.slice(5)));
 const logs = () => events().filter((e) => e.t === "log").map((e) => `${e.level}: ${e.text}`);
-const expected = ["info: channel channel 42 main:show", "info: thread channel 42", "info: wired channel 7", "info: none null"];
+const expected = ["info: channel channel 42 main:show", "info: thread channel 42", "info: wired channel 7", "info: none null", "info: added channel 42"];
 const failed = () => JSON.stringify(events().filter((e) => e.t !== "log" || e.level === "error"));
 // Waits until every expected line is there (a slow machine takes longer); gives up after 20 s.
 const started = Date.now();

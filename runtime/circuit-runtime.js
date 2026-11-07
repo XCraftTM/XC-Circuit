@@ -604,22 +604,52 @@ class GraphNode {
       }
       if (templated(f) && !wired.has(k) && typeof fields[k] === "string") fields[k] = fillTemplate(fields[k], run, fields, placed);
       fields[k] = coerce(fields[k], f.type);
-      // An id (typed, or a text wired in) where a channel goes: the channel itself.
-      const value = fields[k];
-      if (typeof value === "string" || typeof value === "number") {
-        const find = this.graph.rt.fromIdFor(f.type);
-        // An empty id box is nothing, as an unconnected pin is.
-        if (find && !String(value).trim()) fields[k] = null;
-        else if (find) {
-          const id = String(value).trim().replace(/^<[#@&!]*|>$/g, "");
-          const ctx = this.graph.rt.ctxFor(run, this, path);
-          const found = /^[\w-]+$/.test(id) ? await Promise.resolve().then(() => find(id, ctx)).catch(() => null) : null;
-          if (!found) throw new Error(`${f.label || k}: no ${String(f.type).replace(/\?$/, "").split(".").pop().replace(/_/g, " ")} with the id "${value}"`);
-          fields[k] = found;
-        }
-      }
+      await this.findById(fields, k, f, run, path);
+    }
+    // Inputs the block adds in define() (Send Message's channel): ids typed
+    // into them are looked up too. Their values are otherwise left as they are.
+    for (const [k, f] of Object.entries(this.addedFields())) {
+      if (f && !(k in (this.def.fields || {}))) await this.findById(fields, k, f, run, path);
     }
     return fields;
+  }
+
+  /**
+   * An id (typed, or a text wired in) where a value of a type with `fromId`
+   * goes (a channel): the value itself. An empty id is nothing, as an
+   * unconnected pin is.
+   */
+  async findById(fields, k, f, run, path) {
+    const value = fields[k];
+    if (typeof value !== "string" && typeof value !== "number") return;
+    const find = this.graph.rt.fromIdFor(f.type);
+    if (!find) return;
+    if (!String(value).trim()) {
+      fields[k] = null;
+      return;
+    }
+    const id = String(value).trim().replace(/^<[#@&!]*|>$/g, "");
+    const ctx = this.graph.rt.ctxFor(run, this, path);
+    const found = /^[\w-]+$/.test(id) ? await Promise.resolve().then(() => find(id, ctx)).catch(() => null) : null;
+    if (!found) throw new Error(`${f.label || k}: no ${String(f.type).replace(/\?$/, "").split(".").pop().replace(/_/g, " ")} with the id "${value}"`);
+    fields[k] = found;
+  }
+
+  /**
+   * The inputs the block's define() adds for this block's values, as the
+   * editor shows them; worked out once. None when it has no define() or it fails.
+   */
+  addedFields() {
+    if (this.added) return this.added;
+    this.added = {};
+    if (typeof this.def.define !== "function") return this.added;
+    try {
+      const result = this.def.define({ values: this.inline(), connected: {}, project: this.graph.rt.bundle.project || {} });
+      if (result && typeof result.add === "object") this.added = result.add;
+    } catch {
+      // The editor showed the problem already; the block runs with what it has.
+    }
+    return this.added;
   }
 }
 
