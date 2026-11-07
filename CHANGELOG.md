@@ -9,6 +9,8 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **Invite your bot**: Bot settings › Connection now has an invite link under the bot token once one is set. Pick the permissions (common bot permissions, Administrator or none), then open Discord's page for adding the bot to a server, or copy the link to share it.
 
 ### Changed
+- **Missing required inputs glow red**: an input a block needs that is still empty or unconnected now has a soft red glow that pulses slowly, and its name turns red, so it's easy to spot on the canvas.
+- **Problem counts show a warning sign**: the number of problems next to a workspace (or a closed folder) in the Workspaces list now has a warning triangle in front of it.
 - **Create Channel: Position is on the block**: the channel's place in the list (0 at the top, -1 at the end) is now a normal input you can type or connect, instead of an advanced setting.
 - **Pins of advanced settings start hidden**: a new block shows only its usual pins; an advanced one (such as Insert Row's More values) appears once turned on with its pin button in the Inspector.
 

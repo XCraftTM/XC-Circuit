@@ -461,3 +461,12 @@ fn files_and_pinned_advanced_inputs_show_on_the_block() {
     assert!(plain.contains(&"files".to_string()) && !plain.contains(&"components".to_string()), "{plain:?}");
     assert!(keys(&["components".to_string()]).contains(&"components".to_string()));
 }
+
+/// The glow of a missing required input pulses between faint and full, once every 1.5 seconds.
+#[test]
+fn missing_inputs_pulse() {
+    let at = |t: f64| super::glow_strength(t);
+    assert!((0..60).map(|i| at(i as f64 * 0.05)).all(|s| (0.0..=1.0).contains(&s)));
+    assert!((at(0.375) - 1.0).abs() < 1e-3 && at(1.125) < 1e-3, "full a quarter in, faint three quarters in");
+    assert!((at(0.2) - at(1.7)).abs() < 1e-3, "it repeats");
+}

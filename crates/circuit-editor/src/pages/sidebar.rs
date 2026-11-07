@@ -110,7 +110,7 @@ struct Icons {
 
 impl Icons {
     fn new(ed: &Editor) -> Icons {
-        let names = ["workspace", "folder", "folder-plus", "plus", "slash", "more", "pencil", "copy", "eye", "eye-off", "package", "trash", "pointer"];
+        let names = ["workspace", "folder", "folder-plus", "plus", "slash", "more", "pencil", "copy", "eye", "eye-off", "package", "trash", "pointer", "alert"];
         Icons { paths: names.iter().filter_map(|n| Some((*n, ed.reg.icons.get(*n)?.clone()))).collect() }
     }
 
@@ -137,6 +137,18 @@ fn pill(ui: &Ui, right: f32, y: f32, text: &str, fill: Color32, ink: Color32) ->
     rect.left()
 }
 
+/// A problem count: a warning triangle and the number on an amber pill. Returns its left edge.
+fn problems_pill(ui: &Ui, icons: &Icons, theme: &Theme, right: f32, y: f32, count: usize) -> f32 {
+    let ink = Color32::from_rgb(0x1E, 0x1F, 0x22);
+    let galley = ui.painter().layout_no_wrap(count.to_string(), FontId::proportional(10.5), ink);
+    let size = vec2(galley.size().x + 24.0, 16.0);
+    let rect = Rect::from_min_size(pos2(right - size.x, y - size.y / 2.0), size);
+    ui.painter().rect_filled(rect, 8.0, theme.warning);
+    icons.paint(ui, "alert", pos2(rect.left() + 10.0, y), 11.0, ink);
+    ui.painter().galley(pos2(rect.left() + 17.0, y - galley.size().y / 2.0), galley, ink);
+    rect.left()
+}
+
 /// What the list shows about a workspace besides its name.
 #[derive(Default, Clone, Copy)]
 struct Marks {
@@ -151,11 +163,11 @@ struct Marks {
 impl Marks {
     /// The room they take at the row's right end, before the ⋯ button.
     fn width(&self) -> f32 {
-        (if self.off { 30.0 } else { 0.0 }) + (if self.problems > 0 { 26.0 } else { 0.0 }) + (if self.live || self.failed { 14.0 } else { 0.0 })
+        (if self.off { 30.0 } else { 0.0 }) + (if self.problems > 0 { 38.0 } else { 0.0 }) + (if self.live || self.failed { 14.0 } else { 0.0 })
     }
 
     /// Paints them, right to left from `right`.
-    fn paint(&self, ui: &Ui, theme: &Theme, right: f32, y: f32) {
+    fn paint(&self, ui: &Ui, theme: &Theme, icons: &Icons, right: f32, y: f32) {
         let mut x = right;
         if self.live || self.failed {
             let color = if self.failed { theme.error } else { theme.action };
@@ -166,7 +178,7 @@ impl Marks {
             x -= 14.0;
         }
         if self.problems > 0 {
-            x = pill(ui, x, y, &self.problems.to_string(), theme.warning, Color32::from_rgb(0x1E, 0x1F, 0x22)) - 4.0;
+            x = problems_pill(ui, icons, theme, x, y, self.problems) - 4.0;
         }
         if self.off {
             pill(ui, x, y, t!("off"), theme.field, theme.text_muted);
@@ -364,7 +376,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                 let room = 32.0 + marks.width();
                 let (resp, label_area) = row(ui, &theme, &icons, Id::unique(("sidebar-ws", key)), depth, None, Some("workspace"), label, active.as_deref() == Some(key.as_str()), false, room, ws.disabled);
                 if !editing {
-                    marks.paint(ui, &theme, resp.rect.right() - 34.0, resp.rect.center().y);
+                    marks.paint(ui, &theme, &icons, resp.rect.right() - 34.0, resp.rect.center().y);
                 }
                 // On hover: what's in it, its problems, what the bot did with it.
                 let events = ws.nodes.values().filter(|n| reg.block(&n.block).is_some_and(|d| d.kind == circuit_core::BlockKind::Event)).count();
@@ -493,7 +505,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                     let y = resp.rect.center().y;
                     let mut x = resp.rect.right() - 34.0;
                     if !open && folder_problems > 0 {
-                        x = pill(ui, x, y, &folder_problems.to_string(), theme.warning, Color32::from_rgb(0x1E, 0x1F, 0x22)) - 4.0;
+                        x = problems_pill(ui, &icons, &theme, x, y, folder_problems) - 4.0;
                     }
                     ui.painter().text(pos2(x, y), Align2::RIGHT_CENTER, inside.len().to_string(), FontId::proportional(11.0), theme.text_muted);
                 }
@@ -614,7 +626,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                 let (off, folder) = (first.disabled, first.folder.clone());
                 let marks = Marks { off, ..Default::default() };
                 let (resp, _) = row(ui, &theme, &icons, Id::unique(("sidebar-cmd", root)), depth, None, Some("slash"), &format!("/{root}"), false, false, 32.0 + marks.width(), off);
-                marks.paint(ui, &theme, resp.rect.right() - 34.0, resp.rect.center().y);
+                marks.paint(ui, &theme, &icons, resp.rect.right() - 34.0, resp.rect.center().y);
                 let subs: Vec<&str> = commands.iter().filter(|c| c.name.split_whitespace().next() == Some(root.as_str()) && c.name != *root).map(|c| c.name.as_str()).collect();
                 let mut tip = vec![first.description.clone()];
                 if !subs.is_empty() {

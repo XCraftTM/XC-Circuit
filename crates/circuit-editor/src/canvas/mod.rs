@@ -149,6 +149,24 @@ enum NodeMenu {
     Arrange(String, Arrange),
 }
 
+/// A soft red glow around a row whose required input is still empty,
+/// pulsing slowly so it catches the eye. `time` is egui's clock, in seconds.
+fn missing_glow(painter: &egui::Painter, theme: &Theme, row: Rect, time: f64) {
+    let pulse = glow_strength(time);
+    let area = row.shrink2(vec2(7.0, 1.5));
+    painter.rect_filled(area, 6.0, with_alpha(theme.error, (14.0 + 22.0 * pulse) as u8));
+    for i in 0..4 {
+        let spread = i as f32 * 1.5;
+        let alpha = (110.0 - i as f32 * 26.0) * (0.35 + 0.65 * pulse);
+        painter.rect_stroke(area.expand(spread), 6.0 + spread, Stroke::new(1.5, with_alpha(theme.error, alpha as u8)), StrokeKind::Outside);
+    }
+}
+
+/// How strong the glow is now, from 0 to 1: once a second and a half, smoothly.
+fn glow_strength(time: f64) -> f32 {
+    (0.5 + 0.5 * (time * std::f64::consts::TAU / 1.5).sin()) as f32
+}
+
 pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     let Editor { reg, engine, theme, project, shapes, views, selected, edited, picker, active_workspace, activity, wire_values, multi, selected_notes, recording_frame, define_ctx, embed_edit, layout_edit, modal_edit, canvas_edit, selected_wire, prefs, ui_rects, tour_parts, .. } = ed;
     let Some(project) = project.as_mut() else { return };
@@ -730,7 +748,11 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     let node_values = &ws.nodes[id].values;
                     let empty = node_values.get(key).or(f.default.as_ref()).is_none_or(|v| v.is_null() || v == &Value::String(String::new()));
                     let missing = f.required && empty && !connected;
-                    let label_color = if missing { theme.warning } else { theme.text_muted };
+                    if missing {
+                        missing_glow(&painter, theme, *r, ctx.input(|i| i.time));
+                        ctx.request_repaint_after(std::time::Duration::from_millis(33));
+                    }
+                    let label_color = if missing { theme.error } else { theme.text_muted };
                     let label = f.label(key);
                     let label_w = (r.width() * 0.4).min(label.len() as f32 * 7.0 + 8.0);
                     // On the first line above a text box, else centered on the row's control.
