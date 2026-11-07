@@ -36,7 +36,9 @@ mod tests;
 pub const NODE_W: f32 = 240.0;
 /// Blocks with an embed preview are wider, so the preview stays readable.
 const EMBED_NODE_W: f32 = 300.0;
-const EMBED_SCALE: f32 = 0.86;
+/// The embed preview on blocks is drawn as in the Embed Builder, the same
+/// size as a layout's preview, so the two look alike.
+const EMBED_SCALE: f32 = 1.0;
 pub const HEADER_H: f32 = 34.0;
 pub const VALUE_HEADER_H: f32 = 30.0;
 pub const ROW_H: f32 = 28.0;

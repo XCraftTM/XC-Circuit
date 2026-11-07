@@ -11,6 +11,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **Optional plugins that come with the app**: a bundled plugin with `optional = true` in its plugin.toml (the AI agents one) can be turned off and removed like your own; **Add back** at the end of the Plugins list brings a removed one back.
 
 ### Changed
+- **Embed and layout previews on blocks are the same size**: the embed preview was drawn smaller (86%) than the layout preview; both are now drawn as in the builders, with Discord's own sizes (embed text a little smaller than message text, as in Discord).
 - **The buttons above a selected block** wrap into two rows when the block is narrow, stay inside the canvas, and no longer have Source: the block's source file opens from the Inspector.
 - **Slash commands are checked against Discord at every start**: the bot reads the commands Discord has and registers them again when they differ from the project's, so commands changed or removed elsewhere (in the developer portal, by another copy of the bot, or with a lost data folder) are put right. Before, it only compared with what it had sent last time.
 
