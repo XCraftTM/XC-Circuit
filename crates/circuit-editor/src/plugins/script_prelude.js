@@ -290,11 +290,18 @@
         tools: [...tools.values()].map(({ name, description, input }) => ({ name, description, input })),
       };
     }),
-    tool: reply((name, args) => {
-      const t = tools.get(name);
-      need(t, `no tool "${name}"`);
-      return t.run(args && typeof args === "object" ? args : {});
-    }),
+    // An agent gets a failing tool's message alone, without the plugin's stack.
+    tool: (json) => {
+      try {
+        const [name, args] = JSON.parse(json);
+        const t = tools.get(name);
+        need(t, `no tool "${name}"`);
+        const value = t.run(args && typeof args === "object" ? args : {});
+        return JSON.stringify({ ok: value === undefined ? null : value });
+      } catch (e) {
+        return JSON.stringify({ error: e && e.message !== undefined ? e.message : String(e) });
+      }
+    },
     command: reply((id) => {
       const c = commands.get(id);
       need(c, `no command "${id}"`);

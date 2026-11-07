@@ -262,7 +262,7 @@ xc.tool({
       if (!c || typeof c.name !== "string" || !c.name.trim()) throw new Error("every command needs a name");
     }
     xc.data.set("slashCommands", commands);
-    return `Saved ${commands.length} slash commands.`;
+    return `Saved ${commands.length} slash command${commands.length === 1 ? "" : "s"}.`;
   },
 });
 

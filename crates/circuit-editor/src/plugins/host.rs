@@ -751,6 +751,7 @@ mod tests {
         call("connect", serde_json::json!({ "workspace": ws, "from": format!("{event_id}.next"), "to": format!("{log_id}.in") })).unwrap();
         let wrong = call("connect", serde_json::json!({ "workspace": ws, "from": format!("{event_id}.nope"), "to": format!("{log_id}.in") })).unwrap_err();
         assert!(wrong.contains("has no output `nope`"), "{wrong}");
+        assert!(!wrong.contains("editor.js"), "the agent gets the message without the plugin's stack: {wrong}");
         let backwards = call("connect", serde_json::json!({ "workspace": ws, "from": format!("{event_id}.next"), "to": format!("{log_id}.message") })).unwrap_err();
         assert!(backwards.contains("Action"), "{backwards}");
 
