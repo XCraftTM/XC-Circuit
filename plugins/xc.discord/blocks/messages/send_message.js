@@ -29,7 +29,7 @@ module.exports = {
     name: "Send Message",
     description: "Replies to a command or button, or sends, replies to and edits messages in channels.",
     author: "XC Team",
-    version: "3.4.1",
+    version: "3.4.2",
   },
   search: {
     category: "send",
@@ -61,8 +61,7 @@ module.exports = {
       type: "list<discord.component>",
       pin: true,
       multi: true,
-      advanced: true,
-      description: "Buttons and select menus. Up to 5 per row; rows fill in order.",
+      description: "Buttons and select menus, from Button and Select Menu blocks. Up to 5 per row; rows fill in order.",
     },
     private: {
       type: "boolean",
@@ -96,7 +95,7 @@ module.exports = {
     } else {
       add.message = { type: "discord.message", pin: "only", required: true, description: "The message to reply to or edit." };
     }
-    const hide = mode === "defer" ? ["text", "embeds", "split", "files"] : [];
+    const hide = mode === "defer" ? ["text", "embeds", "components", "split", "files"] : [];
     if (mode !== "defer" && values.format === "layout") {
       // A Components V2 message has no text or embeds of its own: they are in the layout.
       add.layout = { type: "discord.layout", pin: "only", required: true, description: "The message from Build Layout." };

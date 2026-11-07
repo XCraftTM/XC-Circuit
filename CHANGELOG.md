@@ -8,6 +8,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **Select several workspaces and delete them together**: Ctrl-click workspaces in the Workspaces list to select several, or Shift-click to select all from the last one clicked, then press Delete. It asks first, listing them. Clicking elsewhere (or Escape) lets go of the selection, so Delete on the canvas still deletes blocks.
 
 ### Fixed
+- **Send Message shows Components again**: since advanced pins start hidden, new Send Message blocks had no Components input for buttons and select menus. It's a normal input again. On a block made in between, click the small dot next to Components to make it a pin.
 - **Modal Builder: Cancel and Submit keep their size**: with a short form, the preview's Submit button stretched to fill the space below it.
 
 ## 0.1.8
