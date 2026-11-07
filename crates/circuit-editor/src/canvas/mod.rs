@@ -100,6 +100,9 @@ pub struct CanvasView {
     /// How tall each field's control was last drawn, so its row fits it:
     /// (block, field) → height.
     pub field_heights: HashMap<(String, String), f32>,
+    /// How wide each block must be for its fields' controls (a dropdown
+    /// showing a long choice), as last drawn: block → width.
+    pub needed_widths: HashMap<String, f32>,
     /// Where the canvas' top-left corner was, and in which frame.
     pub last_origin: Option<(Pos2, u64)>,
     /// A note whose editor opens the next time this canvas is drawn (a new one).
@@ -164,7 +167,12 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         // Everything the layout is made from besides the shape: where the
         // block is, its width, pins, resized text boxes and measured rows.
         let mut h = crate::editor::Fingerprint::default();
-        (node.at[0].to_bits(), node.at[1].to_bits(), node.width.map(f32::to_bits), &node.pins, text_scale).hash(&mut h);
+        // Wide enough for its controls, whatever width it was given.
+        let width = match (node.width, view.needed_widths.get(id.as_str())) {
+            (w, Some(&need)) if need > w.unwrap_or_else(|| def.map_or(NODE_W, default_width)) => Some(need),
+            (w, _) => w,
+        };
+        (node.at[0].to_bits(), node.at[1].to_bits(), width.map(f32::to_bits), &node.pins, text_scale).hash(&mut h);
         for (k, v) in &node.heights {
             (k, v.to_bits()).hash(&mut h);
         }
@@ -218,7 +226,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                 fit.insert(key.to_string(), h + 8.0);
             }
         }
-        let layout = layout_node(id, node.at, &node.pins, node.width, def, shape.as_deref(), &tall, &fit);
+        let layout = layout_node(id, node.at, &node.pins, width, def, shape.as_deref(), &tall, &fit);
         view.layout_cache.insert(id.clone(), (key, shape.clone(), layout.clone()));
         layouts.push(layout);
         if let Some(s) = shape {
@@ -525,6 +533,8 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         if !layout.rect.expand(OFF_SCREEN_MARGIN).intersects(visible) {
             continue;
         }
+        // Measured again as its controls are drawn below.
+        view.needed_widths.remove(&layout.id);
         let id = &layout.id;
         let is_selected = selected.as_ref().is_some_and(|(w, n)| w == ws_key && (n == id || multi.contains(id)));
         let (block_ref, def) = {
@@ -777,6 +787,15 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                         });
                         // Its own height: the row fits it, and it is centered from the next frame on.
                         view.field_heights.insert(field, drawn.response.rect.height());
+                        // And the block gets as wide as it needs (from the next frame on).
+                        if let Some(w) = widgets::select_width(&cui, f, &value) {
+                            let need = (wr.left() - r.left()) + w + 12.0;
+                            let entry = view.needed_widths.entry(id.clone()).or_insert(0.0_f32);
+                            *entry = entry.max(need.ceil());
+                            if need.ceil() > layout.rect.width() + 0.5 {
+                                cui.ctx().request_repaint();
+                            }
+                        }
                         let changed = drawn.inner;
                         if changed {
                             ws.nodes.get_mut(id).unwrap().values.insert(key.clone(), value);

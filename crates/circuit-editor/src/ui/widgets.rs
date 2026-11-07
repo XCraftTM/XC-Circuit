@@ -102,6 +102,21 @@ fn editor(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width:
     }
 }
 
+/// How wide a choice field's dropdown is with its current choice showing
+/// (None for other fields), so a block can be made wide enough for it.
+pub fn select_width(ui: &Ui, field: &FieldDef, value: &Value) -> Option<f32> {
+    if !field.is_select() {
+        return None;
+    }
+    let current = value.as_str().unwrap_or_default();
+    let choices = field.choice_list();
+    let label = choices.iter().find(|(_, k, _)| k == current).map(|(_, _, l)| l.as_str()).unwrap_or(current);
+    let font = egui::TextStyle::Button.resolve(ui.style());
+    let text = ui.fonts_mut(|f| f.layout_no_wrap(label.to_string(), font, egui::Color32::WHITE)).size().x;
+    let s = ui.spacing();
+    Some(text + s.icon_spacing + s.icon_width + 2.0 * s.button_padding.x + 14.0)
+}
+
 fn select(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width: f32, full: bool) -> bool {
     let choices: Vec<(Option<String>, String, String)> = field.choice_list();
     let current = value.as_str().unwrap_or_default().to_string();
