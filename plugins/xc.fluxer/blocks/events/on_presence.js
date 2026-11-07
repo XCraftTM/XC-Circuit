@@ -5,7 +5,7 @@ module.exports = {
     name: "Status Changed",
     description: "Runs when someone goes online, idle, do not disturb or offline, or changes what they're doing.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "members",
@@ -20,8 +20,12 @@ module.exports = {
     status: { type: "text", description: "online, idle, dnd or offline." },
     activity: { type: "text", description: "What they're doing, when shown (a game, a custom status …)." },
     serverId: { type: "text", label: "Server id", description: "The server it was seen in." },
+    server: { type: "fluxer.server?", description: "The server the member is in." },
   },
   listen(ctx, emit) {
+    // The server itself, found in the bot's servers by its id.
+    const send = emit;
+    emit = (o) => send({ ...o, server: (o.serverId && ctx.fluxer.client.guilds?.get?.(String(o.serverId))) || null });
     ctx.fluxer.client.on("presenceUpdate", (p) => {
       const first = (p?.activities || [])[0];
       emit({

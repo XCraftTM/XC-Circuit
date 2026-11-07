@@ -7,7 +7,7 @@ module.exports = {
     name: "Context Menu Used",
     description: "Adds an entry to Discord's right-click menu (Apps) for users or messages, and runs when someone uses it.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "commands",
@@ -27,6 +27,9 @@ module.exports = {
   outputs: {
     interaction: { type: "discord.interaction", description: "The menu use. Connect it to Send Message or Show Modal." },
     user: { type: "discord.user", description: "Who used the entry." },
+    member: { type: "discord.member?", description: "Who used it, as a server member. Empty in DMs." },
+    channel: { type: "discord.channel", description: "Where it was used." },
+    server: { type: "discord.guild?", description: "The server it was used in. Empty in DMs." },
   },
   define({ values }) {
     if (values.target === "message") {
@@ -40,9 +43,9 @@ module.exports = {
     ctx.discord.client.on("interactionCreate", (interaction) => {
       if (!interaction.isContextMenuCommand() || interaction.commandName !== name) return;
       if (onMessage && interaction.isMessageContextMenuCommand()) {
-        emit({ interaction, user: interaction.user, message: interaction.targetMessage, author: interaction.targetMessage.author });
+        emit({ interaction, user: interaction.user, member: interaction.member ?? null, channel: interaction.channel, server: interaction.guild ?? null, message: interaction.targetMessage, author: interaction.targetMessage.author });
       } else if (!onMessage && interaction.isUserContextMenuCommand()) {
-        emit({ interaction, user: interaction.user, targetUser: interaction.targetUser, targetMember: interaction.targetMember ?? null });
+        emit({ interaction, user: interaction.user, member: interaction.member ?? null, channel: interaction.channel, server: interaction.guild ?? null, targetUser: interaction.targetUser, targetMember: interaction.targetMember ?? null });
       }
     });
   },

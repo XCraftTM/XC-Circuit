@@ -7,7 +7,7 @@ module.exports = {
     name: "Reaction Removed",
     description: "Runs when someone takes their reaction back. For reaction roles.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "reactions",
@@ -28,6 +28,8 @@ module.exports = {
     user: { type: "discord.user", description: "Who removed the reaction." },
     message: { type: "discord.message", description: "The message." },
     emoji: { type: "text", description: "The emoji as text." },
+    channel: { type: "discord.channel", description: "Where the message is." },
+    server: { type: "discord.guild?", description: "The server it happened in. Empty in DMs." },
   },
   listen(ctx, emit) {
     ctx.discord.client.on("messageReactionRemove", async (reaction, user) => {
@@ -42,7 +44,7 @@ module.exports = {
       const text = emojiText(reaction.emoji);
       if (ctx.fields.emoji && ctx.fields.emoji !== reaction.emoji.name && ctx.fields.emoji !== text) return;
       if (ctx.fields.messageId && reaction.message.id !== ctx.fields.messageId) return;
-      emit({ user, message: reaction.message, emoji: text });
+      emit({ user, message: reaction.message, emoji: text, channel: reaction.message.channel, server: reaction.message.guild ?? null });
     });
   },
 };

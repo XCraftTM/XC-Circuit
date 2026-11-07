@@ -23,7 +23,7 @@ module.exports = {
     name: "Modal Submitted",
     description: "Runs when someone sends a form opened with Show Modal. Each text input's answer is an output.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "components",
@@ -50,6 +50,8 @@ module.exports = {
     picked: { type: "object", description: "For user, role, channel and mentionable menus: what was picked (the users, roles or channels), by input id." },
     customId: { type: "text", label: "Custom id", description: "The modal's full id." },
     rest: { type: "text", label: "Rest of id", description: "With Starts with: what comes after the prefix (vote:42 gives 42). With a pattern: its first group." },
+    channel: { type: "discord.channel", description: "Where the form was sent from." },
+    server: { type: "discord.guild?", description: "The server it was sent in. Empty in DMs." },
   },
   define({ values }) {
     const outputs = {};
@@ -96,7 +98,7 @@ module.exports = {
           texts[id] = answers[id] = answers[id] ?? "";
         }
       }
-      emit({ ...texts, files, picked, interaction, user: interaction.user, member: interaction.member ?? null, answers, customId: interaction.customId, rest });
+      emit({ ...texts, files, picked, interaction, user: interaction.user, member: interaction.member ?? null, answers, customId: interaction.customId, rest, channel: interaction.channel, server: interaction.guild ?? null });
     });
   },
 };

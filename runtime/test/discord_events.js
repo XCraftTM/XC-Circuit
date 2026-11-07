@@ -43,8 +43,19 @@ const named = (name, extra = {}) => ({ name, guild, ...extra });
   assert.strictEqual(o.server, guild);
   assert.deepStrictEqual(await fire("on_typing.js", { ignoreBots: true }, "typingStart", { user: { bot: true }, channel: {} }), [], "bots are skipped");
 
-  [o] = await fire("on_reactions_cleared.js", { kind: "all" }, "messageReactionRemoveAll", { id: "m" }, new Map([["a", 1], ["b", 2]]));
+  [o] = await fire("on_reactions_cleared.js", { kind: "all" }, "messageReactionRemoveAll", { id: "m", channel: {}, guild }, new Map([["a", 1], ["b", 2]]));
   assert.strictEqual(o.count, 2);
+  assert.strictEqual(o.server, guild);
+
+  // Messages, buttons and threads say which server they're in (empty in DMs).
+  [o] = await fire("on_message.js", {}, "messageCreate", { content: "hi", author: { bot: false }, channel: {}, guild });
+  assert.strictEqual(o.server, guild);
+  [o] = await fire("on_message.js", {}, "messageCreate", { content: "hi", author: { bot: false }, channel: {} });
+  assert.strictEqual(o.server, null, "a DM has no server");
+  [o] = await fire("on_button.js", { match: "equals", customId: "ok" }, "interactionCreate", { isButton: () => true, customId: "ok", user: {}, channel: {}, message: {}, guild });
+  assert.strictEqual(o.server, guild);
+  [o] = await fire("on_thread_create.js", {}, "threadCreate", { name: "t", guild }, true);
+  assert.strictEqual(o.server, guild);
 
   [o] = await fire("on_audit_log.js", { action: "memberkick" }, "guildAuditLogEntryCreate", { action: 20, executorId: "x", targetId: "t", reason: "spam", changes: [{ key: "nick", old: "a" }] }, guild);
   assert.deepStrictEqual([o.action, o.executor.username, o.reason, o.changes[0].new], ["MemberKick", "fetched", "spam", null]);

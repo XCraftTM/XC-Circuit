@@ -7,7 +7,7 @@ module.exports = {
     name: "Poll Vote",
     description: "Runs when someone votes in a poll (or takes a vote back).",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "reactions",
@@ -28,9 +28,11 @@ module.exports = {
     userId: { type: "text", label: "User id", description: "Who voted." },
     message: { type: "discord.message", description: "The poll's message." },
     poll: { type: "discord.poll?", description: "The poll, with its answers and votes." },
+    channel: { type: "discord.channel?", description: "Where the poll is." },
+    server: { type: "discord.guild?", description: "The server the poll is in. Empty in DMs." },
   },
   listen(ctx, emit) {
     const event = ctx.fields.kind === "remove" ? "messagePollVoteRemove" : "messagePollVoteAdd";
-    ctx.discord.client.on(event, (answer, userId) => emit({ answer: answer.text ?? "", userId, message: answer.poll?.message, poll: answer.poll ?? null }));
+    ctx.discord.client.on(event, (answer, userId) => emit({ answer: answer.text ?? "", userId, message: answer.poll?.message, poll: answer.poll ?? null, channel: answer.poll?.message?.channel ?? null, server: answer.poll?.message?.guild ?? null }));
   },
 };

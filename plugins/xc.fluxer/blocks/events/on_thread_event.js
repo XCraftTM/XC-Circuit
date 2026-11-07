@@ -7,7 +7,7 @@ module.exports = {
     name: "Thread Created, Changed or Deleted",
     description: "Runs when a thread or forum post is made, changed (archived, locked, renamed …) or deleted.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "channels",
@@ -24,10 +24,15 @@ module.exports = {
     before: { type: "fluxer.channel?", description: "For changes: the thread as it was." },
     name: { type: "text", description: "Its name." },
     parentId: { type: "text", label: "Parent id", description: "The channel or forum it is in." },
+    serverId: { type: "text", label: "Server id", description: "The server the thread is in." },
+    server: { type: "fluxer.server?", description: "The server the thread is in." },
   },
   listen(ctx, emit) {
+    // The server itself, found in the bot's servers by its id.
+    const send = emit;
+    emit = (o) => send({ ...o, server: (o.serverId && ctx.fluxer.client.guilds?.get?.(String(o.serverId))) || null });
     const client = ctx.fluxer.client;
-    const out = (thread, before = null) => emit({ thread, before, name: thread?.name ?? "", parentId: String(thread?.parentId ?? "") });
+    const out = (thread, before = null) => emit({ thread, before, name: thread?.name ?? "", parentId: String(thread?.parentId ?? ""), serverId: String(thread?.guildId ?? thread?.guild?.id ?? "") });
     if (ctx.fields.when === "update") client.on("threadUpdate", (before, thread) => out(thread, before));
     else client.on(ctx.fields.when === "delete" ? "threadDelete" : "threadCreate", (thread) => out(thread));
   },

@@ -21,7 +21,7 @@ module.exports = {
     name: "Button Pressed",
     description: "Runs when someone presses a button whose custom id matches.",
     author: "XC Team",
-    version: "1.1.0",
+    version: "1.2.0",
   },
   search: {
     category: "components",
@@ -45,6 +45,7 @@ module.exports = {
     rest: { type: "text", label: "Rest of id", description: "With Starts with: what comes after the prefix (vote:42 gives 42). With a pattern: its first group." },
     channel: { type: "discord.channel", description: "Where it was used." },
     message: { type: "discord.message", description: "The message the button is on." },
+    server: { type: "discord.guild?", description: "The server it was pressed in. Empty in DMs." },
   },
   listen(ctx, emit) {
     const test = matcher(ctx.fields.match, ctx.fields.customId);
@@ -52,7 +53,7 @@ module.exports = {
       if (!interaction.isButton()) return;
       const rest = test(interaction.customId);
       if (rest === null) return;
-      emit({ interaction, user: interaction.user, member: interaction.member ?? null, customId: interaction.customId, rest, channel: interaction.channel, message: interaction.message });
+      emit({ interaction, user: interaction.user, member: interaction.member ?? null, customId: interaction.customId, rest, channel: interaction.channel, message: interaction.message, server: interaction.guild ?? null });
     });
   },
 };

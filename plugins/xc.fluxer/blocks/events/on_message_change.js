@@ -7,7 +7,7 @@ module.exports = {
     name: "Message Edited or Deleted",
     description: "Runs when a message is edited or deleted. Messages from before the bot started may only give their id.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "messages",
@@ -28,8 +28,12 @@ module.exports = {
     author: { type: "fluxer.user?", description: "Who wrote it, when known." },
     channelId: { type: "text", label: "Channel id", description: "Where it was." },
     serverId: { type: "text", label: "Server id", description: "The server it was in. Empty in direct messages." },
+    server: { type: "fluxer.server?", description: "The server it happened in. Empty in direct messages." },
   },
   listen(ctx, emit) {
+    // The server itself, found in the bot's servers by its id.
+    const send = emit;
+    emit = (o) => send({ ...o, server: (o.serverId && ctx.fluxer.client.guilds?.get?.(String(o.serverId))) || null });
     const bot = (author) => ctx.fields.ignoreBots && author?.bot;
     if (ctx.fields.when === "delete") {
       ctx.fluxer.client.on("messageDelete", (message) => {

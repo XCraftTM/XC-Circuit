@@ -7,7 +7,7 @@ module.exports = {
     name: "Invite Created or Deleted",
     description: "Runs when someone makes an invite link to a server, or one is deleted.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "server",
@@ -25,8 +25,12 @@ module.exports = {
     inviter: { type: "fluxer.user?", description: "Who made it (for new invites)." },
     channelId: { type: "text", label: "Channel id", description: "The channel it leads to." },
     serverId: { type: "text", label: "Server id", description: "The server." },
+    server: { type: "fluxer.server?", description: "The server the invite is for." },
   },
   listen(ctx, emit) {
+    // The server itself, found in the bot's servers by its id.
+    const send = emit;
+    emit = (o) => send({ ...o, server: (o.serverId && ctx.fluxer.client.guilds?.get?.(String(o.serverId))) || null });
     const client = ctx.fluxer.client;
     if (ctx.fields.when === "delete") {
       client.on("inviteDelete", (p) => emit({ invite: null, code: String(p?.code ?? ""), inviter: null, channelId: String(p?.channelId ?? p?.channel_id ?? ""), serverId: String(p?.guildId ?? p?.guild_id ?? "") }));

@@ -21,7 +21,7 @@ module.exports = {
     name: "Select Menu Used",
     description: "Runs when someone picks from a select menu whose custom id matches.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "components",
@@ -49,6 +49,7 @@ module.exports = {
     rest: { type: "text", label: "Rest of id", description: "With Starts with: what comes after the prefix (vote:42 gives 42). With a pattern: its first group." },
     channel: { type: "discord.channel", description: "Where it was used." },
     message: { type: "discord.message", description: "The message the menu is on." },
+    server: { type: "discord.guild?", description: "The server it was used in. Empty in DMs." },
   },
   listen(ctx, emit) {
     const test = matcher(ctx.fields.match, ctx.fields.customId);
@@ -69,6 +70,7 @@ module.exports = {
         rest,
         channel: interaction.channel,
         message: interaction.message,
+        server: interaction.guild ?? null,
       });
     });
   },

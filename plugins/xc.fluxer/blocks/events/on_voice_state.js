@@ -7,7 +7,7 @@ module.exports = {
     name: "Voice Channel Joined or Left",
     description: "Runs when someone joins, leaves or switches voice channels. Also for mute and deafen changes with Any voice change.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "calls",
@@ -27,8 +27,12 @@ module.exports = {
     serverId: { type: "text", label: "Server id", description: "The server." },
     muted: { type: "boolean", description: "Whether they are muted." },
     deafened: { type: "boolean", description: "Whether they are deafened." },
+    server: { type: "fluxer.server?", description: "The server of the voice channel." },
   },
   listen(ctx, emit) {
+    // The server itself, found in the bot's servers by its id.
+    const send = emit;
+    emit = (o) => send({ ...o, server: (o.serverId && ctx.fluxer.client.guilds?.get?.(String(o.serverId))) || null });
     // Fluxer sends only the new state: the channel before is remembered here.
     const where = new Map();
     ctx.fluxer.client.on("voiceStateUpdate", (d) => {

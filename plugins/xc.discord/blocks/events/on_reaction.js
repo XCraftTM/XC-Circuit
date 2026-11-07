@@ -5,7 +5,7 @@ module.exports = {
     name: "Reaction Added",
     description: "Runs when someone reacts to a message. Good for reaction roles.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "reactions",
@@ -26,6 +26,8 @@ module.exports = {
     user: { type: "discord.user", description: "Who reacted." },
     message: { type: "discord.message", description: "The message." },
     emoji: { type: "text", description: "The emoji as text." },
+    channel: { type: "discord.channel", description: "Where the message is." },
+    server: { type: "discord.guild?", description: "The server it happened in. Empty in DMs." },
   },
   listen(ctx, emit) {
     ctx.discord.client.on("messageReactionAdd", async (reaction, user) => {
@@ -41,7 +43,7 @@ module.exports = {
       const text = e.id ? `<${e.animated ? "a" : ""}:${e.name}:${e.id}>` : e.name;
       if (ctx.fields.emoji && ctx.fields.emoji !== e.name && ctx.fields.emoji !== text) return;
       if (ctx.fields.messageId && reaction.message.id !== ctx.fields.messageId) return;
-      emit({ user, message: reaction.message, emoji: text });
+      emit({ user, message: reaction.message, emoji: text, channel: reaction.message.channel, server: reaction.message.guild ?? null });
     });
   },
 };

@@ -5,7 +5,7 @@ module.exports = {
     name: "Message Deleted",
     description: "Runs when a message is deleted, one run per message (also for bulk deletes). For delete logs.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "messages",
@@ -27,11 +27,12 @@ module.exports = {
     channel: { type: "discord.channel", description: "Where it was." },
     id: { type: "text", label: "Message id", description: "The deleted message's id." },
     bulk: { type: "boolean", description: "True when it went in a bulk delete." },
+    server: { type: "discord.guild?", description: "The server it was deleted in. Empty in DMs." },
   },
   listen(ctx, emit) {
     const send = (m, bulk) => {
       if (ctx.fields.ignoreBots && m.author?.bot) return;
-      emit({ content: m.partial ? "" : m.content ?? "", author: m.author ?? null, channel: m.channel, id: m.id, bulk });
+      emit({ content: m.partial ? "" : m.content ?? "", author: m.author ?? null, channel: m.channel, id: m.id, bulk, server: m.guild ?? null });
     };
     ctx.discord.client.on("messageDelete", (m) => send(m, false));
     ctx.discord.client.on("messageDeleteBulk", (list) => list.forEach((m) => send(m, true)));

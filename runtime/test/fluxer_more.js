@@ -180,6 +180,7 @@ const listen = (id, fields = {}) => {
   client.emit("voiceStateUpdate", { user_id: "5", guild_id: "g1", channel_id: null });
   assert.deepStrictEqual([joins.length, moves.length, leaves.length], [1, 1, 1]);
   assert.deepStrictEqual([moves[0].beforeChannelId, moves[0].channelId, leaves[0].beforeChannelId], ["v1", "v2", "v2"]);
+  assert.strictEqual(joins[0].server, server, "the server itself, from its id");
   const invites = listen("fluxer.on_invite_event", { when: "delete" });
   client.emit("inviteDelete", { code: "abc", channel_id: "c1", guild_id: "g1" });
   assert.deepStrictEqual([invites[0].code, invites[0].channelId], ["abc", "c1"]);

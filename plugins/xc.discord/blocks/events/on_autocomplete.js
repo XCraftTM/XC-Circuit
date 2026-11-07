@@ -7,7 +7,7 @@ module.exports = {
     name: "Autocomplete",
     description: "Runs while someone types into a slash command option that has Autocomplete on. Answer with Respond to Autocomplete.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "commands",
@@ -29,6 +29,9 @@ module.exports = {
     option: { type: "text", description: "The option being typed into." },
     typed: { type: "text", description: "What has been typed so far." },
     user: { type: "discord.user", description: "Who is typing." },
+    member: { type: "discord.member?", description: "Who is typing, as a server member. Empty in DMs." },
+    channel: { type: "discord.channel", description: "Where the command is being used." },
+    server: { type: "discord.guild?", description: "The server it is used in. Empty in DMs." },
   },
   define({ values, project }) {
     const choices = Object.fromEntries(commandsOf(project).map((c) => [c.name, `/${c.name}`]));
@@ -42,7 +45,7 @@ module.exports = {
       if (!interaction.isAutocomplete() || interaction.commandName !== name) return;
       const focused = interaction.options.getFocused(true);
       if (only && focused.name !== only) return;
-      emit({ interaction, option: focused.name, typed: String(focused.value ?? ""), user: interaction.user });
+      emit({ interaction, option: focused.name, typed: String(focused.value ?? ""), user: interaction.user, member: interaction.member ?? null, channel: interaction.channel, server: interaction.guild ?? null });
     });
   },
 };

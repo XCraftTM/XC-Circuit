@@ -7,7 +7,7 @@ module.exports = {
     name: "Reaction Added or Removed",
     description: "Runs when someone adds a reaction to a message, or takes theirs away. For reaction roles and polls.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "reactions",
@@ -29,8 +29,13 @@ module.exports = {
     message: { type: "fluxer.message?", description: "The message, when it could be loaded." },
     messageId: { type: "text", label: "Message id", description: "The message's id." },
     channelId: { type: "text", label: "Channel id", description: "Where the message is." },
+    serverId: { type: "text", label: "Server id", description: "The server it happened in. Empty in direct messages." },
+    server: { type: "fluxer.server?", description: "The server it happened in. Empty in direct messages." },
   },
   listen(ctx, emit) {
+    // The server itself, found in the bot's servers by its id.
+    const send = emit;
+    emit = (o) => send({ ...o, server: (o.serverId && ctx.fluxer.client.guilds?.get?.(String(o.serverId))) || null });
     const event = ctx.fields.when === "remove" ? "messageReactionRemove" : "messageReactionAdd";
     const want = String(ctx.fields.emoji || "").trim();
     ctx.fluxer.client.on(event, async (p) => {
@@ -40,7 +45,7 @@ module.exports = {
       const user = p.user ?? (await ctx.fluxer.client.users.resolve(p.userId).catch(() => null));
       if (ctx.fields.ignoreBots && user?.bot) return;
       const message = p.message ?? (await p.reaction?.fetchMessage?.().catch(() => null)) ?? null;
-      emit({ emoji: e.id ? `<${e.animated ? "a" : ""}:${e.name}:${e.id}>` : e.name, user, member: p.member ?? null, message, messageId: p.messageId, channelId: p.channelId });
+      emit({ emoji: e.id ? `<${e.animated ? "a" : ""}:${e.name}:${e.id}>` : e.name, user, member: p.member ?? null, message, messageId: p.messageId, channelId: p.channelId, serverId: String(p.guildId ?? p.guild_id ?? "") });
     });
   },
 };

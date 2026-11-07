@@ -5,7 +5,7 @@ module.exports = {
     name: "Thread Created",
     description: "Runs when a thread or forum post is created.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "channels",
@@ -26,12 +26,13 @@ module.exports = {
     parent: { type: "discord.channel?", description: "The channel or forum it is in." },
     ownerId: { type: "text", label: "Creator id", description: "Who created it." },
     name: { type: "text", description: "Its name." },
+    server: { type: "discord.guild?", description: "The server it was made in." },
   },
   listen(ctx, emit) {
     const only = String(ctx.fields.parent || "").trim();
     ctx.discord.client.on("threadCreate", (thread, newlyCreated) => {
       if (!newlyCreated || (only && thread.parentId !== only)) return;
-      emit({ thread, parent: thread.parent ?? null, ownerId: thread.ownerId ?? "", name: thread.name });
+      emit({ thread, parent: thread.parent ?? null, ownerId: thread.ownerId ?? "", name: thread.name, server: thread.guild ?? null });
     });
   },
 };

@@ -5,7 +5,7 @@ module.exports = {
     name: "Message Edited",
     description: "Runs when someone edits a message the bot can see. For edit logs.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "messages",
@@ -27,6 +27,7 @@ module.exports = {
     after: { type: "text", description: "The text now." },
     author: { type: "discord.user", description: "Who wrote it." },
     channel: { type: "discord.channel", description: "Where it is." },
+    server: { type: "discord.guild?", description: "The server it was edited in. Empty in DMs." },
   },
   listen(ctx, emit) {
     ctx.discord.client.on("messageUpdate", async (old, now) => {
@@ -40,7 +41,7 @@ module.exports = {
       if (!now.author || (ctx.fields.ignoreBots && now.author.bot)) return;
       // Embeds loading in also fires this; only text changes count.
       if (!old.partial && old.content === now.content) return;
-      emit({ message: now, before: old.partial ? "" : old.content ?? "", after: now.content ?? "", author: now.author, channel: now.channel });
+      emit({ message: now, before: old.partial ? "" : old.content ?? "", after: now.content ?? "", author: now.author, channel: now.channel, server: now.guild ?? null });
     });
   },
 };

@@ -5,7 +5,7 @@ module.exports = {
     name: "Message Sent",
     description: "Runs when a message is sent in a channel the bot can see.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "messages",
@@ -27,12 +27,13 @@ module.exports = {
     author: { type: "discord.user", description: "Who sent it." },
     member: { type: "discord.member?", description: "Who sent it, as a server member. Empty in DMs." },
     channel: { type: "discord.channel", description: "Where it was sent." },
+    server: { type: "discord.guild?", description: "The server it was sent in. Empty in DMs." },
   },
   listen(ctx, emit) {
     ctx.discord.client.on("messageCreate", (message) => {
       if (ctx.fields.ignoreBots && message.author.bot) return;
       if (ctx.fields.contains && !message.content.includes(ctx.fields.contains)) return;
-      emit({ message, content: message.content, author: message.author, member: message.member ?? null, channel: message.channel });
+      emit({ message, content: message.content, author: message.author, member: message.member ?? null, channel: message.channel, server: message.guild ?? null });
     });
   },
 };
