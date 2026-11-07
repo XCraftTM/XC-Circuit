@@ -2,10 +2,12 @@
 //! (JSON-RPC, one message per line) on standard input and output, answers
 //! the protocol itself and passes tool listings and calls to the running app
 //! ([`super::bridge`]). While the app isn't open it offers one tool, which
-//! opens it.
+//! opens it. When the app opens or closes, it tells the client that its
+//! tools changed, so the client lists them again.
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
@@ -23,10 +25,22 @@ Values go from a block's outputs into other blocks' fields, which then become pi
 Text fields can hold `${…}` with JavaScript and values from earlier blocks. Start with get_project, then get_workspace; look up block types with find_block_types and \
 get_block_type before adding blocks. Every change shows in the editor at once and can be undone there. The bot's token is never shown to you.";
 
+/// How often the server looks whether XC Circuit opened or closed.
+const WATCH_EVERY: Duration = Duration::from_secs(2);
+
 /// Runs the server until the client closes its input.
 pub fn run() -> i32 {
     let stdin = std::io::stdin();
-    let mut out = std::io::stdout().lock();
+    // Shared with the watcher, which writes its notifications between answers.
+    let out = Arc::new(Mutex::new(std::io::stdout()));
+    // Whether the app could be reached when the client last listed the tools;
+    // None until it lists, and after a change was told. (Reachable rather than
+    // which tools it got: a port that answers but isn't the app can't loop.)
+    let listed: Arc<Mutex<Option<bool>>> = Arc::default();
+    {
+        let (out, listed) = (out.clone(), listed.clone());
+        let _ = std::thread::Builder::new().name("mcp-watch".into()).spawn(move || watch(&out, &listed));
+    }
     let mut app = AppLink::default();
     for line in stdin.lock().lines() {
         let Ok(line) = line else { break };
@@ -34,16 +48,58 @@ pub fn run() -> i32 {
             continue;
         }
         let reply = match serde_json::from_str::<Value>(&line) {
-            Ok(message) => handle(&message, &mut app),
+            Ok(message) => {
+                let reply = handle(&message, &mut app);
+                if message["method"] == "tools/list" {
+                    *listed.lock().unwrap_or_else(|e| e.into_inner()) = Some(app_reachable());
+                }
+                reply
+            }
             Err(e) => Some(json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32700, "message": format!("Parse error: {e}") } })),
         };
         if let Some(reply) = reply
-            && (writeln!(out, "{reply}").is_err() || out.flush().is_err())
+            && !send(&out, &reply)
         {
             break;
         }
     }
     0
+}
+
+/// Writes one message as a line. False when the client is gone.
+fn send(out: &Mutex<std::io::Stdout>, message: &Value) -> bool {
+    let mut out = out.lock().unwrap_or_else(|e| e.into_inner());
+    writeln!(out, "{message}").is_ok() && out.flush().is_ok()
+}
+
+/// The notification that makes a client list the tools again.
+fn list_changed() -> Value {
+    json!({ "jsonrpc": "2.0", "method": "notifications/tools/list_changed" })
+}
+
+/// Every few seconds: when XC Circuit opened or closed since the client last
+/// listed the tools, tell it so, once.
+fn watch(out: &Mutex<std::io::Stdout>, listed: &Mutex<Option<bool>>) {
+    loop {
+        std::thread::sleep(WATCH_EVERY);
+        let was = *listed.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(was) = was else { continue };
+        if app_reachable() != was {
+            // Once: listing again sets `listed` anew.
+            *listed.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            if !send(out, &list_changed()) {
+                return;
+            }
+        }
+    }
+}
+
+/// Whether the running app answers on the port it wrote down. A connection
+/// without its token is turned away quietly, so this doesn't count as an agent.
+fn app_reachable() -> bool {
+    let info: Option<Value> = std::fs::read_to_string(super::info_file()).ok().and_then(|t| serde_json::from_str(&t).ok());
+    let Some(port) = info.and_then(|i| i["port"].as_u64()).and_then(|p| u16::try_from(p).ok()) else { return false };
+    TcpStream::connect_timeout(&([127, 0, 0, 1], port).into(), Duration::from_millis(500)).is_ok()
 }
 
 /// What the server needs of XC Circuit: its tools, and opening it.
@@ -64,7 +120,8 @@ pub fn handle(message: &Value, app: &mut dyn Backend) -> Option<Value> {
             let version = VERSIONS.iter().find(|v| **v == asked).copied().unwrap_or(VERSIONS[0]);
             Ok(json!({
                 "protocolVersion": version,
-                "capabilities": { "tools": { "listChanged": false } },
+                // Tools come and go with the app: clients are told (see `watch`).
+                "capabilities": { "tools": { "listChanged": true } },
                 "serverInfo": { "name": super::SERVER_NAME, "title": "XC Circuit", "version": env!("CARGO_PKG_VERSION") },
                 "instructions": INSTRUCTIONS,
             }))
@@ -111,7 +168,8 @@ impl AppLink {
         let info: Value = std::fs::read_to_string(super::info_file()).ok().and_then(|t| serde_json::from_str(&t).ok()).ok_or_else(not_open)?;
         let port = info["port"].as_u64().ok_or_else(not_open)? as u16;
         let mut stream = TcpStream::connect_timeout(&([127, 0, 0, 1], port).into(), Duration::from_secs(2)).map_err(|_| not_open())?;
-        let _ = stream.set_read_timeout(Some(Duration::from_secs(90)));
+        // The app greets at once; something else on its old port may never answer.
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
         writeln!(stream, "{}", json!({ "token": info["token"] })).map_err(|e| e.to_string())?;
         let mut reader = BufReader::new(stream.try_clone().map_err(|e| e.to_string())?);
         let mut hello = String::new();
@@ -120,6 +178,8 @@ impl AppLink {
         if hello["ok"] != true {
             return Err(not_open());
         }
+        // A tool may take a while (a dialog in the app): calls get longer.
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(90)));
         Ok((stream, reader))
     }
 
@@ -210,7 +270,7 @@ mod tests {
         let init = ask(&mut app, "initialize", json!({ "protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": { "name": "test" } }));
         assert_eq!(init["id"], 7);
         assert_eq!(init["result"]["protocolVersion"], "2025-03-26", "the client's version when it's one we speak");
-        assert!(init["result"]["capabilities"]["tools"].is_object());
+        assert_eq!(init["result"]["capabilities"]["tools"]["listChanged"], true, "clients hear when the app opens or closes");
         assert_eq!(ask(&mut app, "initialize", json!({ "protocolVersion": "1999-01-01" }))["result"]["protocolVersion"], VERSIONS[0]);
         assert!(handle(&json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }), &mut app).is_none(), "notifications get no answer");
         assert_eq!(ask(&mut app, "ping", json!({}))["result"], json!({}));
@@ -228,6 +288,13 @@ mod tests {
         assert_eq!(ask(&mut app, "tools/list", json!({}))["result"]["tools"][0]["name"], "get_project");
         let called = ask(&mut app, "tools/call", json!({ "name": "get_project", "arguments": { "a": 1 } }));
         assert_eq!(called["result"]["content"][0]["text"], "get_project {\"a\":1}");
+    }
+
+    /// The notification that makes a client list the tools again.
+    #[test]
+    fn tells_of_changed_tools() {
+        assert_eq!(list_changed(), json!({ "jsonrpc": "2.0", "method": "notifications/tools/list_changed" }));
+        assert!(list_changed().get("id").is_none(), "a notification, which gets no answer");
     }
 
     #[test]

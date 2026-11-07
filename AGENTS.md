@@ -21,7 +21,7 @@ The bundled **AI agents (MCP)** plugin (`plugins/xc.agents`) lets agents edit th
 { "mcpServers": { "xc-circuit": { "command": "<path to xc-circuit or xc-circuit.exe>", "args": ["--mcp"] } } }
 ```
 
-`xc-circuit --mcp` speaks MCP over stdio and passes calls to the running app (`127.0.0.1`, with a token in the app's data folder). If the app isn't open, the only tool is `open_xc_circuit`.
+`xc-circuit --mcp` speaks MCP over stdio and passes calls to the running app (`127.0.0.1`, with a token in the app's data folder). If the app isn't open, the only tool is `open_xc_circuit`; when the app opens or closes, the server sends `notifications/tools/list_changed`, so clients list the tools again.
 
 Tools, and how to use them well:
 

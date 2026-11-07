@@ -5,6 +5,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 ## Unreleased
 
 ### Added
+- **AI agents get XC Circuit's tools as soon as it opens**: an AI client that started while XC Circuit was closed only saw `open_xc_circuit` until it reconnected. The MCP server now tells the client when XC Circuit opens or closes, so its tools appear (or go) by themselves within a few seconds.
 - **Update the app from the Updates window**: when a new XC Circuit is out, Help › Check for Updates now has **Update and restart** right there: it downloads the update, installs it as XC Circuit closes (asking about unsaved changes first) and opens it again. **What's new…** shows the release notes.
 
 ## 0.1.9

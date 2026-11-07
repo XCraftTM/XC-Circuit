@@ -27,7 +27,7 @@ The panel shows **Added, but for another copy of XC Circuit** when the entry poi
 
 ## Use it
 
-Keep XC Circuit open with your project, and ask the agent, for example: *"Add a /ping command that answers with the bot's ping"*. If XC Circuit isn't open, the agent sees one tool, `open_xc_circuit`, which opens it.
+Keep XC Circuit open with your project, and ask the agent, for example: *"Add a /ping command that answers with the bot's ping"*. If XC Circuit isn't open, the agent sees one tool, `open_xc_circuit`, which opens it. When XC Circuit opens or closes later, the server tells the AI client that its tools changed, so the client picks up the full set (or loses it) by itself, without reconnecting.
 
 What the agent can do:
 
