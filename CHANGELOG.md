@@ -8,6 +8,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **The builders fit narrow tabs**: when there isn't room for the preview beside the form, the Embed and Layout Builders show it on top, with the values from earlier blocks at the end of the form. Slash Commands shows its Discord preview above the command's settings and starts with just the list of commands; once you pick one, the list folds into a slim bar on the left (with how many commands there are, and a dot when one needs fixing) that opens it over the form with a click. And the Canvas Builder puts the picture on top with its settings in two columns below.
 
 ### Fixed
+- **Long starter names in New Project stay on one line**: a name too long for its card (in German, say) ends in … instead of running into the description below it; hover the card for the whole name.
 - **The builders' windows scroll properly again**: the Embed, Layout and Canvas Builders and Slash Commands no longer show scrollbars all the time, and their Cancel and Apply buttons stay at the bottom where you can reach them, with the wheel scrolling what's above. A builder's window can't be made narrower than the builder needs; docked into a narrow area, it scrolls sideways only.
 
 ## 0.1.4

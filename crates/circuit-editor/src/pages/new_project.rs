@@ -257,7 +257,18 @@ fn form(ui: &mut Ui, theme: &Theme, state: &mut NewProject, reg: &Registry, temp
                         let (rect, click) = ui.allocate_exact_size(card, Sense::click());
                         let on = state.picked == *i;
                         kit::describe_selected(&click, egui::Role::RadioButton, on, name);
-                        let click = click.on_hover_cursor(CursorIcon::PointingHand).on_hover_text(description);
+                        // The title on one line, ending in … when it's longer (the
+                        // tooltip has it whole), so it never runs into the description.
+                        let left = rect.left() + 10.0 + 36.0 + 10.0;
+                        let room = rect.right() - left - 10.0;
+                        let mut job = egui::text::LayoutJob::simple(name.clone(), egui::FontId::proportional(13.5), theme.text, room);
+                        job.wrap.max_rows = 1;
+                        job.wrap.overflow_character = Some('…');
+                        let title = ui.fonts_mut(|f| f.layout_job(job));
+                        let tip = if title.elided { format!("{name}
+
+{description}") } else { description.clone() };
+                        let click = click.on_hover_cursor(CursorIcon::PointingHand).on_hover_text(tip);
                         let fill = if on { with_alpha(theme.accent, 30) } else if click.hovered() { crate::ui::theme::mix(theme.panel_header, theme.text, 0.05) } else { theme.panel_header };
                         let painter = ui.painter();
                         painter.rect(rect, 8.0, fill, Stroke::new(1.0, if on { theme.accent } else { theme.line }), egui::StrokeKind::Inside);
@@ -266,9 +277,6 @@ fn form(ui: &mut Ui, theme: &Theme, state: &mut NewProject, reg: &Registry, temp
                         if let Some(path) = reg.icons.get(icon.as_str()) {
                             egui::Image::from_uri(file_uri(path)).tint(theme.accent).paint_at(ui, tile.shrink(9.0));
                         }
-                        let left = tile.right() + 10.0;
-                        let room = rect.right() - left - 10.0;
-                        let title = painter.layout(name.clone(), egui::FontId::proportional(13.5), theme.text, room);
                         painter.galley(egui::pos2(left, rect.top() + 9.0), title, theme.text);
                         // Two lines at most, ending in … when there's more.
                         let mut job = egui::text::LayoutJob::simple(description.clone(), egui::FontId::proportional(11.5), theme.text_muted, room);
