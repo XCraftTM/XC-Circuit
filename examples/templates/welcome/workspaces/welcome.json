@@ -13,7 +13,7 @@
       "block": "discord.server_info@2",
       "at": [
         360,
-        446
+        490
       ],
       "values": {
         "info": "systemChannel"
@@ -23,7 +23,7 @@
       "block": "discord.mention@1",
       "at": [
         360,
-        611
+        655
       ]
     },
     "4": {

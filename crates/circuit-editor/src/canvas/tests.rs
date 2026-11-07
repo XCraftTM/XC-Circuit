@@ -458,8 +458,16 @@ fn files_and_pinned_advanced_inputs_show_on_the_block() {
         l.rows.iter().filter_map(|(r, _)| if let layout::RowKind::Field { key, .. } = r { Some(key.clone()) } else { None }).collect::<Vec<_>>()
     };
     let plain = keys(&[]);
-    assert!(plain.contains(&"files".to_string()) && !plain.contains(&"components".to_string()), "{plain:?}");
-    assert!(keys(&["components".to_string()]).contains(&"components".to_string()));
+    assert!(plain.contains(&"files".to_string()) && plain.contains(&"components".to_string()), "buttons and menus can be connected: {plain:?}");
+    // An advanced input shows once its pin is turned on: Show Modal's Inputs.
+    let def = ed.reg.block("discord.show_modal").unwrap();
+    let shape = circuit_core::BlockShape::build(def, &Default::default(), None);
+    let keys = |pins: &[String]| {
+        let l = layout::layout_node("1", [0.0, 0.0], pins, None, Some(def), Some(&shape), &Default::default(), &Default::default());
+        l.rows.iter().filter_map(|(r, _)| if let layout::RowKind::Field { key, .. } = r { Some(key.clone()) } else { None }).collect::<Vec<_>>()
+    };
+    assert!(!keys(&[]).contains(&"inputs".to_string()));
+    assert!(keys(&["inputs".to_string()]).contains(&"inputs".to_string()));
 }
 
 /// The glow of a missing required input pulses between faint and full, once every 1.5 seconds.
