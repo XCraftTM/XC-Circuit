@@ -2,7 +2,7 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## Unreleased
+## 0.1.7
 
 ### Added
 - **An Updates window**: Help › Check for Updates now opens a window that shows whether a newer app is out and, for each bundled plugin, your version and the published one (up to date, newer, or needing a newer app). **Update blocks** gets the newer ones; **Download blocks again** downloads the published blocks again even when you have them, for when blocks seem out of date or broken. When GitHub can't be asked, the window and the Console say why, instead of "up to date (or GitHub couldn't be asked)".
