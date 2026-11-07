@@ -372,6 +372,8 @@ impl api::Host for EditorHost<'_> {
         if project.meta.data.get(key) != Some(&value) {
             project.meta.data.insert(key.to_string(), value);
             self.ed.edited = true;
+            // Blocks list it (Slash Command's commands): they see the new data.
+            self.ed.refresh_define_ctx();
         }
         Ok(())
     }
@@ -593,7 +595,7 @@ impl api::Host for EditorHost<'_> {
         Ok(key)
     }
 
-    fn problems(&self) -> Value {
+    fn problems(&mut self) -> Value {
         let items = crate::pages::panels::collect_problems(self.ed);
         Value::Array(
             items
@@ -802,6 +804,23 @@ mod tests {
         let errors = ed.log.len();
         host.sync(&mut ed, None);
         assert_eq!(ed.log.len(), errors);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// Slash commands an agent saves reach the blocks at once (Slash Command lists them).
+    #[test]
+    fn saved_project_data_reaches_the_blocks() {
+        let tmp = std::env::temp_dir().join(format!("xc-agent-data-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let plugins = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+        let mut ed = Editor::new(vec![plugins], None).unwrap();
+        Project::create(tmp.join("bot"), "Data Bot", "discord-bot").unwrap();
+        ed.open_project(&tmp.join("bot"));
+        let mut host = PluginHost::new(BTreeMap::new());
+        host.sync(&mut ed, None);
+        let commands = serde_json::json!({ "commands": [{ "name": "ticket-panel", "description": "Posts the panel", "contexts": ["guild"] }] });
+        host.call_tool(&mut ed, "set_slash_commands", &commands, false).expect("a tool").unwrap();
+        assert_eq!(ed.define_ctx["data"]["slashCommands"][0]["name"], "ticket-panel", "blocks see the new commands: {}", ed.define_ctx);
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
