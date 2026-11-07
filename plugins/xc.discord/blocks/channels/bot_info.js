@@ -1,5 +1,17 @@
+/**
+ * The gateway's heartbeat round trip, in ms. discord.js only knows it after
+ * the first heartbeat (about 40 s after the bot starts) and says -1 until
+ * then: then a request to Discord is timed instead.
+ */
+async function ping(c) {
+  if (c.ws.ping >= 0) return Math.round(c.ws.ping);
+  const start = performance.now();
+  await c.rest.get("/gateway");
+  return Math.round(performance.now() - start);
+}
+
 const INFO = {
-  ping: ["Ping (ms)", "number", (c) => Math.round(c.ws.ping)],
+  ping: ["Ping (ms)", "number", ping],
   uptime: ["Uptime (ms)", "number", (c) => c.uptime ?? 0],
   uptimeText: ["Uptime as text", "text", (c) => {
     let s = Math.floor((c.uptime ?? 0) / 1000);
@@ -24,7 +36,7 @@ module.exports = {
     name: "Bot Info",
     description: "Reads something about the bot itself: ping, uptime, servers, its user, an invite link.",
     author: "XC Team",
-    version: "2.0.0",
+    version: "2.0.1",
   },
   search: {
     category: "bot",
@@ -44,8 +56,8 @@ module.exports = {
     const [label, type] = INFO[values.info] || INFO.ping;
     return { outputs: { result: { type, label, description: `The bot's ${label.toLowerCase()}.` } } };
   },
-  run({ fields, ctx }) {
+  async run({ fields, ctx }) {
     const [, , read] = INFO[fields.info] || INFO.ping;
-    return { result: read(ctx.discord.client) };
+    return { result: await read(ctx.discord.client) };
   },
 };
