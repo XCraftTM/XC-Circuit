@@ -118,7 +118,9 @@ impl CircuitApp {
                 }
                 Some("call") if pending.request["name"] == SCREENSHOT => {
                     let args = pending.request.get("args").cloned().unwrap_or_default();
-                    match self.prepare_shot(&args) {
+                    let prepared = self.prepare_shot(&args);
+                    self.log_agent(SCREENSHOT, &args, prepared.as_ref().err());
+                    match prepared {
                         Ok(about) => {
                             ctx.request_repaint();
                             // About a quarter of a second: what it opened has drawn and windows have faded in.
@@ -132,6 +134,7 @@ impl CircuitApp {
                     let name = pending.request["name"].as_str().unwrap_or("");
                     let args = pending.request.get("args").cloned().unwrap_or_else(|| serde_json::json!({}));
                     let result = self.plugin_host.call_tool(&mut self.ed, name, &args, running).unwrap_or_else(|| Err(format!("No tool `{name}`")));
+                    self.log_agent(name, &args, result.as_ref().err());
                     serde_json::json!({ "result": crate::mcp::tool_result(result) })
                 }
                 _ => serde_json::json!({ "error": "unknown request" }),
@@ -140,6 +143,24 @@ impl CircuitApp {
         }
         self.ed.agent_link = serde_json::json!({ "listening": true, "agents": agents, "port": port });
         self.take_shots(ctx);
+    }
+
+    /// Writes an agent's tool call to the Console: the tool and what it was
+    /// given, as a warning with the reason when it failed. A call about a
+    /// block links to it.
+    fn log_agent(&mut self, tool: &str, args: &serde_json::Value, failed: Option<&String>) {
+        let given = agent_args(args);
+        let text = match failed {
+            None => tf!("AI agent: {tool} {given}", tool = tool, given = given),
+            Some(e) => tf!("AI agent: {tool} {given} failed: {error}", tool = tool, given = given, error = e.lines().next().unwrap_or_default()),
+        };
+        let mut line = crate::editor::LogLine::new(if failed.is_some() { Level::Warn } else { Level::Info }, text.trim().replace("  ", " "));
+        if let (Some(ws), Some(block)) = (args["workspace"].as_str(), args["block"].as_str())
+            && self.ed.workspace(ws).is_some_and(|w| w.nodes.contains_key(block))
+        {
+            line.target = Some((ws.to_string(), block.to_string()));
+        }
+        self.ed.push_log(line);
     }
 
     /// Opens what an agent's screenshot is of: a workspace, fitted to show
@@ -293,4 +314,50 @@ fn shot_png(image: &egui::ColorImage) -> Result<String, String> {
     let mut out = std::io::Cursor::new(Vec::new());
     img.write_to(&mut out, image::ImageFormat::Png).map_err(|e| e.to_string())?;
     Ok(base64::engine::general_purpose::STANDARD.encode(out.into_inner()))
+}
+
+/// What an agent gave a tool, short: `· workspace main, type "core.log", values {message, level}`.
+fn agent_args(args: &serde_json::Value) -> String {
+    use serde_json::Value;
+    let short = |text: &str, max: usize| -> String {
+        let line = text.lines().find(|l| !l.trim().is_empty()).unwrap_or_default().trim();
+        let more = text.lines().filter(|l| !l.trim().is_empty()).count() > 1;
+        match line.char_indices().nth(max) {
+            Some((i, _)) => format!("{}…", &line[..i]),
+            None if more => format!("{line} …"),
+            None => line.to_string(),
+        }
+    };
+    let Some(map) = args.as_object().filter(|m| !m.is_empty()) else { return String::new() };
+    let parts: Vec<String> = map
+        .iter()
+        .map(|(k, v)| {
+            let value = match v {
+                // Keys of a workspace, block or note read as they are.
+                Value::String(t) if matches!(k.as_str(), "workspace" | "block" | "note" | "from" | "to" | "after") => short(t, 40),
+                Value::String(t) => format!("\"{}\"", short(t, if k == "code" { 60 } else { 40 })),
+                Value::Array(list) if list.iter().all(Value::is_string) && list.len() <= 6 => list.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(", "),
+                Value::Array(list) => format!("[{} items]", list.len()),
+                Value::Object(o) => format!("{{{}}}", o.keys().take(6).cloned().collect::<Vec<_>>().join(", ")),
+                other => other.to_string(),
+            };
+            format!("{k} {value}")
+        })
+        .collect();
+    format!("· {}", parts.join(", "))
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    #[test]
+    fn agent_calls_read_short_in_the_console() {
+        assert_eq!(super::agent_args(&json!({})), "");
+        let line = super::agent_args(&json!({ "workspace": "main", "type": "core.log", "values": { "message": "hi", "level": "warn" }, "around": ["1", "2"] }));
+        assert_eq!(line, "· workspace main, type \"core.log\", values {message, level}, around 1, 2");
+        let code = super::agent_args(&json!({ "code": "const a = tools.add_block({ workspace: 'main', type: 'core.log' });\nreturn a;" }));
+        assert!(code.starts_with("· code \"const a = tools.add_block") && code.ends_with("…\""), "{code}");
+        assert_eq!(super::agent_args(&json!({ "blocks": [1, 2, 3] })), "· blocks [3 items]");
+    }
 }

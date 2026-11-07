@@ -184,6 +184,8 @@ pub const UI_STRINGS: &[&str] = &[
     "Installed {name} into {folder}",
     "Couldn't install {file}: {error}",
     "AI agents can't connect: {error}",
+    "AI agent: {tool} {given}",
+    "AI agent: {tool} {given} failed: {error}",
     "Open a Circuit project folder",
     "Search commands, workspaces and blocks",
     "Minimize",
