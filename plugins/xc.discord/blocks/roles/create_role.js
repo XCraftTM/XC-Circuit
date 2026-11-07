@@ -39,8 +39,9 @@ const PERMISSIONS = {
 
 /** Permission flag names from a list of them (the field's choices), or text such as "Send Messages, manage roles" (older projects). */
 function permissionList(given) {
-  const items = Array.isArray(given) ? given : String(given || "").split(/[,\n]/);
-  const wanted = items.map((s) => String(s).trim()).filter(Boolean);
+  // Items with commas in them too (a text wired in becomes a list of one).
+  const items = (Array.isArray(given) ? given : [given]).flatMap((s) => String(s ?? "").split(/[,\n]/));
+  const wanted = items.map((s) => s.trim()).filter(Boolean);
   const squash = (s) => s.toLowerCase().replace(/[^a-z]/g, "");
   return wanted.map((w) => {
     const hit = Object.entries(PERMISSIONS).find(([flag, label]) => squash(flag) === squash(w) || squash(label) === squash(w));
@@ -56,7 +57,7 @@ module.exports = {
     name: "Create Role",
     description: "Makes a new role in a server. The bot needs Manage Roles.",
     author: "XC Team",
-    version: "1.1.0",
+    version: "1.1.1",
   },
   search: {
     category: "roles",

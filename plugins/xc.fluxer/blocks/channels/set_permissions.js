@@ -39,7 +39,7 @@ module.exports = {
     name: "Set Channel Permissions",
     description: "Allows or denies permissions in one channel for a role, a member or everyone, or resets them. For private channels and locking.",
     author: "XC Team",
-    version: "1.1.0",
+    version: "1.1.1",
   },
   search: {
     category: "channels",
@@ -80,7 +80,12 @@ module.exports = {
       return { channel };
     }
     // A list of flag names (the field's choices), or text with commas (older projects).
-    const list = (s) => (Array.isArray(s) ? s : String(s ?? "").split(/[,\s]+/)).map((p) => String(p).trim()).filter(Boolean);
+    // By flag name or as the list shows them; items with commas or spaces in
+    // them too (older projects, or a text wired in, which becomes a list of one).
+    const squash = (s) => s.toLowerCase().replace(/[^a-z]/g, "");
+    const flagOf = (p) => Object.entries(PERMISSIONS).find(([flag, label]) => squash(flag) === squash(p) || squash(label) === squash(p))?.[0] ?? p;
+    const pieces = (p) => (/[,\n]/.test(p) ? p.split(/[,\n]/) : squash(p) in Object.fromEntries(Object.entries(PERMISSIONS).map(([k, l]) => [squash(l), k])) ? [p] : p.split(/\s+/));
+    const list = (s) => (Array.isArray(s) ? s : [s]).flatMap((p) => pieces(String(p ?? ""))).map((p) => p.trim()).filter(Boolean).map(flagOf);
     const allow = list(f.allow);
     const deny = list(f.deny);
     if (!allow.length && !deny.length) throw new Error("Name permissions to allow or deny");
