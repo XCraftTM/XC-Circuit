@@ -132,6 +132,9 @@ fn setup_args(all_users: bool, log: &Path) -> Vec<String> {
 
 #[derive(Default)]
 pub struct Updater {
+    /// The download was asked for with Update and restart: the app closes
+    /// (asking about unsaved changes) once it's done, to install it.
+    pub restart_when_ready: bool,
     pending: Option<Receiver<Result<Option<Release>, String>>>,
     /// How the last check went: fine, or why GitHub couldn't be asked.
     pub last: Option<Result<(), String>>,

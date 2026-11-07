@@ -2,6 +2,11 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
+## Unreleased
+
+### Added
+- **Update the app from the Updates window**: when a new XC Circuit is out, Help › Check for Updates now has **Update and restart** right there: it downloads the update, installs it as XC Circuit closes (asking about unsaved changes first) and opens it again. **What's new…** shows the release notes.
+
 ## 0.1.9
 
 ### Added
