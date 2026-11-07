@@ -97,5 +97,8 @@ const poll = setInterval(() => {
   for (const s of expected) assert.ok(seen.includes(s), `expected "${s}" in:\n${seen.join("\n")}\n${out}`);
   assert.ok(failed().includes('Channel: no channel with the id \\"999\\"'), `expected the unknown id to stop Bad:\n${out}`);
   assert.ok(!seen.some((s) => s.startsWith("info: bad ran")), "Bad must not run with an unknown id");
+  // Errors come in full: the message, then where it happened (the stack).
+  const error = events().find((e) => e.t === "log" && e.level === "error" && e.text.includes("999"));
+  assert.match(error.text, /^Main › Bad \(#bad\): Channel: no channel with the id "999"\n {2}at /, error.text);
   console.log("from id test passed");
 }, 100);

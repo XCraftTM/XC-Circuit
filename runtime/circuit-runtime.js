@@ -17,7 +17,7 @@ const PROTOCOL = "@@xc ";
 function start(bundle, opts) {
   const rt = new Runtime(bundle, opts);
   rt.start().catch((e) => {
-    rt.log.error(`Bot stopped: ${e && e.message ? e.message : e}`);
+    rt.log.error(`Bot stopped: ${e && e.message ? e.message : e}${errorDetails(e)}`);
     process.exitCode = 1;
   });
   return rt;
@@ -192,7 +192,7 @@ class Runtime {
       try {
         this.blocks.set(id, ungroupBlock(this.loadModule(esmToCommonJs(b.source), b.file)));
       } catch (e) {
-        this.log.error(`Could not load block ${id}: ${e.message}`);
+        this.log.error(`Could not load block ${id}: ${e.message}${errorDetails(e)}`);
       }
     }
     for (const [key, ws] of Object.entries(this.bundle.workspaces)) {
@@ -208,7 +208,7 @@ class Runtime {
         this.libs.set(mod.id, api);
         libs.push({ mod, api });
       } catch (e) {
-        this.log.error(`Runtime library ${lib.file} failed: ${e.message}`);
+        this.log.error(`Runtime library ${lib.file} failed: ${e.message}${errorDetails(e)}`);
       }
     }
 
@@ -224,7 +224,7 @@ class Runtime {
       try {
         await mod.start(this, api);
       } catch (e) {
-        this.log.error(e.message);
+        this.log.error(`${e.message}${errorDetails(e)}`);
       }
     }
     for (const h of this.startHandlers) h({});
@@ -345,7 +345,7 @@ class Runtime {
     const where = `${node.graph.name} › ${node.def.name || node.blockId} (#${node.id})`;
     const fromOnError = this.errorHandlers.some((e) => e.node === event);
     if (!this.errorHandlers.length || fromOnError) {
-      this.log.error(`${where}: ${details.message}${fromOnError ? " (in an On Error path)" : ""}`);
+      this.log.error(`${where}: ${details.message}${fromOnError ? " (in an On Error path)" : ""}${errorDetails(err, details.message)}`);
       return;
     }
     for (const { h } of this.errorHandlers) {
@@ -424,7 +424,7 @@ class Graph {
       try {
         node.def.listen(ctx, emit);
       } catch (e) {
-        this.rt.log.error(`${this.name} › ${node.def.name}: listen() failed: ${e.message}`);
+        this.rt.log.error(`${this.name} › ${node.def.name}: listen() failed: ${e.message}${errorDetails(e)}`);
       }
     }
   }
@@ -872,6 +872,41 @@ function describeError(err, node) {
     workspace: node ? node.graph.name : null,
     stack: e.stack || null,
   };
+}
+
+/**
+ * The rest of an error after its message, for the log: the original message
+ * when a clearer one is shown, what kind of error it is (name, code, HTTP
+ * status and request), where it happened (the stack) and what caused it.
+ * Each on a line of its own, starting with a line break; "" when there's
+ * nothing more to say.
+ */
+function errorDetails(err, shown) {
+  if (!err || typeof err !== "object") return "";
+  const lines = [];
+  const message = String(err.message ?? "");
+  if (shown != null && message && message !== shown) lines.push(`Original error: ${message}`);
+  const facts = [];
+  if (err.name && err.name !== "Error") facts.push(String(err.name));
+  if (err.code != null) facts.push(`code ${err.code}`);
+  const status = err.status ?? err.httpStatus;
+  if (status != null && status !== err.code) facts.push(`status ${status}`);
+  if (err.method && err.url) facts.push(`${String(err.method).toUpperCase()} ${err.url}`);
+  if (facts.length) lines.push(facts.join(" · "));
+  // The stack without its first line(s), which repeat the message.
+  const stack = String(err.stack || "")
+    .split("\n")
+    .filter((l) => /^\s+at /.test(l))
+    .map((l) => `  ${l.trim()}`);
+  lines.push(...stack);
+  let cause = err.cause;
+  for (let depth = 0; cause && depth < 3; depth++) {
+    lines.push(`Caused by: ${cause.message ?? cause}`);
+    if (typeof cause !== "object") break;
+    lines.push(...String(cause.stack || "").split("\n").filter((l) => /^\s+at /.test(l)).map((l) => `  ${l.trim()}`));
+    cause = cause.cause;
+  }
+  return lines.length ? `\n${lines.join("\n")}` : "";
 }
 
 /**
