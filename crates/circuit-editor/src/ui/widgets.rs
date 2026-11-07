@@ -269,6 +269,8 @@ fn multiselect(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, w
     let choices = field.choice_list();
     let mut picked = chosen(field, value);
     let label_of = |k: &str| choices.iter().find(|(_, key, _)| key == k).map(|(_, _, l)| l.clone()).unwrap_or_else(|| k.to_string());
+    // Every pick, for the tooltip when the box is too narrow to show them.
+    let all = picked.iter().map(|k| label_of(k)).collect::<Vec<_>>().join(", ");
     let shown = match picked.len() {
         0 => t!("None").to_string(),
         1..=2 => picked.iter().map(|k| label_of(k)).collect::<Vec<_>>().join(", "),
@@ -279,6 +281,8 @@ fn multiselect(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, w
     let resp = ComboBox::from_id_salt(id)
         .width(width)
         .selected_text(shown)
+        // Long lists of picks end in … instead of widening the block.
+        .truncate()
         // Ticking boxes leaves it open; a click outside closes it.
         .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
         .show_ui(ui, |ui| {
@@ -322,6 +326,7 @@ fn multiselect(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, w
             ui.data_mut(|d| d.insert_temp(search_id, search));
         })
         .response;
+    let resp = if picked.is_empty() { resp } else { resp.on_hover_text(all) };
     kit::named(ui, resp);
     if changed {
         // In the choices' order; ones that match no choice after them.
