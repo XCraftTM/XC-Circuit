@@ -194,7 +194,8 @@ impl CircuitApp {
             }
         }
         ctx.request_repaint();
-        let canvas = self.ed.ui_rects.get("canvas").copied();
+        // Where the canvas was drawn: this frame's parts aren't drawn yet, so the last frame's.
+        let canvas = self.ed.ui_rects.get("canvas").or_else(|| self.ed.ui_rects_before.get("canvas")).copied();
         let ppp = ctx.pixels_per_point();
         for shot in std::mem::take(&mut self.agent_shots) {
             let image = shot.image.as_ref().and_then(|s| s.lock().ok().and_then(|g| g.clone()));
