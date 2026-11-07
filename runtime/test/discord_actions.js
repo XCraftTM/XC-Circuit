@@ -183,6 +183,21 @@ const log = (name) => (...args) => {
   o = await run("server/delete_invite.js", { code: "https://discord.gg/abc" }, { fetchInvite: async (c) => ({ code: c, uses: 3, delete: log("invite.delete") }) });
   assert.deepStrictEqual([o.code, o.uses], ["abc", 3]);
 
+  // Create Channel: Position typed, connected as text, or left at the end.
+  const Module = require("module");
+  const load0 = Module._load;
+  Module._load = function (request, ...rest) {
+    return request === "discord.js" ? { ChannelType: { GuildText: 0, GuildVoice: 2, GuildCategory: 4 }, PermissionFlagsBits: { ViewChannel: 1024n } } : load0.call(this, request, ...rest);
+  };
+  try {
+    const made = [];
+    const server = { channels: { create: async (opts) => (made.push(opts), { id: "c1", ...opts }) } };
+    for (const position of [3, "2", -1, "", null]) await run("channels/create_channel.js", { server, name: "tickets", position });
+    assert.deepStrictEqual(made.map((m) => m.position), [3, 2, undefined, undefined, undefined]);
+  } finally {
+    Module._load = load0;
+  }
+
   console.log("discord actions test passed");
 })().catch((e) => {
   console.error(e);

@@ -7,7 +7,7 @@ module.exports = {
     name: "Create Channel",
     description: "Makes a new channel or category. The bot needs Manage Channels.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "channels",
@@ -31,7 +31,7 @@ module.exports = {
     slowmode: { type: "number", default: 0, min: 0, max: 21600, step: 1, advanced: true, label: "Slowmode (s)", show: { type: ["text", "forum", "voice"] }, description: "Seconds between messages per person." },
     bitrate: { type: "number", default: 64, min: 8, max: 384, step: 1, advanced: true, label: "Bitrate (kbps)", show: { type: ["voice", "stage"] }, description: "Audio quality. Above 96 needs boosts." },
     userLimit: { type: "number", default: 0, min: 0, max: 99, step: 1, advanced: true, label: "User limit", show: { type: ["voice"] }, description: "How many can join. 0 = no limit." },
-    position: { type: "number", default: -1, min: -1, step: 1, advanced: true, description: "Its place in the list. -1 = at the end." },
+    position: { type: "number", default: -1, min: -1, step: 1, description: "Its place in the channel list, counted from 0 at the top (in its category, among channels of its kind). -1 = at the end. Connect a number to choose it while the bot runs." },
     reason: { type: "text", default: "", advanced: true, description: "Shown in the audit log." },
   },
   outputs: {
@@ -47,7 +47,8 @@ module.exports = {
     if (f.slowmode > 0) options.rateLimitPerUser = Math.floor(f.slowmode);
     if (f.type === "voice" || f.type === "stage") options.bitrate = Math.max(8, Math.floor(f.bitrate || 64)) * 1000;
     if (f.type === "voice" && f.userLimit > 0) options.userLimit = Math.floor(f.userLimit);
-    if (f.position >= 0) options.position = Math.floor(f.position);
+    const position = Number(f.position);
+    if (f.position !== "" && f.position != null && Number.isFinite(position) && position >= 0) options.position = Math.floor(position);
     if (f.private) options.permissionOverwrites = [{ id: f.server.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }, { id: f.server.members.me.id, allow: [PermissionFlagsBits.ViewChannel] }];
     return { channel: await f.server.channels.create(options) };
   },
