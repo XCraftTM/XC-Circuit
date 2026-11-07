@@ -136,6 +136,15 @@ pub struct Editor {
     pub embed_edit: Option<crate::builders::embed::EmbedEdit>,
     pub layout_edit: Option<crate::builders::layout::LayoutEdit>,
     pub modal_edit: Option<crate::builders::modal::ModalEdit>,
+    /// Workspaces selected in the Workspaces list (Ctrl- and Shift-click), and
+    /// the one a Shift-click counts from. Delete asks to delete them.
+    pub ws_selection: Vec<String>,
+    pub ws_anchor: Option<String>,
+    /// The frame the Workspaces list was last drawn in: its selection only
+    /// counts for Delete while the list is on screen.
+    pub ws_list_frame: u64,
+    /// Workspaces waiting for "Delete them?" to be answered.
+    pub ask_delete_workspaces: Option<Vec<String>>,
     pub canvas_edit: Option<crate::builders::canvas::CanvasEdit>,
     /// The bot's name and picture, for message previews.
     pub bot_profile: crate::bot::profile::Profile,
@@ -188,6 +197,10 @@ impl Editor {
             embed_edit: None,
             layout_edit: None,
             modal_edit: None,
+            ws_selection: Vec::new(),
+            ws_anchor: None,
+            ws_list_frame: 0,
+            ask_delete_workspaces: None,
             canvas_edit: None,
             bot_profile: Default::default(),
             slash_edit: None,
@@ -325,6 +338,9 @@ impl Editor {
         self.embed_edit = None;
         self.layout_edit = None;
         self.modal_edit = None;
+        self.ws_selection.clear();
+        self.ws_anchor = None;
+        self.ask_delete_workspaces = None;
         self.canvas_edit = None;
         self.slash_edit = None;
         self.ws_export = None;

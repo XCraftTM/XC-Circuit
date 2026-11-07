@@ -4,6 +4,9 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 
 ## Unreleased
 
+### Added
+- **Select several workspaces and delete them together**: Ctrl-click workspaces in the Workspaces list to select several, or Shift-click to select all from the last one clicked, then press Delete. It asks first, listing them. Clicking elsewhere (or Escape) lets go of the selection, so Delete on the canvas still deletes blocks.
+
 ### Fixed
 - **Modal Builder: Cancel and Submit keep their size**: with a short form, the preview's Submit button stretched to fill the space below it.
 

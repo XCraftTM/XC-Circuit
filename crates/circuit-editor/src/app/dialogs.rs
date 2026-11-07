@@ -375,7 +375,13 @@ impl CircuitApp {
             self.ed.select_all();
         }
         if hit(Hotkey::Delete) {
-            self.ed.delete_selection();
+            // Workspaces selected in the list (while it's on screen) go, after asking; else blocks.
+            let list_shown = ctx.cumulative_frame_nr() <= self.ed.ws_list_frame + 1;
+            if list_shown && !self.ed.ws_selection.is_empty() {
+                self.ed.ask_delete_workspaces = Some(self.ed.ws_selection.clone());
+            } else {
+                self.ed.delete_selection();
+            }
         }
         let events = ctx.input(|i| i.events.clone());
         for e in events {
@@ -431,6 +437,7 @@ impl CircuitApp {
         self.update_window(ctx);
         self.block_updates_window(ctx);
         self.updates_dialog(ctx);
+        crate::pages::sidebar::delete_dialog(ctx, &mut self.ed);
         self.crash_dialog(ctx);
         let theme = self.ed.theme.clone();
         if self.setup.is_none() && self.tour.is_none() {

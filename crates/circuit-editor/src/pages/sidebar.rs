@@ -52,6 +52,10 @@ enum Do {
     /// Turns a workspace on (true) or off.
     SetEnabled(String, bool),
     DeleteWorkspace(String),
+    /// Ask before deleting these workspaces.
+    AskDelete(Vec<String>),
+    /// A click on a workspace: it alone, Ctrl (add or take it out) or Shift (from the last one clicked).
+    Select(String, Pick),
     Duplicate(String),
     NewWorkspace(Option<String>),
     NewFolder,
@@ -147,6 +151,52 @@ fn problems_pill(ui: &Ui, icons: &Icons, theme: &Theme, right: f32, y: f32, coun
     icons.paint(ui, "alert", pos2(rect.left() + 10.0, y), 11.0, ink);
     ui.painter().galley(pos2(rect.left() + 17.0, y - galley.size().y / 2.0), galley, ink);
     rect.left()
+}
+
+/// How a click on a workspace changes the selection.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Pick {
+    One,
+    Toggle,
+    Range,
+}
+
+/// Workspaces in the order the list showed them last, for Shift-click.
+const ORDER_KEY: &str = "sidebar-ws-order";
+
+/// "Delete them?" for the workspaces Delete (or the menu) picked.
+pub fn delete_dialog(ctx: &egui::Context, ed: &mut Editor) {
+    let Some(keys) = ed.ask_delete_workspaces.clone() else { return };
+    let names: Vec<String> = keys.iter().filter_map(|k| ed.project.as_ref()?.workspaces.get(k).map(|w| w.name.clone())).collect();
+    if names.is_empty() {
+        ed.ask_delete_workspaces = None;
+        return;
+    }
+    let theme = ed.theme.clone();
+    let title = match names.len() {
+        1 => tf!("Delete {name}?", name = names[0]),
+        n => tf!("Delete {count} workspaces?", count = n),
+    };
+    let (mut delete, mut cancel) = (false, false);
+    let close = crate::ui::dialog::show(ctx, &theme, crate::ui::dialog::Spec { id: "delete-workspaces", title: &title, subtitle: None, icon: None, width: 440.0 }, |ui, part| match part {
+        crate::ui::dialog::Part::Body => {
+            if names.len() > 1 {
+                ui.label(RichText::new(names.join(", ")).color(theme.text));
+                ui.add_space(4.0);
+            }
+            ui.label(RichText::new(t!("Their blocks and notes go with them. Until you save, closing the project without saving brings them back; backups keep earlier versions too.")).color(theme.text_muted));
+        }
+        crate::ui::dialog::Part::Footer => {
+            delete = kit::danger_button(ui, &theme, t!("Delete")).clicked() || ui.input(|i| i.key_pressed(Key::Enter));
+            cancel = kit::secondary_button(ui, &theme, t!("Cancel")).clicked();
+        }
+    });
+    if delete {
+        ed.ask_delete_workspaces = None;
+        apply(ed, ctx, keys.into_iter().map(Do::DeleteWorkspace).collect(), &mut None);
+    } else if cancel || close {
+        ed.ask_delete_workspaces = None;
+    }
 }
 
 /// What the list shows about a workspace besides its name.
@@ -292,6 +342,11 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
     let is_open = |key: &str| !collapsed.iter().any(|c| c == key);
     let mut renaming: Option<Renaming> = ctx.data(|d| d.get_temp(Id::unique("sidebar-renaming")));
     let mut todo: Vec<Do> = Vec::new();
+    // Selected workspaces (Ctrl- and Shift-click), and the order rows are drawn in, for Shift.
+    ed.ws_list_frame = ctx.cumulative_frame_nr();
+    let selected = ed.ws_selection.clone();
+    let order = std::cell::RefCell::new(Vec::<String>::new());
+    let list_area = ui.max_rect();
 
     // Folders in their saved order, plus any a workspace names that the list lacks.
     let mut folders = project.meta.folders.clone();
@@ -374,7 +429,9 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                 };
                 let label = if editing { "" } else { ws.name.as_str() };
                 let room = 32.0 + marks.width();
-                let (resp, label_area) = row(ui, &theme, &icons, Id::unique(("sidebar-ws", key)), depth, None, Some("workspace"), label, active.as_deref() == Some(key.as_str()), false, room, ws.disabled);
+                order.borrow_mut().push(key.clone());
+                let lit = active.as_deref() == Some(key.as_str()) || selected.contains(key);
+                let (resp, label_area) = row(ui, &theme, &icons, Id::unique(("sidebar-ws", key)), depth, None, Some("workspace"), label, lit, false, room, ws.disabled);
                 if !editing {
                     marks.paint(ui, &theme, &icons, resp.rect.right() - 34.0, resp.rect.center().y);
                 }
@@ -429,7 +486,17 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                 if resp.double_clicked() {
                     todo.push(Do::StartRename(target.clone(), ws.name.clone()));
                 } else if resp.clicked() {
-                    todo.push(Do::Open(key.clone()));
+                    // Ctrl (or Cmd) adds it to the selection or takes it out, Shift
+                    // selects from the last one clicked; a plain click opens it.
+                    let mods = ui.input(|i| i.modifiers);
+                    if mods.command || mods.ctrl {
+                        todo.push(Do::Select(key.clone(), Pick::Toggle));
+                    } else if mods.shift {
+                        todo.push(Do::Select(key.clone(), Pick::Range));
+                    } else {
+                        todo.push(Do::Select(key.clone(), Pick::One));
+                        todo.push(Do::Open(key.clone()));
+                    }
                 }
                 let mut menu = |ui: &mut Ui| {
                     ui.set_min_width(200.0);
@@ -484,7 +551,12 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                         ui.close();
                     }
                     ui.separator();
-                    if item(ui, &theme, &icons, "trash", RichText::new(t!("Delete workspace")).color(theme.error), true).clicked() {
+                    if selected.len() > 1 && selected.contains(key) {
+                        if item(ui, &theme, &icons, "trash", RichText::new(tf!("Delete {count} workspaces", count = selected.len())).color(theme.error), true).clicked() {
+                            todo.push(Do::AskDelete(selected.clone()));
+                            ui.close();
+                        }
+                    } else if item(ui, &theme, &icons, "trash", RichText::new(t!("Delete workspace")).color(theme.error), true).clicked() {
                         todo.push(Do::DeleteWorkspace(key.clone()));
                         ui.close();
                     }
@@ -762,6 +834,13 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
         ui.add_space(8.0);
     });
 
+    ctx.data_mut(|d| d.insert_temp(Id::unique(ORDER_KEY), order.into_inner()));
+    // A click anywhere else, or Escape, ends the selection, so Delete deletes blocks again.
+    let elsewhere = ui.input(|i| i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| !list_area.contains(p)));
+    let escape = renaming.is_none() && ui.input(|i| i.key_pressed(Key::Escape));
+    if (elsewhere || escape) && ed.ask_delete_workspaces.is_none() {
+        ed.ws_selection.clear();
+    }
     apply(ed, &ctx, todo, &mut renaming);
     ctx.data_mut(|d| match renaming {
         Some(r) => {
@@ -892,7 +971,34 @@ fn apply(ed: &mut Editor, ctx: &egui::Context, todo: Vec<Do>, renaming: &mut Opt
                 ed.log(crate::editor::Level::Info, tf!("{name} is a copy of {original}, turned off so it doesn't answer twice. Right-click › Turn on when it's ready.", name = name, original = ws_name(&key, ed)));
                 ed.edited = true;
             }
+            Do::AskDelete(keys) => ed.ask_delete_workspaces = Some(keys),
+            Do::Select(key, pick) => {
+                let picked = &mut ed.ws_selection;
+                match pick {
+                    Pick::One => *picked = vec![key.clone()],
+                    Pick::Toggle => match picked.iter().position(|k| *k == key) {
+                        Some(i) => {
+                            picked.remove(i);
+                        }
+                        None => picked.push(key.clone()),
+                    },
+                    Pick::Range => {
+                        let order: Vec<String> = ctx.data(|d| d.get_temp(Id::unique(ORDER_KEY))).unwrap_or_default();
+                        let from = ed.ws_anchor.as_ref().and_then(|a| order.iter().position(|k| k == a));
+                        let to = order.iter().position(|k| *k == key);
+                        *picked = match (from, to) {
+                            (Some(a), Some(b)) => order[a.min(b)..=a.max(b)].to_vec(),
+                            _ => vec![key.clone()],
+                        };
+                    }
+                }
+                // Shift keeps counting from the same one.
+                if pick != Pick::Range {
+                    ed.ws_anchor = Some(key);
+                }
+            }
             Do::DeleteWorkspace(key) => {
+                ed.ws_selection.retain(|k| *k != key);
                 // The file goes on save, so Don't save brings the workspace back.
                 project.remove_workspace(&key);
                 ed.actions.push(Action::CloseWorkspaceTabs(key));
@@ -1039,6 +1145,62 @@ mod tests {
         let again = circuit_core::Project::load(&dir).unwrap();
         assert_eq!(again.workspaces.keys().cloned().collect::<Vec<_>>(), ["rank-command", "welcome", "startup"]);
         assert_eq!(again.meta.folders, ["Events", "Commands"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Ctrl- and Shift-click select workspaces; Delete asks, then deletes them; Escape lets go.
+    #[test]
+    fn workspaces_are_selected_and_deleted_together() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let dir = std::env::temp_dir().join(format!("xc-multi-delete-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        copy_dir(&root.join("examples/DemoBot"), &dir);
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&dir);
+        let ctx = egui::Context::default();
+        frame(&ctx, &mut ed, vec![]);
+        frame(&ctx, &mut ed, vec![]);
+        let click_with = |ctx: &egui::Context, ed: &mut Editor, p: Pos2, modifiers: Modifiers| {
+            let run = |ctx: &egui::Context, ed: &mut Editor, mut events: Vec<Event>| {
+                events.insert(0, Event::ModifiersChanged(modifiers));
+                let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(260.0, 600.0))), events, ..Default::default() };
+                let mut out = ctx.run_ui(raw, |ui| panel(ui, ed, &HashMap::new()));
+                out.textures_delta.clear();
+            };
+            run(ctx, ed, vec![Event::PointerMoved(p)]);
+            run(ctx, ed, vec![Event::PointerButton { pos: p, button: PointerButton::Primary, pressed: true, modifiers }]);
+            run(ctx, ed, vec![Event::PointerButton { pos: p, button: PointerButton::Primary, pressed: false, modifiers }]);
+            run(ctx, ed, vec![]);
+        };
+        // Rows: DemoBot, Commands, Rank command, Events, Startup, Welcome.
+        click_with(&ctx, &mut ed, row_at(2), Modifiers::NONE);
+        assert_eq!(ed.ws_selection, ["rank-command"]);
+        click_with(&ctx, &mut ed, row_at(5), Modifiers::COMMAND);
+        assert_eq!(ed.ws_selection, ["rank-command", "welcome"], "Ctrl adds");
+        click_with(&ctx, &mut ed, row_at(5), Modifiers::COMMAND);
+        assert_eq!(ed.ws_selection, ["rank-command"], "and takes out again");
+        click_with(&ctx, &mut ed, row_at(4), Modifiers::SHIFT);
+        assert_eq!(ed.ws_selection, ["startup", "welcome"], "Shift: from the last one clicked, as the list shows them");
+
+        // Delete asks first; Enter (or the Delete button) deletes them.
+        let picked = ed.ws_selection.clone();
+        apply(&mut ed, &ctx, vec![Do::AskDelete(picked)], &mut None);
+        let ask = |ctx: &egui::Context, ed: &mut Editor, events: Vec<Event>| {
+            let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0))), events, ..Default::default() };
+            let mut out = ctx.run_ui(raw, |ui| delete_dialog(ui.ctx(), ed));
+            out.textures_delta.clear();
+        };
+        ask(&ctx, &mut ed, vec![]);
+        assert_eq!(ed.project.as_ref().unwrap().workspaces.len(), 3, "nothing goes before the answer");
+        ask(&ctx, &mut ed, vec![Event::Key { key: Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE }]);
+        assert_eq!(ed.project.as_ref().unwrap().workspaces.keys().cloned().collect::<Vec<_>>(), ["rank-command"]);
+        assert!(ed.ws_selection.is_empty() && ed.ask_delete_workspaces.is_none());
+
+        // Escape lets go of a selection, so Delete deletes blocks again.
+        click_with(&ctx, &mut ed, row_at(2), Modifiers::NONE);
+        assert_eq!(ed.ws_selection, ["rank-command"]);
+        frame(&ctx, &mut ed, vec![Event::Key { key: Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE }]);
+        assert!(ed.ws_selection.is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

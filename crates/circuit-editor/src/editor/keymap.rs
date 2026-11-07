@@ -97,7 +97,7 @@ impl Action {
             Action::Redo => t!("Redo"),
             Action::Duplicate => t!("Duplicate the selected blocks"),
             Action::SelectAll => t!("Select all blocks"),
-            Action::Delete => t!("Delete the selected blocks or wire"),
+            Action::Delete => t!("Delete the selected blocks or wire (or workspaces selected in the Workspaces list)"),
             Action::AddBlock => t!("Add a block at the mouse"),
             Action::AddNote => t!("Add a note"),
             Action::ToggleSnap => t!("Snap to grid on or off"),
