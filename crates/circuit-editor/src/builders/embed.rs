@@ -164,6 +164,8 @@ const LINK: Color32 = Color32::from_rgb(0x00, 0xA8, 0xFC);
 
 /// A laid-out embed: galleys at offsets from the card's top-left corner.
 pub struct EmbedLayout {
+    /// How wide the card is: as wide as its content, up to what it was given.
+    pub width: f32,
     pub height: f32,
     pub bar: Color32,
     pieces: Vec<(Pos2, Marked)>,
@@ -171,8 +173,21 @@ pub struct EmbedLayout {
     thumb_slot: Option<Rect>,
 }
 
-/// Lays out an embed at `width`. `max_desc_lines` shortens long descriptions (blocks use 4).
+/// Discord's widest embed, in points (at 100%).
+pub const MAX_WIDTH: f32 = 516.0;
+
+/// Lays out an embed as Discord does: as wide as its content needs (its
+/// longest line, its fields side by side, a picture), up to `width` and
+/// Discord's own [`MAX_WIDTH`]. `max_desc_lines` shortens long descriptions
+/// (blocks use 4).
 pub fn layout(painter: &Painter, e: &EmbedData, width: f32, max_desc_lines: Option<usize>, scale: f32) -> EmbedLayout {
+    let max = width.min(MAX_WIDTH * scale);
+    // Laid out without wrapping first, to see how wide it wants to be.
+    let natural = layout_at(painter, e, 10_000.0, max_desc_lines, scale).natural;
+    layout_at(painter, e, natural.clamp((120.0 * scale).min(max), max), max_desc_lines, scale).layout
+}
+
+fn layout_at(painter: &Painter, e: &EmbedData, width: f32, max_desc_lines: Option<usize>, scale: f32) -> Laid {
     let pad = 12.0 * scale;
     let thumb = if e.thumbnail.trim().is_empty() { 0.0 } else { 64.0 * scale };
     let inner = (width - pad * 2.0 - 4.0 - if thumb > 0.0 { thumb + 12.0 * scale } else { 0.0 }).max(40.0);
@@ -188,20 +203,23 @@ pub fn layout(painter: &Painter, e: &EmbedData, width: f32, max_desc_lines: Opti
         }
     };
     #[allow(clippy::too_many_arguments)]
-    let text = |pieces: &mut Vec<(Pos2, Marked)>, s: &str, md: Option<Kind>, size: f32, color: Color32, wrap: f32, y: &mut f32, x: f32, gap: f32| {
+    // The right edge of its widest line, for `natural`.
+    let mut right: f32 = 0.0;
+    let text = |pieces: &mut Vec<(Pos2, Marked)>, right: &mut f32, s: &str, md: Option<Kind>, size: f32, color: Color32, wrap: f32, y: &mut f32, x: f32, gap: f32| {
         if s.trim().is_empty() {
             return;
         }
         let m = marked(s, md, size, color, wrap);
+        *right = right.max(x + m.size().x);
         *y += m.size().y + gap * scale;
         pieces.push((pos2(x, *y - m.size().y - gap * scale), m));
     };
     let x0 = pad + 4.0;
     if let Some(a) = &e.author {
-        text(&mut pieces, &a.name, None, 12.0, STRONG, inner, &mut y, x0, 6.0);
+        text(&mut pieces, &mut right, &a.name, None, 12.0, STRONG, inner, &mut y, x0, 6.0);
     }
     let title_color = if e.url.trim().is_empty() { STRONG } else { LINK };
-    text(&mut pieces, &e.title, Some(Kind::Inline), 14.5, title_color, inner, &mut y, x0, 6.0);
+    text(&mut pieces, &mut right, &e.title, Some(Kind::Inline), 14.5, title_color, inner, &mut y, x0, 6.0);
     let mut desc = e.description.clone();
     if let Some(max) = max_desc_lines {
         let lines: Vec<&str> = desc.lines().collect();
@@ -212,39 +230,43 @@ pub fn layout(painter: &Painter, e: &EmbedData, width: f32, max_desc_lines: Opti
             desc = desc.chars().take(max * 60).collect::<String>() + "…";
         }
     }
-    text(&mut pieces, &desc, Some(Kind::Full), 12.5, TEXT, inner, &mut y, x0, 8.0);
+    text(&mut pieces, &mut right, &desc, Some(Kind::Full), 12.5, TEXT, inner, &mut y, x0, 8.0);
 
     // Fields: inline ones share a row, up to three.
     let mut row: Vec<&EmbedField> = Vec::new();
-    let flush = |row: &mut Vec<&EmbedField>, y: &mut f32, pieces: &mut Vec<(Pos2, Marked)>| {
+    let flush = |row: &mut Vec<&EmbedField>, y: &mut f32, pieces: &mut Vec<(Pos2, Marked)>, right: &mut f32| {
         if row.is_empty() {
             return;
         }
         let col_w = inner / row.len() as f32;
         let mut tallest: f32 = 0.0;
+        let mut widest: f32 = 0.0;
         for (i, f) in row.iter().enumerate() {
             let x = x0 + col_w * i as f32;
             let n = marked(&f.name, Some(Kind::Inline), 12.0, STRONG, col_w - 8.0);
             let v = marked(&f.value, Some(Kind::Full), 12.0, TEXT, col_w - 8.0);
             let h = n.size().y + 2.0 + v.size().y;
+            widest = widest.max(n.size().x).max(v.size().x);
             let name_h = n.size().y;
             pieces.push((pos2(x, *y), n));
             pieces.push((pos2(x, *y + name_h + 2.0), v));
             tallest = tallest.max(h);
         }
         *y += tallest + 8.0 * scale;
+        // Side by side, its columns as wide as the widest of them.
+        *right = right.max(x0 + row.len() as f32 * (widest + 8.0));
         row.clear();
     };
     for f in &e.fields {
         if !f.inline || row.len() == 3 {
-            flush(&mut row, &mut y, &mut pieces);
+            flush(&mut row, &mut y, &mut pieces, &mut right);
         }
         row.push(f);
         if !f.inline {
-            flush(&mut row, &mut y, &mut pieces);
+            flush(&mut row, &mut y, &mut pieces, &mut right);
         }
     }
-    flush(&mut row, &mut y, &mut pieces);
+    flush(&mut row, &mut y, &mut pieces, &mut right);
 
     let image_slot = (!e.image.trim().is_empty()).then(|| {
         let r = Rect::from_min_size(pos2(x0, y), vec2(inner, 90.0 * scale));
@@ -257,15 +279,34 @@ pub fn layout(painter: &Painter, e: &EmbedData, width: f32, max_desc_lines: Opti
         (None, true) => "Today at 12:00".into(),
         (None, false) => String::new(),
     };
-    text(&mut pieces, &footer, None, 11.0, MUTED, inner, &mut y, x0, 0.0);
+    text(&mut pieces, &mut right, &footer, None, 11.0, MUTED, inner, &mut y, x0, 0.0);
     let thumb_slot = (thumb > 0.0).then(|| Rect::from_min_size(pos2(width - pad - thumb, pad), vec2(thumb, thumb)));
     let height = (y + pad).max(pad * 2.0 + thumb).max(36.0 * scale);
     let bar = hex_color(&e.color).unwrap_or(Color32::from_rgb(0x1E, 0x1F, 0x22));
-    EmbedLayout { height, bar, pieces, image_slot, thumb_slot }
+    // As wide as its widest line, its thumbnail beside it, and a picture
+    // (Discord shows those up to 400 wide) below.
+    let mut natural = right + pad + if thumb > 0.0 { thumb + 12.0 * scale } else { 0.0 };
+    if image_slot.is_some() {
+        natural = natural.max(x0 + 400.0 * scale + pad);
+    }
+    Laid { natural, layout: EmbedLayout { width, height, bar, pieces, image_slot, thumb_slot } }
 }
 
-pub fn paint(painter: &Painter, at: Pos2, width: f32, l: &EmbedLayout) {
-    let card = Rect::from_min_size(at, vec2(width, l.height));
+/// A layout, and the width its content would like.
+struct Laid {
+    natural: f32,
+    layout: EmbedLayout,
+}
+
+impl std::ops::Deref for Laid {
+    type Target = EmbedLayout;
+    fn deref(&self) -> &EmbedLayout {
+        &self.layout
+    }
+}
+
+pub fn paint(painter: &Painter, at: Pos2, l: &EmbedLayout) {
+    let card = Rect::from_min_size(at, vec2(l.width, l.height));
     painter.rect_filled(card, 4.0, BG);
     painter.rect_filled(Rect::from_min_size(at, vec2(4.0, l.height)), egui::CornerRadius { nw: 4, sw: 4, ne: 0, se: 0 }, l.bar);
     for slot in [l.image_slot, l.thumb_slot].into_iter().flatten() {
@@ -535,7 +576,8 @@ fn two(ui: &mut Ui, theme: &Theme, a: (&str, &mut String, &str), b: (&str, &mut 
 
 /// The embed as it appears in a Discord message, with the bot's name above it.
 fn preview_message(ui: &mut Ui, theme: &Theme, e: &EmbedData, bot: Option<&crate::bot::profile::BotProfile>) {
-    let width = ui.available_width().min(500.0);
+    // Discord's chat, with room for its widest embed.
+    let width = ui.available_width().min(MAX_WIDTH + 76.0);
     let painter = ui.painter().clone();
     let card_w = width - 76.0;
     let l = layout(&painter, e, card_w, None, 1.0);
@@ -545,7 +587,7 @@ fn preview_message(ui: &mut Ui, theme: &Theme, e: &EmbedData, bot: Option<&crate
     crate::bot::profile::paint_avatar(ui, Rect::from_min_size(avatar, vec2(36.0, 36.0)), bot, theme.accent);
     let name = painter.text(avatar + vec2(48.0, 2.0), egui::Align2::LEFT_TOP, crate::bot::profile::name(bot), FontId::proportional(14.0), STRONG);
     painter.text(pos2(name.right() + 8.0, avatar.y + 4.0), egui::Align2::LEFT_TOP, "APP · Today at 12:00", FontId::proportional(11.0), MUTED);
-    paint(&painter, rect.min + vec2(62.0, 44.0), card_w, &l);
+    paint(&painter, rect.min + vec2(62.0, 44.0), &l);
 }
 
 #[cfg(test)]

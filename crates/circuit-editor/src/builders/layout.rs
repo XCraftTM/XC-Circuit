@@ -918,10 +918,14 @@ mod discord {
     }
 }
 
+/// How wide the preview of a message is at most, with the bot's picture
+/// beside it: about as wide as Discord shows its parts.
+const PREVIEW_W: f32 = 520.0;
+
 /// The message as Discord shows it, with the bot's name above it.
 pub fn preview(ui: &mut Ui, theme: &Theme, layout: &Value, bot: Option<&crate::bot::profile::BotProfile>) {
     Frame::new().fill(discord::CHAT).corner_radius(8).inner_margin(Margin::same(14)).show(ui, |ui| {
-        ui.set_width(ui.available_width().min(520.0));
+        ui.set_width(ui.available_width().min(PREVIEW_W));
         ui.horizontal_top(|ui| {
             let (r, _) = ui.allocate_exact_size(vec2(40.0, 40.0), egui::Sense::hover());
             crate::bot::profile::paint_avatar(ui, r, bot, theme.accent);
@@ -942,6 +946,8 @@ pub fn preview(ui: &mut Ui, theme: &Theme, layout: &Value, bot: Option<&crate::b
 /// block: on Discord's chat colour, without the bot's name. `width` is the
 /// whole box's.
 pub fn block_preview(ui: &mut Ui, layout: &Value, width: f32) {
+    // No wider than the builder's preview shows it: a widened block doesn't stretch it.
+    let width = width.min(PREVIEW_W - 40.0);
     Frame::new().fill(discord::CHAT).corner_radius(6).inner_margin(Margin::same(10)).show(ui, |ui| {
         ui.set_width(width - 20.0);
         ui.spacing_mut().item_spacing.y = 6.0;

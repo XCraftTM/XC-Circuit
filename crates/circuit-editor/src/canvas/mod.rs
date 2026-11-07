@@ -656,7 +656,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     let data = crate::builders::embed::EmbedData::from_value(ws.nodes[id].values.get(key).or(f.default.as_ref()).unwrap_or(&Value::Null));
                     let w = r.width() - 28.0;
                     let l = crate::builders::embed::layout(&painter, &data, w, Some(4), EMBED_SCALE);
-                    crate::builders::embed::paint(&painter, r.min + vec2(14.0, 4.0), w, &l);
+                    crate::builders::embed::paint(&painter, r.min + vec2(14.0, 4.0), &l);
                     let button = Rect::from_min_size(pos2(r.left() + 14.0, r.top() + 4.0 + l.height + 8.0), vec2(w, 26.0));
                     if cui.put(button, egui::Button::new(t!("Edit embed…"))).clicked() {
                         open_embed = Some(key.clone());
