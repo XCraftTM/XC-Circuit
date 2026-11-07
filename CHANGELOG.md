@@ -2,7 +2,7 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## Unreleased
+## 0.1.6
 
 ### Added
 - **Channel inputs take a channel id**: every channel input (categories, threads and voice channels too, on Discord and Fluxer) can be switched from its pin to a box for the channel's id, with the pin toggle on the block or in the Inspector. A text wired in works as well, also as a mention such as `<#123…>`; the bot finds the channel before the block runs, and says so when no channel has that id. Plugins can offer this for their own types with `fromId` on a pin type.
