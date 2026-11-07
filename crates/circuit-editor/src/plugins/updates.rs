@@ -6,7 +6,10 @@
 //! data folder, and the higher version of a plugin is the one that loads.
 //! Undo Block Updates deletes that folder, which brings back the bundled
 //! versions. Checked with the app's own update check (at start, unless turned
-//! off, and from Help); any trouble only means nothing is offered.
+//! off, and from Help). From Help, the Updates window shows what was found
+//! for each plugin, and can download the published blocks again (Download
+//! Blocks Again) even when they're no newer. Any trouble only means nothing
+//! is offered; the Updates window says what it was.
 
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, channel};
@@ -82,10 +85,56 @@ fn get(url: &str) -> anyhow::Result<Vec<u8>> {
     Ok(response.body_mut().with_config().limit(MAX_SIZE).read_to_vec()?)
 }
 
-/// The published index.
+/// The published index. Asked for with the time in the address, so a copy
+/// GitHub still has from before the last publish isn't what comes back.
 fn fetch_index() -> anyhow::Result<Vec<Entry>> {
-    let body = get(&format!("{RELEASE}index.json"))?;
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let body = get(&format!("{RELEASE}index.json?t={now}"))?;
     Ok(serde_json::from_slice::<Index>(&body)?.plugins)
+}
+
+/// How a published plugin compares with the loaded one, for the Updates window.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Status {
+    /// The same version.
+    UpToDate,
+    /// Newer, and this app can use it.
+    Newer,
+    /// Newer, but it needs this app version or a later one.
+    NeedsApp(String),
+    /// Older than the loaded one (which came with this app, or a test build).
+    Older,
+}
+
+/// One row of the Updates window: a published plugin this app has.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Row {
+    pub entry: Entry,
+    pub current: String,
+    pub status: Status,
+}
+
+/// The published plugins this app has, each compared with its loaded version.
+pub fn rows(index: &[Entry], loaded: &[(String, String)]) -> Vec<Row> {
+    index
+        .iter()
+        .filter_map(|e| {
+            let (_, current) = loaded.iter().find(|(id, _)| *id == e.id)?;
+            let status = match compare_versions(&e.version, current) {
+                std::cmp::Ordering::Equal => Status::UpToDate,
+                std::cmp::Ordering::Less => Status::Older,
+                std::cmp::Ordering::Greater if app_supported(e.app.as_deref()) => Status::Newer,
+                std::cmp::Ordering::Greater => Status::NeedsApp(e.app.clone().unwrap_or_default()),
+            };
+            Some(Row { entry: e.clone(), current: current.clone(), status })
+        })
+        .collect()
+}
+
+/// What Download Blocks Again downloads: the published plugins this app has
+/// and can use, unless the loaded version is newer (it would win anyway).
+pub fn again(index: &[Entry], loaded: &[(String, String)]) -> Vec<Entry> {
+    rows(index, loaded).into_iter().filter(|r| matches!(r.status, Status::UpToDate | Status::Newer)).map(|r| r.entry).collect()
 }
 
 /// Downloads one update, checks it against the index and unpacks it into
@@ -129,7 +178,11 @@ pub enum Found {
 /// The check and the installing, run in the background.
 #[derive(Default)]
 pub struct BlockUpdates {
-    checking: Option<Receiver<Option<Vec<Entry>>>>,
+    checking: Option<Receiver<Result<Vec<Entry>, String>>>,
+    /// What the last check found: the published plugins, or why it couldn't tell.
+    pub last: Option<Result<Vec<Entry>, String>>,
+    /// How the last installing went: the plugins updated, or what went wrong.
+    pub done: Option<Result<Vec<String>, String>>,
     by_hand: bool,
     installing: Option<Receiver<Result<Vec<String>, String>>>,
     /// Updates found, until installed or put off.
@@ -148,28 +201,42 @@ impl BlockUpdates {
         let (tx, rx) = channel();
         self.checking = Some(rx);
         std::thread::spawn(move || {
-            let _ = tx.send(fetch_index().ok());
+            let _ = tx.send(fetch_index().map_err(|e| format!("{e:#}")));
         });
+    }
+
+    /// A check is running.
+    pub fn checking(&self) -> bool {
+        self.checking.is_some()
     }
 
     /// A finished check, once: what's offered for the plugins loaded now.
     pub fn poll(&mut self, loaded: &[(String, String)]) -> Option<Found> {
         let index = self.checking.as_ref()?.try_recv().ok()?;
         self.checking = None;
-        self.offers = offers(&index.unwrap_or_default(), loaded);
+        self.offers = offers(index.as_deref().unwrap_or_default(), loaded);
+        self.last = Some(index);
         if self.offers.is_empty() {
             return self.by_hand.then_some(Found::None);
         }
-        self.show = true;
+        // From Help, the Updates window shows them; at start, their own window.
+        self.show = !self.by_hand;
         Some(Found::Some)
     }
 
     /// Installs every offered update in the background.
     pub fn install_all(&mut self) {
-        if self.installing.is_some() || self.offers.is_empty() {
+        let entries: Vec<Entry> = self.offers.iter().map(|o| o.entry.clone()).collect();
+        self.install_entries(entries);
+    }
+
+    /// Downloads and installs these published plugins in the background,
+    /// whatever their versions (Download Blocks Again).
+    pub fn install_entries(&mut self, entries: Vec<Entry>) {
+        if self.installing.is_some() || entries.is_empty() {
             return;
         }
-        let entries: Vec<Entry> = self.offers.iter().map(|o| o.entry.clone()).collect();
+        self.done = None;
         let (tx, rx) = channel();
         self.installing = Some(rx);
         std::thread::spawn(move || {
@@ -191,6 +258,7 @@ impl BlockUpdates {
         self.installing = None;
         self.offers.clear();
         self.show = false;
+        self.done = Some(result.clone());
         Some(result)
     }
 
@@ -209,6 +277,32 @@ mod tests {
 
     fn entry(id: &str, version: &str, app: Option<&str>) -> Entry {
         Entry { id: id.into(), name: id.into(), version: version.into(), app: app.map(str::to_string), file: format!("{id}-{version}.zip"), size: 0, sha256: String::new() }
+    }
+
+    /// The Updates window compares each published plugin this app has with
+    /// its loaded version; Download Blocks Again takes the ones this app can
+    /// use that aren't older than what it has.
+    #[test]
+    fn rows_and_downloading_again() {
+        let loaded = vec![
+            ("xc.discord".to_string(), "1.2.4".to_string()),
+            ("xc.core".to_string(), "1.0.35".to_string()),
+            ("xc.fluxer".to_string(), "1.3.0".to_string()),
+            ("xc.server".to_string(), "1.0.0".to_string()),
+        ];
+        let index = vec![entry("xc.discord", "1.2.5", Some("0.0.1")), entry("xc.core", "1.0.35", None), entry("xc.fluxer", "1.2.4", None), entry("xc.server", "2.0.0", Some("99.0.0")), entry("xc.agents", "1.0.0", None)];
+        let status: Vec<(String, Status)> = rows(&index, &loaded).into_iter().map(|r| (r.entry.id, r.status)).collect();
+        assert_eq!(
+            status,
+            [
+                ("xc.discord".to_string(), Status::Newer),
+                ("xc.core".to_string(), Status::UpToDate),
+                ("xc.fluxer".to_string(), Status::Older),
+                ("xc.server".to_string(), Status::NeedsApp("99.0.0".into())),
+            ]
+        );
+        let ids: Vec<String> = again(&index, &loaded).into_iter().map(|e| e.id).collect();
+        assert_eq!(ids, ["xc.discord", "xc.core"]);
     }
 
     /// Only newer versions of plugins this app has, and only ones this app is new enough for.

@@ -94,6 +94,156 @@ impl CircuitApp {
         }
     }
 
+    /// Help › Check for Updates: opens the Updates window and looks for a newer
+    /// app and newer blocks.
+    pub(super) fn check_for_updates(&mut self) {
+        self.updates_open = true;
+        self.block_updates.done = None;
+        self.updater.check(true);
+        self.block_updates.check(true);
+    }
+
+    /// The Updates window: what a check by hand found, for the app and for
+    /// each block plugin, with Update Blocks and Download Blocks Again.
+    fn updates_dialog(&mut self, ctx: &egui::Context) {
+        use crate::plugins::updates::{Status, again, rows};
+        if !self.updates_open {
+            return;
+        }
+        // It speaks for itself: the other update windows stay closed meanwhile.
+        self.updater.show = false;
+        self.block_updates.show = false;
+        let theme = self.ed.theme.clone();
+        let current = env!("CARGO_PKG_VERSION");
+        let loaded: Vec<(String, String)> = self.ed.reg.plugins.iter().map(|p| (p.manifest.id.clone(), p.manifest.version.clone())).collect();
+        let index = self.block_updates.last.clone();
+        let rows = index.as_ref().and_then(|i| i.as_ref().ok()).map(|i| rows(i, &loaded)).unwrap_or_default();
+        let again = index.as_ref().and_then(|i| i.as_ref().ok()).map(|i| again(i, &loaded)).unwrap_or_default();
+        let newer: Vec<_> = rows.iter().filter(|r| r.status == Status::Newer).map(|r| r.entry.clone()).collect();
+        let checking = self.updater.checking() || self.block_updates.checking();
+        let installing = self.block_updates.installing();
+        if checking || installing {
+            ctx.request_repaint_after(std::time::Duration::from_millis(200));
+        }
+        let available = self.updater.available.clone();
+        let app_check = self.updater.last.clone();
+        let done = self.block_updates.done.clone();
+        let (mut update, mut redo, mut check, mut see_app, mut ok) = (false, false, false, false, false);
+        let close = dialog::show(
+            ctx,
+            &theme,
+            dialog::Spec { id: "updates", title: t!("Updates"), subtitle: Some(&tf!("You have XC Circuit {version}.", version = current)), icon: None, width: 520.0 },
+            |ui, part| match part {
+                dialog::Part::Body => {
+                    let muted = |ui: &mut egui::Ui, text: &str| {
+                        ui.label(RichText::new(text).size(12.5).color(theme.text_muted));
+                    };
+                    let checking_row = |ui: &mut egui::Ui| {
+                        ui.horizontal(|ui| {
+                            ui.spinner();
+                            ui.label(RichText::new(t!("Checking…")).color(theme.text_muted));
+                        });
+                    };
+                    kit::section(ui, &theme, t!("The app"));
+                    if self.updater.checking() {
+                        checking_row(ui);
+                    } else if let Some(r) = &available {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(RichText::new(tf!("XC Circuit {version} is available.", version = r.version)).strong().color(theme.text));
+                            see_app = ui.link(t!("See what's new and update…")).clicked();
+                        });
+                    } else {
+                        match &app_check {
+                            Some(Err(e)) => {
+                                ui.label(RichText::new(tf!("Couldn't ask GitHub: {error}", error = e)).color(theme.warning));
+                            }
+                            Some(Ok(())) => muted(ui, &tf!("{version} is the latest version.", version = current)),
+                            None => {}
+                        }
+                    }
+                    ui.add_space(8.0);
+                    kit::section(ui, &theme, t!("Blocks"));
+                    if self.block_updates.checking() {
+                        checking_row(ui);
+                    } else {
+                        match &index {
+                            Some(Err(e)) => {
+                                ui.label(RichText::new(tf!("Couldn't ask GitHub: {error}", error = e)).color(theme.warning));
+                            }
+                            Some(Ok(_)) if rows.is_empty() => muted(ui, t!("None of the published blocks are loaded here.")),
+                            Some(Ok(_)) => {
+                                egui::Grid::new("block-update-rows").num_columns(3).spacing([16.0, 6.0]).show(ui, |ui| {
+                                    for r in &rows {
+                                        ui.label(RichText::new(&r.entry.name).strong().color(theme.text));
+                                        ui.label(RichText::new(&r.current).color(theme.text_muted));
+                                        let (text, color) = match &r.status {
+                                            Status::UpToDate => (t!("Up to date").to_string(), theme.text_muted),
+                                            Status::Newer => (tf!("{version} is available", version = r.entry.version), theme.accent),
+                                            Status::NeedsApp(app) => (tf!("{version} needs XC Circuit {app}", version = r.entry.version, app = app), theme.warning),
+                                            Status::Older => (tf!("Newer than the published {version}", version = r.entry.version), theme.text_muted),
+                                        };
+                                        ui.label(RichText::new(text).color(color));
+                                        ui.end_row();
+                                    }
+                                });
+                            }
+                            None => {}
+                        }
+                    }
+                    if installing {
+                        ui.add_space(6.0);
+                        ui.horizontal(|ui| {
+                            ui.spinner();
+                            ui.label(RichText::new(t!("Downloading the blocks…")).color(theme.text_muted));
+                        });
+                    }
+                    match &done {
+                        Some(Ok(list)) => {
+                            ui.add_space(6.0);
+                            ui.label(RichText::new(tf!("Updated: {plugins}", plugins = list.join(", "))).color(theme.accent));
+                        }
+                        Some(Err(e)) => {
+                            ui.add_space(6.0);
+                            ui.label(RichText::new(tf!("Couldn't update the blocks: {error}", error = e)).color(theme.error));
+                        }
+                        None => {}
+                    }
+                    ui.add_space(6.0);
+                    muted(ui, t!("Your projects keep working: blocks that changed are upgraded when a project opens. Help › Undo Block Updates goes back."));
+                }
+                dialog::Part::Footer => {
+                    let busy = checking || installing;
+                    if !newer.is_empty() {
+                        update = ui.add_enabled_ui(!busy, |ui| kit::primary_button(ui, &theme, t!("Update blocks"))).inner.clicked();
+                    } else {
+                        ok = kit::primary_button(ui, &theme, t!("Close")).clicked();
+                    }
+                    redo = ui
+                        .add_enabled_ui(!busy && !again.is_empty(), |ui| kit::secondary_button(ui, &theme, t!("Download blocks again")))
+                        .inner
+                        .on_hover_text(t!("Downloads the newest published blocks again, even the ones you have, and replaces the downloaded copies. For when blocks seem out of date or broken."))
+                        .clicked();
+                    check = ui.add_enabled_ui(!busy, |ui| kit::secondary_button(ui, &theme, t!("Check again"))).inner.clicked();
+                }
+            },
+        );
+        if update {
+            self.block_updates.install_entries(newer);
+        }
+        if redo {
+            self.block_updates.install_entries(again);
+        }
+        if check {
+            self.check_for_updates();
+        }
+        if see_app {
+            self.updates_open = false;
+            self.updater.show = true;
+        } else if (close || ok) && !installing {
+            self.updates_open = false;
+        }
+    }
+
     /// What's new in an available update, with its download.
     /// Newer bundled blocks: what they are, with Update and Later.
     pub(super) fn block_updates_window(&mut self, ctx: &egui::Context) {
@@ -280,6 +430,7 @@ impl CircuitApp {
     pub(super) fn dialogs(&mut self, ctx: &egui::Context) {
         self.update_window(ctx);
         self.block_updates_window(ctx);
+        self.updates_dialog(ctx);
         self.crash_dialog(ctx);
         let theme = self.ed.theme.clone();
         if self.setup.is_none() && self.tour.is_none() {
@@ -393,7 +544,10 @@ impl CircuitApp {
             ctx.request_repaint_after(std::time::Duration::from_millis(500));
         }
         match self.updater.poll(self.ed.prefs.skipped_update.as_deref()) {
-            Some(Found::UpToDate) => self.ed.log(Level::Info, tf!("XC Circuit {version} is the latest version (or GitHub couldn't be asked)", version = env!("CARGO_PKG_VERSION"))),
+            Some(Found::UpToDate) => match &self.updater.last {
+                Some(Err(e)) => self.ed.log(Level::Warn, tf!("Couldn't ask GitHub for app updates: {error}", error = e)),
+                _ => self.ed.log(Level::Info, tf!("XC Circuit {version} is the latest version", version = env!("CARGO_PKG_VERSION"))),
+            },
             Some(Found::Newer) | None => {}
         }
         match self.updater.poll_download() {
@@ -416,7 +570,10 @@ impl CircuitApp {
         }
         let loaded: Vec<(String, String)> = self.ed.reg.plugins.iter().map(|p| (p.manifest.id.clone(), p.manifest.version.clone())).collect();
         if let Some(crate::plugins::updates::Found::None) = self.block_updates.poll(&loaded) {
-            self.ed.log(Level::Info, t!("The blocks are up to date (or GitHub couldn't be asked)"));
+            match &self.block_updates.last {
+                Some(Err(e)) => self.ed.log(Level::Warn, tf!("Couldn't ask GitHub for block updates: {error}", error = e)),
+                _ => self.ed.log(Level::Info, t!("The blocks are up to date")),
+            }
         }
         match self.block_updates.poll_install() {
             Some(Ok(done)) => {

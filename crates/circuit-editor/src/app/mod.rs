@@ -153,6 +153,8 @@ pub struct CircuitApp {
     updater: crate::app::updater::Updater,
     /// Newer versions of the bundled block plugins, without an app update.
     block_updates: crate::plugins::updates::BlockUpdates,
+    /// The Updates window (Help › Check for Updates) is open.
+    updates_open: bool,
     /// A crash since the last start, offered for a report.
     crash_offer: Option<crate::app::crash::Crash>,
     bot: BotUi,
@@ -324,6 +326,7 @@ impl CircuitApp {
             start: Default::default(),
             updater: Default::default(),
             block_updates: Default::default(),
+            updates_open: false,
             crash_offer: None,
             bot: BotUi::new(),
             stored: Default::default(),

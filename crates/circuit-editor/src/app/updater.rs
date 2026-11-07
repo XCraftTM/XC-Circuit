@@ -127,7 +127,9 @@ fn setup_args(all_users: bool) -> Vec<&'static str> {
 
 #[derive(Default)]
 pub struct Updater {
-    pending: Option<Receiver<Option<Release>>>,
+    pending: Option<Receiver<Result<Option<Release>, String>>>,
+    /// How the last check went: fine, or why GitHub couldn't be asked.
+    pub last: Option<Result<(), String>>,
     /// Asked for from the Help menu: then "you have the latest" is said too.
     by_hand: bool,
     /// A newer release, once found.
@@ -160,7 +162,7 @@ impl Updater {
         let (tx, rx) = channel();
         self.pending = Some(rx);
         std::thread::spawn(move || {
-            let _ = tx.send(latest().filter(|r| newer(&r.version, env!("CARGO_PKG_VERSION"))));
+            let _ = tx.send(latest().map(|found| found.filter(|r| newer(&r.version, env!("CARGO_PKG_VERSION")))));
         });
     }
 
@@ -169,7 +171,8 @@ impl Updater {
     pub fn poll(&mut self, skipped: Option<&str>) -> Option<Found> {
         let found = self.pending.as_ref()?.try_recv().ok()?;
         self.pending = None;
-        match found {
+        self.last = Some(found.as_ref().map(|_| ()).map_err(Clone::clone));
+        match found.unwrap_or_default() {
             Some(r) if self.by_hand || skipped != Some(r.version.as_str()) => {
                 self.show = self.by_hand;
                 self.available = Some(r);
@@ -182,6 +185,11 @@ impl Updater {
 
     pub fn busy(&self) -> bool {
         self.pending.is_some() || self.downloading.is_some()
+    }
+
+    /// A check is running.
+    pub fn checking(&self) -> bool {
+        self.pending.is_some()
     }
 
     /// Starts downloading `asset` for `install` in the background.
@@ -220,15 +228,17 @@ fn agent(timeout: u64) -> ureq::Agent {
 }
 
 /// The latest release on GitHub, or None for any trouble.
-fn latest() -> Option<Release> {
+/// The latest release, if it's one to offer; or why GitHub couldn't be asked.
+fn latest() -> Result<Option<Release>, String> {
     let mut response = agent(10)
         .get(LATEST)
         .header("User-Agent", concat!("XC-Circuit/", env!("CARGO_PKG_VERSION")))
         .header("Accept", "application/vnd.github+json")
         .call()
-        .ok()?;
-    let body: serde_json::Value = serde_json::from_slice(&response.body_mut().read_to_vec().ok()?).ok()?;
-    parse(&body)
+        .map_err(|e| e.to_string())?;
+    let bytes = response.body_mut().read_to_vec().map_err(|e| e.to_string())?;
+    let body: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    Ok(parse(&body))
 }
 
 fn parse(body: &serde_json::Value) -> Option<Release> {
@@ -371,7 +381,7 @@ mod tests {
     #[test]
     #[ignore]
     fn live_latest_release() {
-        let r = latest().expect("GitHub's latest release");
+        let r = latest().expect("GitHub answers").expect("GitHub's latest release");
         println!("latest: {} ({}), {} characters of notes, {} files", r.version, r.url, r.notes.len(), r.assets.len());
         assert!(r.url.contains(&format!("/v{}", r.version)));
         assert!(!newer(env!("CARGO_PKG_VERSION"), &r.version), "this app isn't newer than the latest release");
@@ -385,7 +395,7 @@ mod tests {
     #[test]
     #[ignore]
     fn live_download_is_checked() {
-        let r = latest().expect("GitHub's latest release");
+        let r = latest().expect("GitHub answers").expect("GitHub's latest release");
         let setup = Install::WindowsSetup { all_users: false }.asset(&r).unwrap().clone();
         let dir = std::env::temp_dir().join(format!("xc-update-live-{}", std::process::id()));
         let received = AtomicU64::new(0);
@@ -402,18 +412,25 @@ mod tests {
         let mut u = Updater::default();
         let (tx, rx) = channel();
         u.pending = Some(rx);
-        tx.send(None).unwrap();
+        tx.send(Ok(None)).unwrap();
         assert!(u.poll(None).is_none());
         let (tx, rx) = channel();
         u.pending = Some(rx);
         u.by_hand = true;
-        tx.send(None).unwrap();
+        tx.send(Ok(None)).unwrap();
         assert!(matches!(u.poll(None), Some(Found::UpToDate)));
+        assert_eq!(u.last, Some(Ok(())));
+        // GitHub couldn't be asked: the Updates window says why.
+        let (tx, rx) = channel();
+        u.pending = Some(rx);
+        tx.send(Err("connection refused".into())).unwrap();
+        assert!(matches!(u.poll(None), Some(Found::UpToDate)));
+        assert_eq!(u.last, Some(Err("connection refused".to_string())));
         // A skipped version stays quiet at start.
         let (tx, rx) = channel();
         u.pending = Some(rx);
         u.by_hand = false;
-        tx.send(Some(Release { version: "9.0.0".into(), url: String::new(), notes: String::new(), assets: Vec::new() })).unwrap();
+        tx.send(Ok(Some(Release { version: "9.0.0".into(), url: String::new(), notes: String::new(), assets: Vec::new() }))).unwrap();
         assert!(u.poll(Some("9.0.0")).is_none());
     }
 }

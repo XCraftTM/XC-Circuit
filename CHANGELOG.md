@@ -4,7 +4,14 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 
 ## Unreleased
 
+### Added
+- **An Updates window**: Help › Check for Updates now opens a window that shows whether a newer app is out and, for each bundled plugin, your version and the published one (up to date, newer, or needing a newer app). **Update blocks** gets the newer ones; **Download blocks again** downloads the published blocks again even when you have them, for when blocks seem out of date or broken. When GitHub can't be asked, the window and the Console say why, instead of "up to date (or GitHub couldn't be asked)".
+
+### Changed
+- **Errors show in full in the Console**: a block's error now comes with the rest of what the bot knows about it, each on its own line: the original message (when a clearer one is shown), the kind of error with its code, HTTP status and request, where in the code it happened, and what caused it.
+
 ### Fixed
+- **Block updates arrive right after they're published**: the app asked for the list of published blocks in a way GitHub could answer with a copy from a few minutes before, so a check right after an update could still say "up to date".
 - **A channel id typed into Send Message works**: with "Send to channel", a channel id in the Channel box gave "target.send is not a function", because the bot didn't look up ids for inputs a block adds itself (Send Message adds Channel only for that mode). It does now, on Discord and Fluxer, and Discord's Send Message looks the id up itself too, so XC Circuit 0.1.6 gets the fix with the Discord Bot 1.2.5 block update.
 - **Send Message takes files again**: its Files input was under Advanced, and inputs there had no pin on the block, so nothing could be connected to it. Files now shows on the block (Discord and Fluxer; not when deferring, or when editing on Fluxer), ready for a picture from Build Canvas, a file path from Read, Write or Download File, a web address or another message's attachments.
 - **Advanced inputs can be connected**: in the Inspector's Advanced part, inputs that can only be connected (such as Components) have the **pin** chip, which puts their pin on the block; inputs that are pins or connected always show on the block.

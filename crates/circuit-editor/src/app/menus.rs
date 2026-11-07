@@ -253,9 +253,8 @@ impl CircuitApp {
                     let _ = open::that(dir);
                 }
                 ui.separator();
-                if kit::menu_item(ui, t!("Check for Updates…"), None, !self.updater.busy()).on_hover_text(t!("For the app, and for the bundled blocks")).clicked() {
-                    self.updater.check(true);
-                    self.block_updates.check(true);
+                if kit::menu_item(ui, t!("Check for Updates…"), None, true).on_hover_text(t!("For the app, and for the bundled blocks")).clicked() {
+                    self.check_for_updates();
                 }
                 if kit::menu_item(ui, t!("Undo Block Updates"), None, crate::plugins::updates::any_installed() && !self.block_updates.installing())
                     .on_hover_text(t!("Back to the blocks this app came with"))
