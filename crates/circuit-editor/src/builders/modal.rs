@@ -495,7 +495,9 @@ pub fn preview(ui: &mut Ui, form: &Value, width: f32) {
         ui.add_space(6.0);
         parts_preview(ui, form, w);
         ui.add_space(8.0);
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        // A row of its own height: a right-to-left layout alone takes all the
+        // height left, and the buttons would stretch to fill it.
+        ui.allocate_ui_with_layout(vec2(w, 34.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
             Frame::new().fill(discord::button(1)).corner_radius(4).inner_margin(Margin::symmetric(16, 7)).show(ui, |ui| {
                 ui.label(RichText::new(t!("Submit")).size(13.5).color(Color32::WHITE));
             });
