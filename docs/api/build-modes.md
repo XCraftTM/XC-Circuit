@@ -52,6 +52,10 @@ prefix = { type = "text", group = "Messages", label = "Text command prefix", def
 | `exporter` | How Bot › Export packages the bot (`"<plugin>/node-bundle"`: a Node.js folder). |
 | `tokenEnv` | The environment variable an exported bot reads its token from. Default `DISCORD_TOKEN`. |
 | `features` | What the mode's projects have. `"slashCommands"` shows the Slash Command Builder. |
+| `privilegedIntents` | A table of intents (as blocks name them) that must be turned on by hand, with what the platform calls each: Bot settings › Privileged intents lists the ones the project's blocks need. |
+| `intentsPage` | Where they are turned on; `{appId}` is the bot's application id (from its token). |
+| `inviteUrl` | A link that adds the bot to a server, offered under the bot token once one is set: `{appId}` is the bot's application id, `{permissions}` the number picked from `invitePermissions`. |
+| `invitePermissions` | A table of the permissions to choose from for `inviteUrl`: name (translatable) → the permissions number. The first is picked at first. |
 
 ## categories
 

@@ -1673,6 +1673,7 @@ Blocks run in your bot, which is a normal Node.js program. A block can read file
 | Plugins | The Plugins view of the side bar: every plugin and how it runs, Install…, Reload, Open folder. A switch turns a plugin off or on; the trash can removes it (after asking). The plugins that come with the app can't be turned off or removed |
 | Bot settings | Bot › Settings: pages on the left (Connection, Slash commands, Messages, Music, Privileged intents, and pages plugins add), the page on the right, Save at the bottom. A page with something required but unset shows a count in the list, one with a value that doesn't fit shows it in red |
 | Bot token | Bot › Settings › Connection (kept in Windows Credential Manager / Linux Secret Service). The eye button shows what you typed, Copy copies the saved token without showing it, and values are checked as you type (a build mode's settings can set `pattern`, a regular expression, and `patternHint`; `sensitive = true` hides a text setting behind the eye button) |
+| Invite your bot | Under the bot token, once one is typed or saved: pick the permissions (common bot permissions, Administrator or none), then **Open invite page** opens Discord's page for adding the bot to a server, or **Copy link** copies the link |
 | Run / Stop | F5 / Shift+F5, or Run in the title bar. Running blocks glow; failures show on the block |
 | Export | Bot › Export… writes a folder that runs with `node index.js` |
 
@@ -2998,6 +2999,10 @@ prefix = { type = "text", group = "Messages", label = "Text command prefix", def
 | `exporter` | How Bot › Export packages the bot (`"<plugin>/node-bundle"`: a Node.js folder). |
 | `tokenEnv` | The environment variable an exported bot reads its token from. Default `DISCORD_TOKEN`. |
 | `features` | What the mode's projects have. `"slashCommands"` shows the Slash Command Builder. |
+| `privilegedIntents` | A table of intents (as blocks name them) that must be turned on by hand, with what the platform calls each: Bot settings › Privileged intents lists the ones the project's blocks need. |
+| `intentsPage` | Where they are turned on; `{appId}` is the bot's application id (from its token). |
+| `inviteUrl` | A link that adds the bot to a server, offered under the bot token once one is set: `{appId}` is the bot's application id, `{permissions}` the number picked from `invitePermissions`. |
+| `invitePermissions` | A table of the permissions to choose from for `inviteUrl`: name (translatable) → the permissions number. The first is picked at first. |
 
 ## categories
 

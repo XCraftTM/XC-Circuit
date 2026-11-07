@@ -243,6 +243,21 @@ pub struct SettingsDraft {
     intents_page: Option<String>,
     /// The Databases page.
     databases: DatabasesDraft,
+    /// The invite link under the token, if the mode has one.
+    invite: Option<Invite>,
+}
+
+/// The mode's link that adds the bot to a server.
+struct Invite {
+    /// With `{appId}` and `{permissions}`.
+    url: String,
+    /// The permissions to choose from: number, and what to call them.
+    permissions: Vec<(String, String)>,
+    /// The number picked.
+    picked: String,
+    /// The saved token's application id.
+    saved_app_id: Option<String>,
+    copied: Option<Instant>,
 }
 
 impl SettingsDraft {
@@ -263,6 +278,14 @@ impl SettingsDraft {
     #[cfg(test)]
     pub fn show_page(&mut self, id: &str) {
         self.page = id.into();
+    }
+
+    /// Types into a setting, as the user would.
+    #[cfg(test)]
+    pub fn type_into(&mut self, key: &str, text: &str) {
+        if let Some(f) = self.fields.iter_mut().find(|f| f.key == key) {
+            f.value = text.into();
+        }
     }
 }
 
@@ -364,7 +387,14 @@ impl BotUi {
         // Reopening (after Save, or Undo) stays on the page shown.
         let page = self.settings.as_ref().map(|d| d.page.clone()).filter(|p| pages.iter().any(|x| x.id == *p)).or_else(|| pages.first().map(|p| p.id.clone())).unwrap_or_default();
         let databases = DatabasesDraft::load(&project.meta.settings, &project.root);
-        self.settings = Some(SettingsDraft { fields, pages, page, project_name: project.meta.name.clone(), intents, intents_page, databases });
+        let invite = mode.invite_url.as_ref().map(|url| {
+            let permissions: Vec<(String, String)> = mode.invite_permissions.iter().map(|(name, n)| (n.clone(), tr(name))).collect();
+            // Reopening keeps the choice.
+            let before = self.settings.as_ref().and_then(|d| d.invite.as_ref()).map(|i| i.picked.clone());
+            let picked = before.filter(|p| permissions.iter().any(|(n, _)| n == p)).or_else(|| permissions.first().map(|(n, _)| n.clone())).unwrap_or_else(|| "0".into());
+            Invite { url: url.clone(), permissions, picked, saved_app_id: app_id.clone(), copied: None }
+        });
+        self.settings = Some(SettingsDraft { fields, pages, page, project_name: project.meta.name.clone(), intents, intents_page, databases, invite });
         for line in warnings {
             ed.log(Level::Warn, line);
         }
@@ -500,6 +530,21 @@ impl BotUi {
                         }
                         heading = f.group.clone();
                         setting_ui(ui, ed, &theme, f, root.as_deref());
+                        // Under the bot token: its invite link, once there is a token.
+                        if f.key == "token"
+                            && let Some(invite) = &mut draft.invite
+                        {
+                            let app_id = if !f.value.trim().is_empty() {
+                                app_id_from_token(&f.value)
+                            } else if f.remove {
+                                None
+                            } else {
+                                invite.saved_app_id.clone()
+                            };
+                            if let Some(id) = app_id {
+                                invite_card(ui, &theme, invite, &id);
+                            }
+                        }
                     }
                 });
             });
@@ -571,6 +616,35 @@ impl BotUi {
             self.open_settings(ed);
         }
     }
+}
+
+/// The link that adds the bot to a server: `{appId}` and `{permissions}` filled in.
+fn invite_link(url: &str, app_id: &str, permissions: &str) -> String {
+    url.replace("{appId}", app_id).replace("{permissions}", permissions)
+}
+
+/// Under the bot token: the permissions to ask for, and the invite link to open or copy.
+fn invite_card(ui: &mut Ui, theme: &Theme, invite: &mut Invite, app_id: &str) {
+    kit::setting_card(ui, theme, |ui| {
+        kit::setting_title(ui, theme, t!("Invite your bot"), t!("Opens Discord's page for adding the bot to a server you manage. It asks for the permissions picked here; you can untick some of them there."));
+        ui.add_space(4.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if !invite.permissions.is_empty() {
+                kit::select(ui, "bot-invite-permissions", 220.0, &mut invite.picked, &invite.permissions);
+            }
+            let link = invite_link(&invite.url, app_id, &invite.picked);
+            if kit::button(ui, theme, t!("Open invite page")).on_hover_text(&link).clicked() {
+                let _ = open::that(&link);
+            }
+            let copied = invite.copied.is_some_and(|t| t.elapsed() < COPIED_FOR);
+            if kit::button(ui, theme, if copied { t!("Copied") } else { t!("Copy link") }).clicked() {
+                ui.ctx().copy_text(link);
+                invite.copied = Some(Instant::now());
+                ui.ctx().request_repaint_after(COPIED_FOR);
+            }
+        });
+    });
 }
 
 /// The page of privileged intents: which ones the blocks need, and where to turn them on.
@@ -758,6 +832,8 @@ mod tests {
         let fake_token = ["MTIzNDU2Nzg5MDEyMzQ1Njc4OQ", "GhIjKl", "abcdefghijklmnopqrstuvwxyz0123456789AB"].join(".");
         assert_eq!(app_id_from_token(&fake_token).as_deref(), Some("1234567890123456789"));
         assert_eq!(app_id_from_token("not a token"), None);
+        let url = "https://discord.com/oauth2/authorize?client_id={appId}&scope=bot+applications.commands&permissions={permissions}";
+        assert_eq!(invite_link(url, "1234567890123456789", "8"), "https://discord.com/oauth2/authorize?client_id=1234567890123456789&scope=bot+applications.commands&permissions=8");
 
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let ed = Editor::new(vec![root.join("plugins")], None).unwrap();

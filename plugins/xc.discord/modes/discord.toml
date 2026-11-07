@@ -12,6 +12,17 @@ features    = ["slashCommands"]
 # Bot settings lists the privileged intents the project's blocks need, with a
 # link to turn them on.
 intentsPage = "https://discord.com/developers/applications/{appId}/bot"
+# Bot settings offers this link under the token, to add the bot to a server.
+inviteUrl = "https://discord.com/oauth2/authorize?client_id={appId}&scope=bot+applications.commands&permissions={permissions}"
+
+# The permissions the invite link asks for (Discord lets you untick them).
+# Common: View Channels, Send Messages (also in threads), Manage Messages,
+# Embed Links, Attach Files, Read Message History, Add Reactions, Use External
+# Emojis, Connect and Speak.
+[invitePermissions]
+"Common bot permissions" = "274881440832"
+"Administrator" = "8"
+"No permissions" = "0"
 
 [privilegedIntents]
 GuildMembers = "Server Members Intent"

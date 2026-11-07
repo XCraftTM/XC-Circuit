@@ -209,6 +209,26 @@ fn bot_settings_name_their_controls() {
     report(missing);
 }
 
+/// Connection offers the bot's invite link once a token is there, not before.
+#[test]
+fn bot_settings_offer_the_invite_link_with_a_token() {
+    use egui::Role;
+    let mut h = window("invite", true);
+    {
+        let app = h.state_mut();
+        app.bot.open_settings(&mut app.ed);
+        app.bot.settings.as_mut().unwrap().show_page("connection");
+    }
+    settle(&mut h);
+    assert!(h.query_all_by_role_and_label(Role::Button, "Open invite page").next().is_none(), "no token, no invite link");
+    let fake_token = ["MTIzNDU2Nzg5MDEyMzQ1Njc4OQ", "GhIjKl", "abcdefghijklmnopqrstuvwxyz0123456789AB"].join(".");
+    h.state_mut().bot.settings.as_mut().unwrap().type_into("token", &fake_token);
+    settle(&mut h);
+    assert!(h.query_all_by_role_and_label(Role::Button, "Open invite page").next().is_some(), "a token: its invite link");
+    assert!(h.query_all_by_role_and_label(Role::Button, "Copy link").next().is_some());
+    assert!(h.query_by_label_contains("Invite your bot").is_some());
+}
+
 #[test]
 fn every_builder_names_its_controls() {
     let mut h = window("builders", true);

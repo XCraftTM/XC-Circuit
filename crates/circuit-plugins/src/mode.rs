@@ -36,6 +36,12 @@ pub struct BuildMode {
     pub privileged_intents: IndexMap<String, String>,
     /// Where they are turned on; `{appId}` is the bot's application id.
     pub intents_page: Option<String>,
+    /// A link that adds the bot to a server, offered under the bot token in
+    /// Bot settings: `{appId}` is the bot's application id, `{permissions}`
+    /// the number of the choice picked from `invite_permissions`.
+    pub invite_url: Option<String>,
+    /// The permissions to choose from for the invite link: name → number.
+    pub invite_permissions: IndexMap<String, String>,
     #[serde(skip)]
     pub plugin: String,
 }

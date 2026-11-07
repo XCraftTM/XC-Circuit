@@ -2,6 +2,11 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
+## Unreleased
+
+### Added
+- **Invite your bot**: Bot settings › Connection now has an invite link under the bot token once one is set. Pick the permissions (common bot permissions, Administrator or none), then open Discord's page for adding the bot to a server, or copy the link to share it.
+
 ## 0.1.8
 
 ### Fixed
