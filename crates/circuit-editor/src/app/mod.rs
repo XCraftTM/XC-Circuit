@@ -228,6 +228,9 @@ impl CircuitApp {
         ed.theme.apply(&cc.egui_ctx);
         // What draws the app, and whether it had to fall back.
         let (graphics, software) = crate::app::graphics::describe(cc);
+        if let Some(why) = crate::app::graphics::remembered() {
+            ed.log(Level::Info, why);
+        }
         if let Ok(why) = std::env::var(crate::app::graphics::REASON_VAR) {
             ed.log(Level::Warn, format!("{why}; drawing with {graphics} instead"));
         }

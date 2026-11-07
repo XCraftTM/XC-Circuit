@@ -5,6 +5,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 ## Unreleased
 
 ### Fixed
+- **Older graphics cards are used again instead of software drawing**: cards too old for DirectX 12 and Vulkan, such as a Radeon HD 5000, got Windows' slow software renderer. When the app finds itself drawing in software, it now checks whether OpenGL can use the card and, if so, starts again with OpenGL, and keeps using it from then on.
 - **AI agents can't save slash commands Discord would refuse**: `set_slash_commands` now checks names the way the Slash Commands editor does (1–32 lowercase letters, numbers, - or _ per word; a space starts a subcommand) and says what's wrong instead of saving them.
 
 ## 0.1.8

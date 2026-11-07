@@ -62,7 +62,23 @@ fn main() -> eframe::Result {
         options.wgpu_options.surface.present_mode = eframe::wgpu::PresentMode::AutoNoVsync;
         options.window_builder = None;
     }
-    let result = eframe::run_native("XC Circuit", options, Box::new(|cc| Ok(Box::new(app::CircuitApp::new(cc)))));
+    let result = eframe::run_native(
+        "XC Circuit",
+        options,
+        Box::new(move |cc| {
+            // Drawing in software although OpenGL has a graphics card: start again with OpenGL.
+            if let Some(stand_in) = app::graphics::opengl_instead(cc, stage) {
+                return Ok(stand_in);
+            }
+            Ok(Box::new(app::CircuitApp::new(cc)))
+        }),
+    );
+    if result.is_ok()
+        && let Some(why) = app::graphics::switching()
+        && let Some(code) = app::graphics::restart_with("opengl", why)
+    {
+        std::process::exit(code);
+    }
     if let Err(e) = &result
         && app::graphics::is_graphics_error(e)
         && let Some(code) = app::graphics::restart_with_next(stage, e)
