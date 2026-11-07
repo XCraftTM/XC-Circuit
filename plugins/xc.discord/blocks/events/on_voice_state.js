@@ -7,7 +7,7 @@ module.exports = {
     name: "Voice Changed",
     description: "Runs when someone joins, leaves or moves between voice channels, mutes, deafens or streams. For temporary voice channels and voice logs.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "voice",
@@ -21,7 +21,7 @@ module.exports = {
     intents: ["Guilds", "GuildVoiceStates"],
   },
   fields: {
-    change: { type: "select", pin: false, default: "any", choices: CHANGES, description: "Which change runs it." },
+    change: { type: "multiselect", pin: false, default: ["any"], choices: CHANGES, description: "Which changes run it: tick several, such as joins and leaves. Any change runs it for every one." },
     ignoreBots: { type: "boolean", pin: false, default: true, label: "Ignore bots", description: "Skip bots (such as music bots)." },
   },
   outputs: {
@@ -34,6 +34,8 @@ module.exports = {
     server: { type: "discord.guild", description: "The server." },
   },
   listen(ctx, emit) {
+    // The ticked changes: a list, or (older projects) one name or names with commas. None: any.
+    const picked = [].concat(ctx.fields.change ?? []).flatMap((v) => String(v).split(",")).map((s) => s.trim()).filter(Boolean);
     ctx.discord.client.on("voiceStateUpdate", (old, now) => {
       const member = now.member ?? old.member;
       if (!member || (ctx.fields.ignoreBots && member.user.bot)) return;
@@ -46,8 +48,7 @@ module.exports = {
         stream: Boolean(old.streaming) !== Boolean(now.streaming),
         video: Boolean(old.selfVideo) !== Boolean(now.selfVideo),
       };
-      const which = ctx.fields.change;
-      if (which === "any" ? !Object.values(changed).some(Boolean) : !changed[which]) return;
+      if (!picked.length || picked.includes("any") ? !Object.values(changed).some(Boolean) : !picked.some((k) => changed[k])) return;
       emit({ member, before: old.channel ?? null, after: now.channel ?? null, muted: Boolean(now.mute), deafened: Boolean(now.deaf), streaming: Boolean(now.streaming), server: now.guild });
     });
   },

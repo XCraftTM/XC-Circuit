@@ -91,6 +91,20 @@ const named = (name, extra = {}) => ({ name, guild, ...extra });
   [o] = await fire("on_purchase.js", { kind: "subscriptionUpdate", sku: "" }, "subscriptionUpdate", {}, { userId: "u", skuIds: ["s"], entitlementIds: ["e"], status: 1 });
   assert.strictEqual(o.status, "ending");
 
+  // Voice Changed: several changes ticked; Any change; older projects' single names.
+  const member = { user: { bot: false } };
+  const lounge = { id: "1503044503819260024", name: "Lounge" };
+  const state = (channel, extra = {}) => ({ member, guild, channelId: channel?.id ?? null, channel: channel ?? null, ...extra });
+  const join = [state(null), state(lounge)];
+  const leave = [state(lounge), state(null)];
+  const mute = [state(lounge), state(lounge, { mute: true })];
+  const voice = async (change, [old, now]) => (await fire("on_voice_state.js", { change, ignoreBots: true }, "voiceStateUpdate", old, now)).length;
+  assert.deepStrictEqual([await voice(["join", "leave"], join), await voice(["join", "leave"], leave), await voice(["join", "leave"], mute)], [1, 1, 0], "joins and leaves, not mutes");
+  assert.deepStrictEqual([await voice(["any"], mute), await voice([], join)], [1, 1], "Any change, or none ticked");
+  assert.deepStrictEqual([await voice("join", join), await voice("join", leave), await voice("any", mute), await voice("join, leave", leave)], [1, 0, 1, 1], "saved as a name");
+  [o] = await fire("on_voice_state.js", { change: ["join"], ignoreBots: true }, "voiceStateUpdate", ...join);
+  assert.strictEqual(o.after, lounge);
+
   console.log("discord events test passed");
 })().catch((e) => {
   console.error(e);
