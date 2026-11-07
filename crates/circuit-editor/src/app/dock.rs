@@ -56,6 +56,15 @@ impl DockViewer<Tab> for Viewer<'_> {
         !matches!(tab, Tab::Start)
     }
 
+    /// A builder's window stays wide enough for it (and tall enough for its
+    /// buttons and some of what's above them).
+    fn min_size(&self, tab: &Tab) -> egui::Vec2 {
+        match tab.min_width() {
+            0.0 => egui::Vec2::ZERO,
+            w => egui::vec2(w, 360.0),
+        }
+    }
+
     fn icon(&self, tab: &Tab) -> Option<PathBuf> {
         self.ed.reg.icons.get(tab.icon()).cloned()
     }
@@ -152,10 +161,10 @@ impl DockViewer<Tab> for Viewer<'_> {
                 }
             }
             // The builders keep a size they work at; a smaller tab or window scrolls.
-            Tab::EmbedBuilder => at_least(ui, egui::vec2(760.0, 520.0), |ui| crate::builders::embed::tab(ui, self.ed)),
-            Tab::LayoutBuilder => at_least(ui, egui::vec2(900.0, 560.0), |ui| crate::builders::layout::tab(ui, self.ed)),
-            Tab::CanvasBuilder => at_least(ui, egui::vec2(900.0, 580.0), |ui| crate::builders::canvas::tab(ui, self.ed)),
-            Tab::SlashCommands => at_least(ui, egui::vec2(900.0, 520.0), |ui| crate::builders::slash::tab(ui, self.ed)),
+            Tab::EmbedBuilder => at_least(ui, tab.min_width(), |ui| crate::builders::embed::tab(ui, self.ed)),
+            Tab::LayoutBuilder => at_least(ui, tab.min_width(), |ui| crate::builders::layout::tab(ui, self.ed)),
+            Tab::CanvasBuilder => at_least(ui, tab.min_width(), |ui| crate::builders::canvas::tab(ui, self.ed)),
+            Tab::SlashCommands => at_least(ui, tab.min_width(), |ui| crate::builders::slash::tab(ui, self.ed)),
             Tab::BotSettings => self.bot.settings_tab(ui, self.ed),
             Tab::Export => self.bot.export_tab(ui, self.ed),
             Tab::WorkspaceExport => crate::editor::exchange::export_tab(ui, self.ed),
@@ -166,18 +175,32 @@ impl DockViewer<Tab> for Viewer<'_> {
     }
 }
 
-/// Draws `add` in at least `min`: a tab smaller than that scrolls (both
-/// ways) instead of squeezing what's in it.
-fn at_least(ui: &mut egui::Ui, min: egui::Vec2, add: impl FnOnce(&mut egui::Ui)) {
-    let room = ui.available_size();
-    if room.x >= min.x && room.y >= min.y {
+impl Tab {
+    /// The width a builder works at: a narrower area scrolls sideways
+    /// instead of squeezing its columns, and a window can't get narrower.
+    pub(super) fn min_width(&self) -> f32 {
+        match self {
+            Tab::EmbedBuilder => 760.0,
+            Tab::LayoutBuilder | Tab::CanvasBuilder | Tab::SlashCommands => 900.0,
+            _ => 0.0,
+        }
+    }
+}
+
+/// Draws `add` at least `min_width` wide: a narrower tab scrolls sideways
+/// instead of squeezing it. The height is the tab's, so what's in it keeps
+/// its own scrolling (up and down, with the wheel) and its buttons at the
+/// bottom in view.
+fn at_least(ui: &mut egui::Ui, min_width: f32, add: impl FnOnce(&mut egui::Ui)) {
+    // A few points short (a window's frame, at its smallest) doesn't scroll.
+    if ui.available_width() + 16.0 >= min_width {
         return add(ui);
     }
-    // Solid bars, so it's plain that there's more (floating ones only show near the pointer).
+    // A solid bar, so it's plain that there's more (floating ones only show near the pointer).
     let scroll = ui.spacing().scroll;
     ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
-    egui::ScrollArea::both().id_salt("at-least").auto_shrink([false, false]).scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible).show(ui, |ui| {
-        let (rect, _) = ui.allocate_exact_size(room.max(min), egui::Sense::hover());
+    egui::ScrollArea::horizontal().id_salt("at-least").auto_shrink([false, false]).show(ui, |ui| {
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(min_width, ui.available_height()), egui::Sense::hover());
         let mut inner = ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(egui::Layout::top_down(egui::Align::Min)));
         inner.set_clip_rect(rect.intersect(ui.clip_rect()));
         inner.spacing_mut().scroll = scroll;

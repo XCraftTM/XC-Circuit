@@ -25,6 +25,11 @@ pub trait DockViewer<T> {
     fn on_close(&mut self, _tab: &T) {}
     /// The tab's content, under its tab bar.
     fn ui(&mut self, ui: &mut Ui, tab: &T);
+    /// The smallest a window holding this tab may be made (its content,
+    /// without the tab bar).
+    fn min_size(&self, _tab: &T) -> egui::Vec2 {
+        egui::Vec2::ZERO
+    }
     /// More entries for the tab's right-click menu.
     fn tab_menu(&mut self, _ui: &mut Ui, _tab: &T) {}
     /// A tab let go of outside every area: true when the app takes it (it
@@ -112,6 +117,8 @@ impl<T: Clone + PartialEq + Hash + std::fmt::Debug> Dock<T> {
         ui.allocate_rect(rect, Sense::hover());
         for w in &mut self.windows {
             let frame = egui::Frame::new().fill(theme.panel).stroke(Stroke::new(1.0, theme.line)).corner_radius(8).shadow(ctx.global_style().visuals.popup_shadow);
+            // As big as the biggest its tabs need, and its tab bar.
+            let need = w.node.leaves().iter().flat_map(|l| l.tabs.iter()).map(|t| viewer.min_size(t)).fold(vec2(320.0, 240.0), |a, b| a.max(b + vec2(0.0, p.bar_h)));
             let mut window = egui::Window::new("dock-window")
                 .id(Id::unique(("dock-window", w.id)))
                 .title_bar(false)
@@ -119,8 +126,8 @@ impl<T: Clone + PartialEq + Hash + std::fmt::Debug> Dock<T> {
                 .resizable(true)
                 .movable(false)
                 .default_pos(w.pos)
-                .default_size(w.size)
-                .min_size(vec2(320.0, 240.0))
+                .default_size(w.size.max(need))
+                .min_size(need)
                 .frame(frame);
             if let Some(to) = w.move_to.take() {
                 window = window.current_pos(to);
