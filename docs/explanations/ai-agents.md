@@ -39,9 +39,13 @@ What the agent can do:
 | `add_block` · `set_block_values` · `move_block` · `delete_blocks` | change blocks |
 | `connect` · `disconnect` | wires, checked like ones you draw |
 | `create_workspace` · `get_slash_commands` · `set_slash_commands` | workspaces and commands |
+| `add_note` · `set_note` · `delete_note` | notes on the canvas, also framing blocks you name |
+| `open_builder` | opens the Embed, Layout or Canvas Builder (or Slash Commands) on a block, to show you |
 | `get_problems` · `get_console` | what's wrong, and what the bot logged |
 | `run_bot` · `stop_bot` · `save_project` · `show_in_editor` | run it, save it, show you a block |
 | `run_script` | many of these at once: JavaScript that gets every tool as a function (`tools.add_block({ … })`), the [plugin API](/api/editor) as `xc`, and `print()` |
+
+Embeds, layouts and canvases are what Build Embed, Build Layout and Build Canvas keep in a field: agents fill them with `set_block_values`, and `get_block_type` tells them the format. Embeds and layouts can also be given as Discord's own JSON, as in the builders' JSON tab.
 
 `run_script` lets an agent build a whole flow in one step instead of a call per block. It runs in the same sandbox as plugins: no files, no network, at most 5 seconds.
 

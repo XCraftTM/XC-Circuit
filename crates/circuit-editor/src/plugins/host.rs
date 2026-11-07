@@ -451,6 +451,9 @@ impl api::Host for EditorHost<'_> {
                 if let Some(o) = v.as_object_mut() {
                     o.insert("key".into(), Value::String(k.clone()));
                     o.insert("takesWire".into(), Value::Bool(f.pin != circuit_core::block::PinMode::Inline));
+                    if let Some(format) = value_format(&f.type_name) {
+                        o.insert("format".into(), Value::String(format.into()));
+                    }
                 }
                 v
             })
@@ -493,6 +496,7 @@ impl api::Host for EditorHost<'_> {
                     "advanced": f.advanced,
                     "choices": f.choices,
                     "description": f.description,
+                    "format": value_format(&f.type_name),
                     "wires": wired(k, true),
                 })
             })
@@ -625,6 +629,60 @@ impl api::Host for EditorHost<'_> {
         self.ed.copy_out = Some(text.to_string());
     }
 
+    fn field_value(&self, block: &str, field: &str, value: &Value) -> Result<Value, String> {
+        let def = self.ed.reg.block(block.split('@').next().unwrap_or(block)).ok_or_else(|| format!("no block `{block}` is installed"))?;
+        let Some(f) = def.fields.get(field) else { return Ok(value.clone()) };
+        if value.is_null() {
+            return Ok(Value::Null);
+        }
+        Ok(match f.type_name.as_str() {
+            "embed" => {
+                let discord = value.get("embeds").is_some()
+                    || value["color"].is_number()
+                    || value["image"].is_object()
+                    || value["thumbnail"].is_object()
+                    || value["author"].get("icon_url").is_some()
+                    || value["footer"].get("icon_url").is_some()
+                    || value["timestamp"].is_string();
+                let data = if discord { crate::builders::embed::EmbedData::from_discord(value).map_err(|e| format!("not an embed: {e}"))? } else { crate::builders::embed::EmbedData::from_value(value) };
+                data.to_value()
+            }
+            "layout" => crate::builders::layout::from_json(value).map_err(|e| format!("not a layout: {e}"))?,
+            "canvas" => serde_json::from_value::<crate::builders::canvas::CanvasData>(value.clone()).map_err(|e| format!("not a canvas: {e}"))?.to_value(),
+            _ => value.clone(),
+        })
+    }
+
+    fn open_builder(&mut self, workspace: &str, node: &str, field: &str) -> Result<String, String> {
+        let n = self.ed.workspace(workspace).ok_or_else(|| format!("no workspace `{workspace}`"))?.nodes.get(node).cloned().ok_or_else(|| format!("workspace `{workspace}` has no block `{node}`"))?;
+        let def = self.ed.reg.block(&n.block).ok_or_else(|| format!("block {node} is a `{}`, which isn't installed", n.block))?;
+        // The field asked for, or the block's first one with a builder.
+        let builder_of = |t: &str| matches!(t, "embed" | "layout" | "canvas" | "slash-command-ref");
+        let key = if field.is_empty() { def.fields.iter().find(|(_, f)| builder_of(&f.type_name)).map(|(k, _)| k.clone()) } else { Some(field.to_string()) };
+        let key = key.ok_or_else(|| format!("block {node} ({}) has nothing a builder edits", def.name))?;
+        let f = def.fields.get(&key).ok_or_else(|| format!("block {node} has no field `{key}`"))?;
+        Ok(match f.type_name.as_str() {
+            "embed" => {
+                crate::builders::embed::open(self.ed, workspace, node, &key);
+                "Embed Builder"
+            }
+            "layout" => {
+                crate::builders::layout::open(self.ed, workspace, node, &key);
+                "Layout Builder"
+            }
+            "canvas" => {
+                crate::builders::canvas::open(self.ed, workspace, node, &key);
+                "Canvas Builder"
+            }
+            "slash-command-ref" => {
+                crate::builders::slash::open(self.ed);
+                "Slash Commands"
+            }
+            other => return Err(format!("the field `{key}` is a {other}: no builder edits it")),
+        }
+        .to_string())
+    }
+
     fn agent_clients(&self) -> Value {
         crate::mcp::install::clients()
     }
@@ -664,6 +722,16 @@ fn pin_ref(text: &str) -> Result<circuit_core::graph::PinRef, String> {
         Some((node, pin)) if !node.is_empty() && !pin.is_empty() => Ok(circuit_core::graph::PinRef::new(node, pin)),
         _ => Err(format!("`{text}` isn't a pin: write it as block.pin, such as 3.next or 4.in")),
     }
+}
+
+/// How to write the value of a field a builder edits, for AI agents.
+fn value_format(type_name: &str) -> Option<&'static str> {
+    Some(match type_name {
+        "embed" => "An object: { color: \"#RRGGBB\", title, url, description, author: { name, icon, url }, fields: [{ name, value, inline }], image (a URL), thumbnail (a URL), footer: { text, icon }, timestamp: true for when it's sent }. Discord's own embed JSON (or a message with embeds) works too. Texts can hold ${…}.",
+        "layout" => "Discord's Components V2 JSON: { components: [ … ] }, such as a container { type: 17, accent_color, components: [ { type: 10, content: \"## Title\" }, { type: 14 }, { type: 1, components: [ { type: 2, style: 1, label, custom_id } ] } ] }. Text 10, section 9 (with an accessory: thumbnail 11 or button 2), media gallery 12, file 13, separator 14, row 1. A whole message or a list of components works too. Texts can hold ${…}.",
+        "canvas" => "A picture: { width, height, background: \"#RRGGBB\", layers: [ … ] }, bottom layer first. Layers: { type: \"rect\" | \"circle\" | \"image\" | \"text\" | \"bar\", x, y, w, h, color, color2 and angle (a gradient), radius, opacity (0-100), outline, outline_width; image: src (a URL or ${…}), shape (rect, rounded, circle), fit (cover, contain, stretch); text: text, font (regular, bold, mono), size, align, shadow, shrink; bar: value, max, back }. The field's default is a full example.",
+        _ => return None,
+    })
 }
 
 fn kind_name(d: &circuit_core::BlockDef) -> String {
@@ -786,6 +854,32 @@ mod tests {
         assert!(stopped.contains("The script stopped: No workspace \"nope\"") && stopped.contains("half"), "{stopped}");
         let broken = host.call_tool(&mut ed, "run_script", &serde_json::json!({ "code": "return (" }), false).unwrap().unwrap_err();
         assert!(broken.contains("doesn't parse"), "{broken}");
+
+        let mut call = |name: &str, args: Value| host.call_tool(&mut ed, name, &args, false).expect("a tool");
+        // A note around blocks, changed, then gone.
+        let seen = call("get_workspace", serde_json::json!({ "workspace": moderation })).unwrap();
+        let ids: Vec<Value> = seen["blocks"].as_array().unwrap().iter().map(|b| b["id"].clone()).collect();
+        let note = call("add_note", serde_json::json!({ "workspace": moderation, "title": "Logs messages", "text": "Every message", "around": ids })).unwrap();
+        assert_eq!(note["id"], "n1");
+        let x0 = seen["blocks"][0]["at"][0].as_f64().unwrap();
+        assert!(note["rect"][0].as_f64().unwrap() < x0 && note["rect"][2].as_f64().unwrap() > 400.0, "it frames both blocks: {note}");
+        call("set_note", serde_json::json!({ "workspace": moderation, "note": "n1", "title": "Message log", "color": "#3DFF6E" })).unwrap();
+        let notes = call("get_workspace", serde_json::json!({ "workspace": moderation })).unwrap()["notes"].clone();
+        assert_eq!((notes[0]["title"].as_str(), notes[0]["color"].as_str(), notes[0]["text"].as_str()), (Some("Message log"), Some("#3DFF6E"), Some("Every message")));
+        call("delete_note", serde_json::json!({ "workspace": moderation, "note": "n1" })).unwrap();
+        assert_eq!(call("get_workspace", serde_json::json!({ "workspace": moderation })).unwrap()["notes"], serde_json::json!([]));
+
+        // Builders: an embed given as Discord's JSON is kept the builder's way, and its builder opens.
+        let info = call("get_block_type", serde_json::json!({ "type": "discord.build_embed" })).unwrap();
+        assert!(info["fields"].as_array().unwrap().iter().any(|f| f["format"].as_str().is_some_and(|t| t.contains("Discord's own embed JSON"))), "{info}");
+        let embed = call("add_block", serde_json::json!({ "workspace": moderation, "type": "discord.build_embed", "values": { "embed": { "title": "Hi", "color": 0x00D8F0, "footer": { "text": "Bot", "icon_url": "https://x.example/i.png" } } } })).unwrap();
+        let stored = embed["fields"].as_array().unwrap().iter().find(|f| f["key"] == "embed").unwrap()["value"].clone();
+        assert_eq!((stored["color"].as_str(), stored["footer"]["icon"].as_str()), (Some("#00D8F0"), Some("https://x.example/i.png")), "{stored}");
+        let bad_layout = call("add_block", serde_json::json!({ "workspace": moderation, "type": "discord.build_layout", "values": { "layout": { "content": "hi" } } })).unwrap_err();
+        assert!(bad_layout.contains("not a layout"), "{bad_layout}");
+        let opened = call("open_builder", serde_json::json!({ "workspace": moderation, "block": embed["id"] })).unwrap();
+        assert_eq!(opened, "Opened the Embed Builder.");
+        assert!(ed.embed_edit.is_some(), "the Embed Builder is open on it");
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }

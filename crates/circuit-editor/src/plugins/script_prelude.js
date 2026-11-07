@@ -183,6 +183,10 @@
     console: (lines) => host("console", Number(lines) || 50),
     /** `text` in the app's language, from the plugins' translations (locales/*.toml). */
     t: (t) => host("t", text(t)),
+    /** A value for a block's field as the block keeps it: embeds, layouts and canvases as the builders save them (Discord's JSON works for embeds and layouts). */
+    fieldValue: (type, field, value) => host("fieldValue", String(type).split("@")[0], text(field), value === undefined ? null : value),
+    /** Opens the Embed, Layout or Canvas Builder on a block's field (Slash Commands for a Slash Command block). Returns the builder's name. */
+    openBuilder: (workspace, block, field) => host("openBuilder", workspace, String(block), text(field)),
     /** Puts text on the clipboard. */
     copyText: (t) => host("copyText", text(t)),
     /** XC Circuit's MCP server for AI agents: the clients it can be added to, adding it, its config entry and whether it's listening. */

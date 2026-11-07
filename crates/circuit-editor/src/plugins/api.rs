@@ -162,6 +162,17 @@ pub trait Host {
     }
     /// Puts text on the clipboard.
     fn copy_text(&mut self, _text: &str) {}
+    /// A value for a block's field in the shape the block keeps: an embed,
+    /// layout or canvas as the builders save it (Discord's own JSON works
+    /// for embeds and layouts). Other fields' values stay as they are.
+    fn field_value(&self, _block: &str, _field: &str, value: &serde_json::Value) -> Result<serde_json::Value, String> {
+        Ok(value.clone())
+    }
+    /// Opens the builder for a block's embed, layout or canvas field (or
+    /// Slash Commands, for a Slash Command block).
+    fn open_builder(&mut self, _workspace: &str, _node: &str, _field: &str) -> Result<String, String> {
+        Err("this editor can't open builders for plugins".into())
+    }
     /// The AI clients the app's MCP server can be added to, and whether it is.
     fn agent_clients(&self) -> serde_json::Value {
         serde_json::Value::Array(Vec::new())

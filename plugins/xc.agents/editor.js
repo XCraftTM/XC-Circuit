@@ -65,13 +65,14 @@ tool({
 
 tool({
   name: "get_workspace",
-  description: "A workspace's blocks (id, type, name, position, values, fields made pins) and wires (\"1.next > 2.in\": block 1's flow runs block 2; \"3.result > 4.text\": a value into a field).",
+  description: "A workspace's blocks (id, type, name, position, values, fields made pins), wires (\"1.next > 2.in\": block 1's flow runs block 2; \"3.result > 4.text\": a value into a field) and notes (framed areas with a title and text).",
   input: schema({ workspace: workspaceArg }, ["workspace"]),
   run({ workspace }) {
     needProject();
     const { key, ws } = load(workspace);
     const blocks = Object.entries(ws.nodes || {}).map(([id, n]) => ({ id, type: String(n.block).split("@")[0], name: xc.blockName(n.block), at: n.at, values: n.values || {}, pins: n.pins || [] }));
-    return { key, name: ws.name, folder: ws.folder || null, turnedOff: !!ws.disabled, blocks, wires: ws.links || [] };
+    const notes = Object.entries(ws.notes || {}).map(([id, n]) => ({ id, title: n.title, text: n.text || "", color: n.color || null, x: n.rect[0], y: n.rect[1], width: n.rect[2], height: n.rect[3] }));
+    return { key, name: ws.name, folder: ws.folder || null, turnedOff: !!ws.disabled, blocks, wires: ws.links || [], notes };
   },
 });
 
@@ -88,7 +89,7 @@ tool({
 
 tool({
   name: "get_block_type",
-  description: "A block type's fields (key, type, default, choices, whether it can take a wire), outputs and flows. Read it before adding or setting a block.",
+  description: "A block type's fields (key, type, default, choices, whether it can take a wire), outputs and flows. Read it before adding or setting a block. Fields a builder edits (embed, layout, canvas) say their value's `format`.",
   input: schema({ type: { type: "string", description: "The block type, such as discord.send_message." } }, ["type"]),
   run({ type }) {
     const info = xc.blockType(type);
@@ -141,7 +142,7 @@ tool({
 
 tool({
   name: "add_block",
-  description: "Adds a block to a workspace. Without x and y it goes right of the block given as `after` (or of the rightmost block). Returns the new block with its pins. Wire it up with connect.",
+  description: "Adds a block to a workspace. Without x and y it goes right of the block given as `after` (or of the rightmost block). Returns the new block with its pins. Wire it up with connect. Embeds and layouts can be given as Discord's own JSON.",
   input: schema(
     {
       workspace: workspaceArg,
@@ -164,14 +165,16 @@ tool({
       else if (nodes.length) at = [Math.max(...nodes.map(([, n]) => n.at[0])) + 400, Math.min(...nodes.map(([, n]) => n.at[1]))];
       else at = [40, 60];
     }
-    const id = xc.addBlock(key, type, { x: at[0], y: at[1], values: values || {} });
+    const given = {};
+    for (const [k, v] of Object.entries(values || {})) given[k] = xc.fieldValue(type, k, v);
+    const id = xc.addBlock(key, type, { x: at[0], y: at[1], values: given });
     return xc.blockPins(key, id);
   },
 });
 
 tool({
   name: "set_block_values",
-  description: "Sets fields of a block: { fieldKey: value }. null puts a field back to its default. Text fields can hold ${…} with JavaScript.",
+  description: "Sets fields of a block: { fieldKey: value }. null puts a field back to its default. Text fields can hold ${…} with JavaScript. Embed, layout and canvas fields (what the builders edit) take the `format` get_block_type gives; embeds and layouts also Discord's own JSON.",
   input: schema({ workspace: workspaceArg, block: blockArg, values: { type: "object" } }, ["workspace", "block", "values"]),
   run({ workspace, block, values }) {
     needProject();
@@ -183,7 +186,7 @@ tool({
     for (const [k, v] of Object.entries(values || {})) {
       if (!known.includes(k) && !(k in node.values)) throw new Error(`Block ${id} has no field "${k}". Its fields: ${known.join(", ")}.`);
       if (v === null) delete node.values[k];
-      else node.values[k] = v;
+      else node.values[k] = xc.fieldValue(node.block, k, v);
     }
     xc.setWorkspace(key, ws);
     return xc.blockPins(key, id);
@@ -294,6 +297,107 @@ tool({
     needProject();
     xc.run("file.save");
     return "Saving.";
+  },
+});
+
+// ---- Notes ------------------------------------------------------------------
+
+const noteArg = { type: "string", description: "The note's id (from get_workspace), such as n1." };
+const noteFields = {
+  title: { type: "string" },
+  text: { type: "string", description: "Shown under the title." },
+  color: { type: "string", description: "#RRGGBB; the theme's accent when not given." },
+  around: { type: "array", items: str, description: "Block ids: the note frames them (instead of x, y, width, height)." },
+  x: { type: "number" },
+  y: { type: "number" },
+  width: { type: "number" },
+  height: { type: "number" },
+};
+
+/** Roughly where a block is on the canvas: [x, y, width, height]. */
+function blockArea(key, ws, id) {
+  const n = ws.nodes[id];
+  const pins = xc.blockPins(key, id);
+  const rows = pins.fields.filter((f) => !f.advanced).length + pins.outputs.length + pins.flows.filter((f) => f.key !== "next").length;
+  return [n.at[0], n.at[1], n.width || 260, 44 + rows * 26];
+}
+
+/** A note's rectangle from x, y, width, height or the blocks it goes around. */
+function noteRect(key, ws, o, before) {
+  if (Array.isArray(o.around) && o.around.length) {
+    const areas = o.around.map((b) => blockArea(key, ws, needBlock(ws, key, b)));
+    const left = Math.min(...areas.map((a) => a[0])) - 30;
+    const top = Math.min(...areas.map((a) => a[1])) - 56;
+    const right = Math.max(...areas.map((a) => a[0] + a[2])) + 30;
+    const bottom = Math.max(...areas.map((a) => a[1] + a[3])) + 30;
+    return [left, top, right - left, bottom - top];
+  }
+  const r = before || [40, 40, 420, 260];
+  return [o.x ?? r[0], o.y ?? r[1], o.width ?? r[2], o.height ?? r[3]].map(Number);
+}
+
+tool({
+  name: "add_note",
+  description: "Adds a note to a workspace: a framed area with a title and text, to explain or group blocks. Give `around` (block ids) to frame those blocks, or x, y, width and height. Returns its id.",
+  input: schema({ workspace: workspaceArg, ...noteFields }, ["workspace", "title"]),
+  run(o) {
+    needProject();
+    const { key, ws } = load(o.workspace);
+    ws.notes = ws.notes || {};
+    let n = 1;
+    while (ws.notes[`n${n}`]) n += 1;
+    const id = `n${n}`;
+    const note = { title: String(o.title || ""), rect: noteRect(key, ws, o, null) };
+    if (o.text) note.text = String(o.text);
+    if (o.color) note.color = String(o.color);
+    ws.notes[id] = note;
+    xc.setWorkspace(key, ws);
+    return { id, ...note };
+  },
+});
+
+tool({
+  name: "set_note",
+  description: "Changes a note: its title, text, colour, or where it is (x, y, width, height, or `around` blocks). What isn't given stays.",
+  input: schema({ workspace: workspaceArg, note: noteArg, ...noteFields }, ["workspace", "note"]),
+  run(o) {
+    needProject();
+    const { key, ws } = load(o.workspace);
+    const note = (ws.notes || {})[o.note];
+    if (!note) throw new Error(`Workspace ${key} has no note "${o.note}". Its notes: ${Object.keys(ws.notes || {}).join(", ") || "none"}.`);
+    if (o.title !== undefined) note.title = String(o.title);
+    if (o.text !== undefined) note.text = String(o.text);
+    if (o.color !== undefined) note.color = o.color ? String(o.color) : undefined;
+    if (o.around || ["x", "y", "width", "height"].some((k) => o[k] !== undefined)) note.rect = noteRect(key, ws, o, note.rect);
+    xc.setWorkspace(key, ws);
+    return { id: o.note, ...note };
+  },
+});
+
+tool({
+  name: "delete_note",
+  description: "Deletes a note. The blocks inside it stay.",
+  input: schema({ workspace: workspaceArg, note: noteArg }, ["workspace", "note"]),
+  run({ workspace, note }) {
+    needProject();
+    const { key, ws } = load(workspace);
+    if (!(ws.notes || {})[note]) throw new Error(`Workspace ${key} has no note "${note}".`);
+    delete ws.notes[note];
+    xc.setWorkspace(key, ws);
+    return `Deleted note ${note}.`;
+  },
+});
+
+// ---- Builders ---------------------------------------------------------------
+
+tool({
+  name: "open_builder",
+  description: "Opens the editor's Embed, Layout or Canvas Builder on a block's field (or Slash Commands, for a Slash Command block), so the user sees it there. To change what's in it, use set_block_values.",
+  input: schema({ workspace: workspaceArg, block: blockArg, field: { type: "string", description: "The field; the block's first one a builder edits when not given." } }, ["workspace", "block"]),
+  run({ workspace, block, field }) {
+    needProject();
+    const builder = xc.openBuilder(resolve(workspace), String(block), field || "");
+    return `Opened the ${builder}.`;
   },
 });
 
