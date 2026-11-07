@@ -852,9 +852,9 @@ A bot in XC™ Circuit is a graph of blocks connected by wires. Every block is o
 | --- | --- | --- | --- |
 | **Event** | Event | when something happens: a command is used, a member joins, a timer fires | Slash Command, Member Joins, Every, On Start |
 | **Action** | Action | when the flow reaches it, one after the other | Send Message, Add Role, If, Wait |
-| **Value** | Value | when an action needs one of its outputs | Math, Join Text, Get Stored Value |
+| **Value** | Value | where the flow reaches it, or when a block needs one of its outputs | Math, Join Text, Get Property |
 
-An event **starts a flow**. The flow follows the green **action wires** from block to block: each action runs, finishes, and passes the flow on. Value blocks sit to the side; they are worked out when an action that's about to run needs their output, and again for every run.
+An event **starts a flow**. The flow follows the green **action wires** from block to block: each action runs, finishes, and passes the flow on. Value blocks can go **in the flow** too: wire an Action into them and on out of them, and they run right there, once, and every block after them gets that result (a Random Number in the flow gives two later blocks the same number). That's the clearest way to read, say, a property of a command's option before using it. Left **to the side**, without Action wires, they're worked out when a block that's about to run needs their output, afresh each time.
 
 ```
 [Slash Command] ──▶ [Get Stored Value]* ──▶ [Send Message]

@@ -46,6 +46,7 @@ Good to know:
 - `get_workspace` gives each block's drawn `size`; `add_block` without x and y finds a free spot, and warns when a given position overlaps blocks.
 - A typical slash command: `discord.on_slash_command` (field `command`) → actions → `discord.send_message` (mode `reply`), with the event's `interaction` output wired to Send Message's `interaction` input. The command must also exist in `set_slash_commands`.
 - Texts take `${…}`: JavaScript, with values from earlier blocks by name.
+- Value blocks (Get Property, Math, Compare …) have `in` and `next` too: put them in the flow to make clear when they run (once, there); left out of it, they're worked out when a block reads them.
 - Every change shows in the editor at once and can be undone there (Ctrl+Z). Tokens and other secrets are never available to agents.
 - Plugins can add their own tools with `xc.tool({ name, description, input, run })`.
 

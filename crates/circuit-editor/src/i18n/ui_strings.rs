@@ -748,7 +748,7 @@ pub const UI_STRINGS: &[&str] = &[
     "Sync: done at once, without waiting",
     "Event: starts a flow",
     "Action: does something",
-    "Value: gives a value",
+    "Value: gives a value (in a flow, it runs there)",
     "As one .xcws.json file, to share or to import into another project",
     "Workspaces",
     "Slash commands",

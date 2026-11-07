@@ -5,6 +5,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 ## Unreleased
 
 ### Added
+- **Value blocks can go in the flow**: Get Property, Math, Compare, Text and the other value blocks have Action pins now. Wired into a flow, they run right there, once, and the blocks after them get that result, so it's plain when they run. Left to the side, they work as before: worked out when a block needs them.
 - **Events say which server they're in**: Button, Select Menu, Modal, Autocomplete, Context Menu, Message (received, edited, deleted), Reactions, Poll Vote, Presence and Thread Created now have a **Server** output (empty in DMs); Autocomplete and Context Menu also got **Member** and **Channel**, Modal, Reactions and Poll Vote **Channel**. On Fluxer, events that only gave a server id now give the server too, and Reactions and Thread events its id.
 - **The Console has a text filter**: type in the Filter box to see only lines with that text, together with a level chip if you like.
 - **Slash commands in the side bar can be ordered, put in folders and turned off**: drag a command above or below another or into a folder, make folders with the folder button (rename by double-click, drag them into order), and right-click › Turn off to keep a command from being registered with Discord. Clicking a command opens Slash Commands on it.

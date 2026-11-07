@@ -309,12 +309,11 @@ impl BlockDef {
             .collect()
     }
 
-    /// Action outputs before `define()`.
+    /// Action outputs before `define()`. Value blocks have `next` too: put
+    /// in a flow, they run there (and pass the flow on); left out of one,
+    /// they're worked out when a block reads them.
     pub fn base_flows(&self) -> Vec<String> {
-        match self.kind {
-            BlockKind::Value => Vec::new(),
-            _ => self.flows.clone().unwrap_or_else(|| vec!["next".into()]),
-        }
+        self.flows.clone().unwrap_or_else(|| vec!["next".into()])
     }
 }
 
@@ -428,7 +427,8 @@ impl BlockShape {
             hidden,
             outputs: outputs.into_iter().collect(),
             flows,
-            action_in: def.kind == BlockKind::Action,
+            // Value blocks can be put in a flow too, to say when they run.
+            action_in: matches!(def.kind, BlockKind::Action | BlockKind::Value),
         }
     }
 

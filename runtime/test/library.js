@@ -54,6 +54,10 @@ const bundle = {
         l5: log("random: ${number}"),
         lg: n("core.logic", { op: "not" }),
         l6: log("not: ${result}"),
+        // A value block in the flow runs there once: both logs get its number.
+        rnd2: n("core.random_number", { min: 1, max: 1000000000 }),
+        l7: log("first: ${number}"),
+        l8: log("second: ${number}"),
       },
       links: [
         "start.next > setv.in",
@@ -79,6 +83,11 @@ const bundle = {
         "l5.next > l6.in",
         "upper.result > lg.a",
         "lg.result > l6.result",
+        "l6.next > rnd2.in",
+        "rnd2.next > l7.in",
+        "l7.next > l8.in",
+        "rnd2.number > l7.number",
+        "rnd2.number > l8.number",
       ],
     },
   },
@@ -100,7 +109,7 @@ const logsOf = () =>
     .map((l) => JSON.parse(l.slice(5)))
     .filter((e) => e.t === "log")
     .map((e) => `${e.level}: ${e.text}`);
-const expected = ["upper: HELLO WORLD", "list: a-b-c", "switch went big", "round 1", "round 3", "prop: 7", "random: 5", "not: false"];
+const expected = ["upper: HELLO WORLD", "list: a-b-c", "switch went big", "round 1", "round 3", "prop: 7", "random: 5", "not: false", "first: ", "second: "];
 // Waits until every expected line is there (a slow machine takes longer),
 // then a little more for errors that would follow; gives up after 20 s.
 const started = Date.now();
@@ -114,6 +123,8 @@ const poll = setInterval(() => {
     console.log(logs.join("\n"));
     for (const s of expected) assert.ok(logs.some((l) => l.includes(s)), `expected "${s}"`);
     assert.ok(!logs.some((l) => l.startsWith("error")), "no errors");
+    const number = (label) => logs.find((l) => l.includes(`${label}: `)).split(`${label}: `)[1];
+    assert.strictEqual(number("first"), number("second"), "a value block that ran in the flow keeps its result");
     console.log("\nlibrary test passed");
   }, 300);
 }, 100);

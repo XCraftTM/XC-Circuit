@@ -571,7 +571,7 @@ fn details(ui: &mut egui::Ui, def: &BlockDef, reg: &Registry, theme: &Theme) {
         let what = match def.kind {
             BlockKind::Event => t!("Event: starts a flow"),
             BlockKind::Action => t!("Action: does something"),
-            BlockKind::Value => t!("Value: gives a value"),
+            BlockKind::Value => t!("Value: gives a value (in a flow, it runs there)"),
         };
         ui.label(RichText::new(what).size(11.5).color(kind_color(def.kind, theme)));
         if let Some(waits) = def.timing() {

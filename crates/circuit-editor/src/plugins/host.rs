@@ -534,7 +534,7 @@ impl api::Host for EditorHost<'_> {
         };
         let (to_ty, multi) = if link.to.pin == circuit_core::graph::ACTION_IN {
             if !to_shape.action_in {
-                return Err(format!("block {} is an event or value: nothing runs it", link.to.node));
+                return Err(format!("block {} is an event: nothing runs it", link.to.node));
             }
             (PinType::Action, true)
         } else {
