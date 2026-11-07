@@ -882,6 +882,18 @@ mod tests {
         call("delete_note", serde_json::json!({ "workspace": moderation, "note": "n1" })).unwrap();
         assert_eq!(call("get_workspace", serde_json::json!({ "workspace": moderation })).unwrap()["notes"], serde_json::json!([]));
 
+        // Slash commands follow Discord's naming rules; a space starts a subcommand.
+        let cmd = |name: &str| serde_json::json!({ "name": name, "description": "d", "options": [{ "name": "why", "type": "string", "description": "Why" }] });
+        call("set_slash_commands", serde_json::json!({ "commands": [cmd("ping"), cmd("ticket open"), cmd("mod user ban-hammer_2")] })).unwrap();
+        for bad in ["Ping", "two  spaces", " ping", "a b c d", "hi!", &"x".repeat(33)] {
+            let err = call("set_slash_commands", serde_json::json!({ "commands": [cmd(bad)] })).unwrap_err();
+            assert!(err.starts_with("Not saved: "), "{bad:?}: {err}");
+        }
+        let bad_option = call("set_slash_commands", serde_json::json!({ "commands": [{ "name": "ping", "description": "d", "options": [{ "name": "the reason" }] }] })).unwrap_err();
+        assert!(bad_option.contains("option \"the reason\""), "{bad_option}");
+        let kept = call("get_slash_commands", serde_json::json!({})).unwrap();
+        assert_eq!(kept.to_string().matches("\"name\":\"ticket open\"").count(), 1, "a rejected list leaves the saved one: {kept}");
+
         // Builders: an embed given as Discord's JSON is kept the builder's way, and its builder opens.
         let info = call("get_block_type", serde_json::json!({ "type": "discord.build_embed" })).unwrap();
         assert!(info["fields"].as_array().unwrap().iter().any(|f| f["format"].as_str().is_some_and(|t| t.contains("Discord's own embed JSON"))), "{info}");

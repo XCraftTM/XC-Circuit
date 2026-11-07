@@ -259,16 +259,37 @@ tool({
   },
 });
 
+// Discord's rules for names, as the Slash Command Builder checks them: a
+// command's name is up to three words (command, group, subcommand), each 1–32
+// lowercase letters, digits, - or _; an option's name is one such word.
+const COMMAND_WORD = /^[a-z0-9_-]{1,32}$/;
+
+function slashCommandProblems(commands) {
+  const out = [];
+  commands.forEach((c, i) => {
+    const name = c && typeof c.name === "string" ? c.name : "";
+    const label = name ? `/${name}` : `Command ${i + 1}`;
+    const words = name.split(" ");
+    if (!name.trim()) out.push(`${label}: needs a name`);
+    else if (words.length > 3) out.push(`${label}: at most three words (command, group and subcommand)`);
+    else if (!words.every((w) => COMMAND_WORD.test(w))) out.push(`${label}: each word must be 1–32 lowercase letters, numbers, - or _ (one space between words; a second word is a subcommand)`);
+    for (const o of (c && Array.isArray(c.options) && c.options) || []) {
+      const option = o && typeof o.name === "string" ? o.name : "";
+      if (!COMMAND_WORD.test(option)) out.push(`${label} › option "${option}": the name must be 1–32 lowercase letters, numbers, - or _, without spaces`);
+    }
+  });
+  return out;
+}
+
 tool({
   name: "set_slash_commands",
-  description: "Replaces the project's slash commands (the list get_slash_commands gives, changed). The bot registers them with Discord when it starts. Read them first: entries you leave out are deleted.",
+  description: "Replaces the project's slash commands (the list get_slash_commands gives, changed). The bot registers them with Discord when it starts. Read them first: entries you leave out are deleted. Names are 1–32 lowercase letters, numbers, - or _; a space starts a subcommand (\"ticket open\"), up to three words.",
   input: schema({ commands: { type: "array", items: { type: "object" } } }, ["commands"]),
   run({ commands }) {
     needProject();
     if (!Array.isArray(commands)) throw new Error("commands must be a list");
-    for (const c of commands) {
-      if (!c || typeof c.name !== "string" || !c.name.trim()) throw new Error("every command needs a name");
-    }
+    const problems = slashCommandProblems(commands);
+    if (problems.length) throw new Error(`Not saved: ${problems.join("; ")}`);
     xc.data.set("slashCommands", commands);
     return `Saved ${commands.length} slash command${commands.length === 1 ? "" : "s"}.`;
   },
