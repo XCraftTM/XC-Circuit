@@ -16,6 +16,8 @@ use crate::builders::locales::{self, Localized};
 use crate::ui::theme::Theme;
 
 pub const DATA_KEY: &str = "slashCommands";
+/// The side bar's folders for slash commands, in their order (kept while empty).
+pub const FOLDERS_KEY: &str = "slashFolders";
 
 type Locales = BTreeMap<String, Localized>;
 
@@ -43,6 +45,13 @@ pub struct SlashCommand {
     /// Only usable in age-restricted channels.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub nsfw: bool,
+    /// The side bar folder it is listed in (on every entry of a command).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
+    /// Turned off: not registered with Discord, so it can't be used (on
+    /// every entry of a command).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub disabled: bool,
     /// Older projects had one permission, and DMs on or off.
     #[serde(skip_serializing)]
     permission: String,
@@ -235,6 +244,84 @@ pub fn open(ed: &mut Editor) {
     ed.slash_edit = Some(SlashEdit { commands: load(ed), selected: 0, picked: false, list_open: false, json: None });
 }
 
+/// Opens Slash Commands on a command (its first word).
+pub fn open_at(ed: &mut Editor, root: &str) {
+    open(ed);
+    if let Some(edit) = &mut ed.slash_edit
+        && let Some(i) = edit.commands.iter().position(|c| root_of(&c.name) == root)
+    {
+        edit.selected = i;
+        edit.picked = true;
+    }
+}
+
+/// A project's commands, brought up to date.
+pub fn commands_of(project: &circuit_core::Project) -> Vec<SlashCommand> {
+    let mut list: Vec<SlashCommand> = project.meta.data.get(DATA_KEY).and_then(|v| serde_json::from_value(v.clone()).ok()).unwrap_or_default();
+    list.iter_mut().for_each(upgrade);
+    list
+}
+
+/// The side bar's folders: the saved ones, then any a command names that the list lacks.
+pub fn folders_of(project: &circuit_core::Project, commands: &[SlashCommand]) -> Vec<String> {
+    let mut folders: Vec<String> = project.meta.data.get(FOLDERS_KEY).and_then(|v| serde_json::from_value(v.clone()).ok()).unwrap_or_default();
+    for f in commands.iter().filter_map(|c| c.folder.clone()) {
+        if !folders.contains(&f) {
+            folders.push(f);
+        }
+    }
+    folders
+}
+
+/// Saves commands and folders into the project. Returns whether anything changed.
+pub fn save_to(project: &mut circuit_core::Project, commands: &[SlashCommand], folders: &[String]) -> bool {
+    let (c, f) = (serde_json::to_value(commands).unwrap_or(Value::Null), json!(folders));
+    let changed = project.meta.data.get(DATA_KEY) != Some(&c) || project.meta.data.get(FOLDERS_KEY).unwrap_or(&json!([])) != &f;
+    if changed {
+        project.meta.data.insert(DATA_KEY.into(), c);
+        if folders.is_empty() {
+            project.meta.data.remove(FOLDERS_KEY);
+        } else {
+            project.meta.data.insert(FOLDERS_KEY.into(), f);
+        }
+    }
+    changed
+}
+
+/// The commands' first words, in their order.
+pub fn roots(commands: &[SlashCommand]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for c in commands {
+        let r = root_of(&c.name);
+        if !r.is_empty() && !out.iter().any(|o| o == r) {
+            out.push(r.to_string());
+        }
+    }
+    out
+}
+
+/// Moves a command (all its entries) into `folder`, before or after another
+/// command (`next_to`), or where it was.
+pub fn place(commands: &mut Vec<SlashCommand>, root: &str, folder: Option<String>, next_to: Option<(&str, bool)>) {
+    let Some(was) = commands.iter().position(|c| root_of(&c.name) == root) else { return };
+    let mut moving: Vec<SlashCommand> = Vec::new();
+    let mut kept: Vec<SlashCommand> = Vec::new();
+    for c in commands.drain(..) {
+        if root_of(&c.name) == root { moving.push(c) } else { kept.push(c) }
+    }
+    for c in &mut moving {
+        c.folder = folder.clone();
+    }
+    let at = match next_to.filter(|(other, _)| *other != root) {
+        Some((other, true)) => kept.iter().position(|c| root_of(&c.name) == other),
+        Some((other, false)) => kept.iter().rposition(|c| root_of(&c.name) == other).map(|i| i + 1),
+        None => None,
+    }
+    .unwrap_or(was.min(kept.len()));
+    kept.splice(at..at, moving);
+    *commands = kept;
+}
+
 fn root_of(name: &str) -> &str {
     name.split_whitespace().next().unwrap_or("")
 }
@@ -393,6 +480,9 @@ fn root_json(cmds: &[SlashCommand], root: &str) -> Value {
 /// The builder's commands as Discord stores them, one per first word.
 #[cfg(test)]
 pub fn to_discord(cmds: &[SlashCommand]) -> Vec<Value> {
+    // Turned-off commands aren't registered.
+    let kept: Vec<SlashCommand> = cmds.iter().filter(|c| !c.disabled).cloned().collect();
+    let cmds = &kept[..];
     let mut roots: Vec<&str> = Vec::new();
     for c in cmds {
         let r = root_of(&c.name);
@@ -1249,6 +1339,26 @@ fn discord_preview(ui: &mut Ui, theme: &Theme, cmd: &SlashCommand, eye: Option<&
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Commands move in the side bar as a whole, subcommands included, and
+    /// turned-off ones aren't registered.
+    #[test]
+    fn commands_move_and_turn_off() {
+        let cmd = |name: &str| SlashCommand { name: name.into(), description: "d".into(), contexts: vec!["guild".into()], ..Default::default() };
+        let mut list = vec![cmd("ping"), cmd("ticket open"), cmd("ticket close"), cmd("help")];
+        assert_eq!(roots(&list), ["ping", "ticket", "help"]);
+        place(&mut list, "ticket", Some("Support".into()), Some(("ping", true)));
+        let names: Vec<&str> = list.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, ["ticket open", "ticket close", "ping", "help"]);
+        assert!(list[..2].iter().all(|c| c.folder.as_deref() == Some("Support")), "every entry goes into the folder");
+        place(&mut list, "ticket", None, Some(("help", false)));
+        assert_eq!(roots(&list), ["ping", "help", "ticket"]);
+        place(&mut list, "help", Some("Info".into()), None);
+        assert_eq!(roots(&list), ["ping", "help", "ticket"], "into a folder without a place: it stays where it was");
+        list.iter_mut().filter(|c| c.name.starts_with("ticket")).for_each(|c| c.disabled = true);
+        let sent: Vec<String> = to_discord(&list).iter().map(|c| c["name"].as_str().unwrap().to_string()).collect();
+        assert_eq!(sent, ["ping", "help"], "turned-off commands aren't registered");
+    }
 
     /// The same commands the runtime test turns into Discord's JSON
     /// (runtime/test/discord_blocks.js), so the editor and the bot agree.

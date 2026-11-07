@@ -5,11 +5,13 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 ## Unreleased
 
 ### Added
+- **Slash commands in the side bar can be ordered, put in folders and turned off**: drag a command above or below another or into a folder, make folders with the folder button (rename by double-click, drag them into order), and right-click › Turn off to keep a command from being registered with Discord. Clicking a command opens Slash Commands on it.
 - **AI agents can work on your bot (MCP)**: XC Circuit is now an MCP server, so AI agents such as Claude can read your workspaces, add, change and connect blocks, look up block types, see problems and the Console, edit slash commands, and start or stop the bot. Every change shows in the editor at once and can be undone; the bot's token is never given out. It comes in the new **AI agents (MCP)** plugin: **Plugins › AI agents panel** adds it to Claude Desktop, Claude Code, Cursor or VS Code with one click, or copies the settings for any other client. A `run_script` tool lets an agent do many things in one step (build a whole flow with JavaScript that calls the other tools). Agents can see the canvas with a `screenshot` tool and know how big blocks are, so new blocks go to a free spot instead of on top of others. They can also add and change notes, fill embeds, layouts and canvases (in the builders' format or Discord's own JSON) and open a builder to show you. AI clients start `xc-circuit --mcp`, which talks to the open app on this computer only.
 - **Plugins can offer AI agents tools** with `xc.tool({ name, description, input, run })`, and read more of the editor: `xc.blockTypes`, `xc.blockType`, `xc.blockPins`, `xc.connect` (checked like a drawn wire), `xc.addWorkspace`, `xc.problems`, `xc.console`, `xc.t` and `xc.copyText`.
 - **Optional plugins that come with the app**: a bundled plugin with `optional = true` in its plugin.toml (the AI agents one) can be turned off and removed like your own; **Add back** at the end of the Plugins list brings a removed one back.
 
 ### Changed
+- **The buttons above a selected block** wrap into two rows when the block is narrow, stay inside the canvas, and no longer have Source: the block's source file opens from the Inspector.
 - **Slash commands are checked against Discord at every start**: the bot reads the commands Discord has and registers them again when they differ from the project's, so commands changed or removed elsewhere (in the developer portal, by another copy of the bot, or with a lost data folder) are put right. Before, it only compared with what it had sent last time.
 
 ## 0.1.5

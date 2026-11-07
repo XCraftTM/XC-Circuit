@@ -127,5 +127,10 @@ assert.deepStrictEqual(
   toDiscordCommands(require("./fixtures/slash-input.json"), (n) => permissionBits[n]),
   require("./fixtures/slash-discord.json"),
 );
+// Turned-off commands aren't registered.
+assert.deepStrictEqual(
+  toDiscordCommands([{ name: "ping", description: "P" }, { name: "admin ban", description: "B", disabled: true }]).map((c) => c.name),
+  ["ping"],
+);
 
 console.log(`${Object.keys(all).length} Discord blocks checked\ndiscord blocks test passed`);

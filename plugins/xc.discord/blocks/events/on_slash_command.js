@@ -58,7 +58,8 @@ module.exports = {
     // Subcommands are listed by their full name (ticket open); a command or group
     // that only holds subcommands can't be used on its own, so it isn't listed.
     const isHeader = (c) => commands.some((o) => o.name.startsWith(`${c.name} `));
-    const choices = Object.fromEntries(commands.filter((c) => !isHeader(c)).map((c) => [c.name, `/${c.name}`]));
+    const root = (c) => commands.find((o) => o.name === c.name.split(" ")[0]) || c;
+    const choices = Object.fromEntries(commands.filter((c) => !isHeader(c)).map((c) => [c.name, `/${c.name}${root(c).disabled || c.disabled ? " (turned off)" : ""}`]));
     if (values.command && !(values.command in choices)) choices[values.command] = `/${values.command} (not in the builder)`;
     const command = commands.find((c) => c.name === values.command);
     const outputs = {};

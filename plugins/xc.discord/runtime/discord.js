@@ -320,7 +320,8 @@ const sub = (c, type, name, options) => putLocales({ type, name, description: de
  * The editor builds the same JSON (slash.rs); test/fixtures/slash.json checks both.
  */
 function toDiscordCommands(list, permissionBits = () => undefined) {
-  list = list.filter((c) => words(c).length);
+  // Turned-off commands aren't registered.
+  list = list.filter((c) => words(c).length && !c.disabled);
   const roots = [...new Set(list.map((c) => words(c)[0]))];
   const isHeader = (name) => list.some((o) => o.name.startsWith(`${name} `));
   return roots.map((root) => {

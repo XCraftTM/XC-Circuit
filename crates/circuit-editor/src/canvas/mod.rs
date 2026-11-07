@@ -140,7 +140,6 @@ impl CanvasView {
 enum NodeMenu {
     Delete(String),
     Duplicate(String),
-    OpenSource(String),
     WrapInZone(String),
     LeaveZone(String),
     RemoveZone(String),
@@ -1160,51 +1159,69 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     });
 
     // The selected block's actions, above it (or below when there is no room).
+    // In one row when the block is wide enough, otherwise wrapped into two.
     if let Some(b) = action_bar.filter(|b| outer.intersects(b.rect) && view.drag.is_none()) {
         let count = if multi.contains(&b.node) { multi.len().max(1) } else { 1 };
         let many = |text: &str| if count > 1 { format!("{text} {count}") } else { text.to_string() };
         let bar_h = if theme.touch { ACTION_BAR_TOUCH_H } else { ACTION_BAR_H };
-        let above = b.rect.left_top() - vec2(0.0, bar_h + 8.0);
+        // Its size in one row and as drawn, from the last frame, for these buttons.
+        let id = egui::Id::unique(("action-bar", count > 1, b.in_zone, b.can_wrap, b.source.is_some()));
+        let (one_row, drawn): (f32, Vec2) = ctx.data(|d| d.get_temp(id)).unwrap_or((0.0, vec2(0.0, bar_h)));
+        let wrap = one_row > 0.0 && one_row > b.rect.width();
+        let width = if wrap { b.rect.width().max(one_row / 2.0 + 60.0) } else { outer.width() };
+        let above = b.rect.left_top() - vec2(0.0, drawn.y + 8.0);
         let at = if above.y >= outer.top() + 4.0 { above } else { b.rect.left_bottom() + vec2(0.0, 8.0) };
-        let area = Rect::from_min_size(pos2(at.x.max(outer.left() + 4.0), at.y), vec2(outer.width(), bar_h));
-        tools(area, row).scope(|ui| {
+        // Inside the canvas: moved left when the block is near its right edge.
+        let x = at.x.min(outer.right() - drawn.x - 4.0).max(outer.left() + 4.0);
+        let area = Rect::from_min_size(pos2(x, at.y), vec2(width, bar_h * 3.0));
+        let frame = tools(area, egui::Layout::top_down(egui::Align::Min)).scope(|ui| {
             egui::Frame::new().fill(theme.panel_header).stroke(Stroke::new(1.0, theme.node_border)).corner_radius(9).inner_margin(4).shadow(ui.visuals().popup_shadow).show(ui, |ui| {
-                ui.spacing_mut().item_spacing.x = 4.0;
-                if b.source.is_some() && tool_button(ui, theme, icon("copy").as_deref(), &many(t!("Duplicate"))).clicked() {
-                    menu = Some(NodeMenu::Duplicate(b.node.clone()));
-                }
-                if count == 1 && b.in_zone && tool_button(ui, theme, icon("shield").as_deref(), t!("Leave Try Zone")).clicked() {
-                    menu = Some(NodeMenu::LeaveZone(b.node.clone()));
-                }
-                if count == 1 && b.can_wrap && tool_button(ui, theme, icon("shield").as_deref(), t!("Try Zone")).on_hover_text(t!("Wrap in a Try Zone, which catches its errors")).clicked() {
-                    menu = Some(NodeMenu::WrapInZone(b.node.clone()));
-                }
-                if tool_button(ui, theme, icon("note").as_deref(), t!("Note")).on_hover_text(t!("Put a note around the selected blocks")).clicked() {
-                    menu = Some(NodeMenu::NoteAround(b.node.clone()));
-                }
-                if count > 1 {
-                    let arrange_button = tool_button(ui, theme, icon("align").as_deref(), t!("Arrange")).on_hover_text(t!("Line up or spread out the selected blocks"));
-                    egui::Popup::menu(&arrange_button).show(|ui| {
-                        for (i, how) in Arrange::ALL.into_iter().enumerate() {
-                            if i == 3 || i == 6 {
-                                ui.separator();
+                ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
+                let buttons = |ui: &mut Ui| {
+                    if b.source.is_some() && tool_button(ui, theme, icon("copy").as_deref(), &many(t!("Duplicate"))).clicked() {
+                        menu = Some(NodeMenu::Duplicate(b.node.clone()));
+                    }
+                    if count == 1 && b.in_zone && tool_button(ui, theme, icon("shield").as_deref(), t!("Leave Try Zone")).clicked() {
+                        menu = Some(NodeMenu::LeaveZone(b.node.clone()));
+                    }
+                    if count == 1 && b.can_wrap && tool_button(ui, theme, icon("shield").as_deref(), t!("Try Zone")).on_hover_text(t!("Wrap in a Try Zone, which catches its errors")).clicked() {
+                        menu = Some(NodeMenu::WrapInZone(b.node.clone()));
+                    }
+                    if tool_button(ui, theme, icon("note").as_deref(), t!("Note")).on_hover_text(t!("Put a note around the selected blocks")).clicked() {
+                        menu = Some(NodeMenu::NoteAround(b.node.clone()));
+                    }
+                    if count > 1 {
+                        let arrange_button = tool_button(ui, theme, icon("align").as_deref(), t!("Arrange")).on_hover_text(t!("Line up or spread out the selected blocks"));
+                        egui::Popup::menu(&arrange_button).show(|ui| {
+                            for (i, how) in Arrange::ALL.into_iter().enumerate() {
+                                if i == 3 || i == 6 {
+                                    ui.separator();
+                                }
+                                if kit::menu_item(ui, how.name(), None, true).clicked() {
+                                    menu = Some(NodeMenu::Arrange(b.node.clone(), how));
+                                }
                             }
-                            if kit::menu_item(ui, how.name(), None, true).clicked() {
-                                menu = Some(NodeMenu::Arrange(b.node.clone(), how));
-                            }
-                        }
-                    });
+                        });
+                    }
+                    // The block's source file opens from the Inspector.
+                    if tool_button(ui, theme, icon("trash").as_deref(), &many(t!("Delete"))).on_hover_text(t!("Delete (Del)")).clicked() {
+                        menu = Some(NodeMenu::Delete(b.node.clone()));
+                    }
+                };
+                if wrap {
+                    ui.set_max_width(width - 8.0);
+                    ui.horizontal_wrapped(buttons).response.rect.width()
+                } else {
+                    ui.horizontal(buttons).response.rect.width()
                 }
-                if let Some(src) = b.source.as_ref().filter(|_| count == 1)
-                    && tool_button(ui, theme, icon("function").as_deref(), t!("Source")).on_hover_text(t!("Open the block's source file")).clicked()
-                {
-                    menu = Some(NodeMenu::OpenSource(src.clone()));
-                }
-                if tool_button(ui, theme, icon("trash").as_deref(), &many(t!("Delete"))).on_hover_text(t!("Delete (Del)")).clicked() {
-                    menu = Some(NodeMenu::Delete(b.node.clone()));
-                }
-            });
+            })
         });
+        let (content, size) = (frame.inner.inner, frame.inner.response.rect.size());
+        let one_row = if wrap { one_row } else { content };
+        if (one_row, size) != ctx.data(|d| d.get_temp::<(f32, Vec2)>(id)).unwrap_or_default() {
+            ctx.data_mut(|d| d.insert_temp(id, (one_row, size)));
+            ctx.request_repaint();
+        }
     }
 
     // The selected wire's Delete button, on its middle.
@@ -1239,9 +1256,6 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             *selected = new_ids.first().map(|f| (ws_key.to_string(), f.clone()));
             *multi = new_ids.into_iter().collect();
             *edited = true;
-        }
-        Some(NodeMenu::OpenSource(path)) => {
-            let _ = open::that(path);
         }
         Some(NodeMenu::Arrange(n, how)) => {
             let ids: Vec<String> = if multi.contains(&n) { multi.iter().cloned().collect() } else { vec![n] };

@@ -9,7 +9,6 @@ use std::path::PathBuf;
 
 use circuit_core::Workspace;
 use eframe::egui::{self, Align2, Color32, CursorIcon, FontId, Id, Key, Rect, Response, RichText, ScrollArea, Sense, Stroke, Ui, pos2, vec2};
-use serde_json::Value;
 
 use crate::ui::kit;
 use crate::editor::{Action, Editor, file_uri};
@@ -28,6 +27,8 @@ const SLASH_ROW: &str = "\u{0}slash";
 enum Target {
     Workspace(String),
     Folder(String),
+    /// A folder of slash commands.
+    SlashFolder(String),
 }
 
 /// A name being edited in place.
@@ -57,6 +58,17 @@ enum Do {
     DeleteFolder(String),
     Toggle(String),
     SlashCommands,
+    /// Slash Commands, opened on a command (its first word).
+    SlashOpen(String),
+    /// A command moved into a folder (or none), before (true) or after
+    /// another command, or where it was.
+    SlashPlace(String, Option<String>, Option<(String, bool)>),
+    /// Turns a command on (true) or off.
+    SlashEnable(String, bool),
+    SlashNewFolder,
+    SlashDeleteFolder(String),
+    /// A command folder dropped before (true) or after another.
+    SlashPlaceFolder(String, String, bool),
     Export(crate::editor::exchange::Preselect),
     Import,
 }
@@ -64,6 +76,19 @@ enum Do {
 /// What a dragged folder carries (a dragged workspace carries its key).
 #[derive(Clone)]
 struct FolderDrag(String);
+
+/// What a dragged slash command carries: its first word.
+#[derive(Clone)]
+struct SlashDrag(String);
+
+/// What a dragged folder of slash commands carries.
+#[derive(Clone)]
+struct SlashFolderDrag(String);
+
+/// The key a folder of slash commands is opened and closed by (apart from workspace folders).
+fn slash_folder_key(folder: &str) -> String {
+    format!("\u{0}slash:{folder}")
+}
 
 /// Whether something dropped on `rect` goes before it: the pointer is in its upper half.
 fn drops_before(ui: &Ui, rect: Rect) -> bool {
@@ -547,31 +572,174 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
             }
         }
 
-        // Slash commands, for modes that have them.
-        let commands: Vec<String> = project
-            .meta
-            .data
-            .get(crate::builders::slash::DATA_KEY)
-            .and_then(Value::as_array)
-            .map(|list| list.iter().filter_map(|c| c.get("name").and_then(Value::as_str).map(str::to_string)).collect())
-            .unwrap_or_default();
-        if !commands.is_empty() || ed.has_slash_commands() {
+        // Slash commands, for modes that have them: in folders and the order
+        // they're dragged into, each turned on or off.
+        let commands = crate::builders::slash::commands_of(project);
+        let roots = crate::builders::slash::roots(&commands);
+        if !roots.is_empty() || ed.has_slash_commands() {
+            let slash_folders = crate::builders::slash::folders_of(project, &commands);
             ui.add_space(10.0);
             let line = ui.available_rect_before_wrap();
             ui.painter().hline(line.x_range(), line.top(), Stroke::new(1.0, theme.line));
             ui.add_space(4.0);
             let open = is_open(SLASH_ROW);
-            let (resp, area) = row(ui, &theme, &icons, Id::unique("sidebar-slash"), 0, Some(open), None, t!("Slash commands"), false, true, 30.0, false);
-            ui.painter().text(pos2(area.right() - 4.0, area.center().y), Align2::RIGHT_CENTER, commands.len().to_string(), FontId::proportional(11.5), theme.text_muted);
-            if resp.clicked() {
+            let (resp, _) = row(ui, &theme, &icons, Id::unique("sidebar-slash"), 0, Some(open), None, t!("Slash commands"), false, true, 54.0, false);
+            ui.painter().text(pos2(resp.rect.right() - 34.0, resp.rect.center().y), Align2::RIGHT_CENTER, roots.len().to_string(), FontId::proportional(11.5), theme.text_muted);
+            if row_button(ui, &theme, &icons, Rect::from_center_size(pos2(resp.rect.right() - 16.0, resp.rect.center().y), vec2(22.0, 22.0)), Id::unique("sidebar-slash-folder"), "folder-plus", t!("New folder")).clicked() {
+                todo.push(Do::SlashNewFolder);
+            } else if resp.clicked() {
                 todo.push(Do::Toggle(SLASH_ROW.into()));
             }
-            if open {
-                for name in &commands {
-                    let (resp, _) = row(ui, &theme, &icons, Id::unique(("sidebar-cmd", name)), 1, None, Some("slash"), name, false, false, 0.0, false);
-                    if resp.on_hover_text(t!("Edit in the Slash Command Builder")).clicked() {
-                        todo.push(Do::SlashCommands);
+            // A command dropped here leaves its folder.
+            if egui::DragAndDrop::has_payload_of_type::<SlashDrag>(ui.ctx())
+                && let Some(dragged) = resp.dnd_release_payload::<SlashDrag>()
+            {
+                todo.push(Do::SlashPlace(dragged.0.clone(), None, None));
+            }
+            resp.context_menu(|ui| {
+                ui.set_min_width(200.0);
+                if item(ui, &theme, &icons, "folder-plus", t!("New folder"), false).clicked() {
+                    todo.push(Do::SlashNewFolder);
+                    ui.close();
+                }
+                if item(ui, &theme, &icons, "slash", t!("Edit commands…"), false).clicked() {
+                    todo.push(Do::SlashCommands);
+                    ui.close();
+                }
+            });
+
+            let first_of = |root: &str| commands.iter().find(|c| c.name.split_whitespace().next() == Some(root));
+            let command_row = |ui: &mut Ui, root: &String, depth: usize, todo: &mut Vec<Do>| {
+                let Some(first) = first_of(root) else { return };
+                let (off, folder) = (first.disabled, first.folder.clone());
+                let marks = Marks { off, ..Default::default() };
+                let (resp, _) = row(ui, &theme, &icons, Id::unique(("sidebar-cmd", root)), depth, None, Some("slash"), &format!("/{root}"), false, false, 32.0 + marks.width(), off);
+                marks.paint(ui, &theme, resp.rect.right() - 34.0, resp.rect.center().y);
+                let subs: Vec<&str> = commands.iter().filter(|c| c.name.split_whitespace().next() == Some(root.as_str()) && c.name != *root).map(|c| c.name.as_str()).collect();
+                let mut tip = vec![first.description.clone()];
+                if !subs.is_empty() {
+                    tip.push(tf!("Subcommands: {list}", list = subs.join(", ")));
+                }
+                if off {
+                    tip.push(t!("Turned off: it isn't registered with Discord, so nobody can use it. Right-click › Turn on.").to_string());
+                }
+                let resp = resp.on_hover_text(tip.join("\n"));
+                resp.dnd_set_drag_payload(SlashDrag(root.clone()));
+                if let Some(dragged) = resp.dnd_hover_payload::<SlashDrag>()
+                    && dragged.0 != *root
+                {
+                    insertion_line(ui, &theme, resp.rect, drops_before(ui, resp.rect));
+                }
+                if egui::DragAndDrop::has_payload_of_type::<SlashDrag>(ui.ctx())
+                    && let Some(dragged) = resp.dnd_release_payload::<SlashDrag>()
+                    && dragged.0 != *root
+                {
+                    todo.push(Do::SlashPlace(dragged.0.clone(), folder.clone(), Some((root.clone(), drops_before(ui, resp.rect)))));
+                }
+                let more = more_button(ui, &theme, &icons, resp.rect, Id::unique(("sidebar-cmd-more", root)));
+                if resp.clicked() {
+                    todo.push(Do::SlashOpen(root.clone()));
+                }
+                let mut menu = |ui: &mut Ui| {
+                    ui.set_min_width(200.0);
+                    if item(ui, &theme, &icons, "pencil", t!("Edit"), false).clicked() {
+                        todo.push(Do::SlashOpen(root.clone()));
+                        ui.close();
                     }
+                    let (switch, tip, icon) = if off {
+                        (t!("Turn on"), t!("It's registered with Discord again when the bot starts."), "eye")
+                    } else {
+                        (t!("Turn off"), t!("The bot doesn't register it with Discord, so nobody can use it, until you turn it on again."), "eye-off")
+                    };
+                    if item(ui, &theme, &icons, icon, switch, false).on_hover_text(tip).clicked() {
+                        todo.push(Do::SlashEnable(root.clone(), off));
+                        ui.close();
+                    }
+                    let moves = |ui: &mut Ui| {
+                        if folder.is_some() && kit::menu_item(ui, t!("No folder"), None, true).clicked() {
+                            todo.push(Do::SlashPlace(root.clone(), None, None));
+                            ui.close();
+                        }
+                        for f in &slash_folders {
+                            if folder.as_ref() != Some(f) && kit::menu_item(ui, f, None, true).clicked() {
+                                todo.push(Do::SlashPlace(root.clone(), Some(f.clone()), None));
+                                ui.close();
+                            }
+                        }
+                        if slash_folders.is_empty() {
+                            ui.label(RichText::new(t!("No folders yet")).color(theme.text_muted));
+                        }
+                    };
+                    ui.menu_button(t!("Move to"), moves);
+                };
+                resp.context_menu(|ui| menu(ui));
+                egui::Popup::menu(&more).show(|ui| menu(ui));
+            };
+
+            if open {
+                for folder in &slash_folders {
+                    let target = Target::SlashFolder(folder.clone());
+                    let editing = renaming.as_ref().is_some_and(|r| r.target == target);
+                    let key = slash_folder_key(folder);
+                    let folder_open = is_open(&key);
+                    let inside: Vec<&String> = roots.iter().filter(|r| first_of(r).is_some_and(|c| c.folder.as_ref() == Some(folder))).collect();
+                    let (resp, label_area) = row(ui, &theme, &icons, Id::unique(("sidebar-slash-folder", folder)), 1, Some(folder_open), Some("folder"), if editing { "" } else { folder }, false, false, 60.0, false);
+                    if !editing {
+                        ui.painter().text(pos2(resp.rect.right() - 34.0, resp.rect.center().y), Align2::RIGHT_CENTER, inside.len().to_string(), FontId::proportional(11.0), theme.text_muted);
+                    }
+                    if editing && let Some(r) = renaming.as_mut() {
+                        match rename_box(ui, label_area, r) {
+                            Some(true) => todo.push(Do::Rename(target.clone(), r.text.clone())),
+                            Some(false) => renaming = None,
+                            None => {}
+                        }
+                    } else {
+                        let more = more_button(ui, &theme, &icons, resp.rect, Id::unique(("sidebar-slash-folder-more", folder)));
+                        if resp.double_clicked() {
+                            todo.push(Do::StartRename(target.clone(), folder.clone()));
+                        } else if resp.clicked() {
+                            todo.push(Do::Toggle(key.clone()));
+                        }
+                        if egui::DragAndDrop::has_payload_of_type::<SlashDrag>(ui.ctx())
+                            && let Some(dragged) = resp.dnd_release_payload::<SlashDrag>()
+                        {
+                            todo.push(Do::SlashPlace(dragged.0.clone(), Some(folder.clone()), None));
+                        }
+                        resp.dnd_set_drag_payload(SlashFolderDrag(folder.clone()));
+                        if let Some(dragged) = resp.dnd_hover_payload::<SlashFolderDrag>()
+                            && dragged.0 != *folder
+                        {
+                            insertion_line(ui, &theme, resp.rect, drops_before(ui, resp.rect));
+                        }
+                        if egui::DragAndDrop::has_payload_of_type::<SlashFolderDrag>(ui.ctx())
+                            && let Some(dragged) = resp.dnd_release_payload::<SlashFolderDrag>()
+                            && dragged.0 != *folder
+                        {
+                            todo.push(Do::SlashPlaceFolder(dragged.0.clone(), folder.clone(), drops_before(ui, resp.rect)));
+                        }
+                        let mut menu = |ui: &mut Ui| {
+                            ui.set_min_width(200.0);
+                            if item(ui, &theme, &icons, "pencil", t!("Rename"), false).on_hover_text(t!("Or double-click its name")).clicked() {
+                                todo.push(Do::StartRename(target.clone(), folder.clone()));
+                                ui.close();
+                            }
+                            ui.separator();
+                            if item(ui, &theme, &icons, "trash", RichText::new(t!("Delete folder")).color(theme.error), true).on_hover_text(t!("Its commands move out of it; none are deleted")).clicked() {
+                                todo.push(Do::SlashDeleteFolder(folder.clone()));
+                                ui.close();
+                            }
+                        };
+                        resp.context_menu(|ui| menu(ui));
+                        egui::Popup::menu(&more).show(|ui| menu(ui));
+                    }
+                    if folder_open {
+                        for root in &inside {
+                            command_row(ui, root, 2, &mut todo);
+                        }
+                    }
+                }
+                for root in roots.iter().filter(|r| first_of(r).is_some_and(|c| c.folder.is_none())) {
+                    command_row(ui, root, 1, &mut todo);
                 }
                 let (resp, _) = row(ui, &theme, &icons, Id::unique("sidebar-cmd-new"), 1, None, Some("plus"), t!("Edit commands…"), false, false, 0.0, false);
                 if resp.clicked() {
@@ -628,6 +796,20 @@ fn apply(ed: &mut Editor, ctx: &egui::Context, todo: Vec<Do>, renaming: &mut Opt
                         ed.edited = true;
                     }
                     Target::Folder(_) => {}
+                    Target::SlashFolder(old) if old != name => {
+                        let mut commands = crate::builders::slash::commands_of(project);
+                        let mut folders = crate::builders::slash::folders_of(project, &commands);
+                        for c in commands.iter_mut().filter(|c| c.folder.as_ref() == Some(&old)) {
+                            c.folder = Some(name.clone());
+                        }
+                        folders.retain(|f| *f != name);
+                        match folders.iter().position(|f| *f == old) {
+                            Some(i) => folders[i] = name,
+                            None => folders.push(name),
+                        }
+                        ed.edited |= crate::builders::slash::save_to(project, &commands, &folders);
+                    }
+                    Target::SlashFolder(_) => {}
                 }
             }
             Do::Move(key, folder) => {
@@ -740,6 +922,54 @@ fn apply(ed: &mut Editor, ctx: &egui::Context, todo: Vec<Do>, renaming: &mut Opt
                 }
             }),
             Do::SlashCommands => crate::builders::slash::open(ed),
+            Do::SlashOpen(root) => crate::builders::slash::open_at(ed, &root),
+            Do::SlashPlace(root, folder, next_to) => {
+                let mut commands = crate::builders::slash::commands_of(project);
+                let mut folders = crate::builders::slash::folders_of(project, &commands);
+                if let Some(f) = &folder
+                    && !folders.contains(f)
+                {
+                    folders.push(f.clone());
+                }
+                crate::builders::slash::place(&mut commands, &root, folder, next_to.as_ref().map(|(o, b)| (o.as_str(), *b)));
+                ed.edited |= crate::builders::slash::save_to(project, &commands, &folders);
+            }
+            Do::SlashEnable(root, on) => {
+                let mut commands = crate::builders::slash::commands_of(project);
+                let folders = crate::builders::slash::folders_of(project, &commands);
+                for c in commands.iter_mut().filter(|c| c.name.split_whitespace().next() == Some(root.as_str())) {
+                    c.disabled = !on;
+                }
+                ed.edited |= crate::builders::slash::save_to(project, &commands, &folders);
+            }
+            Do::SlashNewFolder => {
+                let commands = crate::builders::slash::commands_of(project);
+                let mut folders = crate::builders::slash::folders_of(project, &commands);
+                let name = unique(t!("New folder"), |n| folders.iter().any(|f| f == n));
+                folders.push(name.clone());
+                ed.edited |= crate::builders::slash::save_to(project, &commands, &folders);
+                uncollapse(ctx, SLASH_ROW);
+                *renaming = Some(Renaming { target: Target::SlashFolder(name.clone()), text: name, fresh: true });
+            }
+            Do::SlashDeleteFolder(name) => {
+                let mut commands = crate::builders::slash::commands_of(project);
+                let mut folders = crate::builders::slash::folders_of(project, &commands);
+                for c in commands.iter_mut().filter(|c| c.folder.as_ref() == Some(&name)) {
+                    c.folder = None;
+                }
+                folders.retain(|f| *f != name);
+                ed.edited |= crate::builders::slash::save_to(project, &commands, &folders);
+            }
+            Do::SlashPlaceFolder(name, next_to, before) => {
+                let commands = crate::builders::slash::commands_of(project);
+                let mut folders = crate::builders::slash::folders_of(project, &commands);
+                if name != next_to && folders.contains(&name) {
+                    folders.retain(|f| *f != name);
+                    let at = folders.iter().position(|f| *f == next_to).map(|i| if before { i } else { i + 1 }).unwrap_or(folders.len());
+                    folders.insert(at, name);
+                    ed.edited |= crate::builders::slash::save_to(project, &commands, &folders);
+                }
+            }
             Do::Export(preselect) => crate::editor::exchange::open_export(ed, preselect),
             Do::Import => crate::editor::exchange::pick_import(ed),
         }
