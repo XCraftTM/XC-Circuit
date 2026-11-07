@@ -7,6 +7,21 @@ const INTERACTION_MODES = ["reply", "edit", "followup", "defer", "update"];
 const FORMATS = { text: "Text and embeds", layout: "Layout (Components V2)" };
 const MENTIONS = { all: "Everyone mentioned", users: "Only users", usersRoles: "Users and roles (not @everyone)", none: "Nobody" };
 
+/**
+ * The channel to send to: a channel, or its id (typed into the block, or a
+ * text wired in, also as <#id>). Newer apps look ids up before the block
+ * runs; this does it for those that don't.
+ */
+async function channelOf(value, ctx) {
+  if (value == null || typeof value === "object") return value ?? undefined;
+  const given = String(value).trim();
+  if (!given) return undefined;
+  const id = given.replace(/^<#|>$/g, "");
+  const channel = /^\d+$/.test(id) ? await ctx.discord.client.channels.fetch(id).catch(() => null) : null;
+  if (!channel) throw new Error(`Channel: no channel with the id "${given}"`);
+  return channel;
+}
+
 module.exports = {
   id: "discord.send_message",
   kind: "action",
@@ -14,7 +29,7 @@ module.exports = {
     name: "Send Message",
     description: "Replies to a command or button, or sends, replies to and edits messages in channels.",
     author: "XC Team",
-    version: "3.4.0",
+    version: "3.4.1",
   },
   search: {
     category: "send",
@@ -124,7 +139,7 @@ module.exports = {
       const all = [...(layout.files || []), ...(payload.files || [])];
       payload.files = all.length ? all : undefined;
     }
-    const target = fields.interaction ?? fields.channel ?? fields.message ?? (fields.user?.user ?? fields.user);
+    const target = fields.interaction ?? (await channelOf(fields.channel, ctx)) ?? fields.message ?? (fields.user?.user ?? fields.user);
     const send = {
       reply: () => (target.deferred ? target.editReply(payload) : target.reply({ ...payload, withResponse: true })),
       edit: () => target.editReply(payload),

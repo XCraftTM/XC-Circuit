@@ -5,7 +5,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 ## Unreleased
 
 ### Fixed
-- **A channel id typed into Send Message works**: with "Send to channel", a channel id in the Channel box gave "target.send is not a function", because the bot didn't look up ids for inputs a block adds itself (Send Message adds Channel only for that mode). It does now, on Discord and Fluxer.
+- **A channel id typed into Send Message works**: with "Send to channel", a channel id in the Channel box gave "target.send is not a function", because the bot didn't look up ids for inputs a block adds itself (Send Message adds Channel only for that mode). It does now, on Discord and Fluxer, and Discord's Send Message looks the id up itself too, so XC Circuit 0.1.6 gets the fix with the Discord Bot 1.2.5 block update.
 - **Send Message takes files again**: its Files input was under Advanced, and inputs there had no pin on the block, so nothing could be connected to it. Files now shows on the block (Discord and Fluxer; not when deferring, or when editing on Fluxer), ready for a picture from Build Canvas, a file path from Read, Write or Download File, a web address or another message's attachments.
 - **Advanced inputs can be connected**: in the Inspector's Advanced part, inputs that can only be connected (such as Components) have the **pin** chip, which puts their pin on the block; inputs that are pins or connected always show on the block.
 

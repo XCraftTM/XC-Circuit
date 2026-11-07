@@ -133,4 +133,21 @@ assert.deepStrictEqual(
   ["ping"],
 );
 
-console.log(`${Object.keys(all).length} Discord blocks checked\ndiscord blocks test passed`);
+// Send Message to a channel given by its id (typed in, or <#id>), also where
+// the app doesn't look ids up before the block runs.
+(async () => {
+  const sent = [];
+  const channels = { 42: { id: "42", send: async (p) => (sent.push(p.content), { id: "m1" }) } };
+  const ctx = { discord: { client: { channels: { fetch: async (id) => channels[id] ?? Promise.reject(new Error("Unknown Channel")) } } } };
+  const send = (channel) => all["discord.send_message"].run({ fields: { ...defaults("discord.send_message"), mode: "send", text: "hi", channel }, ctx });
+  await send(" 42 ");
+  await send("<#42>");
+  await send(channels[42]);
+  assert.deepStrictEqual(sent, ["hi", "hi", "hi"]);
+  await assert.rejects(send("999"), /no channel with the id "999"/);
+  await assert.rejects(send("general"), /no channel with the id "general"/);
+  console.log(`${Object.keys(all).length} Discord blocks checked\ndiscord blocks test passed`);
+})().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
