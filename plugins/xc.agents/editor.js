@@ -366,11 +366,12 @@ function blockArea(key, ws, id) {
 }
 
 /** A note's rectangle from x, y, width, height or the blocks it goes around. */
-function noteRect(key, ws, o, before) {
+function noteRect(key, ws, o, before, withText) {
   if (Array.isArray(o.around) && o.around.length) {
     const areas = o.around.map((b) => blockArea(key, ws, needBlock(ws, key, b)));
     const left = Math.min(...areas.map((a) => a[0])) - 30;
-    const top = Math.min(...areas.map((a) => a[1])) - 56;
+    // Room above the blocks for the title, and the text under it.
+    const top = Math.min(...areas.map((a) => a[1])) - (withText ? 80 : 56);
     const right = Math.max(...areas.map((a) => a[0] + a[2])) + 30;
     const bottom = Math.max(...areas.map((a) => a[1] + a[3])) + 30;
     return [left, top, right - left, bottom - top];
@@ -390,7 +391,7 @@ tool({
     let n = 1;
     while (ws.notes[`n${n}`]) n += 1;
     const id = `n${n}`;
-    const note = { title: String(o.title || ""), rect: noteRect(key, ws, o, null) };
+    const note = { title: String(o.title || ""), rect: noteRect(key, ws, o, null, !!o.text) };
     if (o.text) note.text = String(o.text);
     if (o.color) note.color = String(o.color);
     ws.notes[id] = note;
@@ -411,7 +412,7 @@ tool({
     if (o.title !== undefined) note.title = String(o.title);
     if (o.text !== undefined) note.text = String(o.text);
     if (o.color !== undefined) note.color = o.color ? String(o.color) : undefined;
-    if (o.around || ["x", "y", "width", "height"].some((k) => o[k] !== undefined)) note.rect = noteRect(key, ws, o, note.rect);
+    if (o.around || ["x", "y", "width", "height"].some((k) => o[k] !== undefined)) note.rect = noteRect(key, ws, o, note.rect, !!note.text);
     xc.setWorkspace(key, ws);
     return { id: o.note, ...note };
   },

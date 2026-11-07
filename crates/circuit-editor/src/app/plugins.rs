@@ -121,7 +121,8 @@ impl CircuitApp {
                     match self.prepare_shot(&args) {
                         Ok(about) => {
                             ctx.request_repaint();
-                            self.agent_shots.push(AgentShot { pending, about, wait: 4, image: None });
+                            // About a quarter of a second: what it opened has drawn and windows have faded in.
+                            self.agent_shots.push(AgentShot { pending, about, wait: 15, image: None });
                             continue;
                         }
                         Err(e) => serde_json::json!({ "result": crate::mcp::tool_result(Err(e)) }),
