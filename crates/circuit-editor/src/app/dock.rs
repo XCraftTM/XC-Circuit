@@ -184,7 +184,7 @@ impl Tab {
             Tab::EmbedBuilder => 540.0,
             Tab::LayoutBuilder => 640.0,
             Tab::CanvasBuilder => 620.0,
-            Tab::SlashCommands => 800.0,
+            Tab::SlashCommands => 600.0,
             _ => 0.0,
         }
     }

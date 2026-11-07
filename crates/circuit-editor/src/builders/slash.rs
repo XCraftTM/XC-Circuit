@@ -198,6 +198,10 @@ const KINDS: [(&str, &str, u64); 9] = [
 pub struct SlashEdit {
     pub(crate) commands: Vec<SlashCommand>,
     selected: usize,
+    /// A command was picked: in a narrow tab the list then folds into a bar.
+    picked: bool,
+    /// The folded list is open over the form.
+    list_open: bool,
     /// While switched to JSON: the command (first word) shown, and its text.
     json: Option<(String, JsonText)>,
 }
@@ -228,7 +232,7 @@ pub fn load(ed: &Editor) -> Vec<SlashCommand> {
 }
 
 pub fn open(ed: &mut Editor) {
-    ed.slash_edit = Some(SlashEdit { commands: load(ed), selected: 0, json: None });
+    ed.slash_edit = Some(SlashEdit { commands: load(ed), selected: 0, picked: false, list_open: false, json: None });
 }
 
 fn root_of(name: &str) -> &str {
@@ -674,107 +678,203 @@ fn apply_json(edit: &mut SlashEdit, root: &str, v: &Value) -> Result<String, Str
     Ok(first)
 }
 
+/// Below this the preview goes on top of the form, and the list of commands
+/// gets out of the way once one is picked.
+const SIDE_BY_SIDE: f32 = 230.0 + 18.0 + 380.0 + 20.0 + PREVIEW_W;
+
 fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], trash: Option<&std::path::Path>, eye: Option<&std::path::Path>) {
-    // In a narrow tab the preview goes on top of the form instead of beside it.
-    let stacked = ui.available_width() < 230.0 + 18.0 + 380.0 + 20.0 + PREVIEW_W;
-    ui.horizontal_top(|ui| {
-        // Command list.
-        let h = dialog::remaining_height(ui, 420.0);
-        ui.allocate_ui_with_layout(vec2(230.0, h), egui::Layout::top_down(egui::Align::Min), |ui| {
-            kit::section(ui, theme, t!("Commands"));
-            let mut remove = None;
-            for (i, c) in edit.commands.iter().enumerate() {
-                let selected = i == edit.selected;
-                let label = if c.name.is_empty() { "/(no name)".to_string() } else { format!("/{}", c.name) };
-                let text = RichText::new(label).monospace().color(if selected { theme.text } else { theme.text_muted });
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 6.0;
-                    if ui.add_sized([180.0, 34.0], egui::Button::selectable(selected, text)).clicked() {
-                        edit.selected = i;
-                    }
-                    if kit::icon_button(ui, theme, trash, "×", t!("Delete this command")).clicked() {
-                        remove = Some(i);
-                    }
-                });
-            }
-            if let Some(i) = remove {
-                edit.commands.remove(i);
-                edit.selected = edit.selected.min(edit.commands.len().saturating_sub(1));
-            }
-            ui.add_space(8.0);
-            if kit::secondary_button(ui, theme, t!("+ New command")).clicked() {
-                edit.commands.push(SlashCommand {
-                    name: format!("command{}", edit.commands.len() + 1),
-                    description: t!("Describe what it does").into(),
-                    contexts: vec!["guild".into()],
-                    ..Default::default()
-                });
-                edit.selected = edit.commands.len() - 1;
-            }
-            if !issues.is_empty() {
-                ui.add_space(14.0);
-                for p in issues.iter().take(6) {
-                    ui.label(RichText::new(format!("• {p}")).size(11.5).color(theme.warning));
+    let h = dialog::remaining_height(ui, 420.0);
+    let top_down = egui::Layout::top_down(egui::Align::Min);
+    if ui.available_width() >= SIDE_BY_SIDE {
+        // The list, the selected command, and on the right how it looks in Discord.
+        ui.horizontal_top(|ui| {
+            ui.allocate_ui_with_layout(vec2(230.0, h), top_down, |ui| {
+                if command_list(ui, theme, edit, issues, trash) {
+                    edit.picked = true;
                 }
+            });
+            let r = ui.min_rect();
+            ui.painter().vline(r.right() + 8.0, r.y_range(), Stroke::new(1.0, theme.line));
+            ui.add_space(18.0);
+            let form_w = (ui.available_width() - PREVIEW_W - 40.0).max(380.0);
+            ui.allocate_ui_with_layout(vec2(form_w, h), top_down, |ui| form_column(ui, theme, edit, None));
+            if let Some(cmd) = edit.commands.get(edit.selected) {
+                ui.add_space(20.0);
+                discord_preview(ui, theme, cmd, eye);
             }
         });
-        let r = ui.min_rect();
-        ui.painter().vline(r.right() + 8.0, r.y_range(), Stroke::new(1.0, theme.line));
-        ui.add_space(18.0);
-
-        // The selected command, and on the right how it looks in Discord.
-        let form_w = if stacked { ui.available_width() } else { (ui.available_width() - PREVIEW_W - 40.0).max(380.0) };
-        ui.allocate_ui_with_layout(vec2(form_w, h), egui::Layout::top_down(egui::Align::Min), |ui| {
-            let Some(cmd) = edit.commands.get(edit.selected) else {
-                ui.add_space(40.0);
+        return;
+    }
+    // Narrow: the list on its own until a command is picked; then that
+    // command, with its preview on top, and the list folded into a bar on the
+    // left that opens it over the form.
+    if !edit.picked || edit.commands.get(edit.selected).is_none() {
+        edit.list_open = false;
+        ui.allocate_ui_with_layout(vec2(ui.available_width().min(420.0), h), top_down, |ui| {
+            if command_list(ui, theme, edit, issues, trash) {
+                edit.picked = true;
+            }
+            if edit.commands.is_empty() {
+                ui.add_space(8.0);
                 ui.label(RichText::new(t!("No slash commands yet. Click “+ New command”.")).color(theme.text_muted));
-                return;
-            };
-            if stacked {
-                dialog::preview_on_top(ui, "slash-preview", 0.4, |ui| discord_preview(ui, theme, cmd, eye));
             }
-            let root = root_of(&edit.commands[edit.selected].name).to_string();
-            // Builder | JSON.
-            if let Some(json) = json_view::switch(ui, theme, edit.json.is_some()) {
-                if json {
-                    edit.json = Some((root.clone(), JsonText::new(&root_json(&edit.commands, &root))));
-                } else if edit.json.as_ref().is_none_or(|(_, j)| j.error.is_none()) {
-                    edit.json = None;
-                }
+        });
+        return;
+    }
+    ui.horizontal_top(|ui| {
+        let bar = list_bar(ui, theme, edit, issues, h);
+        ui.add_space(12.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), h), top_down, |ui| form_column(ui, theme, edit, Some(eye)));
+        if edit.list_open {
+            list_over(ui, theme, edit, issues, trash, bar);
+        }
+    });
+}
+
+/// The commands, "+ New command" and what's wrong with them. Returns true
+/// when a command was picked (or made).
+fn command_list(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], trash: Option<&std::path::Path>) -> bool {
+    let mut picked = false;
+    kit::section(ui, theme, t!("Commands"));
+    let mut remove = None;
+    let width = (ui.available_width() - 46.0).max(150.0);
+    for (i, c) in edit.commands.iter().enumerate() {
+        let selected = i == edit.selected;
+        let label = if c.name.is_empty() { "/(no name)".to_string() } else { format!("/{}", c.name) };
+        let text = RichText::new(label).monospace().color(if selected { theme.text } else { theme.text_muted });
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            if ui.add_sized([width, 34.0], egui::Button::selectable(selected, text)).clicked() {
+                edit.selected = i;
+                picked = true;
             }
-            ui.add_space(8.0);
-            if let Some((shown, jt)) = &mut edit.json {
-                // Another command was picked: show its JSON (unless this one has an error to fix).
-                if *shown != root && jt.error.is_none() {
-                    *shown = root.clone();
-                    *jt = JsonText::new(&root_json(&edit.commands, &root));
-                }
-                let help = tf!(
-                    "/{command} as Discord stores it, with its subcommands. Edit it, or paste a command (from the Discord docs or discord.js toJSON()); it applies as soon as it is valid.",
-                    command = shown
-                );
-                let shown_now = shown.clone();
-                if let Some(v) = json_view::editor(ui, theme, ui.scope_id().with("slash-json"), jt, &help) {
-                    let mut jt_after = jt.clone();
-                    match apply_json(edit, &shown_now, &v) {
-                        Ok(first) => edit.json = Some((first, jt_after)),
-                        Err(e) => {
-                            jt_after.error = Some(e);
-                            edit.json = Some((shown_now, jt_after));
-                        }
-                    }
-                }
-                return;
+            if kit::icon_button(ui, theme, trash, "×", t!("Delete this command")).clicked() {
+                remove = Some(i);
             }
-            ScrollArea::vertical().id_salt("slash-form").max_height(dialog::remaining_height(ui, 300.0)).auto_shrink([false, true]).show(ui, |ui| {
-                ui.set_width(ui.available_width());
-                command_form(ui, theme, edit, &root);
+        });
+    }
+    if let Some(i) = remove {
+        edit.commands.remove(i);
+        edit.selected = edit.selected.min(edit.commands.len().saturating_sub(1));
+    }
+    ui.add_space(8.0);
+    if kit::secondary_button(ui, theme, t!("+ New command")).clicked() {
+        edit.commands.push(SlashCommand {
+            name: format!("command{}", edit.commands.len() + 1),
+            description: t!("Describe what it does").into(),
+            contexts: vec!["guild".into()],
+            ..Default::default()
+        });
+        edit.selected = edit.commands.len() - 1;
+        picked = true;
+    }
+    if !issues.is_empty() {
+        ui.add_space(14.0);
+        for p in issues.iter().take(6) {
+            ui.label(RichText::new(format!("• {p}")).size(11.5).color(theme.warning));
+        }
+    }
+    picked
+}
+
+/// The folded list: a slim bar with an arrow, how many commands there are,
+/// and a dot when something needs fixing. A click opens the list over the form.
+fn list_bar(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], h: f32) -> egui::Rect {
+    let (rect, resp) = ui.allocate_exact_size(vec2(30.0, h), egui::Sense::click());
+    kit::describe(&resp, egui::Role::Button, t!("Commands"));
+    let lit = resp.hovered() || edit.list_open;
+    let fill = if lit { crate::ui::theme::mix(theme.panel_header, theme.text, 0.08) } else { theme.panel_header };
+    let p = ui.painter();
+    p.rect(rect, 7.0, fill, Stroke::new(1.0, theme.line), egui::StrokeKind::Inside);
+    // An arrow pointing the way the list opens (or closes).
+    let c = egui::pos2(rect.center().x, rect.top() + 20.0);
+    let d = if edit.list_open { -1.0 } else { 1.0 };
+    let s = Stroke::new(1.8, if lit { theme.text } else { theme.text_muted });
+    p.line_segment([c + vec2(-3.0 * d, -5.0), c + vec2(3.0 * d, 0.0)], s);
+    p.line_segment([c + vec2(3.0 * d, 0.0), c + vec2(-3.0 * d, 5.0)], s);
+    p.text(egui::pos2(rect.center().x, rect.top() + 44.0), egui::Align2::CENTER_CENTER, edit.commands.len().to_string(), egui::FontId::proportional(12.0), theme.text_muted);
+    if !issues.is_empty() {
+        p.circle_filled(egui::pos2(rect.center().x, rect.top() + 62.0), 4.0, theme.warning);
+    }
+    let tip = if issues.is_empty() { t!("Show the commands").to_string() } else { tf!("Show the commands · {count} to fix", count = issues.len()) };
+    if resp.on_hover_text(tip).clicked() {
+        edit.list_open = !edit.list_open;
+    }
+    rect
+}
+
+/// The list opened from the bar, over the form. Picking a command, a click
+/// outside or Escape closes it.
+fn list_over(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], trash: Option<&std::path::Path>, bar: egui::Rect) {
+    let card = Frame::new()
+        .fill(theme.panel)
+        .stroke(Stroke::new(1.0, theme.node_border))
+        .corner_radius(10)
+        .inner_margin(Margin::same(12))
+        .shadow(egui::Shadow { offset: [0, 10], blur: 28, spread: 0, color: Color32::from_black_alpha(130) });
+    let area = egui::Area::new(ui.scope_id().with("slash-list-over")).order(egui::Order::Foreground).fixed_pos(bar.right_top() + vec2(6.0, 0.0)).show(ui.ctx(), |ui| {
+        card.show(ui, |ui| {
+            ui.set_width(260.0);
+            ScrollArea::vertical().id_salt("slash-list-over-scroll").max_height(bar.height() - 24.0).show(ui, |ui| {
+                if command_list(ui, theme, edit, issues, trash) {
+                    edit.list_open = false;
+                }
             });
         });
-        if let Some(cmd) = edit.commands.get(edit.selected).filter(|_| !stacked) {
-            ui.add_space(20.0);
-            discord_preview(ui, theme, cmd, eye);
+    });
+    let outside = ui.input(|i| i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| !area.response.rect.contains(p) && !bar.contains(p)));
+    if outside || ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        edit.list_open = false;
+    }
+}
+
+/// The selected command: Builder | JSON, and its form or its JSON. With
+/// `preview_on_top` (narrow tabs), how it looks in Discord goes above it.
+fn form_column(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, preview_on_top: Option<Option<&std::path::Path>>) {
+    let Some(cmd) = edit.commands.get(edit.selected) else {
+        ui.add_space(40.0);
+        ui.label(RichText::new(t!("No slash commands yet. Click “+ New command”.")).color(theme.text_muted));
+        return;
+    };
+    if let Some(eye) = preview_on_top {
+        dialog::preview_on_top(ui, "slash-preview", 0.4, |ui| discord_preview(ui, theme, cmd, eye));
+    }
+        let root = root_of(&edit.commands[edit.selected].name).to_string();
+        // Builder | JSON.
+        if let Some(json) = json_view::switch(ui, theme, edit.json.is_some()) {
+            if json {
+                edit.json = Some((root.clone(), JsonText::new(&root_json(&edit.commands, &root))));
+            } else if edit.json.as_ref().is_none_or(|(_, j)| j.error.is_none()) {
+                edit.json = None;
+            }
         }
+        ui.add_space(8.0);
+        if let Some((shown, jt)) = &mut edit.json {
+            // Another command was picked: show its JSON (unless this one has an error to fix).
+            if *shown != root && jt.error.is_none() {
+                *shown = root.clone();
+                *jt = JsonText::new(&root_json(&edit.commands, &root));
+            }
+            let help = tf!(
+                "/{command} as Discord stores it, with its subcommands. Edit it, or paste a command (from the Discord docs or discord.js toJSON()); it applies as soon as it is valid.",
+                command = shown
+            );
+            let shown_now = shown.clone();
+            if let Some(v) = json_view::editor(ui, theme, ui.scope_id().with("slash-json"), jt, &help) {
+                let mut jt_after = jt.clone();
+                match apply_json(edit, &shown_now, &v) {
+                    Ok(first) => edit.json = Some((first, jt_after)),
+                    Err(e) => {
+                        jt_after.error = Some(e);
+                        edit.json = Some((shown_now, jt_after));
+                    }
+                }
+            }
+            return;
+        }
+    ScrollArea::vertical().id_salt("slash-form").max_height(dialog::remaining_height(ui, 300.0)).auto_shrink([false, true]).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        command_form(ui, theme, edit, &root);
     });
 }
 
@@ -1178,7 +1278,7 @@ mod tests {
     #[test]
     fn pasting_one_command_replaces_it() {
         let input: Vec<SlashCommand> = serde_json::from_value(fixture("slash-input.json")).unwrap();
-        let mut edit = SlashEdit { commands: input, selected: 2, json: None };
+        let mut edit = SlashEdit { commands: input, selected: 2, picked: true, list_open: false, json: None };
         let pasted = json!({ "name": "support", "description": "Get help", "options": [{ "type": 5, "name": "urgent", "description": "Is it urgent?" }] });
         assert_eq!(apply_json(&mut edit, "ticket", &pasted).unwrap(), "support");
         let names: Vec<&str> = edit.commands.iter().map(|c| c.name.as_str()).collect();
