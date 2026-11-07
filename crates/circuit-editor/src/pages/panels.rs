@@ -374,7 +374,7 @@ fn wrap_columns(text: &str, cols: usize) -> Vec<&str> {
 pub type ProblemItem = (String, String, Option<(String, String)>);
 
 /// Plugin problems plus checks of every workspace in the open project.
-pub fn collect_problems(ed: &Editor) -> Vec<ProblemItem> {
+pub fn collect_problems(ed: &mut Editor) -> Vec<ProblemItem> {
     let mut items: Vec<ProblemItem> = ed.reg.problems.iter().map(|p| (p.source.clone(), p.message.clone(), None)).collect();
     if let Some(project) = &ed.project {
         for (stem, why) in &project.unreadable {
@@ -419,10 +419,17 @@ pub fn collect_problems(ed: &Editor) -> Vec<ProblemItem> {
                 if def.kind == circuit_core::BlockKind::Action && ws.links_into(id, ACTION_IN).next().is_none() {
                     items.push((format!("{} › {}", ws.name, def.name), t!("nothing runs this block (no Action wire into it)").into(), Some((key.clone(), id.clone()))));
                 }
-                for (k, f) in &def.fields {
+                // The fields as drawn: with the ones the block adds from its settings
+                // (Send Message's Channel when sending to one) and without hidden ones.
+                let shape = crate::editor::node_shape(&ed.reg, &ed.engine, &mut ed.shapes, key, ws, id, &ed.define_ctx);
+                let fields: Vec<(String, circuit_core::FieldDef)> = match &shape {
+                    Some(s) => s.visible_fields().map(|(k, f)| (k.clone(), f.clone())).collect(),
+                    None => def.fields.iter().filter(|(_, f)| f.show.is_none()).map(|(k, f)| (k.clone(), f.clone())).collect(),
+                };
+                for (k, f) in &fields {
                     let connected = ws.links_into(id, k).next().is_some();
                     let empty = node.values.get(k).or(f.default.as_ref()).is_none_or(|v| v.is_null() || *v == Value::String(String::new()));
-                    if f.required && !connected && empty && f.show.is_none() {
+                    if f.required && !connected && empty {
                         items.push((format!("{} › {}", ws.name, def.name), format!("`{}` needs a value", f.label(k)), Some((key.clone(), id.clone()))));
                     }
                 }
@@ -528,14 +535,46 @@ mod tests {
         project.workspaces.insert("main".into(), caller);
         project.workspaces.insert("helpers".into(), helper);
         let about = |items: &[ProblemItem], what: &str| items.iter().filter(|(_, why, _)| why.contains(what)).count();
-        let items = collect_problems(&ed);
+        let items = collect_problems(&mut ed);
         assert_eq!(about(&items, "turned off"), 0);
         assert_eq!(about(&items, "nothing runs this block"), 1);
 
         ed.project.as_mut().unwrap().workspaces.get_mut("helpers").unwrap().disabled = true;
-        let items = collect_problems(&ed);
+        let items = collect_problems(&mut ed);
         assert_eq!(about(&items, "calls greet, but its When Called block is in Helpers, which is turned off"), 1, "{items:?}");
         assert_eq!(about(&items, "nothing runs this block"), 0, "blocks of a workspace that is off aren't checked");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Inputs a block adds from its settings count too: Send Message sending to a
+    /// channel needs one, and replying needs the interaction instead.
+    #[test]
+    fn inputs_a_block_adds_are_checked() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        let dir = std::env::temp_dir().join(format!("xc-problems-added-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        circuit_core::Project::create(&dir, "Added", "discord-bot").unwrap();
+        ed.open_project(&dir);
+        let send = |mode: &str, channel: &str| Node {
+            block: "discord.send_message@3".into(),
+            values: serde_json::json!({ "mode": mode, "text": "hi", "channel": channel }).as_object().cloned().unwrap(),
+            ..Default::default()
+        };
+        let project = ed.project.as_mut().unwrap();
+        let mut ws = Workspace::new("Main");
+        ws.nodes.insert("go".into(), Node { block: "core.on_start@1".into(), ..Default::default() });
+        ws.nodes.insert("empty".into(), send("send", ""));
+        ws.nodes.insert("typed".into(), send("send", "123456789012345678"));
+        ws.links.push("go.next > empty.in".parse().unwrap());
+        ws.links.push("empty.next > typed.in".parse().unwrap());
+        project.workspaces.clear();
+        project.workspaces.insert("main".into(), ws);
+        let items = collect_problems(&mut ed);
+        let channel: Vec<_> = items.iter().filter(|(_, why, _)| why.contains("`Channel` needs a value")).collect();
+        assert_eq!(channel.len(), 1, "only the empty one: {items:?}");
+        assert_eq!(channel[0].2.as_ref().map(|(_, b)| b.as_str()), Some("empty"));
+        assert!(!items.iter().any(|(_, why, _)| why.contains("Interaction")), "sending to a channel needs no interaction: {items:?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -233,7 +233,7 @@ fn templates_open_without_surprises() {
     for dir in dirs {
         let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
         ed.open_project(&dir);
-        for (text, _, at) in crate::pages::panels::collect_problems(&ed) {
+        for (text, _, at) in crate::pages::panels::collect_problems(&mut ed) {
             found.push(format!("{} {at:?}: {text}", dir.file_name().unwrap().to_string_lossy()));
         }
     }
@@ -241,7 +241,7 @@ fn templates_open_without_surprises() {
         println!("{}", found.join("\n"));
     }
     // Their descriptions say to fill these in.
-    let left_to_you = ["› Add Role", "› Find Channel"];
+    let left_to_you = ["› Add Role", "› Find Channel", "› On New Post"];
     let surprises: Vec<&String> = found.iter().filter(|p| !left_to_you.iter().any(|l| p.ends_with(l))).collect();
     assert!(surprises.is_empty(), "templates open with problems:\n{surprises:#?}");
 }

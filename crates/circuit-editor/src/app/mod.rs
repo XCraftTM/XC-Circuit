@@ -487,7 +487,7 @@ impl eframe::App for CircuitApp {
             .show(ui, |ui| self.status_bar(ui));
         let key = (self.ed.history.revision(), self.ed.reloads, self.ed.prefs.language.clone());
         if self.problems_found.as_ref().is_none_or(|(k, _)| *k != key) {
-            self.problems_found = Some((key, panels::collect_problems(&self.ed)));
+            self.problems_found = Some((key, panels::collect_problems(&mut self.ed)));
         }
         let mut problems = self.problems_found.as_ref().map(|(_, p)| p.clone()).unwrap_or_default();
         problems.extend(self.plugin_host.problems());

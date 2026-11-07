@@ -149,7 +149,7 @@ pub trait Host {
         Err("this editor can't make workspaces for plugins".into())
     }
     /// What the Problems panel lists: [{ source, message, workspace, block }].
-    fn problems(&self) -> serde_json::Value {
+    fn problems(&mut self) -> serde_json::Value {
         serde_json::Value::Array(Vec::new())
     }
     /// The Console's last `lines` lines: [{ time, level, text, workspace, block }].
