@@ -457,7 +457,7 @@ tool({
 
 tool({
   name: "open_builder",
-  description: "Opens the editor's Embed, Layout or Canvas Builder on a block's field (or Slash Commands, for a Slash Command block), so the user sees it there. To change what's in it, use set_block_values.",
+  description: "Opens the editor's Embed, Layout, Modal or Canvas Builder on a block's field (or Slash Commands, for a Slash Command block), so the user sees it there. To change what's in it, use set_block_values.",
   input: schema({ workspace: workspaceArg, block: blockArg, field: { type: "string", description: "The field; the block's first one a builder edits when not given." } }, ["workspace", "block"]),
   run({ workspace, block, field }) {
     needProject();

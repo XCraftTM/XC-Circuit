@@ -61,20 +61,20 @@ const CHANNEL_TYPES: [(u64, &str); 8] = [(0, n("Text")), (2, n("Voice")), (4, n(
 
 // ---- The JSON ---------------------------------------------------------------
 
-fn ty(v: &Value) -> u64 {
+pub(crate) fn ty(v: &Value) -> u64 {
     v.get("type").and_then(Value::as_u64).unwrap_or(0)
 }
 
-fn text_of<'a>(v: &'a Value, key: &str) -> &'a str {
+pub(crate) fn text_of<'a>(v: &'a Value, key: &str) -> &'a str {
     v.get(key).and_then(Value::as_str).unwrap_or_default()
 }
 
-fn list_of<'a>(v: &'a Value, key: &str) -> &'a [Value] {
+pub(crate) fn list_of<'a>(v: &'a Value, key: &str) -> &'a [Value] {
     v.get(key).and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default()
 }
 
 /// The list under `key`, made if missing.
-fn list_mut<'a>(v: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
+pub(crate) fn list_mut<'a>(v: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
     if !v.get(key).is_some_and(Value::is_array) {
         v[key] = json!([]);
     }
@@ -460,7 +460,7 @@ fn list_editor(ui: &mut Ui, theme: &Theme, list: &mut Vec<Value>, top: bool, nex
 
 /// A framed card with a title and Up, Down and Remove buttons.
 #[allow(clippy::too_many_arguments)]
-fn card(ui: &mut Ui, theme: &Theme, title: &str, i: usize, len: usize, remove: &mut Option<usize>, swap: &mut Option<(usize, usize)>, top: bool, add: impl FnOnce(&mut Ui)) {
+pub(crate) fn card(ui: &mut Ui, theme: &Theme, title: &str, i: usize, len: usize, remove: &mut Option<usize>, swap: &mut Option<(usize, usize)>, top: bool, add: impl FnOnce(&mut Ui)) {
     let fill = if top { theme.panel_header } else { theme.panel };
     Frame::new().fill(fill).stroke(Stroke::new(1.0, theme.line)).corner_radius(9).inner_margin(Margin::same(10)).show(ui, |ui| {
         ui.set_width(ui.available_width());
@@ -611,7 +611,7 @@ fn body(ui: &mut Ui, theme: &Theme, c: &mut Value, next: usize) {
         kind::ROW => {
             let children = list_mut(c, "components");
             if children.first().is_some_and(is_select) {
-                select_editor(ui, theme, &mut children[0]);
+                select_editor(ui, theme, &mut children[0], false);
                 return;
             }
             let mut remove = None;
@@ -642,7 +642,7 @@ fn body(ui: &mut Ui, theme: &Theme, c: &mut Value, next: usize) {
 
 /// The name in front of a row's control, in a column of its own. Returns
 /// the label's id, which names the control for screen readers.
-fn label_column(ui: &mut Ui, label: egui::Label) -> egui::Id {
+pub(crate) fn label_column(ui: &mut Ui, label: egui::Label) -> egui::Id {
     let h = crate::ui::kit::input_height(ui);
     ui.allocate_ui_with_layout(vec2(110.0, h), egui::Layout::left_to_right(egui::Align::Center), |ui| {
         ui.set_min_width(110.0);
@@ -652,7 +652,7 @@ fn label_column(ui: &mut Ui, label: egui::Label) -> egui::Id {
 }
 
 /// A text box for a string under `key`; an empty one removes the key.
-fn line(ui: &mut Ui, v: &mut Value, key: &str, hint: &str, label: &str) {
+pub(crate) fn line(ui: &mut Ui, v: &mut Value, key: &str, hint: &str, label: &str) {
     ui.horizontal(|ui| {
         ui.set_min_height(crate::ui::kit::input_height(ui));
         let name = label_column(ui, egui::Label::new(RichText::new(label).size(12.5)));
@@ -664,7 +664,7 @@ fn line(ui: &mut Ui, v: &mut Value, key: &str, hint: &str, label: &str) {
     });
 }
 
-fn set_text(v: &mut Value, key: &str, text: String) {
+pub(crate) fn set_text(v: &mut Value, key: &str, text: String) {
     if text.is_empty() {
         if let Some(m) = v.as_object_mut() {
             m.remove(key);
@@ -674,7 +674,7 @@ fn set_text(v: &mut Value, key: &str, text: String) {
     }
 }
 
-fn text_area(ui: &mut Ui, v: &mut Value, key: &str, hint: &str) {
+pub(crate) fn text_area(ui: &mut Ui, v: &mut Value, key: &str, hint: &str) {
     let mut text = text_of(v, key).to_string();
     if ui.add(crate::ui::kit::TextArea::new(ui.scope_id().with(key), &mut text).hint(hint).rows(3)).changed() {
         v[key] = json!(text);
@@ -682,7 +682,7 @@ fn text_area(ui: &mut Ui, v: &mut Value, key: &str, hint: &str) {
 }
 
 /// A switch for a yes/no setting that is left out when off.
-fn flag(ui: &mut Ui, theme: &Theme, v: &mut Value, key: &str, label: &str) {
+pub(crate) fn flag(ui: &mut Ui, theme: &Theme, v: &mut Value, key: &str, label: &str) {
     let mut on = v.get(key).and_then(Value::as_bool).unwrap_or(false);
     let name = ui.label(RichText::new(label).color(theme.text)).id;
     if crate::ui::kit::toggle(ui, &mut on, theme).labelled_by(name).changed() {
@@ -775,7 +775,7 @@ fn emoji_line(ui: &mut Ui, v: &mut Value) {
     });
 }
 
-fn number(ui: &mut Ui, v: &mut Value, key: &str, label: &str) {
+pub(crate) fn number(ui: &mut Ui, v: &mut Value, key: &str, label: &str) {
     let mut text = v.get(key).and_then(Value::as_u64).map(|n| n.to_string()).unwrap_or_default();
     let name = ui.label(RichText::new(label).size(12.5)).id;
     if ui.add(crate::ui::kit::TextLine::new(&mut text).hint("1").width(60.0)).labelled_by(name).changed() {
@@ -788,7 +788,9 @@ fn number(ui: &mut Ui, v: &mut Value, key: &str, label: &str) {
     }
 }
 
-fn select_editor(ui: &mut Ui, theme: &Theme, sel: &mut Value) {
+/// A select menu's settings. `in_modal`: a question in a form, where the id
+/// names the answer and menus can't be disabled.
+pub(crate) fn select_editor(ui: &mut Ui, theme: &Theme, sel: &mut Value, in_modal: bool) {
     let current = ty(sel);
     ui.horizontal(|ui| {
         ui.set_min_height(crate::ui::kit::input_height(ui));
@@ -814,10 +816,16 @@ fn select_editor(ui: &mut Ui, theme: &Theme, sel: &mut Value) {
                 m.remove("channel_types");
             }
         }
-        ui.add_space(8.0);
-        flag(ui, theme, sel, "disabled", t!("Disabled"));
+        if !in_modal {
+            ui.add_space(8.0);
+            flag(ui, theme, sel, "disabled", t!("Disabled"));
+        }
     });
-    line(ui, sel, "custom_id", t!("Select Menu Used matches this"), t!("Custom id"));
+    if in_modal {
+        line(ui, sel, "custom_id", t!("The answer's name in Modal Submitted"), t!("Answer id"));
+    } else {
+        line(ui, sel, "custom_id", t!("Select Menu Used matches this"), t!("Custom id"));
+    }
     line(ui, sel, "placeholder", t!("Shown before anything is picked"), t!("Placeholder"));
     ui.horizontal(|ui| {
         ui.set_min_height(crate::ui::kit::input_height(ui));
@@ -898,7 +906,7 @@ fn select_editor(ui: &mut Ui, theme: &Theme, sel: &mut Value) {
 // ---- The preview ------------------------------------------------------------
 
 /// Discord's own colors, so the preview looks like the real thing in any theme.
-mod discord {
+pub(crate) mod discord {
     use eframe::egui::Color32;
     pub const CHAT: Color32 = Color32::from_rgb(0x31, 0x33, 0x38);
     pub const CONTAINER: Color32 = Color32::from_rgb(0x2B, 0x2D, 0x31);
@@ -1064,7 +1072,7 @@ fn preview_one(ui: &mut Ui, c: &Value, width: f32) {
 }
 
 /// A text component's markdown, as Discord shows it (see `markdown`).
-fn markdown(ui: &mut Ui, text: &str, width: f32) {
+pub(crate) fn markdown(ui: &mut Ui, text: &str, width: f32) {
     let m = crate::builders::markdown::layout(ui.painter(), text, crate::builders::markdown::Kind::Full, 14.0, discord::TEXT, width);
     let (rect, _) = ui.allocate_exact_size(vec2(width, m.size().y), egui::Sense::hover());
     m.paint(ui.painter(), rect.min);

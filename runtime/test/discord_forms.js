@@ -70,9 +70,9 @@ if (fs.existsSync(installed)) {
     }
   }
   class ModalBuilder extends Builder {
-    constructor() {
+    constructor(data) {
       super();
-      this.data.components = [];
+      this.data = { components: [], ...(data || {}) };
     }
     addLabelComponents(...c) {
       this.data.components.push(...c);
@@ -87,7 +87,7 @@ if (fs.existsSync(installed)) {
       return this;
     }
     toJSON() {
-      return { ...this.data, components: this.data.components.map((c) => c.toJSON()) };
+      return { ...this.data, components: this.data.components.map((c) => (c.toJSON ? c.toJSON() : c)) };
     }
   }
   setter(ModalBuilder, "setCustomId", "setTitle");
@@ -135,6 +135,30 @@ const json = (x) => JSON.parse(JSON.stringify(x.toJSON()));
   assert.strictEqual(modal.components[2].label, "Pick a team", "a menu on its own asks with its placeholder");
   assert.strictEqual(modal.components[3].label, "Attach a file");
   await assert.rejects(run("interactions/show_modal.js", { interaction, inputs: [{ odd: 1 }] }), /Inputs takes/);
+
+  // A form from the Modal Builder: Discord's JSON, with ${…} filled in.
+  const fill = (s, vars) => s.replace(/\$\{(\w+)\}/g, (_, k) => vars[k] ?? "");
+  const showModal = block("interactions/show_modal.js");
+  const form = { title: "Apply, ${name}", custom_id: "apply:${id}", components: [
+    { type: 10, content: "Fill in everything." },
+    { type: 18, label: "Why?", description: "A sentence", component: { type: 4, custom_id: "why", style: 2, required: true } },
+    { type: 18, label: "Team", component: { type: 3, custom_id: "team", options: [{ label: "Red", value: "red" }] } },
+    { type: 18, label: "Proof", component: { type: 19, custom_id: "proof", min_values: 1, max_values: 2 } },
+  ] };
+  await showModal.run({ fields: { ...defaults(showModal), interaction, form, name: "Ada", id: "42" }, ctx: { fill } });
+  const built = json(shown);
+  assert.strictEqual(built.title, "Apply, Ada");
+  assert.strictEqual(built.custom_id, "apply:42");
+  assert.deepStrictEqual(built.components.map((c) => c.type), [10, 18, 18, 18]);
+  assert.deepStrictEqual(built.components[1].component, { type: 4, custom_id: "why", style: 2, required: true });
+  assert.strictEqual(built.components[3].component.max_values, 2);
+  // The block's default form works as it is; an empty one says what to do.
+  await showModal.run({ fields: { ...defaults(showModal), interaction }, ctx: { fill } });
+  assert.strictEqual(json(shown).components[0].component.custom_id, "answer");
+  await assert.rejects(showModal.run({ fields: { ...defaults(showModal), interaction, form: { title: "T", components: [] } }, ctx: { fill } }), /no questions/);
+  // Blocks wired into Inputs hide the form; otherwise the form hides Custom id and Title.
+  assert.deepStrictEqual(showModal.define({ connected: {} }).hide, ["customId", "title"]);
+  assert.deepStrictEqual(showModal.define({ connected: { inputs: "list<discord.component>" } }).hide, ["form"]);
 
   // Modal Submitted: text, menu values, picked users and files, by input id.
   const onModal = block("events/on_modal.js");

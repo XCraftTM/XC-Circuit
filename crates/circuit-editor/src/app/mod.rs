@@ -55,6 +55,7 @@ pub enum Tab {
     /// Editors that used to be dialogs. Each is open while its draft exists.
     EmbedBuilder,
     LayoutBuilder,
+    ModalBuilder,
     CanvasBuilder,
     SlashCommands,
     BotSettings,

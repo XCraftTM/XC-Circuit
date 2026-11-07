@@ -5,7 +5,11 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 ## Unreleased
 
 ### Added
+- **A Modal Builder for forms**: Show Modal's form is now designed in one place, like a layout: a title, and up to 5 questions (a box to type into, a select menu or a file upload, each with a hint) and texts, with a preview that looks like Discord's. **Edit form…** on the block opens it; the answer ids are listed there to copy into Modal Submitted. The separate Text Input, Form Field, File Upload and Form Text blocks are no longer needed and left the block picker; forms built from them keep working.
 - **Invite your bot**: Bot settings › Connection now has an invite link under the bot token once one is set. Pick the permissions (common bot permissions, Administrator or none), then open Discord's page for adding the bot to a server, or copy the link to share it.
+
+### Changed
+- **Pins of advanced settings start hidden**: a new block shows only its usual pins; an advanced one (such as Insert Row's More values) appears once turned on with its pin button in the Inspector.
 
 ## 0.1.8
 

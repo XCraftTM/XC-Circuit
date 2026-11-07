@@ -150,7 +150,7 @@ enum NodeMenu {
 }
 
 pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
-    let Editor { reg, engine, theme, project, shapes, views, selected, edited, picker, active_workspace, activity, wire_values, multi, selected_notes, recording_frame, define_ctx, embed_edit, layout_edit, canvas_edit, selected_wire, prefs, ui_rects, tour_parts, .. } = ed;
+    let Editor { reg, engine, theme, project, shapes, views, selected, edited, picker, active_workspace, activity, wire_values, multi, selected_notes, recording_frame, define_ctx, embed_edit, layout_edit, modal_edit, canvas_edit, selected_wire, prefs, ui_rects, tour_parts, .. } = ed;
     let Some(project) = project.as_mut() else { return };
     let mode = reg.mode(&project.meta.mode).or_else(|| reg.modes.first());
     let Some(ws) = project.workspaces.get_mut(ws_key) else {
@@ -217,7 +217,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             }
         }
         if let Some(s) = &shape {
-            for (key, _) in s.visible_fields().filter(|(_, f)| f.type_name == "layout") {
+            for (key, _) in s.visible_fields().filter(|(_, f)| matches!(f.type_name.as_str(), "layout" | "modal")) {
                 let h = view.preview_heights.get(&(id.clone(), key.clone())).copied().unwrap_or(LAYOUT_PREVIEW_GUESS).min(LAYOUT_PREVIEW_MAX);
                 tall.insert(key.clone(), 4.0 + h + 8.0 + 26.0 + 8.0);
             }
@@ -634,6 +634,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         let shape = node_shapes.get(id.as_str()).map(|s| &**s);
         let mut open_embed: Option<String> = None;
         let mut open_layout: Option<String> = None;
+        let mut open_modal: Option<String> = None;
         let mut open_canvas: Option<String> = None;
         for (row, r) in layout.rows.iter() {
             // Hovering a row's name shows what it is, like hovering its pin.
@@ -679,8 +680,8 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                         open_canvas = Some(key.clone());
                     }
                 }
-                RowKind::Field { key, .. } if shape.and_then(|s| s.field(key)).is_some_and(|f| f.type_name == "layout") => {
-                    // The message as Discord shows it, like the Layout Builder's
+                RowKind::Field { key, .. } if shape.and_then(|s| s.field(key)).is_some_and(|f| matches!(f.type_name.as_str(), "layout" | "modal")) => {
+                    // The message (or form) as Discord shows it, like the builder's
                     // preview; cut off (and fading out) past LAYOUT_PREVIEW_MAX.
                     let f = shape.and_then(|s| s.field(key)).unwrap();
                     let value = ws.nodes[id].values.get(key).or(f.default.as_ref()).cloned().unwrap_or(Value::Null);
@@ -693,7 +694,12 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     child.set_clip_rect(area.intersect(cui.clip_rect()));
                     // Its texts are only to look at: a drag on them moves the block.
                     child.style_mut().interaction.selectable_labels = false;
-                    crate::builders::layout::block_preview(&mut child, &value, w);
+                    let is_form = f.type_name == "modal";
+                    if is_form {
+                        crate::builders::modal::block_preview(&mut child, &value, w);
+                    } else {
+                        crate::builders::layout::block_preview(&mut child, &value, w);
+                    }
                     let full = child.min_rect().height().ceil();
                     if before.is_none_or(|b| (b - full).abs() > 0.5) {
                         view.preview_heights.insert(field, full);
@@ -710,8 +716,12 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                         painter.text(pos2(area.center().x, area.bottom() - 9.0), Align2::CENTER_CENTER, t!("Open the builder for the rest"), FontId::proportional(11.0), theme.text_muted);
                     }
                     let button = Rect::from_min_size(pos2(r.left() + 14.0, area.bottom() + 8.0), vec2(w, 26.0));
-                    if cui.put(button, egui::Button::new(t!("Edit layout…"))).clicked() {
-                        open_layout = Some(key.clone());
+                    if cui.put(button, egui::Button::new(if is_form { t!("Edit form…") } else { t!("Edit layout…") })).clicked() {
+                        if is_form {
+                            open_modal = Some(key.clone());
+                        } else {
+                            open_layout = Some(key.clone());
+                        }
                     }
                 }
                 RowKind::Field { key, pinned } => {
@@ -849,6 +859,10 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         if let Some(k) = open_layout {
             let value = ws.nodes[id].values.get(&k).cloned().or_else(|| shape.and_then(|s| s.field(&k)).and_then(|f| f.default.clone())).unwrap_or(Value::Null);
             *layout_edit = Some(crate::builders::layout::LayoutEdit::new(ws_key, id, &k, &value));
+        }
+        if let Some(k) = open_modal {
+            let value = ws.nodes[id].values.get(&k).cloned().or_else(|| shape.and_then(|s| s.field(&k)).and_then(|f| f.default.clone())).unwrap_or(Value::Null);
+            *modal_edit = Some(crate::builders::modal::ModalEdit::new(ws_key, id, &k, &value));
         }
 
         // Header interaction: the only place a block can be dragged.

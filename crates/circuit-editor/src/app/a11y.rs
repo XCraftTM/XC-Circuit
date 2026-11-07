@@ -248,8 +248,23 @@ fn every_builder_names_its_controls() {
     settle(&mut h);
     look(&h, "Layout Builder", &mut missing);
     {
+        // A form with every kind of part, so each one's controls are looked at.
         let ed = &mut h.state_mut().ed;
         ed.layout_edit = None;
+        let form = serde_json::json!({ "title": "Apply", "custom_id": "apply", "components": [
+            { "type": 10, "content": "Read this first" },
+            { "type": 18, "label": "Name", "component": { "type": 4, "custom_id": "name", "style": 1 } },
+            { "type": 18, "label": "Team", "component": { "type": 3, "custom_id": "team", "options": [{ "label": "Red", "value": "red" }] } },
+            { "type": 18, "label": "Who", "component": { "type": 8, "custom_id": "where" } },
+            { "type": 18, "label": "Proof", "component": { "type": 19, "custom_id": "proof" } }
+        ] });
+        ed.modal_edit = Some(crate::builders::modal::ModalEdit::new(&ws, "m", "form", &form));
+    }
+    settle(&mut h);
+    look(&h, "Modal Builder", &mut missing);
+    {
+        let ed = &mut h.state_mut().ed;
+        ed.modal_edit = None;
         crate::builders::canvas::open(ed, &ws, "c", "canvas");
     }
     settle(&mut h);

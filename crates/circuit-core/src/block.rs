@@ -318,7 +318,8 @@ impl BlockDef {
     pub fn default_pins(&self) -> Vec<String> {
         self.fields
             .iter()
-            .filter(|(_, f)| matches!(f.pin, PinMode::Pin | PinMode::Only))
+            // Advanced ones stay hidden until their pin is turned on in the Inspector.
+            .filter(|(_, f)| matches!(f.pin, PinMode::Pin | PinMode::Only) && !f.advanced)
             .map(|(k, _)| k.clone())
             .collect()
     }

@@ -5,7 +5,8 @@ module.exports = {
     name: "Form Text",
     description: "Text shown in a form between its fields: instructions, rules, a heading. Discord's text formatting works (**bold**, # headings, lists).",
     author: "XC Team",
-    version: "1.0.0",
+    deprecated: "Show Modal's Modal Builder makes the whole form, without extra blocks.",
+    version: "1.1.0",
   },
   search: {
     category: "components",

@@ -661,6 +661,7 @@ impl api::Host for EditorHost<'_> {
                 data.to_value()
             }
             "layout" => crate::builders::layout::from_json(value).map_err(|e| format!("not a layout: {e}"))?,
+            "modal" => crate::builders::modal::from_json(value).map_err(|e| format!("not a form: {e}"))?,
             "canvas" => serde_json::from_value::<crate::builders::canvas::CanvasData>(value.clone()).map_err(|e| format!("not a canvas: {e}"))?.to_value(),
             _ => value.clone(),
         })
@@ -670,7 +671,7 @@ impl api::Host for EditorHost<'_> {
         let n = self.ed.workspace(workspace).ok_or_else(|| format!("no workspace `{workspace}`"))?.nodes.get(node).cloned().ok_or_else(|| format!("workspace `{workspace}` has no block `{node}`"))?;
         let def = self.ed.reg.block(&n.block).ok_or_else(|| format!("block {node} is a `{}`, which isn't installed", n.block))?;
         // The field asked for, or the block's first one with a builder.
-        let builder_of = |t: &str| matches!(t, "embed" | "layout" | "canvas" | "slash-command-ref");
+        let builder_of = |t: &str| matches!(t, "embed" | "layout" | "modal" | "canvas" | "slash-command-ref");
         let key = if field.is_empty() { def.fields.iter().find(|(_, f)| builder_of(&f.type_name)).map(|(k, _)| k.clone()) } else { Some(field.to_string()) };
         let key = key.ok_or_else(|| format!("block {node} ({}) has nothing a builder edits", def.name))?;
         let f = def.fields.get(&key).ok_or_else(|| format!("block {node} has no field `{key}`"))?;
@@ -682,6 +683,10 @@ impl api::Host for EditorHost<'_> {
             "layout" => {
                 crate::builders::layout::open(self.ed, workspace, node, &key);
                 "Layout Builder"
+            }
+            "modal" => {
+                crate::builders::modal::open(self.ed, workspace, node, &key);
+                "Modal Builder"
             }
             "canvas" => {
                 crate::builders::canvas::open(self.ed, workspace, node, &key);
@@ -742,6 +747,7 @@ fn value_format(type_name: &str) -> Option<&'static str> {
     Some(match type_name {
         "embed" => "An object: { color: \"#RRGGBB\", title, url, description, author: { name, icon, url }, fields: [{ name, value, inline }], image (a URL), thumbnail (a URL), footer: { text, icon }, timestamp: true for when it's sent }. Discord's own embed JSON (or a message with embeds) works too. Texts can hold ${…}.",
         "layout" => "Discord's Components V2 JSON: { components: [ … ] }, such as a container { type: 17, accent_color, components: [ { type: 10, content: \"## Title\" }, { type: 14 }, { type: 1, components: [ { type: 2, style: 1, label, custom_id } ] } ] }. Text 10, section 9 (with an accessory: thumbnail 11 or button 2), media gallery 12, file 13, separator 14, row 1. A whole message or a list of components works too. Texts can hold ${…}.",
+        "modal" => "Discord's modal JSON: { title (up to 45), custom_id (what Modal Submitted matches), components: [ … ] }, up to 5 components: questions { type: 18, label, description, component } around a text input { type: 4, custom_id (the answer's id), style: 1 one line or 2 several, placeholder, value, min_length, max_length, required }, a select menu { type: 3, custom_id, options: [{ label, value }] } (or 5 users, 6 roles, 7 both, 8 channels) or a file upload { type: 19, custom_id, min_values, max_values }; and texts { type: 10, content }. Texts can hold ${…}.",
         "canvas" => "A picture: { width, height, background: \"#RRGGBB\", layers: [ … ] }, bottom layer first. Layers: { type: \"rect\" | \"circle\" | \"image\" | \"text\" | \"bar\", x, y, w, h, color, color2 and angle (a gradient), radius, opacity (0-100), outline, outline_width; image: src (a URL or ${…}), shape (rect, rounded, circle), fit (cover, contain, stretch); text: text, font (regular, bold, mono), size, align, shadow, shrink; bar: value, max, back }. The field's default is a full example.",
         _ => return None,
     })
@@ -902,6 +908,15 @@ mod tests {
         assert_eq!((stored["color"].as_str(), stored["footer"]["icon"].as_str()), (Some("#00D8F0"), Some("https://x.example/i.png")), "{stored}");
         let bad_layout = call("add_block", serde_json::json!({ "workspace": moderation, "type": "discord.build_layout", "values": { "layout": { "content": "hi" } } })).unwrap_err();
         assert!(bad_layout.contains("not a layout"), "{bad_layout}");
+        // A form, as Discord's modal JSON; text inputs in rows become questions.
+        let form = serde_json::json!({ "title": "Apply", "custom_id": "apply", "components": [{ "type": 1, "components": [{ "type": 4, "custom_id": "why", "label": "Why?", "style": 2 }] }] });
+        let modal = call("add_block", serde_json::json!({ "workspace": moderation, "type": "discord.show_modal", "values": { "form": form } })).unwrap();
+        let stored = modal["fields"].as_array().unwrap().iter().find(|f| f["key"] == "form").unwrap()["value"].clone();
+        assert_eq!(stored["components"][0], serde_json::json!({ "type": 18, "label": "Why?", "component": { "type": 4, "custom_id": "why", "style": 2 } }), "{stored}");
+        let bad_form = call("add_block", serde_json::json!({ "workspace": moderation, "type": "discord.show_modal", "values": { "form": "hi" } })).unwrap_err();
+        assert!(bad_form.contains("not a form"), "{bad_form}");
+        let opened = call("open_builder", serde_json::json!({ "workspace": moderation, "block": modal["id"] })).unwrap();
+        assert!(opened.to_string().contains("Modal Builder"), "{opened}");
         // Placing: a second block after the same one goes below the first, not on it.
         let start = call("add_block", serde_json::json!({ "workspace": moderation, "type": "core.on_start", "x": 40, "y": 2000 })).unwrap();
         let first = call("add_block", serde_json::json!({ "workspace": moderation, "type": "core.log", "after": start["id"] })).unwrap();

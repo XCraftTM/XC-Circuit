@@ -180,6 +180,7 @@ fn every_tab_has_an_icon() {
         Tab::Plugin("p".into(), "q".into()),
         Tab::EmbedBuilder,
         Tab::LayoutBuilder,
+        Tab::ModalBuilder,
         Tab::CanvasBuilder,
         Tab::SlashCommands,
         Tab::BotSettings,

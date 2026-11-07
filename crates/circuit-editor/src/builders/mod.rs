@@ -1,4 +1,4 @@
-//! The builders for Discord things: embeds, layouts, canvases and slash commands, with their previews (markdown, colors, JSON, locales).
+//! The builders for Discord things: embeds, layouts, forms (modals), canvases and slash commands, with their previews (markdown, colors, JSON, locales).
 
 pub mod canvas;
 pub mod color;
@@ -7,4 +7,5 @@ pub mod json_view;
 pub mod layout;
 pub mod locales;
 pub mod markdown;
+pub mod modal;
 pub mod slash;

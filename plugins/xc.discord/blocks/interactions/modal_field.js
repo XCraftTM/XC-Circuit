@@ -5,7 +5,8 @@ module.exports = {
     name: "Form Field",
     description: "Puts a question above a Text Input, Select Menu or File Upload in a form, with an optional hint under it. Connect it to Show Modal › Inputs.",
     author: "XC Team",
-    version: "1.0.0",
+    deprecated: "Show Modal's Modal Builder makes the whole form, without extra blocks.",
+    version: "1.1.0",
   },
   search: {
     category: "components",

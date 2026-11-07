@@ -5,7 +5,8 @@ module.exports = {
     name: "File Upload",
     description: "A place in a form where people attach files. Put it in a Form Field (or connect it to Show Modal directly). The files arrive at Modal Submitted › Files.",
     author: "XC Team",
-    version: "1.0.0",
+    deprecated: "Show Modal's Modal Builder makes the whole form, without extra blocks.",
+    version: "1.1.0",
   },
   search: {
     category: "components",

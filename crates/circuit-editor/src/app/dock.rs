@@ -49,6 +49,7 @@ impl Tab {
             Tab::Plugin(..) | Tab::Plugins => "plug",
             Tab::EmbedBuilder => "embed",
             Tab::LayoutBuilder => "layers",
+            Tab::ModalBuilder => "text",
             Tab::CanvasBuilder => "palette",
             Tab::SlashCommands => "slash",
             Tab::BotSettings => "bolt",
@@ -90,6 +91,7 @@ impl DockViewer<Tab> for Viewer<'_> {
             Tab::Canvas(key) => self.ed.workspace(key).map(|w| w.name.clone()).unwrap_or_else(|| key.clone()),
             Tab::EmbedBuilder => t!("Embed Builder").into(),
             Tab::LayoutBuilder => t!("Layout Builder").into(),
+            Tab::ModalBuilder => t!("Modal Builder").into(),
             Tab::CanvasBuilder => t!("Canvas Builder").into(),
             Tab::SlashCommands => t!("Slash Commands").into(),
             Tab::BotSettings => t!("Bot settings").into(),
@@ -131,6 +133,7 @@ impl DockViewer<Tab> for Viewer<'_> {
         match tab {
             Tab::EmbedBuilder => self.ed.embed_edit = None,
             Tab::LayoutBuilder => self.ed.layout_edit = None,
+            Tab::ModalBuilder => self.ed.modal_edit = None,
             Tab::CanvasBuilder => self.ed.canvas_edit = None,
             Tab::SlashCommands => self.ed.slash_edit = None,
             Tab::BotSettings => self.bot.settings = None,
@@ -182,6 +185,7 @@ impl DockViewer<Tab> for Viewer<'_> {
             // The builders keep a size they work at; a smaller tab or window scrolls.
             Tab::EmbedBuilder => at_least(ui, tab.min_width(), |ui| crate::builders::embed::tab(ui, self.ed)),
             Tab::LayoutBuilder => at_least(ui, tab.min_width(), |ui| crate::builders::layout::tab(ui, self.ed)),
+            Tab::ModalBuilder => at_least(ui, tab.min_width(), |ui| crate::builders::modal::tab(ui, self.ed)),
             Tab::CanvasBuilder => at_least(ui, tab.min_width(), |ui| crate::builders::canvas::tab(ui, self.ed)),
             Tab::SlashCommands => at_least(ui, tab.min_width(), |ui| crate::builders::slash::tab(ui, self.ed)),
             Tab::BotSettings => self.bot.settings_tab(ui, self.ed),
@@ -202,6 +206,7 @@ impl Tab {
         match self {
             Tab::EmbedBuilder => 540.0,
             Tab::LayoutBuilder => 640.0,
+            Tab::ModalBuilder => 620.0,
             Tab::CanvasBuilder => 620.0,
             Tab::SlashCommands => 600.0,
             _ => 0.0,

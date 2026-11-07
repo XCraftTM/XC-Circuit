@@ -47,6 +47,8 @@ Besides the [type strings](#type-strings), a field's `type` can name an editor:
 | `multiselect` | drop-down of `choices` with a checkbox each (and a search when there are many) | a list of the chosen keys; text with commas from older projects is read too |
 | `color` | swatch with a colour picker | `"#RRGGBB"` |
 | `embed` | the Embed Builder (Discord) | embed object |
+| `layout` | the Layout Builder, and the message on the block (Discord) | Components V2: `{ components: [ … ] }` |
+| `modal` | the Modal Builder, and the form on the block (Discord) | Discord's modal JSON: `{ title, custom_id, components: [ … ] }`, with questions (type 18 around a text input, select menu or file upload) and texts (type 10) |
 | `slash-command-ref` | a slash command of the project (Discord) | its name |
 | `canvas` | the Canvas Builder, and the picture on the block | a design: `{ width, height, background, layers, samples }` ([Build Canvas](/explanations/canvas)) |
 

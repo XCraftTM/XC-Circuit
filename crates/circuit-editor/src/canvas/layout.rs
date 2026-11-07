@@ -157,8 +157,8 @@ pub(super) fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], width: Opt
 
 /// How wide a block is before it is resized.
 pub(super) fn default_width(def: &BlockDef) -> f32 {
-    // Blocks that show a message (an embed, a layout) or a picture get room for it.
-    let shows = matches!(def.preview.as_deref(), Some("embed" | "canvas")) || def.fields.values().any(|f| f.type_name == "layout");
+    // Blocks that show a message (an embed, a layout), a form or a picture get room for it.
+    let shows = matches!(def.preview.as_deref(), Some("embed" | "canvas")) || def.fields.values().any(|f| matches!(f.type_name.as_str(), "layout" | "modal"));
     def.width.unwrap_or(if shows { EMBED_NODE_W } else { NODE_W })
 }
 

@@ -21,6 +21,7 @@ fn padded(ui: &mut Ui, add: impl FnOnce(&mut Ui)) {
 enum InspectorAsk {
     EmbedBuilder(String, String, String),
     LayoutBuilder(String, String, String),
+    ModalBuilder(String, String, String),
     CanvasBuilder(String, String, String),
     SlashCommands,
 }
@@ -35,6 +36,7 @@ pub fn inspector(ui: &mut Ui, ed: &mut Editor) {
     match ask {
         Some(InspectorAsk::EmbedBuilder(ws, node, key)) => crate::builders::embed::open(ed, &ws, &node, &key),
         Some(InspectorAsk::LayoutBuilder(ws, node, key)) => crate::builders::layout::open(ed, &ws, &node, &key),
+        Some(InspectorAsk::ModalBuilder(ws, node, key)) => crate::builders::modal::open(ed, &ws, &node, &key),
         Some(InspectorAsk::CanvasBuilder(ws, node, key)) => crate::builders::canvas::open(ed, &ws, &node, &key),
         Some(InspectorAsk::SlashCommands) => crate::builders::slash::open(ed),
         None => {}
@@ -131,6 +133,10 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                     } else if f.type_name == "layout" {
                         if crate::ui::kit::button(ui, &theme, t!("Open Layout Builder")).clicked() {
                             *ask = Some(InspectorAsk::LayoutBuilder(ws_key.clone(), node_id.clone(), key.clone()));
+                        }
+                    } else if f.type_name == "modal" {
+                        if crate::ui::kit::button(ui, &theme, t!("Open Modal Builder")).clicked() {
+                            *ask = Some(InspectorAsk::ModalBuilder(ws_key.clone(), node_id.clone(), key.clone()));
                         }
                     } else {
                         let mut value = ws.nodes[&node_id].values.get(key).cloned().or_else(|| f.default.clone()).unwrap_or(Value::Null);

@@ -7,7 +7,8 @@ module.exports = {
     name: "Text Input",
     description: "A box to type into, for Show Modal. Its answer comes out of Modal Submitted under its id.",
     author: "XC Team",
-    version: "1.0.0",
+    deprecated: "Show Modal's Modal Builder makes the whole form, without extra blocks.",
+    version: "1.1.0",
   },
   search: {
     category: "components",
