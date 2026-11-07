@@ -115,10 +115,10 @@ impl FieldDef {
     }
 
     /// Whether `${…}` in this field's text is filled in, each name it uses
-    /// with an input of its own: plain text fields, unless the block sets
-    /// `template: false`.
+    /// with an input of its own: plain text fields and fields for any value
+    /// (typed in as text), unless the block sets `template: false`.
     pub fn templated(&self) -> bool {
-        self.template.unwrap_or_else(|| matches!(self.type_name.trim_end_matches('?'), "text" | "textarea" | "string") && self.choices.is_none())
+        self.template.unwrap_or_else(|| matches!(self.type_name.trim_end_matches('?'), "text" | "textarea" | "string" | "any") && self.choices.is_none())
     }
 
     /// Choices of a `select` field as `(group, id, label)`.

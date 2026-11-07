@@ -602,7 +602,11 @@ class GraphNode {
         fields[k] = templateParts(fields[k], run, fields, placed);
         continue;
       }
-      if (templated(f) && !wired.has(k) && typeof fields[k] === "string") fields[k] = fillTemplate(fields[k], run, fields, placed);
+      if (templated(f) && !wired.has(k) && typeof fields[k] === "string") {
+        // A field for any kind of value that is one ${…} gets the value itself
+        // (${#1.after} is the channel, not its name); text fields get text.
+        fields[k] = isAnyType(f) ? fillValue(fields[k], run, fields, placed) : fillTemplate(fields[k], run, fields, placed);
+      }
       fields[k] = coerce(fields[k], f.type);
       await this.findById(fields, k, f, run, path);
     }
@@ -667,10 +671,33 @@ class Run {
   }
 }
 
-/** Whether ${…} in a field is filled in: plain text fields, unless `template: false`. */
+/** Whether ${…} in a field is filled in: text fields and fields for any value, unless `template: false`. */
 function templated(f) {
   if (typeof f.template === "boolean") return f.template;
-  return ["text", "textarea", "string"].includes(String(f.type || "").replace(/\?$/, "")) && !f.choices;
+  return ["text", "textarea", "string", "any"].includes(String(f.type || "").replace(/\?$/, "")) && !f.choices;
+}
+
+/** A field that takes any kind of value (Check's Value, Set Variable's value). */
+function isAnyType(f) {
+  return String(f.type || "").replace(/\?$/, "") === "any";
+}
+
+/**
+ * Like fillTemplate, but a text that is just one ${…} (spaces around it
+ * allowed) gives the expression's value as it is: an object, a number, a
+ * list. Anything else is filled in as text.
+ */
+function fillValue(text, run, fields, placed = {}) {
+  const t = text.trim();
+  if (t.startsWith("${") && expressionEnd(t, 2) === t.length - 1) {
+    const expr = t.slice(2, -1);
+    try {
+      return evaluate(expr, run, fields, placed);
+    } catch (e) {
+      throw new Error(`\${${expr}}: ${e.message}`);
+    }
+  }
+  return fillTemplate(text, run, fields, placed);
 }
 
 /**
@@ -2620,4 +2647,4 @@ if (typeof __XC_BUNDLE__ !== "undefined") {
 }
 
 module.exports = {
-  isPrivateAddress, guardedFetch, start, ungroupBlock, fillTemplate, templateParts, snapshot, Timers, coerce, compare, preview, Store, DbStore, Database, Databases, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };
+  isPrivateAddress, guardedFetch, start, ungroupBlock, fillTemplate, fillValue, templated, templateParts, snapshot, Timers, coerce, compare, preview, Store, DbStore, Database, Databases, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };

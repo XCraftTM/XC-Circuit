@@ -3,7 +3,7 @@
 "use strict";
 
 const assert = require("assert");
-const { fillTemplate, coerce, compare, preview } = require("../circuit-runtime.js");
+const { fillTemplate, fillValue, templated, coerce, compare, preview } = require("../circuit-runtime.js");
 
 const run = { event: { user: "from the event", guild: { name: "XC" } }, vars: new Map([["count", 3]]), outputs: new Map([["n1", { result: 42 }]]) };
 
@@ -12,6 +12,16 @@ assert.strictEqual(fillTemplate("${user} in ${guild.name}", run, {}), "from the 
 assert.strictEqual(fillTemplate("${count} times", run, {}), "3 times");
 assert.strictEqual(fillTemplate("${mode}", run, { mode: "reply" }), "reply");
 assert.strictEqual(fillTemplate("answer ${result}", run, {}), "answer 42");
+// Fields for any value fill ${…} too; one ${…} alone gives the value itself.
+assert.ok(templated({ type: "any" }) && templated({ type: "text" }) && !templated({ type: "number" }) && !templated({ type: "any", template: false }));
+const channel = { id: "1503044503819260024", name: "Lounge" };
+assert.strictEqual(fillValue("${count}", run, {}), 3, "the number itself, not \"3\"");
+assert.strictEqual(fillValue(" ${count} ", run, {}), 3, "spaces around it are fine");
+assert.strictEqual(fillValue("${count} times", run, {}), "3 times", "more than one ${…}: text");
+assert.strictEqual(fillValue("plain", run, {}), "plain");
+assert.deepStrictEqual(fillValue("${ch}", run, { ch: channel }), channel);
+assert.strictEqual(fillValue("${ch.id}", run, { ch: channel }), "1503044503819260024");
+assert.ok(compare(fillValue("${ch.id}", run, { ch: channel }), "eq", "1503044503819260024"), "Check with ${….id} matches the id");
 
 // A value wired into the text's input wins over the event's.
 assert.strictEqual(fillTemplate("Hi ${user}!", run, {}, { user: "wired" }), "Hi wired!");
