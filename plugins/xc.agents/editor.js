@@ -65,12 +65,13 @@ tool({
 
 tool({
   name: "get_workspace",
-  description: "A workspace's blocks (id, type, name, position, values, fields made pins), wires (\"1.next > 2.in\": block 1's flow runs block 2; \"3.result > 4.text\": a value into a field) and notes (framed areas with a title and text).",
+  description: "A workspace's blocks (id, type, name, position `at`, `size` as drawn [width, height] or null before the workspace was shown, values, fields made pins), wires (\"1.next > 2.in\": block 1's flow runs block 2; \"3.result > 4.text\": a value into a field) and notes (framed areas with a title and text).",
   input: schema({ workspace: workspaceArg }, ["workspace"]),
   run({ workspace }) {
     needProject();
     const { key, ws } = load(workspace);
-    const blocks = Object.entries(ws.nodes || {}).map(([id, n]) => ({ id, type: String(n.block).split("@")[0], name: xc.blockName(n.block), at: n.at, values: n.values || {}, pins: n.pins || [] }));
+    const rects = xc.blockRects(key);
+    const blocks = Object.entries(ws.nodes || {}).map(([id, n]) => ({ id, type: String(n.block).split("@")[0], name: xc.blockName(n.block), at: n.at, size: rects[id] ? [rects[id][2], rects[id][3]] : null, values: n.values || {}, pins: n.pins || [] }));
     const notes = Object.entries(ws.notes || {}).map(([id, n]) => ({ id, title: n.title, text: n.text || "", color: n.color || null, x: n.rect[0], y: n.rect[1], width: n.rect[2], height: n.rect[3] }));
     return { key, name: ws.name, folder: ws.folder || null, turnedOff: !!ws.disabled, blocks, wires: ws.links || [], notes };
   },
@@ -142,7 +143,7 @@ tool({
 
 tool({
   name: "add_block",
-  description: "Adds a block to a workspace. Without x and y it goes right of the block given as `after` (or of the rightmost block). Returns the new block with its pins. Wire it up with connect. Embeds and layouts can be given as Discord's own JSON.",
+  description: "Adds a block to a workspace. Without x and y it goes to a free spot right of the block given as `after` (or of everything), moved down past blocks in the way. Returns the new block with its pins. Wire it up with connect. Embeds and layouts can be given as Discord's own JSON.",
   input: schema(
     {
       workspace: workspaceArg,
@@ -157,18 +158,15 @@ tool({
   run({ workspace, type, values, after, x, y }) {
     needProject();
     const { key, ws } = load(workspace);
-    let at = typeof x === "number" && typeof y === "number" ? [x, y] : null;
-    if (!at) {
-      const nodes = Object.entries(ws.nodes || {});
-      const anchor = after && ws.nodes[after] ? ws.nodes[after] : null;
-      if (anchor) at = [anchor.at[0] + 400, anchor.at[1]];
-      else if (nodes.length) at = [Math.max(...nodes.map(([, n]) => n.at[0])) + 400, Math.min(...nodes.map(([, n]) => n.at[1]))];
-      else at = [40, 60];
-    }
+    const placed = typeof x === "number" && typeof y === "number";
+    const at = placed ? [x, y] : freeSpot(key, ws, type, after);
     const given = {};
     for (const [k, v] of Object.entries(values || {})) given[k] = xc.fieldValue(type, k, v);
+    const overlaps = placed ? overlapping(key, ws, [at[0], at[1], ...guessSize(type)]) : [];
     const id = xc.addBlock(key, type, { x: at[0], y: at[1], values: given });
-    return xc.blockPins(key, id);
+    const result = xc.blockPins(key, id);
+    if (overlaps.length) result.warning = `It probably overlaps blocks ${overlaps.join(", ")}: check with screenshot, or move it with move_block.`;
+    return result;
   },
 });
 
@@ -300,6 +298,49 @@ tool({
   },
 });
 
+// ---- Placing blocks ---------------------------------------------------------
+
+const GAP = 60;
+
+/** Every block's area: as drawn when the workspace was shown, else estimated. */
+function areas(key, ws) {
+  const rects = xc.blockRects(key);
+  return Object.keys(ws.nodes || {}).map((id) => ({ id, a: rects[id] || blockArea(key, ws, id) }));
+}
+
+/** About how big a new block of a type is: [width, height]. */
+function guessSize(type) {
+  const info = xc.blockType(type);
+  if (!info) return [260, 120];
+  const big = info.fields.some((f) => ["embed", "layout", "canvas"].includes(f.type));
+  const rows = info.fields.filter((f) => !f.advanced).length + info.outputs.length + info.flows.filter((f) => f !== "next").length;
+  return [big ? 320 : 260, 44 + rows * 26 + (big ? 220 : 0)];
+}
+
+/** Blocks whose area comes closer than the gap to [x, y, w, h]. */
+function overlapping(key, ws, r) {
+  return areas(key, ws)
+    .filter(({ a }) => r[0] < a[0] + a[2] + GAP / 2 && r[0] + r[2] + GAP / 2 > a[0] && r[1] < a[1] + a[3] + GAP / 2 && r[1] + r[3] + GAP / 2 > a[1])
+    .map(({ id }) => id);
+}
+
+/** Where a new block goes: right of `after` (or of everything), then down until nothing is in the way. */
+function freeSpot(key, ws, type, after) {
+  const taken = areas(key, ws).map(({ a }) => a);
+  if (!taken.length) return [40, 60];
+  const [w, h] = guessSize(type);
+  const rects = xc.blockRects(key);
+  const anchor = after && ws.nodes[after] ? rects[after] || blockArea(key, ws, after) : null;
+  let x = anchor ? anchor[0] + anchor[2] + GAP * 1.5 : Math.max(...taken.map((a) => a[0] + a[2])) + GAP * 1.5;
+  let y = anchor ? anchor[1] : Math.min(...taken.map((a) => a[1]));
+  for (let i = 0; i < 200; i++) {
+    const hit = taken.find((a) => x < a[0] + a[2] + GAP && x + w + GAP > a[0] && y < a[1] + a[3] + GAP && y + h + GAP > a[1]);
+    if (!hit) break;
+    y = hit[1] + hit[3] + GAP;
+  }
+  return [Math.round(x), Math.round(y)];
+}
+
 // ---- Notes ------------------------------------------------------------------
 
 const noteArg = { type: "string", description: "The note's id (from get_workspace), such as n1." };
@@ -314,8 +355,10 @@ const noteFields = {
   height: { type: "number" },
 };
 
-/** Roughly where a block is on the canvas: [x, y, width, height]. */
+/** Where a block is on the canvas: [x, y, width, height], as drawn, or roughly before it was. */
 function blockArea(key, ws, id) {
+  const drawn = xc.blockRects(key)[id];
+  if (drawn) return drawn;
   const n = ws.nodes[id];
   const pins = xc.blockPins(key, id);
   const rows = pins.fields.filter((f) => !f.advanced).length + pins.outputs.length + pins.flows.filter((f) => f.key !== "next").length;

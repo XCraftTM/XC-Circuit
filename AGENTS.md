@@ -36,12 +36,14 @@ Tools, and how to use them well:
 | `add_note` · `set_note` · `delete_note` | Notes: framed areas with a title and text; `around: [block ids]` frames blocks. |
 | `create_workspace` · `get_slash_commands` · `set_slash_commands` | Workspaces and the project's slash commands (`set` replaces the whole list). |
 | `open_builder` · `show_in_editor` | Show the user: open the Embed/Layout/Canvas Builder or Slash Commands, or centre the canvas on a block. |
+| `screenshot` | See the canvas as the user does (a workspace fitted to view, or centred on a block). Check layouts with it: blocks with previews (embeds, layouts, pictures) are tall. |
 | `get_problems` · `get_console` | What's wrong; what the bot logged (with the block that wrote it). |
 | `run_bot` · `stop_bot` · `save_project` | Run and save. |
 | `run_script` | Many steps in one call: JavaScript with `tools` (every tool as a function: `tools.add_block({ … })`), `xc` (the [editor plugin API](docs/api/editor.md)) and `print()`. Sandboxed, 5 seconds. |
 
 Good to know:
 
+- `get_workspace` gives each block's drawn `size`; `add_block` without x and y finds a free spot, and warns when a given position overlaps blocks.
 - A typical slash command: `discord.on_slash_command` (field `command`) → actions → `discord.send_message` (mode `reply`), with the event's `interaction` output wired to Send Message's `interaction` input. The command must also exist in `set_slash_commands`.
 - Texts take `${…}`: JavaScript, with values from earlier blocks by name.
 - Every change shows in the editor at once and can be undone there (Ctrl+Z). Tokens and other secrets are never available to agents.

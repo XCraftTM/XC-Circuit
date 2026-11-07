@@ -116,6 +116,12 @@ pub struct CanvasView {
 
 impl CanvasView {
     /// A view at 100%, before it was first drawn.
+    /// Each block's rectangle on the canvas (in canvas units), as last laid
+    /// out; empty until the workspace was shown.
+    pub fn block_rects(&self) -> Vec<(String, egui::Rect)> {
+        self.layout_cache.iter().map(|(id, (_, _, l))| (id.clone(), l.rect)).collect()
+    }
+
     pub fn at_full_size() -> CanvasView {
         CanvasView { zoom: 1.0, ..Default::default() }
     }

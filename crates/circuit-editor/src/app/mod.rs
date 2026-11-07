@@ -167,6 +167,8 @@ pub struct CircuitApp {
     agent_bridge: Option<crate::mcp::bridge::Bridge>,
     /// When starting it failed last.
     agent_bridge_failed: Option<std::time::Instant>,
+    /// Agents' screenshots waiting for the canvas to settle or for the picture.
+    agent_shots: Vec<plugins::AgentShot>,
     /// The Plugins tab's unsaved changes, while it is open.
     settings: crate::pages::settings::SettingsView,
     restore: crate::pages::restore::RestoreView,
@@ -331,6 +333,7 @@ impl CircuitApp {
             bundled_plugins,
             agent_bridge: None,
             agent_bridge_failed: None,
+            agent_shots: Vec::new(),
             setup,
             tour: None,
             dock_before_tour: None,

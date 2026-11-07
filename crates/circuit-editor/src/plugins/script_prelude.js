@@ -187,6 +187,8 @@
     fieldValue: (type, field, value) => host("fieldValue", String(type).split("@")[0], text(field), value === undefined ? null : value),
     /** Opens the Embed, Layout or Canvas Builder on a block's field (Slash Commands for a Slash Command block). Returns the builder's name. */
     openBuilder: (workspace, block, field) => host("openBuilder", workspace, String(block), text(field)),
+    /** Where a workspace's blocks are and how big, as the canvas last drew them: { id: [x, y, width, height] } ({} before it was shown). */
+    blockRects: (workspace) => host("blockRects", workspace),
     /** Puts text on the clipboard. */
     copyText: (t) => host("copyText", text(t)),
     /** XC Circuit's MCP server for AI agents: the clients it can be added to, adding it, its config entry and whether it's listening. */

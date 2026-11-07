@@ -162,6 +162,11 @@ pub trait Host {
     }
     /// Puts text on the clipboard.
     fn copy_text(&mut self, _text: &str) {}
+    /// Where a workspace's blocks are and how big, as the canvas last drew
+    /// them: { id: [x, y, width, height] }. Empty before it was shown.
+    fn block_rects(&self, _workspace: &str) -> serde_json::Value {
+        serde_json::json!({})
+    }
     /// A value for a block's field in the shape the block keeps: an embed,
     /// layout or canvas as the builders save it (Discord's own JSON works
     /// for embeds and layouts). Other fields' values stay as they are.

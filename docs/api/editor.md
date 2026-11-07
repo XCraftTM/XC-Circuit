@@ -54,6 +54,7 @@ Types for your code editor: `/// <reference types="@xc-circuit/sdk/editor" />` (
 | `xc.copyText(text)` | put text on the clipboard |
 | `xc.fieldValue(type, field, value)` | a value as the block keeps it: embeds, layouts and canvases as the builders save them |
 | `xc.openBuilder(workspace, id, field)` | open the Embed, Layout or Canvas Builder on a block's field |
+| `xc.blockRects(workspace)` | where its blocks are and how big, as drawn: `{ id: [x, y, width, height] }` |
 | `xc.select(workspace, ids)` · `xc.reveal(workspace, id)` | select · go to a block |
 | `xc.data.set(key, value)` · `xc.storage.set(key, value)` | save data |
 | `xc.log(…)` · `xc.success(…)` · `xc.warn(…)` · `xc.error(…)` | write to the Console |

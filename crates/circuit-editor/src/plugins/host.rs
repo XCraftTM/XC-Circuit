@@ -629,6 +629,18 @@ impl api::Host for EditorHost<'_> {
         self.ed.copy_out = Some(text.to_string());
     }
 
+    fn block_rects(&self, workspace: &str) -> Value {
+        let Some(ws) = self.ed.workspace(workspace) else { return serde_json::json!({}) };
+        let rects = self.ed.views.get(workspace).map(|v| v.block_rects()).unwrap_or_default();
+        Value::Object(
+            rects
+                .into_iter()
+                .filter(|(id, _)| ws.nodes.contains_key(id))
+                .map(|(id, r)| (id, serde_json::json!([r.min.x.round(), r.min.y.round(), r.width().round(), r.height().round()])))
+                .collect(),
+        )
+    }
+
     fn field_value(&self, block: &str, field: &str, value: &Value) -> Result<Value, String> {
         let def = self.ed.reg.block(block.split('@').next().unwrap_or(block)).ok_or_else(|| format!("no block `{block}` is installed"))?;
         let Some(f) = def.fields.get(field) else { return Ok(value.clone()) };
@@ -877,6 +889,15 @@ mod tests {
         assert_eq!((stored["color"].as_str(), stored["footer"]["icon"].as_str()), (Some("#00D8F0"), Some("https://x.example/i.png")), "{stored}");
         let bad_layout = call("add_block", serde_json::json!({ "workspace": moderation, "type": "discord.build_layout", "values": { "layout": { "content": "hi" } } })).unwrap_err();
         assert!(bad_layout.contains("not a layout"), "{bad_layout}");
+        // Placing: a second block after the same one goes below the first, not on it.
+        let start = call("add_block", serde_json::json!({ "workspace": moderation, "type": "core.on_start", "x": 40, "y": 2000 })).unwrap();
+        let first = call("add_block", serde_json::json!({ "workspace": moderation, "type": "core.log", "after": start["id"] })).unwrap();
+        let second = call("add_block", serde_json::json!({ "workspace": moderation, "type": "core.log", "after": start["id"] })).unwrap();
+        assert_eq!(first["at"][0], second["at"][0], "{first} {second}");
+        assert!(second["at"][1].as_f64().unwrap() >= first["at"][1].as_f64().unwrap() + 100.0, "below the first: {first} {second}");
+        assert!(first.get("warning").is_none());
+        let on_top = call("add_block", serde_json::json!({ "workspace": moderation, "type": "core.log", "x": first["at"][0], "y": first["at"][1] })).unwrap();
+        assert!(on_top["warning"].as_str().is_some_and(|w| w.contains(first["id"].as_str().unwrap())), "{on_top}");
         let opened = call("open_builder", serde_json::json!({ "workspace": moderation, "block": embed["id"] })).unwrap();
         assert_eq!(opened, "Opened the Embed Builder.");
         assert!(ed.embed_edit.is_some(), "the Embed Builder is open on it");

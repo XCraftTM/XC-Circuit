@@ -595,6 +595,7 @@ fn host_call(h: &mut dyn Host, method: &str, args: &str) -> Result<Value, String
         "console" => h.console(a.first().and_then(Value::as_u64).unwrap_or(50).min(1000) as usize),
         "t" => json!(h.translate(&s(0))),
         "fieldValue" => h.field_value(&s(0), &s(1), &value(2))?,
+        "blockRects" => h.block_rects(&s(0)),
         "openBuilder" => json!(h.open_builder(&s(0), &s(1), &s(2))?),
         "copyText" => {
             h.copy_text(&s(0));

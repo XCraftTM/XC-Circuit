@@ -41,6 +41,7 @@ What the agent can do:
 | `create_workspace` · `get_slash_commands` · `set_slash_commands` | workspaces and commands |
 | `add_note` · `set_note` · `delete_note` | notes on the canvas, also framing blocks you name |
 | `open_builder` | opens the Embed, Layout or Canvas Builder (or Slash Commands) on a block, to show you |
+| `screenshot` | a picture of the canvas (a workspace fitted to view, or centred on a block), so the agent sees what it built |
 | `get_problems` · `get_console` | what's wrong, and what the bot logged |
 | `run_bot` · `stop_bot` · `save_project` · `show_in_editor` | run it, save it, show you a block |
 | `run_script` | many of these at once: JavaScript that gets every tool as a function (`tools.add_block({ … })`), the [plugin API](/api/editor) as `xc`, and `print()` |

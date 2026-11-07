@@ -764,6 +764,7 @@ version = "0.1.6"
 dependencies = [
  "anyhow",
  "arboard",
+ "base64 0.23.1",
  "chrono",
  "circuit-core",
  "circuit-plugins",
