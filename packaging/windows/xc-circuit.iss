@@ -69,6 +69,10 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Type: filesandordirs; Name: "{app}\plugins"
 Type: filesandordirs; Name: "{app}\examples"
 
+; Copies of the app that an update had to move aside (see MoveRunningAppAside).
+[UninstallDelete]
+Type: files; Name: "{app}\xc-circuit.old*.exe"
+
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
@@ -83,7 +87,56 @@ Filename: "{app}\xc-circuit.exe"; Description: "{cm:LaunchProgram,XC Circuit}"; 
 Filename: "{app}\xc-circuit.exe"; Flags: nowait runasoriginaluser; Check: RestartWanted
 
 [Code]
+var
+  AppExe, MovedAside: String;
+
 function RestartWanted: Boolean;
 begin
   Result := ExpandConstant('{param:restart|0}') = '1';
+end;
+
+function OldCopy(I: Integer): String;
+begin
+  Result := ExpandConstant('{app}\xc-circuit.old') + IntToStr(I) + '.exe';
+end;
+
+// xc-circuit.exe can't be overwritten while it runs, and Setup can't close
+// every copy: an AI client's MCP server (xc-circuit.exe --mcp) has no window,
+// so Setup's "close the applications" step failed and a silent update undid
+// everything. Windows does let a running program be renamed, so the old one is
+// moved aside before that step (which then finds nothing in use) and the new
+// one copied in. The old copy is deleted at the next update, or when uninstalling.
+procedure MoveRunningAppAside;
+var
+  I: Integer;
+begin
+  AppExe := ExpandConstant('{app}\xc-circuit.exe');
+  for I := 1 to 20 do
+    DeleteFile(OldCopy(I));
+  if not FileExists(AppExe) then
+    Exit;
+  for I := 1 to 20 do
+    if not FileExists(OldCopy(I)) then
+    begin
+      if RenameFile(AppExe, OldCopy(I)) then
+      begin
+        MovedAside := OldCopy(I);
+        Log('Moved the old xc-circuit.exe aside: ' + MovedAside);
+      end;
+      Exit;
+    end;
+end;
+
+// Runs before Setup looks for applications using its files.
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  MoveRunningAppAside;
+  Result := '';
+end;
+
+// If the update was undone, the old app goes back where it was.
+procedure DeinitializeSetup;
+begin
+  if (MovedAside <> '') and not FileExists(AppExe) then
+    RenameFile(MovedAside, AppExe);
 end;

@@ -109,7 +109,9 @@ impl Install {
             Install::WindowsSetup { all_users } => {
                 // Silent: only a progress window. /restart=1 opens XC Circuit
                 // when it's done (see packaging/windows/xc-circuit.iss).
-                std::process::Command::new(file).args(setup_args(*all_users)).spawn().map(|_| ())
+                // Its log goes next to it, to see why an update failed.
+                let log = file.with_file_name("setup.log");
+                std::process::Command::new(file).args(setup_args(*all_users, &log)).spawn().map(|_| ())
             }
             Install::AppImage(path) => {
                 std::fs::rename(file, path)?;
@@ -121,8 +123,11 @@ impl Install {
 }
 
 /// The Windows Setup's arguments for an update from inside the app.
-fn setup_args(all_users: bool) -> Vec<&'static str> {
-    vec!["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS", "/restart=1", if all_users { "/ALLUSERS" } else { "/CURRENTUSER" }]
+fn setup_args(all_users: bool, log: &Path) -> Vec<String> {
+    let scope = if all_users { "/ALLUSERS" } else { "/CURRENTUSER" };
+    let mut args: Vec<String> = ["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS", "/restart=1", scope].map(String::from).into();
+    args.push(format!("/LOG={}", log.display()));
+    args
 }
 
 #[derive(Default)]
@@ -360,8 +365,10 @@ mod tests {
         let image = Install::AppImage(PathBuf::from("/opt/xc.AppImage")).asset(&r).unwrap();
         assert!(image.name.ends_with(if arm { "aarch64.AppImage" } else { "x86_64.AppImage" }), "{}", image.name);
         assert!(Install::Other.asset(&r).is_none());
-        assert!(setup_args(true).contains(&"/ALLUSERS") && setup_args(false).contains(&"/CURRENTUSER"));
-        assert!(setup_args(false).contains(&"/restart=1"), "the Setup opens XC Circuit again");
+        let log = Path::new("C:\\Temp\\xc-circuit-update\\setup.log");
+        assert!(setup_args(true, log).contains(&"/ALLUSERS".into()) && setup_args(false, log).contains(&"/CURRENTUSER".into()));
+        assert!(setup_args(false, log).contains(&"/restart=1".into()), "the Setup opens XC Circuit again");
+        assert!(setup_args(false, log).contains(&"/LOG=C:\\Temp\\xc-circuit-update\\setup.log".into()), "a failed update leaves its log");
     }
 
     /// A download must have its size and, when GitHub gives one, its checksum.
