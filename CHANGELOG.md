@@ -2,7 +2,7 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## Unreleased
+## 0.1.8
 
 ### Fixed
 - **Updating from inside the app works while an AI client is connected**: Setup couldn't replace XC Circuit while an AI client (Claude, Cursor …) had its MCP server running, so it undid the update. It now moves the running copy aside and finishes. Setup also keeps a log of the update now, `setup.log` in the `xc-circuit-update` folder in your temporary files.
