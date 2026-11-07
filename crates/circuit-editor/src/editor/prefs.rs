@@ -40,6 +40,10 @@ pub struct Prefs {
     pub side_shown: Option<String>,
     /// Plugins turned off, by id: found but not loaded.
     pub disabled_plugins: Vec<String>,
+    /// Optional plugins that come with the app and were removed, by id: not
+    /// loaded or listed (their files come back with every update), until
+    /// added back.
+    pub removed_plugins: Vec<String>,
     /// The Console's font, an installed font family by name; `None` for the
     /// built-in monospaced one.
     pub console_font: Option<String>,
@@ -135,7 +139,7 @@ impl SideView {
 
 impl Default for Prefs {
     fn default() -> Self {
-        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), activity: SideView::ALL.iter().map(|v| v.key().to_string()).collect(), side_shown: Some(SideView::Workspaces.key().into()), disabled_plugins: Vec::new(), console_font: None, console_font_size: CONSOLE_FONT_SIZE, console_line_spacing: CONSOLE_LINE_SPACING, new_project_location: None, recent_projects: Vec::new(), check_updates: true, skipped_update: None, snap_to_grid: false, recent_blocks: Vec::new(), favorite_blocks: Vec::new(), shortcuts: Default::default(), last_crash_seen: 0 }
+        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), activity: SideView::ALL.iter().map(|v| v.key().to_string()).collect(), side_shown: Some(SideView::Workspaces.key().into()), disabled_plugins: Vec::new(), removed_plugins: Vec::new(), console_font: None, console_font_size: CONSOLE_FONT_SIZE, console_line_spacing: CONSOLE_LINE_SPACING, new_project_location: None, recent_projects: Vec::new(), check_updates: true, skipped_update: None, snap_to_grid: false, recent_blocks: Vec::new(), favorite_blocks: Vec::new(), shortcuts: Default::default(), last_crash_seen: 0 }
     }
 }
 

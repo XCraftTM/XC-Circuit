@@ -77,6 +77,15 @@ pub enum BotEvent {
 }
 
 /// A workspace in the open project.
+/// Something AI agents can do through the app's MCP server (`xc.tool`).
+#[derive(Clone, Debug)]
+pub struct Tool {
+    pub name: String,
+    pub description: String,
+    /// What it takes, as a JSON Schema object.
+    pub input: serde_json::Value,
+}
+
 #[derive(Clone, Debug)]
 pub struct WorkspaceInfo {
     pub key: String,
@@ -117,6 +126,58 @@ pub trait Host {
     }
     /// Selects blocks of a workspace.
     fn select(&mut self, _workspace: &str, _nodes: &[String]) {}
+    /// The installed block types matching `query` (words in their name,
+    /// aliases, tags, category or description; empty: all).
+    fn block_types(&self, _query: &str) -> serde_json::Value {
+        serde_json::Value::Array(Vec::new())
+    }
+    /// A block type: its fields, outputs and flows.
+    fn block_type(&self, _block: &str) -> Option<serde_json::Value> {
+        None
+    }
+    /// A block on a workspace as it is now: its values and the pins it has
+    /// (a block's `define` can add some), with their types.
+    fn block_pins(&mut self, _workspace: &str, _node: &str) -> Result<serde_json::Value, String> {
+        Err("this editor can't describe blocks".into())
+    }
+    /// Connects two pins (`node.pin`), checked like a wire drawn on the canvas.
+    fn connect(&mut self, _workspace: &str, _from: &str, _to: &str) -> Result<(), String> {
+        Err("this editor can't connect blocks for plugins".into())
+    }
+    /// Makes a workspace (in a sidebar folder, when given). Returns its key.
+    fn add_workspace(&mut self, _name: &str, _folder: Option<&str>) -> Result<String, String> {
+        Err("this editor can't make workspaces for plugins".into())
+    }
+    /// What the Problems panel lists: [{ source, message, workspace, block }].
+    fn problems(&self) -> serde_json::Value {
+        serde_json::Value::Array(Vec::new())
+    }
+    /// The Console's last `lines` lines: [{ time, level, text, workspace, block }].
+    fn console(&self, _lines: usize) -> serde_json::Value {
+        serde_json::Value::Array(Vec::new())
+    }
+    /// `text` in the app's language, from the plugins' translations.
+    fn translate(&self, text: &str) -> String {
+        text.to_string()
+    }
+    /// Puts text on the clipboard.
+    fn copy_text(&mut self, _text: &str) {}
+    /// The AI clients the app's MCP server can be added to, and whether it is.
+    fn agent_clients(&self) -> serde_json::Value {
+        serde_json::Value::Array(Vec::new())
+    }
+    /// Adds the MCP server to an AI client (or takes it out). Says what happened.
+    fn agent_install(&mut self, _client: &str, _remove: bool) -> Result<String, String> {
+        Err("this editor can't set up AI clients".into())
+    }
+    /// The MCP server's entry for a client's config file, as JSON text.
+    fn agent_snippet(&self) -> String {
+        String::new()
+    }
+    /// Whether the MCP server is listening, and how many agents are connected.
+    fn agent_link(&self) -> serde_json::Value {
+        serde_json::Value::Null
+    }
 }
 
 /// What the editor calls on a plugin (a script, see [`crate::plugins::script`]).
@@ -131,4 +192,13 @@ pub trait PluginObject {
     fn on_save(&mut self, host: &mut dyn Host) -> Result<(), String>;
     fn tick(&mut self, host: &mut dyn Host) -> Result<Option<std::time::Duration>, String>;
     fn overlay_ui(&mut self, ctx: &egui::Context, host: &mut dyn Host) -> Result<(), String>;
+    /// What it offers AI agents.
+    fn tools(&self) -> Vec<Tool> {
+        Vec::new()
+    }
+    /// Runs one of its tools with `args` (an object). Its answer: text, or
+    /// any JSON value.
+    fn call_tool(&mut self, name: &str, _args: &serde_json::Value, _host: &mut dyn Host) -> Result<serde_json::Value, String> {
+        Err(format!("no tool `{name}`"))
+    }
 }

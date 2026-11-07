@@ -1,0 +1,30 @@
+# KI-Agenten (MCP) auf Deutsch: das Panel. Die Werkzeuge für die Agenten bleiben englisch.
+
+[meta]
+code = "de"
+name = "Deutsch"
+english_name = "German"
+
+[strings]
+"AI agents (MCP)" = "KI-Agenten (MCP)"
+"AI agents" = "KI-Agenten"
+"AI agents such as Claude can read your project, add, change and connect blocks, see problems and the Console, and start or stop the bot. Every change shows here at once and can be undone. They never see the bot's token." = "KI-Agenten wie Claude können dein Projekt lesen, Blöcke hinzufügen, ändern und verbinden, Probleme und die Konsole sehen und den Bot starten oder stoppen. Jede Änderung erscheint hier sofort und lässt sich rückgängig machen. Den Token des Bots sehen sie nie."
+"Server" = "Server"
+"Not listening" = "Wartet nicht auf Verbindungen"
+"Listening · {n} connected" = "Bereit · {n} verbunden"
+"Listening · no agent connected" = "Bereit · kein Agent verbunden"
+"Add to an AI client" = "Zu einem KI-Programm hinzufügen"
+"Added" = "Hinzugefügt"
+"Added, but for another copy of XC Circuit" = "Hinzugefügt, aber für eine andere Kopie von XC Circuit"
+"Not added" = "Nicht hinzugefügt"
+"Not installed on this computer" = "Auf diesem Computer nicht installiert"
+"Remove" = "Entfernen"
+"Take XC Circuit out of its settings" = "XC Circuit aus seinen Einstellungen nehmen"
+"Update" = "Aktualisieren"
+"Add" = "Hinzufügen"
+"Check again" = "Erneut prüfen"
+"Other MCP clients" = "Andere MCP-Programme"
+"Paste this into the client's MCP settings: it starts XC Circuit's server." = "Füge das in die MCP-Einstellungen des Programms ein: Es startet den Server von XC Circuit."
+"Copy settings" = "Einstellungen kopieren"
+"Copied." = "Kopiert."
+"The agent's tools work while XC Circuit is open. Turn this plugin off or remove it under Plugins to stop them." = "Die Werkzeuge des Agenten funktionieren, solange XC Circuit offen ist. Schalte dieses Plugin unter Plugins aus oder entferne es, um sie abzuschalten."

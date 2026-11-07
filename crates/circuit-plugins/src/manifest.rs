@@ -22,6 +22,9 @@ pub struct PluginManifest {
     pub native: Option<NativeManifest>,
     /// A JavaScript part that runs in the editor: commands, panels and checks.
     pub editor: Option<EditorManifest>,
+    /// Comes with the app but isn't needed by it: unlike the other bundled
+    /// plugins it can be turned off and removed (and added back).
+    pub optional: bool,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]

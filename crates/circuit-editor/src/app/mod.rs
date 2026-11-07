@@ -163,6 +163,10 @@ pub struct CircuitApp {
     plugin_host: crate::plugins::host::PluginHost,
     /// The app's own plugins folder.
     bundled_plugins: Option<PathBuf>,
+    /// The MCP server's link for AI agents, while a plugin offers them tools.
+    agent_bridge: Option<crate::mcp::bridge::Bridge>,
+    /// When starting it failed last.
+    agent_bridge_failed: Option<std::time::Instant>,
     /// The Plugins tab's unsaved changes, while it is open.
     settings: crate::pages::settings::SettingsView,
     restore: crate::pages::restore::RestoreView,
@@ -233,10 +237,12 @@ impl CircuitApp {
         ed.examples_dir = examples_dir.clone();
         let bundled_plugins = bundled_root.map(|r| r.join("plugins"));
         if let Some(dir) = &bundled_plugins {
-            ed.bundled_plugins = ed.reg.plugins.iter().filter(|p| p.dir.starts_with(dir)).map(|p| p.manifest.id.clone()).collect();
+            // The ones the app needs; optional ones can be turned off and removed.
+            ed.bundled_plugins = ed.reg.plugins.iter().filter(|p| p.dir.starts_with(dir) && !p.manifest.optional).map(|p| p.manifest.id.clone()).collect();
+            ed.optional_plugins = ed.reg.plugins.iter().filter(|p| p.dir.starts_with(dir) && p.manifest.optional).map(|p| (p.manifest.id.clone(), p.manifest.name.clone())).collect();
         }
-        // Plugins turned off: loaded again without them.
-        if !ed.prefs.disabled_plugins.is_empty() {
+        // Plugins turned off or removed: loaded again without them.
+        if !ed.prefs.disabled_plugins.is_empty() || !ed.prefs.removed_plugins.is_empty() {
             ed.reload_plugins();
         }
         // The last project; the example on the very first start; nothing (the
@@ -323,6 +329,8 @@ impl CircuitApp {
             palette: None,
             plugin_host,
             bundled_plugins,
+            agent_bridge: None,
+            agent_bridge_failed: None,
             setup,
             tour: None,
             dock_before_tour: None,

@@ -14,6 +14,17 @@ impl CircuitApp {
         if self.ed.bundled_plugins.iter().any(|b| b == id) {
             return;
         }
+        // One that comes with the app: its files come back with every update,
+        // so it is left out instead, until added back.
+        if let Some((_, name)) = self.ed.optional_plugins.iter().find(|(p, _)| p == id).cloned() {
+            self.ed.prefs.disabled_plugins.retain(|p| p != id);
+            if !self.ed.prefs.removed_plugins.iter().any(|p| p == id) {
+                self.ed.prefs.removed_plugins.push(id.to_string());
+            }
+            self.ed.log(Level::Success, tf!("Removed {name}. Plugins › Add back brings it back.", name = name));
+            self.reload_plugins(ctx);
+            return;
+        }
         let Some(lp) = self.ed.reg.plugins.iter().chain(&self.ed.reg.disabled).find(|p| p.manifest.id == id).cloned() else { return };
         let mut folders = self.ed.plugin_dirs.clone();
         if let Some(p) = &self.ed.project {
@@ -75,6 +86,43 @@ impl CircuitApp {
         self.plugin_host.sync(&mut self.ed, self.bundled_plugins.as_deref());
     }
 
+    /// AI agents' requests through the MCP server, answered with plugins'
+    /// tools. The server listens only while a plugin has tools (the AI
+    /// agents plugin is on), and never in tests.
+    fn serve_agents(&mut self, ctx: &egui::Context, running: bool) {
+        let tools = self.plugin_host.tools();
+        if tools.is_empty() || cfg!(test) {
+            self.agent_bridge = None;
+        } else if self.agent_bridge.is_none() && self.agent_bridge_failed.is_none_or(|t| t.elapsed() > std::time::Duration::from_secs(30)) {
+            match crate::mcp::bridge::Bridge::start(ctx.clone()) {
+                Ok(b) => self.agent_bridge = Some(b),
+                Err(e) => {
+                    // Tried again in a while, not every frame.
+                    self.ed.log(Level::Warn, tf!("AI agents can't connect: {error}", error = e));
+                    self.agent_bridge_failed = Some(std::time::Instant::now());
+                }
+            }
+        }
+        let Some(bridge) = &self.agent_bridge else {
+            self.ed.agent_link = serde_json::json!({ "listening": false, "agents": 0 });
+            return;
+        };
+        for pending in bridge.poll() {
+            let answer = match pending.request["op"].as_str() {
+                Some("list") => serde_json::json!({ "tools": tools.iter().map(|t| serde_json::json!({ "name": t.name, "description": t.description, "inputSchema": t.input })).collect::<Vec<_>>() }),
+                Some("call") => {
+                    let name = pending.request["name"].as_str().unwrap_or("");
+                    let args = pending.request.get("args").cloned().unwrap_or_else(|| serde_json::json!({}));
+                    let result = self.plugin_host.call_tool(&mut self.ed, name, &args, running).unwrap_or_else(|| Err(format!("No tool `{name}`")));
+                    serde_json::json!({ "result": crate::mcp::tool_result(result) })
+                }
+                _ => serde_json::json!({ "error": "unknown request" }),
+            };
+            pending.answer(answer);
+        }
+        self.ed.agent_link = serde_json::json!({ "listening": true, "agents": bridge.agents(), "port": bridge.port });
+    }
+
     /// Bot events, checks and queued commands for plugins' scripts.
     pub(super) fn run_plugins(&mut self, ctx: &egui::Context) {
         let running = self.bot.state != BotState::Stopped;
@@ -82,6 +130,10 @@ impl CircuitApp {
             self.plugin_host.bot_event(&mut self.ed, &ev, running);
         }
         self.plugin_host.tick(&mut self.ed, running);
+        self.serve_agents(ctx, running);
+        if let Some(text) = self.ed.copy_out.take() {
+            ctx.copy_text(text);
+        }
         for id in std::mem::take(&mut self.plugin_host.queued) {
             match id.as_str() {
                 "bot.run" => self.run_command(Cmd::Run, ctx),

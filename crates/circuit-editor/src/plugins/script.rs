@@ -29,6 +29,8 @@ use crate::plugins::api::{self, BotEvent, Command, Host, PanelInfo, PluginObject
 /// which run often.
 const QUICK: Duration = Duration::from_millis(100);
 const SLOW: Duration = Duration::from_millis(1000);
+/// How long an AI agent's tool may take.
+const TOOL: Duration = Duration::from_secs(5);
 const MEMORY_LIMIT: usize = 32 * 1024 * 1024;
 /// How often an open panel is drawn again, at most, without a click.
 const RENDER_EVERY: Duration = Duration::from_millis(250);
@@ -95,6 +97,17 @@ struct Registered {
     bot_event: usize,
     selection: usize,
     overlays: Vec<OverlayEntry>,
+    tools: Vec<ToolEntry>,
+}
+
+/// A tool for AI agents (`xc.tool`).
+#[derive(Clone, Deserialize)]
+struct ToolEntry {
+    name: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    input: Value,
 }
 
 /// Something floating over the editor (`xc.overlay`).
@@ -567,6 +580,28 @@ fn host_call(h: &mut dyn Host, method: &str, args: &str) -> Result<Value, String
             h.select(&s(0), &ids);
             Value::Null
         }
+        "blockTypes" => h.block_types(&s(0)),
+        "blockType" => h.block_type(&s(0)).unwrap_or(Value::Null),
+        "blockPins" => h.block_pins(&s(0), &s(1))?,
+        "connect" => {
+            h.connect(&s(0), &s(1), &s(2))?;
+            Value::Null
+        }
+        "addWorkspace" => {
+            let folder = s(1);
+            json!(h.add_workspace(&s(0), (!folder.is_empty()).then_some(folder.as_str()))?)
+        }
+        "problems" => h.problems(),
+        "console" => h.console(a.first().and_then(Value::as_u64).unwrap_or(50).min(1000) as usize),
+        "t" => json!(h.translate(&s(0))),
+        "copyText" => {
+            h.copy_text(&s(0));
+            Value::Null
+        }
+        "agentClients" => h.agent_clients(),
+        "agentInstall" => json!(h.agent_install(&s(0), a.get(1).and_then(Value::as_bool).unwrap_or(false))?),
+        "agentSnippet" => json!(h.agent_snippet()),
+        "agentLink" => h.agent_link(),
         other => return Err(format!("xc has no `{other}`")),
     })
 }
@@ -767,6 +802,14 @@ impl PluginObject for ScriptPlugin {
         }
         let next = self.state.borrow().timers.iter().map(|t| t.due).min();
         Ok(next.map(|d| d.saturating_duration_since(Instant::now())))
+    }
+
+    fn tools(&self) -> Vec<api::Tool> {
+        self.registered.tools.iter().map(|t| api::Tool { name: t.name.clone(), description: t.description.clone(), input: t.input.clone() }).collect()
+    }
+
+    fn call_tool(&mut self, name: &str, args: &Value, host: &mut dyn Host) -> Result<Value, String> {
+        self.run(Some(host), TOOL, "tool", vec![json!(name), args.clone()])
     }
 
     fn overlay_ui(&mut self, ctx: &egui::Context, host: &mut dyn Host) -> Result<(), String> {

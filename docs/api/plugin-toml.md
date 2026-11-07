@@ -39,6 +39,7 @@ script = "editor.js"
 | `author` | text | Who made it. |
 | `description` | text | One or two sentences, shown under the name. |
 | `icon` | path | An SVG or PNG in the plugin folder. |
+| `optional` | true / false | For plugins that come with the app: it can be turned off and removed (and added back), unlike the others. |
 | `overrides` | list of block ids | Blocks of other plugins this plugin may replace with blocks of the same id. Without it, a second block with an id that exists is refused. |
 
 ## `[engines]`

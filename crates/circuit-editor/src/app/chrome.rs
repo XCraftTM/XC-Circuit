@@ -14,6 +14,11 @@ impl CircuitApp {
                 self.reload_plugins(ctx);
             }
             crate::plugins::manager::SideAsk::Remove(id) => self.remove_plugin(&id, ctx),
+            crate::plugins::manager::SideAsk::AddBack(id) => {
+                self.ed.prefs.removed_plugins.retain(|p| *p != id);
+                self.ed.prefs.disabled_plugins.retain(|p| *p != id);
+                self.reload_plugins(ctx);
+            }
             crate::plugins::manager::SideAsk::Reload => self.reload_plugins(ctx),
             crate::plugins::manager::SideAsk::Install => self.pick_plugin_zip(ctx),
             crate::plugins::manager::SideAsk::OpenFolder => {

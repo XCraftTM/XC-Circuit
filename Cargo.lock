@@ -750,7 +750,7 @@ dependencies = [
 
 [[package]]
 name = "circuit-core"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "anyhow",
  "indexmap",
@@ -760,7 +760,7 @@ dependencies = [
 
 [[package]]
 name = "circuit-editor"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "anyhow",
  "arboard",
@@ -798,7 +798,7 @@ dependencies = [
 
 [[package]]
 name = "circuit-plugins"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "anyhow",
  "circuit-core",
@@ -813,7 +813,7 @@ dependencies = [
 
 [[package]]
 name = "circuit-runner"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "anyhow",
  "base64 0.23.1",

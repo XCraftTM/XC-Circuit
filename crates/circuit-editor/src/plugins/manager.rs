@@ -1,6 +1,7 @@
 //! The Plugins view of the side bar: every installed plugin, what it adds and
 //! how its editor script runs; turning plugins on and off, and removing them.
-//! The plugins that come with the app can't be turned off or removed.
+//! The plugins that come with the app can't be turned off or removed, except
+//! optional ones: removing those hides them, and Add back brings them back.
 
 use eframe::egui::{self, Color32, Frame, Margin, RichText};
 
@@ -17,8 +18,11 @@ pub enum SideAsk {
     Install,
     /// Turn a plugin (its id) on or off.
     Enable(String, bool),
-    /// Remove a plugin (its id): its folder is deleted.
+    /// Remove a plugin (its id): its folder is deleted (an optional one that
+    /// comes with the app is left out instead).
     Remove(String),
+    /// Bring back an optional plugin that comes with the app (its id).
+    AddBack(String),
 }
 
 /// A plugin's state in a few words, and its colour.
@@ -59,7 +63,8 @@ pub fn side(ui: &mut egui::Ui, theme: &Theme, ed: &Editor, host: &PluginHost) ->
             });
             ui.add_space(8.0);
             // By name: turning one off or on doesn't move it.
-            let mut all: Vec<_> = ed.reg.plugins.iter().map(|p| (p, true)).chain(ed.reg.disabled.iter().map(|p| (p, false))).collect();
+            let removed = |id: &str| ed.prefs.removed_plugins.iter().any(|p| p == id);
+            let mut all: Vec<_> = ed.reg.plugins.iter().map(|p| (p, true)).chain(ed.reg.disabled.iter().filter(|p| !removed(&p.manifest.id)).map(|p| (p, false))).collect();
             all.sort_by_key(|(p, _)| p.manifest.name.to_lowercase());
             for (lp, on) in all {
                 let m = &lp.manifest;
@@ -99,7 +104,9 @@ pub fn side(ui: &mut egui::Ui, theme: &Theme, ed: &Editor, host: &PluginHost) ->
                     }
                     if confirm.as_deref() == Some(m.id.as_str()) && !builtin {
                         ui.add_space(4.0);
-                        ui.add(egui::Label::new(RichText::new(tf!("Remove {name}? Its folder is deleted: {folder}", name = m.name, folder = lp.dir.display())).size(11.5).color(theme.warning)).wrap());
+                        let optional = ed.optional_plugins.iter().any(|(p, _)| *p == m.id);
+                        let question = if optional { tf!("Remove {name}? It comes with the app, so Add back at the end of this list brings it back.", name = m.name) } else { tf!("Remove {name}? Its folder is deleted: {folder}", name = m.name, folder = lp.dir.display()) };
+                        ui.add(egui::Label::new(RichText::new(question).size(11.5).color(theme.warning)).wrap());
                         ui.horizontal(|ui| {
                             if kit::danger_button(ui, theme, t!("Remove")).clicked() {
                                 ask = Some(SideAsk::Remove(m.id.clone()));
@@ -112,6 +119,22 @@ pub fn side(ui: &mut egui::Ui, theme: &Theme, ed: &Editor, host: &PluginHost) ->
                     }
                 });
                 ui.add_space(6.0);
+            }
+            // Optional plugins that come with the app and were removed.
+            let gone: Vec<&(String, String)> = ed.optional_plugins.iter().filter(|(id, _)| removed(id)).collect();
+            if !gone.is_empty() {
+                ui.add_space(6.0);
+                kit::section(ui, theme, t!("Removed"));
+                for (id, name) in gone {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(name).size(12.5).color(theme.text_muted));
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if kit::button(ui, theme, t!("Add back")).on_hover_text(t!("It comes with the app: turn it on again")).clicked() {
+                                ask = Some(SideAsk::AddBack(id.clone()));
+                            }
+                        });
+                    });
+                }
             }
         });
     });

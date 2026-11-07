@@ -29,6 +29,7 @@
 
   const commands = new Map();
   const panels = new Map();
+  const tools = new Map();
   const checks = [];
   const overlays = new Map();
   const timers = new Map();
@@ -58,6 +59,17 @@
     check(fn) {
       need(typeof fn === "function", "xc.check(fn) needs a function");
       checks.push(fn);
+    },
+    /**
+     * Something AI agents can do through XC Circuit's MCP server: { name,
+     * description, input (a JSON Schema for its arguments), run(args) }.
+     * run returns the answer: text, or any value (sent as JSON).
+     */
+    tool(def) {
+      need(def && typeof def.name === "string" && /^[a-zA-Z0-9_-]{1,64}$/.test(def.name), "xc.tool({ name, description, input, run }) needs a name of letters, digits, _ and -");
+      need(typeof def.run === "function", `the tool "${def.name}" needs a run(args) function`);
+      need(!tools.has(def.name), `the tool "${def.name}" is added twice`);
+      tools.set(def.name, { name: def.name, description: text(def.description), input: def.input || { type: "object", properties: {} }, run: def.run });
     },
     /** Floats something over the whole editor: render(ui) like a panel, dragged around, onClick when clicked. */
     overlay(def) {
@@ -155,6 +167,32 @@
     /** Runs an editor command ("bot.run", "bot.stop", "file.save") or a plugin's command, after this handler. */
     run: (id) => host("run", id),
     botRunning: () => host("botRunning"),
+    /** Installed block types matching words of `query` (all without): [{ type, name, category, kind, description }]. */
+    blockTypes: (query) => host("blockTypes", text(query)),
+    /** A block type ("core.log"): its fields, outputs and flows, or null. */
+    blockType: (type) => host("blockType", String(type).split("@")[0]),
+    /** A block of a workspace as it is now: its values and pins, with their types. */
+    blockPins: (workspace, block) => host("blockPins", workspace, String(block)),
+    /** Connects two pins ("3.next" to "4.in"), checked like a wire drawn on the canvas. It can be undone. */
+    connect: (workspace, from, to) => host("connect", workspace, String(from), String(to)),
+    /** Makes a workspace ({ folder }). Returns its key. */
+    addWorkspace: (name, o = {}) => host("addWorkspace", text(name), o.folder ? text(o.folder) : ""),
+    /** What the Problems panel lists: [{ source, message, workspace, block }]. */
+    problems: () => host("problems"),
+    /** The Console's last lines (50 without `lines`): [{ time, level, text, workspace, block }]. */
+    console: (lines) => host("console", Number(lines) || 50),
+    /** `text` in the app's language, from the plugins' translations (locales/*.toml). */
+    t: (t) => host("t", text(t)),
+    /** Puts text on the clipboard. */
+    copyText: (t) => host("copyText", text(t)),
+    /** XC Circuit's MCP server for AI agents: the clients it can be added to, adding it, its config entry and whether it's listening. */
+    agents: Object.freeze({
+      clients: () => host("agentClients"),
+      install: (client) => host("agentInstall", text(client), false),
+      remove: (client) => host("agentInstall", text(client), true),
+      snippet: () => host("agentSnippet"),
+      link: () => host("agentLink"),
+    }),
     plugin: { name: __pluginName },
   };
   Object.freeze(xc.data);
@@ -249,7 +287,13 @@
         botEvent: listeners.botEvent.length,
         selection: listeners.selection.length,
         overlays: [...overlays.values()].map(({ id, x, y, width, height, frame, draggable, onClick }) => ({ id, x, y, width, height, frame, draggable, click: !!onClick })),
+        tools: [...tools.values()].map(({ name, description, input }) => ({ name, description, input })),
       };
+    }),
+    tool: reply((name, args) => {
+      const t = tools.get(name);
+      need(t, `no tool "${name}"`);
+      return t.run(args && typeof args === "object" ? args : {});
     }),
     command: reply((id) => {
       const c = commands.get(id);

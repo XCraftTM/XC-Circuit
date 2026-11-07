@@ -8,6 +8,7 @@ mod bot;
 mod builders;
 mod canvas;
 mod editor;
+mod mcp;
 mod pages;
 mod plugins;
 mod ui;
@@ -17,6 +18,10 @@ use eframe::egui;
 fn main() -> eframe::Result {
     // `xc-circuit --export-icon <folder>`: the icon as PNGs and an .ico, for packaging.
     let args: Vec<String> = std::env::args().collect();
+    // `xc-circuit --mcp`: the MCP server AI clients start (see mcp/stdio.rs).
+    if args.get(1).map(String::as_str) == Some("--mcp") {
+        std::process::exit(mcp::stdio::run());
+    }
     if args.get(1).map(String::as_str) == Some("--export-icon") {
         let dir = std::path::PathBuf::from(args.get(2).map(String::as_str).unwrap_or("."));
         if let Err(e) = export_icon(&dir) {

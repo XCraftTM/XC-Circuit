@@ -266,6 +266,19 @@ impl PluginHost {
         self.call(i, ed, bot_running, |o, h| ui.push_id(id, |ui| o.panel_ui(panel, ui, h)).inner);
     }
 
+    /// Every tool plugins offer AI agents (the first plugin's, when two use a name).
+    pub fn tools(&self) -> Vec<api::Tool> {
+        let mut seen = std::collections::HashSet::new();
+        self.plugins.iter().filter_map(|p| p.instance.as_ref()).flat_map(|i| i.obj.tools()).filter(|t| seen.insert(t.name.clone())).collect()
+    }
+
+    /// Runs a tool for an AI agent. None: no plugin has it.
+    pub fn call_tool(&mut self, ed: &mut Editor, name: &str, args: &Value, bot_running: bool) -> Option<Result<Value, String>> {
+        let i = self.plugins.iter().position(|p| p.instance.as_ref().is_some_and(|i| i.obj.tools().iter().any(|t| t.name == name)))?;
+        // A tool's failure is its answer to the agent; the plugin stays on.
+        Some(self.call(i, ed, bot_running, |o, h| Ok(o.call_tool(name, args, h))).unwrap_or_else(|| Err("the plugin crashed".into())))
+    }
+
     pub fn panel_title(&self, plugin: &str, panel: &str) -> Option<String> {
         self.plugins.iter().find(|p| p.id == plugin)?.panels().iter().find(|x| x.id == panel).map(|x| x.title.clone())
     }
@@ -405,6 +418,256 @@ impl api::Host for EditorHost<'_> {
         self.ed.selected = ids.first().map(|n| (workspace.to_string(), n.clone()));
         self.ed.multi = ids.into_iter().collect();
     }
+
+    fn block_types(&self, query: &str) -> Value {
+        let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
+        let mut found: Vec<&circuit_core::BlockDef> = self
+            .ed
+            .reg
+            .blocks
+            .values()
+            .filter(|d| d.deprecated.is_none())
+            .filter(|d| {
+                let hay = format!("{} {} {} {} {} {}", d.id, d.name, d.aliases.join(" "), d.tags.join(" "), d.category.as_deref().unwrap_or(""), d.description).to_lowercase();
+                words.iter().all(|w| hay.contains(w.as_str()))
+            })
+            .collect();
+        found.sort_by(|a, b| a.id.cmp(&b.id));
+        Value::Array(
+            found
+                .into_iter()
+                .map(|d| serde_json::json!({ "type": d.id, "name": d.name, "category": d.category, "kind": kind_name(d), "description": d.description }))
+                .collect(),
+        )
+    }
+
+    fn block_type(&self, block: &str) -> Option<Value> {
+        let d = self.ed.reg.block(block.split('@').next().unwrap_or(block))?;
+        let fields: Vec<Value> = d
+            .fields
+            .iter()
+            .map(|(k, f)| {
+                let mut v = serde_json::to_value(f).unwrap_or(Value::Null);
+                if let Some(o) = v.as_object_mut() {
+                    o.insert("key".into(), Value::String(k.clone()));
+                    o.insert("takesWire".into(), Value::Bool(f.pin != circuit_core::block::PinMode::Inline));
+                }
+                v
+            })
+            .collect();
+        let outputs: Vec<Value> = d.outputs.iter().map(|(k, o)| serde_json::json!({ "key": k, "type": o.type_name, "label": o.label, "description": o.description })).collect();
+        Some(serde_json::json!({
+            "type": d.id,
+            "block": format!("{}@{}", d.id, d.major_version()),
+            "name": d.name,
+            "kind": kind_name(d),
+            "category": d.category,
+            "description": d.description,
+            "docs": d.docs,
+            "flows": d.base_flows(),
+            "fields": fields,
+            "outputs": outputs,
+            "hasDefine": d.has_define,
+        }))
+    }
+
+    fn block_pins(&mut self, workspace: &str, node: &str) -> Result<Value, String> {
+        let shape = self.shape(workspace, node)?;
+        let ws = self.ed.workspace(workspace).ok_or_else(|| format!("no workspace `{workspace}`"))?;
+        let n = &ws.nodes[node];
+        let wired = |pin: &str, into: bool| -> Vec<String> {
+            ws.links.iter().filter(|l| if into { l.to.node == node && l.to.pin == pin } else { l.from.node == node && l.from.pin == pin }).map(|l| l.to_string()).collect()
+        };
+        let fields: Vec<Value> = shape
+            .visible_fields()
+            .map(|(k, f)| {
+                let value = n.values.get(k).cloned().or_else(|| f.default.clone()).unwrap_or(Value::Null);
+                serde_json::json!({
+                    "key": k,
+                    "label": f.label(k),
+                    "type": f.ty.to_string(),
+                    "value": value,
+                    "required": f.required,
+                    "takesWire": f.pin != circuit_core::block::PinMode::Inline,
+                    "isPin": f.pin == circuit_core::block::PinMode::Only || n.pins.contains(k),
+                    "advanced": f.advanced,
+                    "choices": f.choices,
+                    "description": f.description,
+                    "wires": wired(k, true),
+                })
+            })
+            .collect();
+        let outputs: Vec<Value> = shape.outputs.iter().map(|(k, o)| serde_json::json!({ "key": k, "label": o.label(k), "type": o.ty.to_string(), "description": o.description, "wires": wired(k, false) })).collect();
+        let flows: Vec<Value> = shape.flows.iter().map(|f| serde_json::json!({ "key": f, "wires": wired(f, false) })).collect();
+        Ok(serde_json::json!({
+            "id": node,
+            "block": n.block,
+            "name": self.block_name(&n.block),
+            "at": n.at,
+            "actionIn": shape.action_in.then(|| wired(circuit_core::graph::ACTION_IN, true)),
+            "flows": flows,
+            "fields": fields,
+            "outputs": outputs,
+        }))
+    }
+
+    fn connect(&mut self, workspace: &str, from: &str, to: &str) -> Result<(), String> {
+        let link = circuit_core::graph::Link { from: pin_ref(from)?, to: pin_ref(to)? };
+        if link.from.node == link.to.node {
+            return Err("a block can't be wired to itself".into());
+        }
+        let from_shape = self.shape(workspace, &link.from.node)?;
+        let to_shape = self.shape(workspace, &link.to.node)?;
+        use circuit_core::types::PinType;
+        let from_ty = if from_shape.flows.contains(&link.from.pin) {
+            PinType::Action
+        } else if let Some(o) = from_shape.output(&link.from.pin) {
+            o.ty.clone()
+        } else {
+            let mut have: Vec<&str> = from_shape.flows.iter().map(String::as_str).collect();
+            have.extend(from_shape.outputs.iter().map(|(k, _)| k.as_str()));
+            return Err(format!("block {} has no output `{}` (it has: {})", link.from.node, link.from.pin, have.join(", ")));
+        };
+        let (to_ty, multi) = if link.to.pin == circuit_core::graph::ACTION_IN {
+            if !to_shape.action_in {
+                return Err(format!("block {} is an event or value: nothing runs it", link.to.node));
+            }
+            (PinType::Action, true)
+        } else {
+            match to_shape.field(&link.to.pin) {
+                Some(f) if f.pin == circuit_core::block::PinMode::Inline => return Err(format!("the field `{}` of block {} can't take a wire: set its value instead", link.to.pin, link.to.node)),
+                Some(f) => (f.ty.clone(), f.multi),
+                None => {
+                    let mut have = vec![circuit_core::graph::ACTION_IN.to_string()];
+                    have.extend(to_shape.visible_fields().filter(|(_, f)| f.pin != circuit_core::block::PinMode::Inline).map(|(k, _)| k.clone()));
+                    return Err(format!("block {} has no input `{}` (it has: {})", link.to.node, link.to.pin, have.join(", ")));
+                }
+            }
+        };
+        if from_ty.is_action() != to_ty.is_action() {
+            return Err("an Action (flow) pin connects only to another block's `in`, and values only to fields".into());
+        }
+        if from_ty.compat(&to_ty, &self.ed.reg) == circuit_core::types::Compat::No {
+            return Err(format!("a {from_ty} doesn't fit into a {to_ty}"));
+        }
+        let reg = &self.ed.reg;
+        let project = self.ed.project.as_mut().ok_or("no project is open")?;
+        let ws = project.workspaces.get_mut(workspace).ok_or_else(|| format!("no workspace `{workspace}`"))?;
+        let value_block = |id: &str| ws.nodes.get(id).and_then(|n| reg.block(&n.block)).is_some_and(|d| d.kind == circuit_core::block::BlockKind::Value);
+        if ws.flow(value_block).would_loop(&link) {
+            return Err("that wire would make a loop".into());
+        }
+        let action = from_ty.is_action();
+        let (to_node, to_pin) = (link.to.node.clone(), link.to.pin.clone());
+        ws.connect(link, !action && !multi);
+        if !action
+            && let Some(n) = ws.nodes.get_mut(&to_node)
+            && !n.pins.contains(&to_pin)
+        {
+            n.pins.push(to_pin);
+        }
+        self.ed.edited = true;
+        Ok(())
+    }
+
+    fn add_workspace(&mut self, name: &str, folder: Option<&str>) -> Result<String, String> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err("a workspace needs a name".into());
+        }
+        let project = self.ed.project.as_mut().ok_or("no project is open")?;
+        let key = project.new_workspace_key(name);
+        let folder = folder.map(str::trim).filter(|f| !f.is_empty()).map(str::to_string);
+        if let Some(f) = &folder
+            && !project.meta.folders.contains(f)
+        {
+            project.meta.folders.push(f.clone());
+        }
+        project.workspaces.insert(key.clone(), Workspace { folder, ..Workspace::new(name) });
+        self.ed.edited = true;
+        self.ed.actions.push(crate::editor::Action::OpenWorkspace(key.clone()));
+        Ok(key)
+    }
+
+    fn problems(&self) -> Value {
+        let items = crate::pages::panels::collect_problems(self.ed);
+        Value::Array(
+            items
+                .into_iter()
+                .map(|(source, message, at)| serde_json::json!({ "source": source, "message": message, "workspace": at.as_ref().map(|a| &a.0), "block": at.as_ref().map(|a| &a.1) }))
+                .collect(),
+        )
+    }
+
+    fn console(&self, lines: usize) -> Value {
+        let log = &self.ed.log;
+        Value::Array(
+            log[log.len().saturating_sub(lines)..]
+                .iter()
+                .map(|l| {
+                    let level = match l.level {
+                        Level::Info => "info",
+                        Level::Success => "success",
+                        Level::Warn => "warn",
+                        Level::Error => "error",
+                    };
+                    serde_json::json!({ "time": l.time, "level": level, "text": l.text, "workspace": l.target.as_ref().map(|t| &t.0), "block": l.target.as_ref().map(|t| &t.1) })
+                })
+                .collect(),
+        )
+    }
+
+    fn translate(&self, text: &str) -> String {
+        crate::i18n::tr(text).into_owned()
+    }
+
+    fn copy_text(&mut self, text: &str) {
+        self.ed.copy_out = Some(text.to_string());
+    }
+
+    fn agent_clients(&self) -> Value {
+        crate::mcp::install::clients()
+    }
+
+    fn agent_install(&mut self, client: &str, remove: bool) -> Result<String, String> {
+        let done = if remove { crate::mcp::install::remove(client) } else { crate::mcp::install::install(client) };
+        match &done {
+            Ok(what) => self.ed.log(Level::Success, what.clone()),
+            Err(e) => self.ed.log(Level::Warn, e.clone()),
+        }
+        done
+    }
+
+    fn agent_snippet(&self) -> String {
+        crate::mcp::install::snippet()
+    }
+
+    fn agent_link(&self) -> Value {
+        self.ed.agent_link.clone()
+    }
+}
+
+impl EditorHost<'_> {
+    /// A block's shape as it is now (a block's `define` can change it).
+    fn shape(&mut self, workspace: &str, node: &str) -> Result<std::sync::Arc<circuit_core::block::BlockShape>, String> {
+        let Editor { reg, engine, shapes, project, define_ctx, .. } = &mut *self.ed;
+        let ws = project.as_ref().ok_or("no project is open")?.workspaces.get(workspace).ok_or_else(|| format!("no workspace `{workspace}`"))?;
+        let n = ws.nodes.get(node).ok_or_else(|| format!("workspace `{workspace}` has no block `{node}`"))?;
+        shapes.begin();
+        crate::editor::node_shape(reg, engine, shapes, workspace, ws, node, define_ctx).ok_or_else(|| format!("block {node} is a `{}`, which isn't installed", n.block))
+    }
+}
+
+/// `3.next` as a pin of a block.
+fn pin_ref(text: &str) -> Result<circuit_core::graph::PinRef, String> {
+    match text.trim().split_once('.') {
+        Some((node, pin)) if !node.is_empty() && !pin.is_empty() => Ok(circuit_core::graph::PinRef::new(node, pin)),
+        _ => Err(format!("`{text}` isn't a pin: write it as block.pin, such as 3.next or 4.in")),
+    }
+}
+
+fn kind_name(d: &circuit_core::BlockDef) -> String {
+    format!("{:?}", d.kind).to_lowercase()
 }
 
 #[cfg(test)]
@@ -452,6 +715,58 @@ mod tests {
         let errors = ed.log.len();
         host.sync(&mut ed, None);
         assert_eq!(ed.log.len(), errors);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// The AI agents plugin's tools, on a real project with the bundled blocks.
+    #[test]
+    fn agents_build_a_workspace_with_tools() {
+        let tmp = std::env::temp_dir().join(format!("xc-agent-tools-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let plugins = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+        let mut ed = Editor::new(vec![plugins], None).unwrap();
+        Project::create(tmp.join("bot"), "Agent Bot", "discord-bot").unwrap();
+        ed.open_project(&tmp.join("bot"));
+        let mut host = PluginHost::new(BTreeMap::new());
+        host.sync(&mut ed, None);
+        let names: Vec<String> = host.tools().into_iter().map(|t| t.name).collect();
+        for want in ["get_project", "get_workspace", "find_block_types", "add_block", "connect", "run_bot"] {
+            assert!(names.iter().any(|n| n == want), "{want} in {names:?} · {:?}", ed.log);
+        }
+        let mut call = |name: &str, args: Value| host.call_tool(&mut ed, name, &args, false).expect("a tool");
+
+        let project = call("get_project", serde_json::json!({})).unwrap();
+        assert_eq!(project["name"], "Agent Bot");
+        let ws = project["workspaces"][0]["key"].as_str().unwrap().to_string();
+        let found = call("find_block_types", serde_json::json!({ "query": "log" })).unwrap();
+        assert!(found["blockTypes"].as_array().unwrap().iter().any(|b| b["type"] == "core.log"), "{found}");
+        let info = call("get_block_type", serde_json::json!({ "type": "core.log" })).unwrap();
+        assert!(info["fields"].as_array().unwrap().iter().any(|f| f["key"] == "message"), "{info}");
+
+        let event = call("add_block", serde_json::json!({ "workspace": ws, "type": "discord.on_message" })).unwrap();
+        let event_id = event["id"].as_str().unwrap().to_string();
+        let log = call("add_block", serde_json::json!({ "workspace": ws, "type": "core.log", "after": event_id, "values": { "message": "Hi ${user}" } })).unwrap();
+        let log_id = log["id"].as_str().unwrap().to_string();
+        assert!(log["at"][0].as_f64().unwrap() > event["at"][0].as_f64().unwrap(), "placed right of the block it follows");
+        call("connect", serde_json::json!({ "workspace": ws, "from": format!("{event_id}.next"), "to": format!("{log_id}.in") })).unwrap();
+        let wrong = call("connect", serde_json::json!({ "workspace": ws, "from": format!("{event_id}.nope"), "to": format!("{log_id}.in") })).unwrap_err();
+        assert!(wrong.contains("has no output `nope`"), "{wrong}");
+        let backwards = call("connect", serde_json::json!({ "workspace": ws, "from": format!("{event_id}.next"), "to": format!("{log_id}.message") })).unwrap_err();
+        assert!(backwards.contains("Action"), "{backwards}");
+
+        let seen = call("get_workspace", serde_json::json!({ "workspace": ws })).unwrap();
+        assert_eq!(seen["wires"], serde_json::json!([format!("{event_id}.next > {log_id}.in")]));
+        assert_eq!(seen["blocks"][1]["values"]["message"], "Hi ${user}");
+        call("set_block_values", serde_json::json!({ "workspace": ws, "block": log_id, "values": { "message": "Bye" } })).unwrap();
+        let bad = call("set_block_values", serde_json::json!({ "workspace": ws, "block": log_id, "values": { "nope": 1 } })).unwrap_err();
+        assert!(bad.contains("no field \"nope\""), "{bad}");
+        call("disconnect", serde_json::json!({ "workspace": ws, "from": format!("{event_id}.next"), "to": format!("{log_id}.in") })).unwrap();
+        call("delete_blocks", serde_json::json!({ "workspace": ws, "blocks": [log_id] })).unwrap();
+        let after = call("get_workspace", serde_json::json!({ "workspace": ws })).unwrap();
+        assert_eq!(after["blocks"].as_array().unwrap().len(), 1);
+        assert!(ed.edited, "the changes are edits the editor saves and can undo");
+        let made = host.call_tool(&mut ed, "create_workspace", &serde_json::json!({ "name": "Moderation", "folder": "Events" }), false).unwrap().unwrap();
+        assert!(ed.workspace(made["key"].as_str().unwrap()).is_some());
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }

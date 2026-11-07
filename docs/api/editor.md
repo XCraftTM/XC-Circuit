@@ -23,6 +23,7 @@ Types for your code editor: `/// <reference types="@xc-circuit/sdk/editor" />` (
 | [`xc.on(event, fn)`](#xc-on) | react to `"save"`, `"botEvent"`, `"selection"` |
 | [`xc.every(ms, fn)` · `xc.after(ms, fn)` · `xc.cancel(id)`](#timers) | timers |
 | [`xc.playSound(file, { volume })`](#sounds) | play a sound from the plugin |
+| [`xc.tool({ name, description, input, run })`](#xc-tool) | something AI agents can do through the MCP server |
 
 ### Read the project
 
@@ -37,6 +38,10 @@ Types for your code editor: `/// <reference types="@xc-circuit/sdk/editor" />` (
 | `xc.data.get(key)` | project data (in `circuit.json`) |
 | `xc.storage.get(key)` | the plugin's own store (on this computer) |
 | `xc.botRunning()` · `xc.screen()` | is the bot running · window size |
+| `xc.blockTypes(query)` · `xc.blockType(type)` | installed block types · one type's fields, outputs and flows |
+| `xc.blockPins(workspace, id)` | a block as it is now: its values and pins, with types and wires |
+| `xc.problems()` · `xc.console(lines)` | what the Problems panel and the Console show |
+| `xc.t(text)` | text in the app's language, from the plugins' `locales/*.toml` |
 
 ### Change things
 
@@ -44,6 +49,9 @@ Types for your code editor: `/// <reference types="@xc-circuit/sdk/editor" />` (
 | --- | --- |
 | `xc.addBlock(workspace, type, { x, y, values })` | place a block, returns its id |
 | `xc.setWorkspace(key, workspace)` | replace a workspace |
+| `xc.connect(workspace, "3.next", "4.in")` | draw a wire, checked like one drawn on the canvas |
+| `xc.addWorkspace(name, { folder })` | make a workspace, returns its key |
+| `xc.copyText(text)` | put text on the clipboard |
 | `xc.select(workspace, ids)` · `xc.reveal(workspace, id)` | select · go to a block |
 | `xc.data.set(key, value)` · `xc.storage.set(key, value)` | save data |
 | `xc.log(…)` · `xc.success(…)` · `xc.warn(…)` · `xc.error(…)` | write to the Console |
@@ -122,6 +130,23 @@ xc.playSound("sounds/ding.wav", { volume: 0.5 });
 ```
 
 WAV, MP3 or Ogg Vorbis from the plugin's folder. Nothing plays (and nothing fails) without an audio device.
+
+### xc.tool
+
+Something AI agents such as Claude can do in XC Circuit, through its [MCP server](/explanations/ai-agents). `input` is a JSON Schema for the arguments; `run(args)` returns the answer: text, or any value (the agent gets it as JSON). Throwing an error tells the agent what went wrong. A tool may take 5 seconds.
+
+```js
+xc.tool({
+  name: "count_blocks",
+  description: "How many blocks each workspace has.",
+  input: { type: "object", properties: {} },
+  run() {
+    return xc.workspaces().map((w) => ({ workspace: w.name, blocks: Object.keys(xc.workspace(w.key).nodes).length }));
+  },
+});
+```
+
+The tools of every plugin that is on are offered together; the bundled AI agents plugin has the usual ones. `xc.agents` (`clients()`, `install(id)`, `remove(id)`, `snippet()`, `link()`) is what its panel uses to add the server to AI clients.
 
 ## Good to know
 

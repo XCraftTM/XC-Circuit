@@ -72,6 +72,12 @@ pub struct Editor {
     /// The ids of the plugins that come with the app: they can't be turned
     /// off or removed.
     pub bundled_plugins: Vec<String>,
+    /// Plugins that come with the app but can be turned off and removed: (id, name).
+    pub optional_plugins: Vec<(String, String)>,
+    /// Text a plugin put on the clipboard, for the app to copy.
+    pub copy_out: Option<String>,
+    /// The MCP server for AI agents: { listening, agents }, kept by the app.
+    pub agent_link: serde_json::Value,
     /// The bundled `examples` folder (DemoBot and the starters), when found.
     pub examples_dir: Option<PathBuf>,
     pub theme: Theme,
@@ -146,6 +152,9 @@ impl Editor {
             engine,
             plugin_dirs,
             bundled_plugins: Vec::new(),
+            optional_plugins: Vec::new(),
+            copy_out: None,
+            agent_link: serde_json::Value::Null,
             theme: Theme::fallback(),
             project: None,
             edited: false,
@@ -255,7 +264,7 @@ impl Editor {
             Err(e) => return self.log(Level::Error, format!("could not restart the block sandbox: {e:#}")),
         }
         // The app's own plugins load even if a preference says otherwise.
-        let off: Vec<String> = self.prefs.disabled_plugins.iter().filter(|id| !self.bundled_plugins.contains(id)).cloned().collect();
+        let off: Vec<String> = self.prefs.disabled_plugins.iter().chain(&self.prefs.removed_plugins).filter(|id| !self.bundled_plugins.contains(id)).cloned().collect();
         self.reg = Registry::load_except(&dirs, &self.engine, &off);
         self.apply_language();
         self.shapes.clear();
