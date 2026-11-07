@@ -51,8 +51,10 @@ const TEXT_BOX_RANGE: (f32, f32) = (30.0, 900.0);
 /// How narrow and wide a block can be made with a text box's grip.
 const NODE_WIDTH_RANGE: (f32, f32) = (200.0, 1400.0);
 /// A layout field lists up to this many parts, a line each.
-const LAYOUT_LINES: usize = 6;
-const LAYOUT_LINE_H: f32 = 17.0;
+/// The tallest a layout's preview gets inside its block; longer ones fade out.
+const LAYOUT_PREVIEW_MAX: f32 = 340.0;
+/// A layout preview's height before it was first drawn.
+const LAYOUT_PREVIEW_GUESS: f32 = 90.0;
 const GRID: f32 = 22.0;
 /// How far outside the view a block still counts as in view.
 const OFF_SCREEN_MARGIN: f32 = 48.0;
@@ -103,6 +105,9 @@ pub struct CanvasView {
     /// How wide each block must be for its fields' controls (a dropdown
     /// showing a long choice), as last drawn: block → width.
     pub needed_widths: HashMap<String, f32>,
+    /// How tall each layout field's preview was last drawn, uncut:
+    /// (block, field) → height.
+    pub preview_heights: HashMap<(String, String), f32>,
     /// Where the canvas' top-left corner was, and in which frame.
     pub last_origin: Option<(Pos2, u64)>,
     /// A note whose editor opens the next time this canvas is drawn (a new one).
@@ -179,6 +184,11 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         for (k, v) in heights_of.get(id.as_str()).into_iter().flatten() {
             (k, v.to_bits()).hash(&mut h);
         }
+        for ((n, k), v) in &view.preview_heights {
+            if n == id {
+                (k, v.to_bits()).hash(&mut h);
+            }
+        }
         let key = h.finish();
         let same_shape = |cached: &Option<std::sync::Arc<BlockShape>>| match (cached, &shape) {
             (Some(a), Some(b)) => std::sync::Arc::ptr_eq(a, b),
@@ -200,9 +210,9 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             }
         }
         if let Some(s) = &shape {
-            for (key, f) in s.visible_fields().filter(|(_, f)| f.type_name == "layout") {
-                let lines = crate::builders::layout::summary(node.values.get(key).or(f.default.as_ref()).unwrap_or(&Value::Null)).len().clamp(1, LAYOUT_LINES);
-                tall.insert(key.clone(), 8.0 + lines as f32 * LAYOUT_LINE_H + 8.0 + 26.0 + 8.0);
+            for (key, _) in s.visible_fields().filter(|(_, f)| f.type_name == "layout") {
+                let h = view.preview_heights.get(&(id.clone(), key.clone())).copied().unwrap_or(LAYOUT_PREVIEW_GUESS).min(LAYOUT_PREVIEW_MAX);
+                tall.insert(key.clone(), 4.0 + h + 8.0 + 26.0 + 8.0);
             }
         }
         if let (Some(s), Some(d)) = (&shape, def) {
@@ -663,20 +673,36 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     }
                 }
                 RowKind::Field { key, .. } if shape.and_then(|s| s.field(key)).is_some_and(|f| f.type_name == "layout") => {
+                    // The message as Discord shows it, like the Layout Builder's
+                    // preview; cut off (and fading out) past LAYOUT_PREVIEW_MAX.
                     let f = shape.and_then(|s| s.field(key)).unwrap();
-                    let lines = crate::builders::layout::summary(ws.nodes[id].values.get(key).or(f.default.as_ref()).unwrap_or(&Value::Null));
-                    let shown = lines.len().clamp(1, LAYOUT_LINES);
+                    let value = ws.nodes[id].values.get(key).or(f.default.as_ref()).cloned().unwrap_or(Value::Null);
                     let w = r.width() - 28.0;
-                    let list = Rect::from_min_size(r.min + vec2(14.0, 4.0), vec2(w, 8.0 + shown as f32 * LAYOUT_LINE_H));
-                    painter.rect_filled(list, 6.0, Color32::from_rgb(0x2B, 0x2D, 0x31));
-                    if lines.is_empty() {
-                        painter.text(list.left_center() + vec2(8.0, 0.0), Align2::LEFT_CENTER, t!("Empty: add parts in the builder"), FontId::proportional(11.5), theme.text_muted);
+                    let field = (id.clone(), key.clone());
+                    let before = view.preview_heights.get(&field).copied();
+                    let area = Rect::from_min_size(r.min + vec2(14.0, 4.0), vec2(w, before.unwrap_or(LAYOUT_PREVIEW_GUESS).min(LAYOUT_PREVIEW_MAX)));
+                    let room = Rect::from_min_size(area.min, vec2(w, 10_000.0));
+                    let mut child = cui.new_child(UiBuilder::new().id_salt(("layout-preview", id, key)).max_rect(room).layout(egui::Layout::top_down(egui::Align::Min)));
+                    child.set_clip_rect(area.intersect(cui.clip_rect()));
+                    // Its texts are only to look at: a drag on them moves the block.
+                    child.style_mut().interaction.selectable_labels = false;
+                    crate::builders::layout::block_preview(&mut child, &value, w);
+                    let full = child.min_rect().height().ceil();
+                    if before.is_none_or(|b| (b - full).abs() > 0.5) {
+                        view.preview_heights.insert(field, full);
+                        cui.ctx().request_repaint();
                     }
-                    for (i, l) in lines.iter().take(LAYOUT_LINES).enumerate() {
-                        let text = if i + 1 == LAYOUT_LINES && lines.len() > LAYOUT_LINES { tf!("… and {count} more", count = lines.len() - i) } else { l.clone() };
-                        painter.text(list.left_top() + vec2(8.0, 4.0 + (i as f32 + 0.5) * LAYOUT_LINE_H), Align2::LEFT_CENTER, text, FontId::proportional(11.5), Color32::from_rgb(0xDB, 0xDE, 0xE1));
+                    if full > area.height() + 0.5 {
+                        let fade = 28.0;
+                        let back = Color32::from_rgb(0x31, 0x33, 0x38);
+                        for i in 0..7 {
+                            let t = i as f32 / 7.0;
+                            let strip = Rect::from_min_max(pos2(area.left(), area.bottom() - fade * (1.0 - t)), pos2(area.right(), area.bottom() - fade * (1.0 - t) + fade / 7.0 + 0.5));
+                            painter.rect_filled(strip, 0.0, back.gamma_multiply(0.25 + 0.75 * t));
+                        }
+                        painter.text(pos2(area.center().x, area.bottom() - 9.0), Align2::CENTER_CENTER, t!("Open the builder for the rest"), FontId::proportional(11.0), theme.text_muted);
                     }
-                    let button = Rect::from_min_size(pos2(r.left() + 14.0, list.bottom() + 8.0), vec2(w, 26.0));
+                    let button = Rect::from_min_size(pos2(r.left() + 14.0, area.bottom() + 8.0), vec2(w, 26.0));
                     if cui.put(button, egui::Button::new(t!("Edit layout…"))).clicked() {
                         open_layout = Some(key.clone());
                     }

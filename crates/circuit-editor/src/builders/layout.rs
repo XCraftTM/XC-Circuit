@@ -238,31 +238,6 @@ fn kind_name(c: &Value) -> String {
     }
 }
 
-fn short(text: &str, max: usize) -> String {
-    let line = text.lines().find(|l| !l.trim().is_empty()).unwrap_or_default().trim_start_matches(['#', '-', '>', ' ']);
-    if line.chars().count() > max { format!("{}…", line.chars().take(max).collect::<String>()) } else { line.to_string() }
-}
-
-/// One line per top-level component, for the block on the canvas.
-pub fn summary(layout: &Value) -> Vec<String> {
-    components(layout)
-        .iter()
-        .map(|c| {
-            let children = list_of(c, "components");
-            match ty(c) {
-                kind::TEXT => format!("{}: {}", kind_name(c), short(text_of(c, "content"), 26)),
-                kind::SECTION => format!("{}: {}", kind_name(c), short(children.first().map(|t| text_of(t, "content")).unwrap_or_default(), 24)),
-                kind::CONTAINER => tf!("Container · {count} parts", count = children.len()),
-                kind::GALLERY => tf!("Media gallery · {count} pictures", count = list_of(c, "items").len()),
-                kind::ROW if !children.first().is_some_and(is_select) => {
-                    format!("{}: {}", kind_name(c), children.iter().map(|b| text_of(b, "label")).collect::<Vec<_>>().join(", "))
-                }
-                _ => kind_name(c),
-            }
-        })
-        .collect()
-}
-
 /// A new component of the kind picked in an Add menu. `n` keeps custom ids apart.
 fn new_component(what: &str, n: usize) -> Value {
     match what {
@@ -963,6 +938,21 @@ pub fn preview(ui: &mut Ui, theme: &Theme, layout: &Value, bot: Option<&crate::b
     });
 }
 
+/// The message's parts as Discord shows them, for the preview inside a
+/// block: on Discord's chat colour, without the bot's name. `width` is the
+/// whole box's.
+pub fn block_preview(ui: &mut Ui, layout: &Value, width: f32) {
+    Frame::new().fill(discord::CHAT).corner_radius(6).inner_margin(Margin::same(10)).show(ui, |ui| {
+        ui.set_width(width - 20.0);
+        ui.spacing_mut().item_spacing.y = 6.0;
+        let list = components(layout);
+        if list.is_empty() {
+            ui.label(RichText::new(t!("Empty: add parts in the builder")).size(12.0).color(discord::MUTED));
+        }
+        preview_list(ui, list, width - 20.0);
+    });
+}
+
 fn preview_list(ui: &mut Ui, list: &[Value], width: f32) {
     for c in list {
         preview_one(ui, c, width);
@@ -1154,7 +1144,6 @@ mod tests {
         assert_eq!(count(components(&layout)), 10);
         assert!(problems(&layout).is_empty(), "{:?}", problems(&layout));
         assert_eq!(to_json(&layout), message, "nothing is lost on the way back");
-        assert_eq!(summary(&layout), ["Container · 4 parts", "Media gallery · 1 pictures"]);
 
         let lists_only = from_json(&json!([{ "type": 10, "content": "x" }])).unwrap();
         assert_eq!(components(&lists_only).len(), 1);
