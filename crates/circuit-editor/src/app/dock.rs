@@ -176,12 +176,15 @@ impl DockViewer<Tab> for Viewer<'_> {
 }
 
 impl Tab {
-    /// The width a builder works at: a narrower area scrolls sideways
-    /// instead of squeezing its columns, and a window can't get narrower.
+    /// The narrowest a builder works at (with its preview on top of the
+    /// form): a narrower area scrolls sideways instead of squeezing it, and
+    /// a window can't get narrower.
     pub(super) fn min_width(&self) -> f32 {
         match self {
-            Tab::EmbedBuilder => 760.0,
-            Tab::LayoutBuilder | Tab::CanvasBuilder | Tab::SlashCommands => 900.0,
+            Tab::EmbedBuilder => 540.0,
+            Tab::LayoutBuilder => 640.0,
+            Tab::CanvasBuilder => 620.0,
+            Tab::SlashCommands => 800.0,
             _ => 0.0,
         }
     }

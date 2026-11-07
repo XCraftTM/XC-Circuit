@@ -319,33 +319,17 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
             width: 1040.0,
         },
         |ui, part| match part {
+            // Side by side when there's room; in a narrow tab the preview
+            // goes on top of the form and the values to its end.
+            Part::Body if ui.available_width() < SIDE_BY_SIDE => {
+                kit::section(ui, &theme, t!("Preview"));
+                dialog::preview_on_top(ui, "embed-preview", 0.4, |ui| preview_message(ui, &theme, &edit.draft, bot.as_ref()));
+                form_column(ui, &theme, edit, Some(&values));
+            }
             Part::Body => {
                 ui.horizontal_top(|ui| {
                     let h = dialog::remaining_height(ui, 420.0);
-                    ui.allocate_ui_with_layout(vec2(470.0, h), egui::Layout::top_down(egui::Align::Min), |ui| {
-                        if let Some(json) = json_view::switch(ui, &theme, edit.json.is_some()) {
-                            if json {
-                                edit.json = Some(JsonText::new(&edit.draft.to_discord()));
-                            } else if edit.json.as_ref().is_none_or(|j| j.error.is_none()) {
-                                edit.json = None;
-                            }
-                        }
-                        ui.add_space(8.0);
-                        if let Some(jt) = &mut edit.json {
-                            let help = t!("The embed as Discord's JSON. Edit it, or paste an embed or a whole message (from an embed generator, say); it applies as soon as it is valid. \"timestamp\": \"now\" shows when it's sent.");
-                            if let Some(v) = json_view::editor(ui, &theme, ui.scope_id().with("embed-json"), jt, help) {
-                                match EmbedData::from_discord(&v) {
-                                    Ok(e) => edit.draft = e,
-                                    Err(e) => jt.error = Some(e),
-                                }
-                            }
-                            return;
-                        }
-                        ScrollArea::vertical().id_salt("embed-form").max_height(dialog::remaining_height(ui, 300.0)).auto_shrink([false, false]).show(ui, |ui| {
-                            ui.set_width(452.0);
-                            form(ui, &theme, &mut edit.draft);
-                        });
-                    });
+                    ui.allocate_ui_with_layout(vec2(FORM_W, h), egui::Layout::top_down(egui::Align::Min), |ui| form_column(ui, &theme, edit, None));
                     ui.add_space(14.0);
                     ui.vertical(|ui| {
                         kit::section(ui, &theme, t!("Preview"));
@@ -385,6 +369,43 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
     } else if cancel {
         ed.embed_edit = None;
     }
+}
+
+/// The form's width beside the preview.
+const FORM_W: f32 = 470.0;
+/// Below this the preview goes on top of the form.
+const SIDE_BY_SIDE: f32 = FORM_W + 14.0 + 380.0;
+
+/// Builder | JSON, and the form or the JSON. `values` (the values from
+/// earlier blocks) are listed at the form's end, when given.
+fn form_column(ui: &mut Ui, theme: &Theme, edit: &mut EmbedEdit, values: Option<&crate::editor::values::Scope>) {
+    if let Some(json) = json_view::switch(ui, theme, edit.json.is_some()) {
+        if json {
+            edit.json = Some(JsonText::new(&edit.draft.to_discord()));
+        } else if edit.json.as_ref().is_none_or(|j| j.error.is_none()) {
+            edit.json = None;
+        }
+    }
+    ui.add_space(8.0);
+    if let Some(jt) = &mut edit.json {
+        let help = t!("The embed as Discord's JSON. Edit it, or paste an embed or a whole message (from an embed generator, say); it applies as soon as it is valid. \"timestamp\": \"now\" shows when it's sent.");
+        if let Some(v) = json_view::editor(ui, theme, ui.scope_id().with("embed-json"), jt, help) {
+            match EmbedData::from_discord(&v) {
+                Ok(e) => edit.draft = e,
+                Err(e) => jt.error = Some(e),
+            }
+        }
+        return;
+    }
+    ScrollArea::vertical().id_salt("embed-form").max_height(dialog::remaining_height(ui, 300.0)).auto_shrink([false, false]).show(ui, |ui| {
+        ui.set_width(ui.available_width() - 18.0);
+        form(ui, theme, &mut edit.draft);
+        if let Some(values) = values {
+            ui.add_space(12.0);
+            kit::section(ui, theme, t!("Values from earlier blocks"));
+            crate::editor::values::list(ui, theme, values);
+        }
+    });
 }
 
 fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {

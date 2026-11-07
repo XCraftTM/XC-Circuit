@@ -54,6 +54,15 @@ pub fn remaining_height(ui: &Ui, min: f32) -> f32 {
     (bottom - top).max(min)
 }
 
+/// A builder's preview on top of its form, for when the tab is too narrow
+/// for them side by side: up to `share` of the room down to the footer, and
+/// scrolling past that, so the form below keeps the rest.
+pub fn preview_on_top(ui: &mut Ui, id: &str, share: f32, add: impl FnOnce(&mut Ui)) {
+    let h = (remaining_height(ui, 300.0) * share).max(140.0);
+    egui::ScrollArea::vertical().id_salt(id).max_height(h).auto_shrink([false, true]).show(ui, add);
+    ui.add_space(12.0);
+}
+
 pub fn tab(ui: &mut Ui, theme: &Theme, spec: Spec, mut content: impl FnMut(&mut Ui, Part)) {
     let id = Id::unique(("dialog-tab", spec.id));
     egui::Panel::bottom(id.with("footer"))

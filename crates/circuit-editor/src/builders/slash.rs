@@ -675,6 +675,8 @@ fn apply_json(edit: &mut SlashEdit, root: &str, v: &Value) -> Result<String, Str
 }
 
 fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], trash: Option<&std::path::Path>, eye: Option<&std::path::Path>) {
+    // In a narrow tab the preview goes on top of the form instead of beside it.
+    let stacked = ui.available_width() < 230.0 + 18.0 + 380.0 + 20.0 + PREVIEW_W;
     ui.horizontal_top(|ui| {
         // Command list.
         let h = dialog::remaining_height(ui, 420.0);
@@ -721,12 +723,15 @@ fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], tra
         ui.add_space(18.0);
 
         // The selected command, and on the right how it looks in Discord.
-        let form_w = (ui.available_width() - PREVIEW_W - 40.0).max(380.0);
+        let form_w = if stacked { ui.available_width() } else { (ui.available_width() - PREVIEW_W - 40.0).max(380.0) };
         ui.allocate_ui_with_layout(vec2(form_w, h), egui::Layout::top_down(egui::Align::Min), |ui| {
-            if edit.commands.get(edit.selected).is_none() {
+            let Some(cmd) = edit.commands.get(edit.selected) else {
                 ui.add_space(40.0);
                 ui.label(RichText::new(t!("No slash commands yet. Click “+ New command”.")).color(theme.text_muted));
                 return;
+            };
+            if stacked {
+                dialog::preview_on_top(ui, "slash-preview", 0.4, |ui| discord_preview(ui, theme, cmd, eye));
             }
             let root = root_of(&edit.commands[edit.selected].name).to_string();
             // Builder | JSON.
@@ -766,7 +771,7 @@ fn body(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[String], tra
                 command_form(ui, theme, edit, &root);
             });
         });
-        if let Some(cmd) = edit.commands.get(edit.selected) {
+        if let Some(cmd) = edit.commands.get(edit.selected).filter(|_| !stacked) {
             ui.add_space(20.0);
             discord_preview(ui, theme, cmd, eye);
         }

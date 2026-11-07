@@ -353,10 +353,17 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
             width: 1220.0,
         },
         |ui, part| match part {
+            // Side by side when there's room; in a narrow tab the preview
+            // goes on top of the form and the values to its end.
+            Part::Body if ui.available_width() < 620.0 + 16.0 + 400.0 => {
+                kit::section(ui, &theme, t!("Preview"));
+                dialog::preview_on_top(ui, "layout-preview", 0.4, |ui| preview(ui, &theme, &edit.draft, bot.as_ref()));
+                form(ui, &theme, edit, Some(&values));
+            }
             Part::Body => {
                 ui.horizontal_top(|ui| {
                     let h = dialog::remaining_height(ui, 420.0);
-                    ui.allocate_ui_with_layout(vec2(620.0, h), egui::Layout::top_down(egui::Align::Min), |ui| form(ui, &theme, edit));
+                    ui.allocate_ui_with_layout(vec2(620.0, h), egui::Layout::top_down(egui::Align::Min), |ui| form(ui, &theme, edit, None));
                     ui.add_space(16.0);
                     ui.vertical(|ui| {
                         kit::section(ui, &theme, t!("Preview"));
@@ -399,7 +406,9 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
     }
 }
 
-fn form(ui: &mut Ui, theme: &Theme, edit: &mut LayoutEdit) {
+/// Builder | JSON, and the components or the JSON. `values` (the values from
+/// earlier blocks) are listed at the end, when given.
+fn form(ui: &mut Ui, theme: &Theme, edit: &mut LayoutEdit, values: Option<&crate::editor::values::Scope>) {
     if let Some(json) = json_view::switch(ui, theme, edit.json.is_some()) {
         if json {
             edit.json = Some(JsonText::new(&to_json(&edit.draft)));
@@ -436,6 +445,11 @@ fn form(ui: &mut Ui, theme: &Theme, edit: &mut LayoutEdit) {
             ui.set_width(ui.available_width() - 12.0);
             let next = count(components(&edit.draft)) + 1;
             list_editor(ui, theme, list_mut(&mut edit.draft, "components"), true, next);
+            if let Some(values) = values {
+                ui.add_space(12.0);
+                kit::section(ui, theme, t!("Values from earlier blocks"));
+                crate::editor::values::list(ui, theme, values);
+            }
         });
     });
 }

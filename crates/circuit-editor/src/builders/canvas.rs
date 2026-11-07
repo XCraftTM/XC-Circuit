@@ -556,6 +556,28 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
             width: 1240.0,
         },
         |ui, part| match part {
+            // In a narrow tab the picture goes on top, the two lists of
+            // settings below it, and the preview values to the right one's end.
+            Part::Body if ui.available_width() < 250.0 + 12.0 + 420.0 + 12.0 + 300.0 => {
+                let room = (dialog::remaining_height(ui, 300.0) * 0.42).max(140.0);
+                preview(ui, &theme, edit, room);
+                ui.add_space(10.0);
+                let h = dialog::remaining_height(ui, 300.0);
+                ui.horizontal_top(|ui| {
+                    ui.allocate_ui_with_layout(vec2(250.0, h), egui::Layout::top_down(egui::Align::Min), |ui| {
+                        ScrollArea::vertical().id_salt("canvas-left").auto_shrink([false, false]).show(ui, |ui| left_panel(ui, &theme, edit, &icons));
+                    });
+                    ui.add_space(12.0);
+                    ui.allocate_ui_with_layout(vec2(ui.available_width(), h), egui::Layout::top_down(egui::Align::Min), |ui| {
+                        ScrollArea::vertical().id_salt("canvas-right").auto_shrink([false, false]).show(ui, |ui| {
+                            ui.set_width(ui.available_width() - 14.0);
+                            properties(ui, &theme, edit);
+                            ui.add_space(12.0);
+                            samples(ui, &theme, &mut edit.draft);
+                        });
+                    });
+                });
+            }
             Part::Body => {
                 let h = dialog::remaining_height(ui, 460.0);
                 ui.horizontal_top(|ui| {
@@ -565,7 +587,8 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
                     ui.add_space(12.0);
                     let middle = (ui.available_width() - 300.0 - 12.0).max(300.0);
                     ui.allocate_ui_with_layout(vec2(middle, h), egui::Layout::top_down(egui::Align::Min), |ui| {
-                        preview(ui, &theme, edit);
+                        let room = (ui.available_height() - 160.0).max(200.0);
+                        preview(ui, &theme, edit, room);
                         ui.add_space(10.0);
                         ScrollArea::vertical().id_salt("canvas-samples").auto_shrink([false, false]).show(ui, |ui| samples(ui, &theme, &mut edit.draft));
                     });
@@ -771,9 +794,10 @@ fn left_panel(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit, icons: &Icons) 
 }
 
 /// The design, fitted into the space, where layers are chosen, moved and resized.
-fn preview(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit) {
+/// The picture, at most `height` tall (and as wide as there is room).
+fn preview(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit, height: f32) {
     let d = &edit.draft;
-    let room = vec2(ui.available_width(), (ui.available_height() - 160.0).max(200.0));
+    let room = vec2(ui.available_width(), height);
     let scale = (room.x / d.width.max(1.0)).min(room.y / d.height.max(1.0)).min(1.0);
     let size = vec2(d.width, d.height) * scale;
     let (area, resp) = ui.allocate_exact_size(vec2(room.x, size.y), Sense::click_and_drag());
@@ -864,14 +888,25 @@ fn samples(ui: &mut Ui, theme: &Theme, d: &mut CanvasData) {
         return;
     }
     kit::hint(ui, theme, t!("Only for the preview: the bot fills in the real values."));
-    egui::Grid::new("canvas-samples-grid").num_columns(2).spacing(vec2(10.0, 4.0)).show(ui, |ui| {
+    // Each name over its box when there's no room for them side by side.
+    if ui.available_width() < 480.0 {
         for e in &exprs {
             let name = ui.label(RichText::new(format!("${{{e}}}")).monospace().size(11.5).color(theme.text)).id;
             let value = d.samples.entry(e.clone()).or_default();
-            kit::labelled(ui, name, |ui| ui.add(crate::ui::kit::TextLine::new(value).hint(e.as_str()).width(220.0)));
-            ui.end_row();
+            let w = ui.available_width();
+            kit::labelled(ui, name, |ui| ui.add(crate::ui::kit::TextLine::new(value).hint(e.as_str()).width(w)));
+            ui.add_space(4.0);
         }
-    });
+    } else {
+        egui::Grid::new("canvas-samples-grid").num_columns(2).spacing(vec2(10.0, 4.0)).show(ui, |ui| {
+            for e in &exprs {
+                let name = ui.label(RichText::new(format!("${{{e}}}")).monospace().size(11.5).color(theme.text)).id;
+                let value = d.samples.entry(e.clone()).or_default();
+                kit::labelled(ui, name, |ui| ui.add(crate::ui::kit::TextLine::new(value).hint(e.as_str()).width(220.0)));
+                ui.end_row();
+            }
+        });
+    }
     // Values for ${…} no longer used are dropped.
     d.samples.retain(|k, v| exprs.contains(k) && !v.is_empty());
 }
