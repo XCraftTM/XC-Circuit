@@ -126,7 +126,8 @@ impl Theme {
         v.hyperlink_color = self.accent;
         v.warn_fg_color = self.warning;
         v.error_fg_color = self.error;
-        v.selection.bg_fill = with_alpha(self.accent, 80);
+        // Strong enough to see marked text at a glance on the input fields.
+        v.selection.bg_fill = with_alpha(self.accent, if self.dark { 140 } else { 110 });
         v.selection.stroke = Stroke::new(1.0, self.text);
 
         let w = &mut v.widgets;

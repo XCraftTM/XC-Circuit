@@ -85,9 +85,14 @@ type Redone = (std::sync::Arc<egui::Galley>, f32, f32, f32);
 pub(super) fn sharpen_text(ctx: &egui::Context, layer: LayerId, to_global: TSTransform, text: Color32) {
     let zoom = to_global.scaling;
     let ppp = ctx.pixels_per_point();
+    // A text box's marked text is painted into its text (a rectangle in the
+    // selection colour); laid out again it would lose that, so while one is
+    // being typed in, texts holding a selection stay as they are.
+    let selection = ctx.text_edit_focused().then(|| ctx.global_style().visuals.selection.bg_fill);
+    let selected = |g: &egui::Galley| selection.is_some_and(|c| g.rows.iter().any(|r| r.row.visuals.mesh.vertices.iter().any(|v| v.color == c)));
     let texts: Vec<(usize, Pos2, std::sync::Arc<egui::Galley>)> = ctx.graphics(|g| {
         g.get(layer)
-            .map(|list| list.all_entries().enumerate().filter_map(|(i, c)| if let egui::Shape::Text(t) = &c.shape { Some((i, t.pos, t.galley.clone())) } else { None }).collect())
+            .map(|list| list.all_entries().enumerate().filter_map(|(i, c)| if let egui::Shape::Text(t) = &c.shape { (!selected(&t.galley)).then(|| (i, t.pos, t.galley.clone())) } else { None }).collect())
             .unwrap_or_default()
     });
     if texts.is_empty() {
