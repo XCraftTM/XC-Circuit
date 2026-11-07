@@ -59,6 +59,12 @@ assert.ok(compare(10, "eq", "10.0"));
 assert.ok(compare("b", "gt", "a") && !compare("Apple", "eq", "apple"));
 assert.ok(compare("Apple", "eq", "apple", { ignoreCase: true }));
 assert.ok(compare(user, "eq", "42") && compare(user, "eq", { id: "42" }));
+// Discord ids are longer than numbers hold exactly: two close ones stay apart.
+assert.ok(compare("1503044503819260024", "eq", "1503044503819260024"));
+assert.ok(!compare("1503044503819260024", "eq", "1503044503819260031"), "ids 7 apart are different");
+assert.ok(compare({ id: "1503044503819260031" }, "gt", "1503044503819260024") && compare("1503044503819260024", "lt", "1503044503819260031"));
+assert.ok(compare("1503044503819260024", "ne", 1503044503819260031n));
+assert.ok(compare("10", "eq", 10) && compare(" 7 ", "lt", "10"), "short numbers as before");
 assert.ok(compare(5, "between", 1, { c: "5" }) && !compare(6, "between", 1, { c: 5 }));
 assert.ok(compare(new Date(2026, 0, 2), "gt", new Date(2026, 0, 1)));
 assert.ok(compare("Hello world", "contains", "WORLD", { ignoreCase: true }) && compare("Hello", "not_contains", "x"));

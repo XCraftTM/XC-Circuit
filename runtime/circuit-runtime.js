@@ -2314,10 +2314,30 @@ function textOf(v, ignoreCase) {
   return ignoreCase ? s.toLowerCase() : s;
 }
 
+/**
+ * Whole numbers too long for JavaScript's numbers to hold exactly, such as
+ * Discord ids (18-19 digits), as BigInts; null for anything else. Two
+ * different ids would otherwise round to the same number.
+ */
+function asBigInt(v) {
+  const s = typeof v === "bigint" ? v.toString() : typeof v === "string" ? v.trim() : typeof v === "number" && Number.isSafeInteger(v) ? String(v) : null;
+  return s !== null && /^-?\d+$/.test(s) ? BigInt(s) : null;
+}
+
+/** Both as BigInts when either is a whole number longer than a number holds exactly. */
+function bigPair(a, b) {
+  const [x, y] = [asBigInt(a), asBigInt(b)];
+  if (x === null || y === null) return null;
+  const big = (n) => n > BigInt(Number.MAX_SAFE_INTEGER) || n < -BigInt(Number.MAX_SAFE_INTEGER);
+  return big(x) || big(y) ? [x, y] : null;
+}
+
 function same(a, b, ignoreCase) {
   a = comparable(a);
   b = comparable(b);
   if (a == null || b == null) return (a ?? "") === (b ?? "");
+  const big = bigPair(a, b);
+  if (big) return big[0] === big[1];
   const [x, y] = [asNumber(a), asNumber(b)];
   if (x !== null && y !== null) return x === y;
   return textOf(a, ignoreCase) === textOf(b, ignoreCase);
@@ -2327,6 +2347,8 @@ function same(a, b, ignoreCase) {
 function order(a, b, ignoreCase) {
   a = comparable(a);
   b = comparable(b);
+  const big = bigPair(a, b);
+  if (big) return big[0] === big[1] ? 0 : big[0] > big[1] ? 1 : -1;
   const [x, y] = [asNumber(a), asNumber(b)];
   if (x !== null && y !== null) return x - y;
   return textOf(a, ignoreCase).localeCompare(textOf(b, ignoreCase));
