@@ -359,20 +359,70 @@ function toDiscordCommand(c) {
 module.exports.toDiscordCommands = toDiscordCommands;
 module.exports.toDiscordCommand = toDiscordCommand;
 module.exports.registrationPlan = registrationPlan;
+module.exports.sameCommands = sameCommands;
 
 /**
- * What to send Discord, given the commands, where they go ("global" or a
- * server id) and what was registered last time ({ scope, hash }, or null).
- * Unchanged commands aren't sent again, a list that became empty is still
- * sent (so deleted commands go away), and moving between the dev server and
- * global clears the old place, so commands don't show up twice.
+ * A command as a plain value to compare: Discord leaves out what is at its
+ * default (`required: false`, no translations), so both sides are filled in
+ * the same way. Contexts are only compared when we set them (Discord fills
+ * in its own for commands that don't say).
  */
-function registrationPlan(list, scope, last) {
+function comparable(c, ours) {
+  const locales = (v) => Object.fromEntries(Object.entries(v || {}).sort());
+  const option = (o) => ({
+    type: o.type,
+    name: o.name,
+    description: o.description || "",
+    name_localizations: locales(o.name_localizations),
+    description_localizations: locales(o.description_localizations),
+    required: !!o.required,
+    autocomplete: !!o.autocomplete,
+    choices: (o.choices || []).map((ch) => ({ name: ch.name, value: ch.value, name_localizations: locales(ch.name_localizations) })),
+    channel_types: [...(o.channel_types || [])].sort(),
+    min_value: o.min_value ?? null,
+    max_value: o.max_value ?? null,
+    min_length: o.min_length ?? null,
+    max_length: o.max_length ?? null,
+    options: (o.options || []).map(option),
+  });
+  const type = c.type ?? 1;
+  return {
+    type,
+    name: c.name,
+    description: type === 1 ? c.description || "" : "",
+    name_localizations: locales(c.name_localizations),
+    description_localizations: locales(c.description_localizations),
+    options: (c.options || []).map(option),
+    default_member_permissions: c.default_member_permissions ?? null,
+    nsfw: !!c.nsfw,
+    contexts: ours.contexts ? [...(c.contexts || [])].sort() : null,
+    integration_types: [...(c.integration_types && c.integration_types.length ? c.integration_types : [0])].sort(),
+  };
+}
+
+/** Whether the commands Discord has (`current`) are the ones we want (`list`). */
+function sameCommands(current, list) {
+  if (current.length !== list.length) return false;
+  const key = (c) => `${c.type ?? 1}:${c.name}`;
+  const theirs = new Map(current.map((c) => [key(c), c]));
+  return list.every((ours) => {
+    const t = theirs.get(key(ours));
+    return t && JSON.stringify(comparable(t, ours)) === JSON.stringify(comparable(ours, ours));
+  });
+}
+
+/**
+ * What to send to Discord: the commands, unless Discord already has exactly
+ * them (`current`, read from Discord at every start; null when that failed,
+ * then they're sent when they changed since `last` time). Moving between
+ * global and a dev server clears the old place.
+ */
+function registrationPlan(list, scope, last, current = null) {
   const hash = require("crypto").createHash("sha256").update(JSON.stringify(list)).digest("hex");
   const steps = [];
   if (last && last.scope !== scope && last.count) steps.push({ scope: last.scope, list: [] });
-  const changed = !last || last.scope !== scope || last.hash !== hash;
-  if (changed && (list.length || (last && last.scope === scope && last.count))) steps.push({ scope, list });
+  const changed = current ? !sameCommands(current, list) : !last || last.scope !== scope || last.hash !== hash;
+  if (changed && (list.length || (current ? current.length : last && last.scope === scope && last.count))) steps.push({ scope, list });
   return { steps, record: { scope, hash, count: list.length } };
 }
 
@@ -406,14 +456,24 @@ async function registerCommands(rt, client) {
   try {
     last = JSON.parse(fs.readFileSync(file, "utf8"));
   } catch {}
-  const plan = registrationPlan(list, devServer || "global", last);
+  // What Discord has now: commands changed or removed elsewhere (the
+  // developer portal, another copy of the bot) are put right at every start.
+  const scope = devServer || "global";
+  let current = null;
+  try {
+    const route = scope === "global" ? `/applications/${client.application.id}/commands` : `/applications/${client.application.id}/guilds/${scope}/commands`;
+    current = await client.rest.get(route, { query: new URLSearchParams({ with_localizations: "true" }) });
+  } catch (e) {
+    rt.log.warn(`Couldn't read the slash commands from Discord (${e.message})`);
+  }
+  const plan = registrationPlan(list, scope, last, current);
   for (const step of plan.steps) {
     const where = step.scope === "global" ? "globally" : "on the dev server";
     if (step.scope === "global") await client.application.commands.set(step.list);
     else await client.application.commands.set(step.list, step.scope);
     rt.log.info(step.list.length ? `Registered ${step.list.length} slash commands ${where}` : `Removed the slash commands ${where}`);
   }
-  if (!plan.steps.length && list.length) rt.log.info(`Slash commands unchanged (${list.length})`);
+  if (!plan.steps.length && list.length) rt.log.info(`Slash commands in sync with Discord (${list.length})`);
   try {
     fs.mkdirSync(rt.opts.dataDir, { recursive: true });
     fs.writeFileSync(file, JSON.stringify(plan.record) + "\n");

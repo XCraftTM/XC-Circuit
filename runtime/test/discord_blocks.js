@@ -66,7 +66,7 @@ assert.strictEqual(fmt("escape", "*not bold*"), "\\*not bold\\*");
 }
 
 // Slash commands: names with spaces are subcommands and groups.
-const { toDiscordCommands, registrationPlan, shardOptions } = require("../../plugins/xc.discord/runtime/discord.js");
+const { toDiscordCommands, registrationPlan, sameCommands, shardOptions } = require("../../plugins/xc.discord/runtime/discord.js");
 
 // The Shards setting.
 assert.deepStrictEqual(shardOptions(""), {});
@@ -87,6 +87,19 @@ assert.deepStrictEqual(shardOptions("3"), { shards: [0, 1, 2], shardCount: 3 });
     [{ scope: "global", list: [] }, { scope: "123", list: ping }],
     "moving to the dev server clears the global ones",
   );
+  // With what Discord has: sent again when it differs, whatever was sent last time.
+  const ours = [{ name: "ping", description: "Pong", options: [{ type: 3, name: "who", description: "Who", required: false }], contexts: [0, 1] }];
+  // Discord's answer: defaults left out, ids and versions added, contexts in its order.
+  const discord = [{ id: "1", application_id: "2", version: "3", type: 1, name: "ping", description: "Pong", options: [{ type: 3, name: "who", description: "Who" }], contexts: [1, 0], integration_types: [0], default_member_permissions: null, nsfw: false, name_localizations: null }];
+  assert.ok(sameCommands(discord, ours), "the same commands, as Discord returns them");
+  assert.deepStrictEqual(registrationPlan(ours, "global", first.record, discord).steps, [], "in sync: nothing sent");
+  const edited = [{ ...discord[0], description: "Changed in the portal" }];
+  assert.deepStrictEqual(registrationPlan(ours, "global", registrationPlan(ours, "global", null).record, edited).steps, [{ scope: "global", list: ours }], "changed on Discord: sent again");
+  assert.deepStrictEqual(registrationPlan(ours, "global", registrationPlan(ours, "global", null).record, []).steps, [{ scope: "global", list: ours }], "removed on Discord: sent again");
+  assert.deepStrictEqual(registrationPlan([], "global", null, discord).steps, [{ scope: "global", list: [] }], "left on Discord but deleted here: cleared");
+  assert.deepStrictEqual(registrationPlan([], "global", null, []).steps, [], "nothing on either side");
+  const menu = [{ name: "Report", type: 3 }];
+  assert.ok(sameCommands([{ id: "4", type: 3, name: "Report", description: "", contexts: [0, 1, 2], integration_types: [0] }], menu), "a menu entry with Discord's own contexts");
 }
 const cmds = toDiscordCommands(
   [
