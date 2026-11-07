@@ -21,8 +21,11 @@ pub trait DockViewer<T> {
     fn closeable(&self, _tab: &T) -> bool {
         true
     }
-    /// A tab's × (or middle click, or its menu's Close): it's taken out after this.
-    fn on_close(&mut self, _tab: &T) {}
+    /// A tab's × (or middle click, or its menu's Close): it's taken out after
+    /// this, or replaced by the tab returned (a placeholder keeping its place).
+    fn on_close(&mut self, _tab: &T) -> Option<T> {
+        None
+    }
     /// The tab's content, under its tab bar.
     fn ui(&mut self, ui: &mut Ui, tab: &T);
     /// The smallest a window holding this tab may be made (its content,
@@ -155,10 +158,12 @@ impl<T: Clone + PartialEq + Hash + std::fmt::Debug> Dock<T> {
         }
         for act in acts {
             match act {
-                Act::Close(tab) => {
-                    viewer.on_close(&tab);
-                    self.remove(&tab);
-                }
+                Act::Close(tab) => match viewer.on_close(&tab) {
+                    Some(instead) => self.replace(&tab, instead),
+                    None => {
+                        self.remove(&tab);
+                    }
+                },
                 Act::Focus(tab) => self.focus(&tab),
                 Act::Drag(tab) => {
                     self.focus(&tab);

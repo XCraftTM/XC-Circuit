@@ -5,6 +5,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 ## Unreleased
 
 ### Changed
+- **A placeholder where the workspaces go**: closing the last workspace tab (or deleting its workspace) leaves a "No workspace" tab in its place, listing the project's workspaces to open and a button for a new one, instead of the Inspector taking the whole window. Opening a workspace puts it back right there.
 - **The builders fit narrow tabs**: when there isn't room for the preview beside the form, the Embed and Layout Builders show it on top, with the values from earlier blocks at the end of the form. Slash Commands shows its Discord preview above the command's settings and starts with just the list of commands; once you pick one, the list folds into a slim bar on the left (with how many commands there are, and a dot when one needs fixing) that opens it over the form with a click. And the Canvas Builder puts the picture on top with its settings in two columns below.
 
 ### Fixed

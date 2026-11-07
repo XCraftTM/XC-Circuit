@@ -249,7 +249,12 @@ impl CircuitApp {
                     open_canvas(&mut self.dock, key);
                 }
                 Action::CloseWorkspaceTabs(key) => {
-                    close_tabs(&mut self.dock, |t| *t == Tab::Canvas(key.clone()));
+                    let tab = Tab::Canvas(key.clone());
+                    let others = self.dock.tabs().any(|t| matches!(t, Tab::Canvas(k) if *k != key));
+                    if !others && self.ed.project.is_some() && !self.dock.contains(&Tab::Start) {
+                        self.dock.replace(&tab, Tab::Start);
+                    }
+                    close_tabs(&mut self.dock, |t| *t == tab);
                     self.ed.views.remove(&key);
                     if self.ed.selected.as_ref().is_some_and(|(w, _)| *w == key) {
                         self.ed.selected = None;

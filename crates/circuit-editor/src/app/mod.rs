@@ -528,6 +528,8 @@ impl eframe::App for CircuitApp {
                 side_ask: None,
                 to_side: None,
                 closed_side: Vec::new(),
+                canvases: self.dock.tabs().filter(|t| matches!(t, Tab::Canvas(_))).count(),
+                no_workspace: None,
             };
             let size = ui.available_size();
             if let Some(before) = self.dock_size
@@ -545,6 +547,9 @@ impl eframe::App for CircuitApp {
             let side_ask = viewer.side_ask.take();
             let to_side = viewer.to_side.take();
             let closed_side = std::mem::take(&mut viewer.closed_side);
+            if let Some(ask) = viewer.no_workspace.take() {
+                self.no_workspace_ask(ask);
+            }
             for view in closed_side {
                 self.back_to_bar(view);
             }

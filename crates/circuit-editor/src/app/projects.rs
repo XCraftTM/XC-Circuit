@@ -116,10 +116,39 @@ impl CircuitApp {
         self.drop_placeholder();
     }
 
-    /// Once a canvas is in its place, the placeholder that kept it goes.
+    /// Once a canvas is in its place, the placeholder that kept it goes. With
+    /// a project open and no canvas, there is always one (left of the
+    /// Inspector, if no canvas left one in its place).
     pub(super) fn drop_placeholder(&mut self) {
-        if self.dock_before_start.is_none() && self.dock.find(|t| matches!(t, Tab::Canvas(_))).is_some() {
-            close_tabs(&mut self.dock, |t| matches!(t, Tab::Start));
+        if self.dock_before_start.is_some() {
+            return;
         }
+        let canvas = self.dock.find(|t| matches!(t, Tab::Canvas(_))).is_some();
+        if canvas {
+            close_tabs(&mut self.dock, |t| matches!(t, Tab::Start));
+        } else if self.ed.project.is_some() && !self.dock.contains(&Tab::Start) {
+            let focused = self.dock.focused().cloned();
+            open_center(&mut self.dock, Tab::Start);
+            if let Some(tab) = focused {
+                self.dock.focus(&tab);
+            }
+        }
+    }
+
+    /// The placeholder's buttons: open a workspace, or make one and open it.
+    pub(super) fn no_workspace_ask(&mut self, ask: super::dock::NoWorkspace) {
+        use super::dock::NoWorkspace;
+        let key = match ask {
+            NoWorkspace::Open(key) => key,
+            NoWorkspace::New => {
+                let Some(project) = self.ed.project.as_mut() else { return };
+                let name = (1..).map(|i| if i == 1 { t!("Workspace").to_string() } else { format!("{} {i}", t!("Workspace")) }).find(|n| !project.workspaces.values().any(|w| w.name == *n)).expect("unbounded");
+                let key = project.new_workspace_key(&name);
+                project.workspaces.insert(key.clone(), circuit_core::Workspace::new(name));
+                self.ed.edited = true;
+                key
+            }
+        };
+        self.ed.actions.push(Action::OpenWorkspace(key));
     }
 }

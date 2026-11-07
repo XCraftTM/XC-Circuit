@@ -24,6 +24,16 @@ pub(super) struct Viewer<'a> {
     pub(super) to_side: Option<(Tab, Option<egui::Pos2>)>,
     /// Workspaces, Stored Data or Plugins whose tab was closed: back to the activity bar.
     pub(super) closed_side: Vec<SideView>,
+    /// How many workspace tabs are open: closing the last leaves a placeholder.
+    pub(super) canvases: usize,
+    /// What the placeholder for a workspace asked for.
+    pub(super) no_workspace: Option<NoWorkspace>,
+}
+
+/// The placeholder's buttons, in the canvas area while no workspace is open.
+pub(super) enum NoWorkspace {
+    Open(String),
+    New,
 }
 
 impl Tab {
@@ -85,6 +95,8 @@ impl DockViewer<Tab> for Viewer<'_> {
             Tab::BotSettings => t!("Bot settings").into(),
             Tab::Export => t!("Export bot").into(),
             Tab::Plugins => t!("Plugins").into(),
+            // With a project open it holds the place of its workspaces.
+            Tab::Start if self.ed.project.is_some() => t!("No workspace").into(),
             Tab::Start => t!("Start").into(),
             Tab::WorkspaceExport => t!("Export workspaces").into(),
             Tab::WorkspaceImport => t!("Import workspaces").into(),
@@ -109,7 +121,12 @@ impl DockViewer<Tab> for Viewer<'_> {
         over && tab.side_key().is_some()
     }
 
-    fn on_close(&mut self, tab: &Tab) {
+    fn on_close(&mut self, tab: &Tab) -> Option<Tab> {
+        // The last workspace's tab leaves a placeholder in its place, so the
+        // area stays (and the Inspector doesn't take the whole window).
+        if matches!(tab, Tab::Canvas(_)) && self.canvases <= 1 && self.ed.project.is_some() {
+            return Some(Tab::Start);
+        }
         // Closing an editor's tab cancels it.
         match tab {
             Tab::EmbedBuilder => self.ed.embed_edit = None,
@@ -123,6 +140,7 @@ impl DockViewer<Tab> for Viewer<'_> {
             Tab::Side(view) => self.closed_side.push(*view),
             _ => {}
         }
+        None
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, tab: &Tab) {
@@ -154,6 +172,7 @@ impl DockViewer<Tab> for Viewer<'_> {
                 let key = key.clone();
                 canvas::show(ui, self.ed, &key);
             }
+            Tab::Start if self.ed.project.is_some() => self.no_workspace = no_workspace(ui, self.ed),
             Tab::Start => {
                 let recent = self.ed.prefs.recent_projects.clone();
                 if let Some(pick) = crate::pages::start_page::show(ui, &self.ed.theme, self.start, &recent, &self.ed.reg, self.has_example) {
@@ -364,6 +383,50 @@ pub(super) fn repair_layout(dock: &mut Dock<Tab>) -> bool {
     }
     dock.main = dock.main.take().and_then(crate::ui::dock::prune);
     true
+}
+
+/// Where a workspace's canvas goes while none is open: what to do, the
+/// project's workspaces to open, and a button for a new one.
+fn no_workspace(ui: &mut egui::Ui, ed: &Editor) -> Option<NoWorkspace> {
+    let theme = &ed.theme;
+    let project = ed.project.as_ref()?;
+    let mut ask = None;
+    ui.painter().rect_filled(ui.max_rect(), 0.0, theme.panel);
+    egui::ScrollArea::vertical().id_salt("no-workspace").auto_shrink([false, false]).show(ui, |ui| {
+        let width = ui.available_width().min(380.0);
+        ui.add_space((ui.available_height() * 0.18).clamp(24.0, 140.0));
+        ui.horizontal(|ui| {
+            ui.add_space(((ui.available_width() - width) / 2.0).max(16.0));
+            ui.vertical(|ui| {
+                ui.set_width(width);
+                if let Some(icon) = ed.reg.icons.get("workspace") {
+                    let (rect, _) = ui.allocate_exact_size(egui::vec2(44.0, 44.0), egui::Sense::hover());
+                    ui.painter().rect_filled(rect, 10.0, crate::ui::theme::with_alpha(theme.accent, 34));
+                    egui::Image::from_uri(crate::editor::file_uri(icon)).tint(theme.accent).paint_at(ui, rect.shrink(11.0));
+                    ui.add_space(10.0);
+                }
+                ui.label(RichText::new(t!("No workspace open")).size(17.0).strong().color(theme.text));
+                ui.add_space(2.0);
+                let hint = if project.workspaces.is_empty() { t!("Make a workspace to put blocks in.") } else { t!("Open a workspace to edit its blocks here, or make a new one.") };
+                ui.label(RichText::new(hint).size(12.5).color(theme.text_muted));
+                ui.add_space(14.0);
+                for (key, ws) in project.workspaces.iter().take(12) {
+                    let text = RichText::new(&ws.name).color(theme.text);
+                    if ui.add_sized([width, 32.0], egui::Button::new(text).fill(theme.panel_header)).on_hover_text(t!("Open this workspace")).clicked() {
+                        ask = Some(NoWorkspace::Open(key.clone()));
+                    }
+                }
+                if project.workspaces.len() > 12 {
+                    ui.label(RichText::new(tf!("And {count} more in Workspaces.", count = project.workspaces.len() - 12)).size(12.0).color(theme.text_muted));
+                }
+                ui.add_space(10.0);
+                if crate::ui::kit::primary_button(ui, theme, t!("+ New workspace")).clicked() {
+                    ask = Some(NoWorkspace::New);
+                }
+            });
+        });
+    });
+    ask
 }
 
 /// Focuses a workspace's canvas tab, or opens it next to the other canvases.
