@@ -17,7 +17,7 @@ Good first contributions:
 - **Translations:** `plugins/xc.core/locales/<code>.toml`. See [Translate the app](https://xcrafttm.github.io/XC-Circuit/tutorials/translate).
 - **Blocks:** a `.js` file in a plugin's `blocks/` folder. See [Your first block](https://xcrafttm.github.io/XC-Circuit/tutorials/first-block) and the [Blocks reference](https://xcrafttm.github.io/XC-Circuit/api/blocks).
 - **Starter bots:** a project in `examples/templates/<name>/` with a `template.json`.
-- **Docs:** the website lives in `docs/` (VitePress).
+- **Docs:** the website lives in `docs/` (VitePress). After changing it, run `python tools/agent_docs.py` to update `docs/public/llms-full.txt`, the docs in one file for AI agents (see [AGENTS.md](AGENTS.md)).
 
 ## Building
 

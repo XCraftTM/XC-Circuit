@@ -1,0 +1,3550 @@
+# XC Circuit: the complete documentation
+All pages of https://xcrafttm.github.io/XC-Circuit, in the order of its sidebar. Made by tools/agent_docs.py from docs/; start with AGENTS.md in the repository for how the code is laid out.
+
+
+---
+
+<!-- docs/index.md · https://xcrafttm.github.io/XC-Circuit/ -->
+
+
+
+
+---
+
+<!-- docs/tutorials/index.md · https://xcrafttm.github.io/XC-Circuit/tutorials/ -->
+
+# Tutorials
+
+Step by step, with pictures. Each one ends with something that works.
+
+| | | |
+| --- | --- | --- |
+| 1 | **[Your first bot](./first-bot)** | a `/ping` command, running in Discord · 15 min |
+| 2 | **[Values and texts](./values-and-texts)** | pass values between blocks, remember things · 10 min |
+| 3 | **[Your first block](./first-block)** | write a block in JavaScript · 10 min |
+| 4 | **[Your first editor plugin](./first-editor-plugin)** | add a panel and a command to XC Circuit · 10 min |
+| 5 | **[Translate the app](./translate)** | a new language for the interface · 5 min |
+
+Making plugins? After tutorials 3 and 4, the [Plugin guide](/plugins/) shows how to test, share and update them, with [recipes](/plugins/recipes) to copy.
+
+::: tip Look at a finished bot
+**Help › Open Example: DemoBot**, or **File › New Project** › pick a starter such as *Levels & XP*.
+:::
+
+
+---
+
+<!-- docs/explanations/index.md · https://xcrafttm.github.io/XC-Circuit/explanations/ -->
+
+# Explanations
+
+These pages explain how XC™ Circuit works and why it works that way. Read them when you want to understand what's going on; for step-by-step lessons see the [Tutorials](/tutorials/), and for every key and function the [API reference](/api/).
+
+## Building bots
+
+- **[Events, actions and values](./blocks-and-wires)**: the three kinds of blocks, and how a flow runs through them.
+- **[Texts and `${…}`](./expressions)**: JavaScript in any text, and where the names in it come from.
+- **[Projects and workspaces](./projects)**: what's in a project folder, and how to organize a bot.
+- **[Variables and stored data](./data)**: values for one run, for a workspace, for the whole bot, and data that survives restarts.
+- **[Try Zones and errors](./errors)**: what happens when something fails, and how to handle it.
+
+## Behind the scenes
+
+- **[Plugins](./plugins)**: everything is a plugin; the kinds of plugins and what each may do.
+- **[Running and exporting](./running)**: how the editor runs your bot, and what an export contains.
+- **[Tokens and safety](./safety)**: where secrets are kept, and why editor scripts are sandboxed.
+
+
+---
+
+<!-- docs/plugins/index.md · https://xcrafttm.github.io/XC-Circuit/plugins/ -->
+
+# Make a plugin
+
+::: info In short
+A plugin is a folder with a `plugin.toml`. Put it in a project's `plugins/` folder (or your own plugins folder), save a file, and XC™ Circuit loads it right away. Blocks run in the bot; an `editor.js` adds panels, commands and checks to the editor. Errors show in the Console and the Problems panel.
+:::
+
+This guide takes you from an empty folder to a plugin you can share. The [Reference](/api/) lists every key and function; the [Recipes](./recipes) show complete examples for common tasks; [Share and update](./share) covers packaging and versions.
+
+## What can a plugin do?
+
+| I want to… | Make | Runs in | Start with |
+| --- | --- | --- | --- |
+| add a **block** to the picker | a block file in `blocks/` | the bot | [Your first block](/tutorials/first-block) |
+| add a **panel, command or check** to the editor | an `editor.js` | the editor (sandboxed) | [Your first editor plugin](/tutorials/first-editor-plugin) |
+| make something **float over the editor** | an overlay in `editor.js` | the editor | [Desk Pet](https://github.com/XCraftTM/XC-Circuit/tree/main/examples/plugins/desk-pet) |
+| change how the app **looks** | a theme | the editor | [Themes](/api/themes) |
+| **translate** the app | a locale file | the editor | [Translate the app](/tutorials/translate) |
+| offer **starter bots** in New Project | a template | the editor | [Templates](/api/templates) |
+| add **settings** to Bot › Settings | a settings file | the editor and the bot | [Plugin settings](/api/build-modes#plugin-settings) |
+| support another **chat app** | a build mode, runtime library and pin types | the bot | [Build modes](/api/build-modes) |
+
+One plugin can do several of these: DemoBot's own plugin has blocks and an editor script.
+
+## The folder
+
+```
+acme.tools/
+├─ plugin.toml        what it is and what it adds
+├─ blocks/
+│  └─ shout.js        a block
+├─ editor.js          panels, commands, checks
+└─ icons/
+   └─ acme.svg
+```
+
+```toml
+id          = "acme.tools"
+name        = "Acme Tools"
+version     = "1.0.0"
+author      = "Acme"
+description = "A block and a panel for Acme bots."
+
+[engines]
+circuit = "^1.0"
+
+[contributes]
+blocks = ["blocks/*.js"]
+icons  = ["icons/*.svg"]
+
+[editor]
+script = "editor.js"
+```
+
+Pick an `id` that's yours (`yourname.something`, lowercase) and start every block id and command id with it: two plugins can't use the same ids. Every key is in [plugin.toml](/api/plugin-toml).
+
+## Where to keep it while you work
+
+| Folder | Loaded | Good for |
+| --- | --- | --- |
+| the project's `plugins/` | only with that project | a plugin for one bot: it travels with the project (and its exports) |
+| your plugins folder (Plugins › Open folder) | in every project | a plugin you use everywhere |
+| a folder in `XC_CIRCUIT_PLUGINS` | in every project | developing a plugin in its own Git repository |
+
+`XC_CIRCUIT_PLUGINS` is an environment variable with one or more folders (separated by `;` on Windows, `:` on Linux), each holding plugin folders. Start XC Circuit from a terminal that has it set:
+
+```powershell
+$env:XC_CIRCUIT_PLUGINS = "C:\code\my-plugins"; & "C:\Program Files\XC Circuit\xc-circuit.exe"
+```
+
+## The loop: save, look, fix
+
+XC Circuit watches plugin files. **Save a file and it loads again**: a block file, the editor script, a theme, a translation. You don't restart anything:
+
+- **Blocks** appear in the picker (search for their name). Blocks already on the canvas take the new shape; a running bot uses the new code after a restart (Save restarts it, if *Restart on save* is on).
+- **Editor scripts** start again: their panels are drawn again, their commands are in the Plugins menu at once. Variables at the top of the script start over; what's in `xc.storage` and `xc.data` stays.
+- **Themes and translations** apply right away.
+
+The Plugins view in the side bar lists every plugin and whether its script runs. **Reload** there loads every plugin again, for a file the watcher missed.
+
+## When something's wrong
+
+| Where | What you see |
+| --- | --- |
+| **Problems** panel | a `plugin.toml` or block file that couldn't be read, a missing dependency, a block id used twice, problems your `xc.check` returns |
+| **Console** | errors from commands, timers and events (with the file and line), what your blocks log with `ctx.log`, and a block that fails while the bot runs |
+| the **panel** itself | an error in its `render`, above what it showed last |
+| the **block** on the canvas | a block that failed turns red (the Console says why) |
+| Plugins view | *Script · error*, with the reason |
+
+An editor script that crashes is turned off until you save one of its files. One that takes too long (100 ms to draw, 1 s for a command) is stopped with an error saying so.
+
+**Logging.** In blocks: `ctx.log.info("…", value)`. In editor scripts: `xc.log("…", value)`. Both go to the Console; objects are shown readably.
+
+## TypeScript and your code editor
+
+Blocks and editor scripts can be TypeScript (`.ts`): XC Circuit removes the types when it loads them. For completion and checking in your code editor, use the types in the repository's [`sdk/`](https://github.com/XCraftTM/XC-Circuit/tree/main/sdk) folder:
+
+```ts
+// a block
+import { defineBlock } from "@xc-circuit/sdk";
+export default defineBlock({ id: "acme.shout", kind: "value", /* … */ });
+```
+
+```js
+// editor.js
+/// <reference types="@xc-circuit/sdk/editor" />
+xc.command({ id: "acme.hello", title: "Hello", run() { xc.log("Hi") } });
+```
+
+Split a bigger editor script into files with `require("./lib/util.js")` (`.js`, `.ts` or `.json`, only the plugin's own files). A block is one file.
+
+## What's allowed where
+
+| | Editor script (`editor.js`) | Block (in the bot) |
+| --- | --- | --- |
+| Files, network, programs | no | yes (it's a Node.js program) |
+| npm packages | no | yes: `requires.dependencies` and [`ctx.require`](/api/ctx#require) |
+| The project | read, and change with undo | only its own values and what's wired in |
+| Time | 100 ms to draw, 1 s for a command | as long as it needs |
+| Asks before loading | no | no, so only use block plugins you trust |
+
+Because editor scripts can't reach files or the network, they start without asking, even in a project you downloaded. Block code runs with the bot's full access, like any npm package: see [Tokens and safety](/explanations/safety).
+
+## Next
+
+- [Recipes](./recipes): complete examples to copy.
+- [Share and update](./share): versions, zips, updates.
+- [Reference](/api/): every key and function.
+
+
+---
+
+<!-- docs/api/index.md · https://xcrafttm.github.io/XC-Circuit/api/ -->
+
+# API reference
+
+Every key and function plugins can use. New here? Start with the [Plugin guide](/plugins/) (how to make, test and share a plugin, with [recipes](/plugins/recipes)) and the tutorials [Your first block](/tutorials/first-block) and [Your first editor plugin](/tutorials/first-editor-plugin).
+
+## What do you want to do?
+
+| I want to… | Read |
+| --- | --- |
+| make a **new block** for the picker | [Blocks](./blocks) → [Fields and types](./fields) → [Run context (ctx)](./ctx) |
+| add a **panel, command or check** to the editor | [Editor plugins (xc)](./editor) → [Panels (ui)](./panels) |
+| make something **float over the editor** (a desk pet) | [Overlays](./editor#xc-overlay) |
+| support a **new kind of bot** (another chat app) | [Build modes](./build-modes) → [Runtime libraries](./runtime-libs) → [Pin types](./pin-types) |
+| make a **theme** | [Themes](./themes) |
+| **translate** the app | [Translations](./locales) |
+| offer a **starter bot** in New Project | [Templates](./templates) |
+| read or write **project files** with other tools | [Project format](./project-format) |
+
+## Every plugin is a folder
+
+```
+my.plugin/
+├─ plugin.toml   what it is, what it adds   → plugin.toml
+├─ blocks/       blocks (.js, .ts)          → Blocks
+├─ editor.js     panels, commands, checks   → Editor plugins
+├─ modes/        kinds of bots (.toml)      → Build modes
+├─ runtime/      code for a kind of bot     → Runtime libraries
+├─ types/        value types (.toml)        → Pin types
+├─ themes/       themes (.toml)             → Themes
+├─ locales/      translations (.toml)       → Translations
+├─ icons/        icons (.svg, .png)
+└─ templates/    starter bots               → Templates
+```
+
+Only [`plugin.toml`](./plugin-toml) is required. Share a plugin as a `.zip` of its folder: people install it with **Plugins › Install from Zip…**
+
+## Types for your code editor
+
+The repository's [`sdk/`](https://github.com/XCraftTM/XC-Circuit/tree/main/sdk) folder is the `@xc-circuit/sdk` package:
+
+```ts
+import { defineBlock } from "@xc-circuit/sdk";        // blocks
+/// <reference types="@xc-circuit/sdk/editor" />      // editor plugins (xc, ui)
+```
+
+## Versions
+
+The plugin API is version **1.0**. A plugin says which versions it works with in `plugin.toml` (`[engines] circuit = "^1.0"`); plugins for another major version aren't loaded. Additions in 1.x keep old plugins working.
+
+
+---
+
+<!-- docs/download.md · https://xcrafttm.github.io/XC-Circuit/download -->
+
+# Download
+
+::: info Early Access
+XC™ Circuit is in Early Access: it works and is used for real bots, but expect rough edges. See the [known issues](/known-issues) and [what's new](/changelog). It's [built with AI assistance](/made-with-ai).
+:::
+
+
+## After downloading
+
+- **Windows Setup**: run it. It installs for you only; no administrator needed.
+- **Windows .zip** or **Linux .tar.gz**: unpack it anywhere and start `xc-circuit.exe` (Windows) or `xc-circuit` (Linux).
+- **AppImage**: make it executable (right-click › Properties › *Allow executing*, or `chmod +x`), then double-click it.
+- **.deb**: `sudo apt install ./XC-Circuit-…deb` · **.rpm**: `sudo dnf install ./XC-Circuit-…rpm`
+
+Not sure whether your computer is x64 or ARM64? Almost every PC is x64; ARM64 is mostly laptops with a Snapdragon chip.
+
+::: tip "Windows protected your PC"?
+The installer isn't signed yet, so Windows asks first. Choose **More info › Run anyway**.
+:::
+
+## Updates
+
+The app looks for newer versions itself (at start, and from Help › Check for Updates; you can turn the check off in Settings).
+
+- **Installed with the Windows Setup, or an AppImage:** **Update and restart** downloads the new version, checks it against the checksum GitHub publishes, and installs it as XC Circuit closes (asking about unsaved changes first). Then XC Circuit opens again. On Windows only a small progress window shows; installed for everyone, Windows asks for administrator rights.
+- **.deb, .rpm, .zip or .tar.gz:** **Download** opens the release page; install the new file as you did the first one.
+
+## What you need
+
+- **Node.js 22 or newer** to run bots. The first start finds it, or installs it for you: with winget or the official installer on Windows, as a private copy on Linux.
+- The npm packages a bot needs (discord.js for Discord bots, @fluxerjs/core for Fluxer bots) are installed once, on the first run, into `%APPDATA%\XC Circuit\packages` or `~/.local/share/xc-circuit/packages`.
+
+## What's in the download
+
+| File or folder | What it is |
+| --- | --- |
+| `xc-circuit` / `xc-circuit.exe` | The editor, with the Node.js runtime that runs your block graphs built in |
+| `plugins/` | The bundled plugins: Circuit Core, Discord Bot, Fluxer Bot and Server Tools |
+| `examples/` | DemoBot and the starters New Project offers |
+| `README.md` | A short guide to the editor |
+| `LICENSE`, `THIRD-PARTY-NOTICES.txt`, `licenses/` | The licence and the licences of what's built in |
+
+Your own plugins go into `%APPDATA%\XC Circuit\plugins` (Windows) or `~/.local/share/xc-circuit/plugins` (Linux); Plugins › Open folder opens it.
+
+## From source
+
+The code is on [GitHub](https://github.com/XCraftTM/XC-Circuit). With Rust installed:
+
+```bash
+cargo run -p circuit-editor
+```
+
+The first start opens `examples/DemoBot`. See the [licence](https://github.com/XCraftTM/XC-Circuit/blob/main/LICENSE) for what you may do with the code: you can fork it to propose changes (blocks, translations, fixes) as pull requests.
+
+
+---
+
+<!-- docs/performance.md · https://xcrafttm.github.io/XC-Circuit/performance -->
+
+# Performance
+
+::: info In short
+XC™ Circuit draws a typical bot in **about 1 ms per frame** and runs at **800–1,100 frames a second** on a gaming PC when nothing holds it back. Even a workspace of **1,600 blocks** stays smooth on a 120 Hz screen on an everyday computer. Frames only drop with **thousands of blocks in one workspace** or **hundreds of blocks on screen at once on a 4K window**. Bots run **75,000–200,000 blocks a second** once exported.
+:::
+
+The bundled starter bots have 3 to 8 blocks per workspace, and even large bots rarely have more than 100 in one. Everything below is about how far beyond that you can go.
+
+## How it's measured
+
+A screen shows a new picture (a frame) 60 or 120 times a second, so the app has **16.7 ms** (60 Hz) or **8.3 ms** (120 Hz) per frame. If a frame takes longer, the screen shows the previous picture again and movement stutters: frames drop.
+
+Two kinds of measurements:
+
+- **Real frame rates:** the whole app in its window, drawing with the graphics card, with a made-up project that it pans and zooms by itself. Vsync is off, so it draws as fast as it can instead of waiting for the screen.
+- **Frame times:** what XC Circuit does on the processor for each frame (building the interface and turning it into triangles), timed without a window, so many more cases can be compared. The graphics card then only draws the triangles, which took it about 0.2 ms a frame in the real measurements.
+
+The tables show the **95th percentile**: 19 out of 20 frames are at least this fast. They ran on two computers:
+
+| | CPU | Graphics | Notes |
+| --- | --- | --- | --- |
+| **Desktop** | AMD Ryzen 7 9800X3D (8 cores) | NVIDIA GeForce RTX 4070 SUPER | A fast gaming PC, Windows 11 |
+| **Everyday** | AMD EPYC 7763, 4 cores of a shared server | none | GitHub's standard Windows machine: about 2× slower, like an ordinary laptop |
+
+🟢 smooth at 120 Hz · 🟡 smooth at 60 Hz · 🔴 drops frames
+
+## Real frame rates
+
+The desktop, a 1440×900 window, Vulkan. Each workspace was shown still, panned across and zoomed from 100% to 25% and back.
+
+| Blocks in the workspace | Still | Panning | Zooming | Slowest frames (95%) |
+| --- | --- | --- | --- | --- |
+| 25 | 1,045 FPS | 1,139 FPS | 374 FPS | 🟢 3.0 ms |
+| 200 | 836 FPS | 801 FPS | 304 FPS | 🟢 4.9 ms |
+| 800 | 493 FPS | 483 FPS | 234 FPS | 🟢 5.9 ms |
+| 1,600 | 312 FPS | 308 FPS | 181 FPS | 🟢 7.4 ms |
+
+**Without a graphics card** (drawing in software with Mesa's llvmpipe on Linux, 4 cores of an AMD EPYC 9V45 server), the same test still runs at about 42–67 FPS still or panning, and 34–51 FPS while zooming: usable, but noticeably less smooth.
+
+Out of more than 10,000 frames on the desktop, only two took longer than 16.7 ms (single hiccups while zooming). Zooming costs the most, because every text is laid out again at its new size. Your screen still shows at most its own refresh rate (60, 144, 240 …); the rest is headroom.
+
+## Blocks in one workspace
+
+Frame times with a few blocks on screen (100% zoom) and the rest of the workspace off screen. Off-screen blocks cost a little: their layout is kept, and checked each frame for changes.
+
+| Blocks in the workspace | Desktop | Everyday |
+| --- | --- | --- |
+| 25 | 🟢 0.9 ms | 🟢 1.7 ms |
+| 200 | 🟢 1.0 ms | 🟢 2.0 ms |
+| 400 | 🟢 1.5 ms | 🟢 2.7 ms |
+| 800 | 🟢 1.7 ms | 🟢 4.1 ms |
+| 1,600 | 🟢 3.3 ms | 🟢 8.2 ms |
+| 3,200 | 🟢 6.4 ms | 🔴 18.5 ms |
+
+An everyday computer stays smooth at 120 Hz up to about **1,600 blocks** in one workspace and drops frames at 3,200; the desktop handles 3,200 at 120 Hz. For very big bots, split them into several workspaces (the Call Workspace block runs one from another): other workspaces cost nothing.
+
+## Blocks on screen at once
+
+The window filled edge to edge with blocks, from 100% zoom down to 25% (the smallest). More pixels mean more blocks fit, so a 4K window (2560×1440 at 150%) shows the most.
+
+| Window | Zoom | Blocks on screen | Desktop | Everyday |
+| --- | --- | --- | --- | --- |
+| 1400×900 | 100% | 12 | 🟢 0.6 ms | 🟢 1.1 ms |
+| 1400×900 | 50% | 48 | 🟢 2.3 ms | 🟢 4.2 ms |
+| 1400×900 | 35% | 88 | 🟢 3.1 ms | 🟢 6.0 ms |
+| 1400×900 | 25% | 165 | 🟢 6.4 ms | 🟡 12.7 ms |
+| 4K | 100% | 35 | 🟢 2.0 ms | 🟢 4.1 ms |
+| 4K | 50% | 126 | 🟢 7.3 ms | 🟡 14.6 ms |
+| 4K | 35% | 260 | 🟡 9.6 ms | 🔴 22.8 ms |
+| 4K | 25% | 459 | 🔴 19.5 ms | 🔴 44.2 ms |
+
+On a normal-sized window frames never drop, even fully zoomed out. On a **4K window**, about **130–250 blocks on screen** is where an everyday computer starts to drop frames (450 for the desktop). Drawing that many blocks is the one thing that costs real time: each one is a small form with its own fields.
+
+## Working on the canvas
+
+A workspace of 400 blocks at 50% zoom: what moving around and editing cost compared with doing nothing.
+
+| What you do | 1400×900, desktop | 1400×900, everyday | 4K, desktop | 4K, everyday |
+| --- | --- | --- | --- | --- |
+| Nothing (idle) | 🟢 2.8 ms | 🟢 6.1 ms | 🟡 8.8 ms | 🔴 18.1 ms |
+| Moving the pointer | 🟢 2.8 ms | 🟢 6.4 ms | 🟡 8.5 ms | 🔴 18.0 ms |
+| Panning | 🟢 2.8 ms | 🟢 5.5 ms | 🟡 8.8 ms | 🔴 18.1 ms |
+| Zooming | 🟢 5.0 ms | 🟡 9.6 ms | 🟡 10.2 ms | 🔴 22.2 ms |
+| Dragging a block | 🟢 3.0 ms | 🟢 5.6 ms | 🟢 7.5 ms | 🔴 17.2 ms |
+
+Panning and dragging cost no more than standing still. A 400-block workspace with 120 blocks on a 4K screen is the one case that isn't smooth on an everyday computer (just under 60 frames a second).
+
+When nothing changes, XC Circuit doesn't redraw (at most once a second, while a plugin's script runs), so an idle window uses almost no processor time. While blocks glow after running, the canvas redraws about 30 times a second.
+
+## Everyday tasks
+
+| Task | Desktop | Everyday |
+| --- | --- | --- |
+| Load every plugin (205 blocks, compiled in QuickJS) | 81 ms | 125 ms |
+| Open a project (any size; it loads its plugins too) | 84 ms | 128 ms |
+| Open a workspace of 25 blocks for the first time | 1.8 ms | 3.8 ms |
+| Open a workspace of 200 blocks for the first time | 12 ms | 27 ms |
+| Open a workspace of 800 blocks for the first time | 78 ms | 168 ms |
+| Open a workspace of 1,600 blocks for the first time | 266 ms | 530 ms |
+| Open the block picker | 14 ms | 28 ms |
+| Each letter typed into the picker's search | 3.3 ms | 7.2 ms |
+| Paste 100 blocks | 0.2 ms | 0.3 ms |
+| Undo that | under 0.1 ms | under 0.1 ms |
+| Save a project of 1,600 blocks | 1.0 ms | 2.3 ms |
+| Start a bot, until its first block ran | 54 ms | 108 ms |
+| Export a bot of 800 blocks (without installing its packages) | 0.8 ms | 3.6 ms |
+
+A workspace takes longer the first time it's opened because each block's shape is worked out (its `define()` runs) and its texts are laid out once; after that, switching to it is instant. Exporting with "install packages" also runs npm, which takes as long as the download.
+
+## Running bots
+
+The runtime that runs your bot, timed with 10,000 rounds of each case. **Run in the editor** reports every block to the editor as it starts and ends (that's how blocks glow and show their times); an **exported bot** skips that.
+
+| Case | Run in the editor, desktop | Exported, desktop | Run in the editor, everyday | Exported, everyday |
+| --- | --- | --- | --- | --- |
+| Blocks (Set Variable with Math) | 94,000 a second | 202,000 a second | 19,000 a second | 74,000 a second |
+| Stored data (Increase Stored Value) | 147,000 a second | 294,000 a second | 27,000 a second | 83,000 a second |
+| Signals (Emit Signal → On Signal) | 66,000 a second | 156,000 a second | 15,000 a second | 52,000 a second |
+
+A block takes 5–15 microseconds in an exported bot. Real bots spend almost all their time waiting for Discord or Fluxer (a reply takes 50–300 ms), so the blocks themselves are never what makes a bot slow. During these tests a bot used 50–150 MB of memory, most of it Node.js itself.
+
+## If it gets slow
+
+- **Split very big workspaces.** Thousands of blocks in one workspace cost a little each frame, other workspaces cost nothing. Use Call Workspace to run one from another.
+- **Zoom in a bit on big screens.** Hundreds of blocks on a 4K screen are the most expensive thing to draw.
+- **Check the graphics driver.** If no graphics card driver can be used, XC Circuit draws in software (it says so in the Console). On Linux that still gave 34–67 FPS above; Windows' software renderer was much slower on GitHub's screenless servers (about 2 FPS), though that says more about those servers than about a normal PC. Installing the graphics driver fixes it.
+
+## Run them yourself
+
+The benchmarks are in the repository. With [Rust](https://rustup.rs) and Node.js installed:
+
+```bash
+cargo run --release -p circuit-editor -- --fps fps.json
+```
+
+```bash
+cargo test --release -p circuit-editor bench_ -- --ignored --nocapture --test-threads=1
+```
+
+```bash
+node runtime/bench/runtime.js
+```
+
+The first opens XC Circuit for about a minute: it uses a made-up project and its own settings in a temporary folder, moves by itself (don't click into it) and closes when done, writing `fps.json`. The others print tables like the ones above and write `target/bench/*.json`. The **Benchmarks** workflow on GitHub runs all three on GitHub's Windows and Linux machines.
+
+Measured with XC Circuit 0.1.0 in November 2026.
+
+
+---
+
+<!-- docs/made-with-ai.md · https://xcrafttm.github.io/XC-Circuit/made-with-ai -->
+
+# How XC™ Circuit is made
+
+**XC™ Circuit is designed and directed by XCraftTM and built with AI assistance (Anthropic's Claude).**
+
+We think you should know that before you use it, so here's what that means.
+
+## Who does what
+
+- **XCraftTM** decides what XC Circuit is and does: which features it gets, how they should look and feel, what's good enough. Every feature is tried, and problems found by using the app are sent back until they're right.
+- **Claude** (an AI) writes most of the code, the documentation and the bundled art and sounds (icons, the desk pet, the sound effects), following those decisions.
+
+## What we do about quality
+
+- **Tests:** more than a hundred automated tests for the editor and runtime run before every release, plus checks of the real interface rendered offscreen.
+- **Open to read:** the [source code](https://github.com/XCraftTM/XC-Circuit) is public, so anyone can see how it works.
+- **Real use:** bots are tested against real Discord and Fluxer servers before a release.
+- **Maintained:** bugs are fixed and reported crashes looked at. Report anything with Help › Report a Bug.
+
+## What it means for you
+
+- Your bots, projects and plugins are **yours**. XC Circuit doesn't use AI while you build or run bots, and nothing you make is sent anywhere.
+- XC Circuit has **no telemetry**. It only goes online to check for updates (you can turn that off) and when your bot runs.
+
+If you'd rather not use software made this way, we understand. If you do use it, we'd love to hear what you build.
+
+
+---
+
+<!-- docs/tutorials/first-bot.md · https://xcrafttm.github.io/XC-Circuit/tutorials/first-bot -->
+
+# Your first bot
+
+A Discord bot with a `/ping` command that answers **"Pong! 42 ms"**. About 15 minutes.
+
+You need XC™ Circuit ([download](/download)) and a Discord server where you may add bots.
+
+## 1. Make the bot in Discord
+
+1. Open the [Discord Developer Portal](https://discord.com/developers/applications) › **New Application**, name it *Ping Bot*.
+2. **Bot** › **Reset Token** › copy the token. It's a password: don't share it.
+3. **OAuth2 › URL Generator**: tick **bot** and **applications.commands**, then **Send Messages**. Open the link at the bottom and add the bot to your server.
+
+## 2. Create the project
+
+**File › New Project…**
+
+![The New Project window](/screens/new-project.png)
+
+1. Pick **Discord Bot**.
+2. Type a name.
+3. Keep **Empty project** (the others are finished bots to learn from).
+4. **Create**.
+
+## 3. Paste the token
+
+**Bot › Settings…**
+
+![Bot settings](/screens/bot-settings.png)
+
+1. Paste the token.
+2. **Save and close**.
+
+::: tip Safe
+The token is kept in your computer's password store, never in the project folder.
+:::
+
+## 4. Make the `/ping` command
+
+**Bot › Slash Commands…**
+
+![The Slash Commands window](/screens/slash-commands.png)
+
+1. **+ New command**.
+2. Name `ping`, description *Checks that the bot answers*.
+3. **Save and close**.
+
+## 5. Add the blocks
+
+Right-click the empty canvas (or press **Space**).
+
+![The block picker](/screens/block-picker.png)
+
+1. Type `slash`.
+2. Click **Slash Command**.
+
+Then add **Send Message** the same way, and connect them:
+
+![The finished blocks](/screens/ping-blocks.png)
+
+1. Set **Command** to `/ping`.
+2. Drag from the green arrow on Slash Command to Send Message.
+3. Drag from **Interaction** to **Interaction**: this tells Send Message what to answer.
+4. Type the text:
+
+```
+Pong! ${Date.now() - interaction.createdTimestamp} ms
+```
+
+`${…}` is JavaScript: here, how long ago the command was used.
+
+## 6. Run it
+
+![The Run button](/screens/run.png)
+
+1. **Run** (or **F5**). The first run installs discord.js, which takes a moment.
+
+Type `/ping` in your server. The bot answers, and the blocks light up as they run.
+
+::: details It doesn't answer?
+- The Console says why, and the failing block turns red.
+- No token: step 3. Bot not in the server: step 1.3.
+- New command not showing yet: save with **Ctrl+S**, which restarts the bot.
+:::
+
+**Ctrl+S** saves. **Shift+F5** stops the bot.
+
+Next: [Values and texts](./values-and-texts).
+
+
+---
+
+<!-- docs/tutorials/values-and-texts.md · https://xcrafttm.github.io/XC-Circuit/tutorials/values-and-texts -->
+
+# Values and texts
+
+A `/count` command that remembers how often each person used it: **"You've counted 3 times, Alex!"**
+
+Start from the bot of [Your first bot](./first-bot).
+
+## 1. Add the command
+
+- **Bot › Slash Commands…** › **+ New command**: `count`.
+- In the Workspaces panel, **+** adds a workspace: call it *Count command*.
+
+## 2. Build it
+
+Add **Slash Command**, **Increase Stored Value** and **Send Message**, connected with green arrows, then:
+
+![The Count command's blocks](/screens/count-blocks.png)
+
+1. Connect **User** to **Target**: every person gets their own count.
+2. Set **Key** to `counts`.
+3. Connect **Value** to the text's `${value}` input. It appears by itself when you type `${value}` in the text.
+4. The text:
+
+```
+You've counted ${value} times, ${user.username}!
+```
+
+Also connect **Interaction** to Send Message's **Interaction**, as before.
+
+## 3. Try it
+
+**F5**, then use `/count` a few times. The number keeps going up, also after restarting the bot. The **Stored Data** view (database icon on the left) shows what's saved.
+
+::: tip Let the editor write it
+Type `${` in any text: a list shows what earlier blocks give. Pick one and it's written for you, such as `${#2.value}`.
+:::
+
+## What's what
+
+| | |
+| --- | --- |
+| **Outputs** (right side of a block) | values a block gives |
+| **Inputs** (left side) | values a block takes |
+| **`${…}`** in a text | JavaScript; names from earlier blocks just work |
+| **Stored values** | kept across restarts, per user, server, member, channel or bot |
+
+More: [Texts and ${…}](/explanations/expressions) · [Variables and stored data](/explanations/data).
+
+
+---
+
+<!-- docs/tutorials/first-block.md · https://xcrafttm.github.io/XC-Circuit/tutorials/first-block -->
+
+# Your first block
+
+A **Greeting** block that says "Good morning", "Good afternoon" or "Good evening". Blocks are small JavaScript files.
+
+## 1. Make a plugin in your project
+
+In your bot's folder, create these folders and files:
+
+```
+Ping Bot/
+└─ plugins/
+   └─ my.blocks/
+      ├─ plugin.toml
+      └─ blocks/
+         └─ greeting.js
+```
+
+`plugin.toml`:
+
+```toml
+id      = "my.blocks"
+name    = "My blocks"
+version = "1.0.0"
+
+[contributes]
+blocks = ["blocks/*.js"]
+```
+
+## 2. Write the block
+
+`blocks/greeting.js`:
+
+```js
+module.exports = {
+  id: "my.greeting",
+  kind: "value",
+  info: { name: "Greeting", description: "Good morning, afternoon or evening.", author: "You", version: "1.0.0" },
+  fields: { name: { type: "text" } },
+  outputs: { text: { type: "text" } },
+  run({ fields }) {
+    const hour = new Date().getHours();
+    const part = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+    return { text: `Good ${part}, ${fields.name || "you"}!` };
+  },
+};
+```
+
+Save. XC Circuit loads it right away.
+
+## 3. Use it
+
+Right-click the canvas:
+
+![The picker finds the new block](/screens/greeting-picker.png)
+
+1. Type `greet`.
+2. There it is. Click it, and connect its **Text** to a Send Message.
+
+## How it works
+
+| Key | What it is |
+| --- | --- |
+| `kind: "value"` | gives a value when another block needs it (others: `"action"`, `"event"`) |
+| `fields` | what you fill in on the block |
+| `outputs` | what it gives |
+| `run()` | gets the fields, returns the outputs |
+
+::: details An action with two ways out
+```js
+module.exports = {
+  id: "my.coin_flip",
+  kind: "action",
+  info: { name: "Coin Flip", description: "Heads or tails.", author: "You", version: "1.0.0" },
+  flows: ["heads", "tails"],
+  run({ ctx }) {
+    return ctx.next(Math.random() < 0.5 ? "heads" : "tails");
+  },
+};
+```
+`flows` are the green outputs; `ctx.next()` picks one.
+:::
+
+Everything a block can have: [Blocks](/api/blocks).
+
+
+---
+
+<!-- docs/tutorials/first-editor-plugin.md · https://xcrafttm.github.io/XC-Circuit/tutorials/first-editor-plugin -->
+
+# Your first editor plugin
+
+Editor plugins add things to XC Circuit itself: panels, commands, checks, even a [desk pet](https://github.com/XCraftTM/XC-Circuit/tree/main/examples/plugins/desk-pet). They're JavaScript too.
+
+We'll make a **Block Counter**: a command and a panel.
+
+## 1. The plugin
+
+In your bot's folder: `plugins/block.counter/plugin.toml`
+
+```toml
+id      = "block.counter"
+name    = "Block Counter"
+version = "1.0.0"
+
+[editor]
+script = "editor.js"
+```
+
+## 2. The script
+
+`plugins/block.counter/editor.js`:
+
+```js
+xc.command({
+  id: "counter.total",
+  title: "Count all blocks",
+  run() {
+    xc.log(`${xc.project().name} has ${xc.blocks().length} blocks`);
+  },
+});
+
+xc.panel({
+  id: "counts",
+  title: "Block Counter",
+  render(ui) {
+    ui.heading("Blocks per workspace");
+    for (const w of xc.workspaces()) {
+      const count = Object.keys(xc.workspace(w.key).nodes).length;
+      ui.row((ui) => {
+        ui.text(w.name);
+        ui.text(`${count} blocks`, { muted: true });
+      });
+    }
+    ui.button("Count all blocks", () => xc.run("counter.total"), { primary: true });
+  },
+});
+```
+
+Save. It loads right away, and again every time you save.
+
+## 3. Try it
+
+Open the **Plugins** menu:
+
+![The Plugins menu](/screens/plugins-menu.png)
+
+1. Your command: writes to the Console.
+2. Your panel: opens it.
+
+![The panel](/screens/block-counter-panel.png)
+
+1. Dock it anywhere, like any panel.
+
+## What else `xc` can do
+
+| | |
+| --- | --- |
+| `xc.check(fn)` | problems for the Problems panel |
+| `xc.overlay({…})` | something floating over the editor (the desk pet) |
+| `xc.every(ms, fn)` | timers |
+| `xc.playSound(file)` | sounds |
+| `xc.addBlock(…)`, `xc.select(…)` | change the canvas |
+| `xc.on("save" \| "botEvent" \| "selection", fn)` | react to the app |
+
+All of it: [Editor plugins (xc)](/api/editor) and [Panels (ui)](/api/panels).
+
+
+---
+
+<!-- docs/tutorials/translate.md · https://xcrafttm.github.io/XC-Circuit/tutorials/translate -->
+
+# Translate the app
+
+Add a language for XC Circuit's menus and windows. (Blocks stay in English, so projects look the same for everyone.)
+
+## 1. Start
+
+**Settings** (gear at the bottom left, or **Ctrl+,**) › **Appearance**:
+
+![Settings › Appearance](/screens/translate.png)
+
+1. **Create a translation…**, then give the language's code (`fr`) and name (*Français*).
+
+A file opens with every text of the app.
+
+## 2. Translate
+
+```toml
+[strings]
+"Save and close" = "Enregistrer et fermer"
+"{count} to fix" = "{count} à corriger"
+"Run" = ""
+```
+
+- Keep `{words in braces}` as they are.
+- Empty lines stay English: translate a bit at a time.
+
+Save, and pick your language under **Interface language**. Changes show right away.
+
+## 3. Share
+
+It's a plugin folder: zip it and share it (others install it with **Plugins › Install from Zip…**), or send it to us as a pull request on [GitHub](https://github.com/XCraftTM/XC-Circuit).
+
+More: [Translations](/api/locales).
+
+
+---
+
+<!-- docs/explanations/blocks-and-wires.md · https://xcrafttm.github.io/XC-Circuit/explanations/blocks-and-wires -->
+
+# Events, actions and values
+
+A bot in XC™ Circuit is a graph of blocks connected by wires. Every block is one of three kinds, and the kind decides when it runs.
+
+## The three kinds
+
+| Kind | Chip | Runs… | Examples |
+| --- | --- | --- | --- |
+| **Event** | Event | when something happens: a command is used, a member joins, a timer fires | Slash Command, Member Joins, Every, On Start |
+| **Action** | Action | when the flow reaches it, one after the other | Send Message, Add Role, If, Wait |
+| **Value** | Value | when an action needs one of its outputs | Math, Join Text, Get Stored Value |
+
+An event **starts a flow**. The flow follows the green **action wires** from block to block: each action runs, finishes, and passes the flow on. Value blocks sit to the side; they are worked out when an action that's about to run needs their output, and again for every run.
+
+```
+[Slash Command] ──▶ [Get Stored Value]* ──▶ [Send Message]
+                              ▲
+                     [Math] ──┘  (values are worked out on demand)
+```
+
+## Two kinds of wires
+
+- **Action wires** (green) connect an action output to an action input. They decide the order.
+- **Value wires** connect an output, such as *User* or *Value*, to an input of the same or a compatible type. They carry data.
+
+A value can come from any block that ran earlier in the same flow, or from a value block. The editor only lets you connect pins whose types fit (a *Member* can go where a *User* is needed, because a member converts to its user), and dragging a wire into empty canvas offers only the blocks that fit.
+
+## One path per action output
+
+An action output leads to one block; connecting it elsewhere replaces the old wire. Paths can join, but they only **branch** through blocks made for it: **If** (true/false), **Switch**, **For Each**, **Repeat**, or a block of your own with several [`flows`](/api/blocks#flows). This keeps the order of a flow obvious: you can always read it from left to right. A wire that would make an endless loop is refused.
+
+## Several flows at once
+
+Every event starts its own **run**. If two people use a command at the same time, two runs go through the same blocks independently, each with its own values and run variables. Blocks that wait (for Discord, a timer, the web) don't hold up other runs.
+
+## Fields and pins
+
+A block's **fields** are what you fill in on it: a text, a number, a choice. Most fields can also become a **pin**: click the faint pin next to the field (or *pin* in the Inspector) and connect a value to it instead. Some fields are pins only, because a fixed value makes no sense there (a member to give a role to, for example).
+
+## Why it's built this way
+
+- **Order you can see.** Bots are mostly "when X, do A, then B, then C". Action wires make that order visible and keep it unambiguous.
+- **Values without wiring order.** Calculations don't need to be placed in the flow; they're worked out when used, so the flow stays short.
+- **Plain JavaScript underneath.** Every block is a [JavaScript file](/api/blocks), and every text accepts [`${…}`](./expressions), so you can always drop down to code when a block doesn't exist yet.
+
+
+---
+
+<!-- docs/explanations/expressions.md · https://xcrafttm.github.io/XC-Circuit/explanations/expressions -->
+
+# Texts and `${…}`
+
+Any text field (Send Message's text, Log, Join Text, the Embed and Layout Builders, …) can hold JavaScript inside `${…}`, exactly like a JavaScript template string:
+
+```
+Welcome ${member.displayName}! You're member #${server.memberCount}.
+${xp >= 1000 ? "🏆 Veteran" : "🌱 Newcomer"}
+It's ${new Date().getFullYear()}.
+```
+
+When the block runs, every `${…}` is evaluated and replaced by its result.
+
+## Where names come from
+
+A name inside `${…}` is looked up, in this order, in:
+
+1. **The block's own fields**, by their key.
+2. **The event's outputs**: `user`, `member`, `interaction`, `message`, … whatever the event that started the run gives.
+3. **Run variables** set with Set Variable.
+4. **Outputs of earlier blocks** on the same action path.
+
+A name none of these give gets an **input of its own** under the text, so you can connect a value to it. Type `${ping}` and an input called *ping* appears.
+
+## Values of a particular block
+
+`#4` means block #4 (the number in its title bar), so `${#4.message.url}` is the *Message* output of block #4. Use this when several earlier blocks give an output with the same name, or when you want to be explicit. Typing `${` in a text lists the blocks before this one and their values; the editor writes the reference for you.
+
+## Members of values
+
+Values are real objects: a Discord *User* is a discord.js `User`, a *Member* a `GuildMember`. Their properties and reading methods work: `${user.username}`, `${member.roles.highest.name}`, `${user.displayAvatarURL()}`. Typing a `.` after a value inside `${…}` lists its members with their types, like a code editor.
+
+## Errors
+
+A mistake in an expression (a typo, reading a property of nothing) stops the block with an error that quotes the expression. Use optional chaining and fallbacks where a value may be missing: `${member?.nickname ?? user.username}`.
+
+## Why JavaScript
+
+Template strings are the JavaScript most people already know, they work for everything from a name to a calculation, and they run exactly as written: there's no separate formula language to learn, and anything you find in discord.js's documentation can be used directly.
+
+::: details Older projects
+Projects from before `${…}` used `{name}`. They are changed to `${name}` when the project opens.
+:::
+
+
+---
+
+<!-- docs/explanations/projects.md · https://xcrafttm.github.io/XC-Circuit/explanations/projects -->
+
+# Projects and workspaces
+
+## A project is a folder
+
+```
+My Bot/
+├─ circuit.json            the project: name, build mode, settings, slash commands
+├─ workspaces/
+│  ├─ welcome.json         one file per workspace
+│  └─ rank-command.json
+└─ plugins/                optional: plugins that belong to this project
+   └─ my.blocks/
+```
+
+Everything is plain, formatted JSON, so a project works well in Git: changes show as readable diffs, and two people can work on different workspaces without conflicts. The exact format is in [Project format](/api/project-format).
+
+What's **not** in the folder: the bot token and other secrets (they're in the [credential store](./safety)), and the editor's own state such as zoom and selection (kept in a hidden `.circuit/` folder that you can leave out of Git).
+
+## Build modes
+
+Each project has a **build mode**, chosen in File › New Project: *Discord Bot* (discord.js) or *Fluxer Bot* (fluxer.js). The mode decides which blocks the picker offers, the categories they're sorted into, the settings in Bot › Settings, and which npm packages the bot needs. Build modes come from plugins; see [Build modes](/api/build-modes).
+
+## Workspaces
+
+A workspace is one canvas. A bot can have any number, sorted into folders in the Workspaces panel. They all run together: splitting a bot into workspaces is only for you.
+
+Good habits:
+
+- **One workspace per command or feature**: *Rank command*, *Welcome*, *Moderation*.
+- **Reuse with Call.** A *When Called* event in one workspace and *Call* blocks elsewhere make a flow you can use from many places, like a function. *Return* gives a value back.
+- **Signals** (Emit Signal and On Signal) let one part of the bot tell others that something happened, without waiting for them.
+- **Notes** explain a part of a workspace: *Add note* in the canvas toolbar, or *Note* above selected blocks to frame them. A note has a title, a description and a colour (the pencil button, or double-click its title). Drag its title to move it with the blocks inside (hold Alt to move only the note), and its edges or corners to resize it. Notes are selected, copied, pasted, duplicated and deleted like blocks: click the title, or draw a box around the whole note.
+
+## Starters and examples
+
+File › New Project can start from a working bot (welcome and auto role, moderation, levels, tickets, role menus; for Fluxer: basic commands, moderation). They are ordinary projects copied into your new folder; plugins can add their own (see [Templates](/api/templates)). Help › Open Example opens DemoBot.
+
+## Safety nets
+
+- **Undo/redo** per workspace (Ctrl+Z / Ctrl+Y).
+- **Backups**: every save keeps a snapshot outside the project (the newest 20, plus one a day for 14 days). File › Restore from backup… compares them with now and restores the whole project or one workspace.
+- **Crash recovery**: unsaved changes are copied every 30 seconds and offered back after a crash.
+
+
+---
+
+<!-- docs/explanations/data.md · https://xcrafttm.github.io/XC-Circuit/explanations/data -->
+
+# Variables and stored data
+
+Bots need to remember things: for a moment, while a command runs, or for months. XC™ Circuit has two tools for that.
+
+## Variables: while the bot runs
+
+Variables are set with **Set Variable** and read with **Get Variable** (or by name in [`${…}`](./expressions)). They live in memory and come in three scopes:
+
+| Scope | Lives for | Use it for |
+| --- | --- | --- |
+| **Run** | one run, from its event to its end | a value you work out early and need later in the same flow |
+| **Workspace** | as long as the bot runs, shared by the runs of one workspace | a cache, a queue for one feature |
+| **Global** | as long as the bot runs, shared by everything | state the whole bot needs |
+
+Variables are gone when the bot stops.
+
+## Stored data: across restarts
+
+**Set, Get, Increase and Delete Stored Value**, **List Stored Keys** and **Leaderboard** keep data in a file, so it survives restarts. Each value has a **key** (such as `xp`) and belongs to a scope:
+
+| Scope | One value per… |
+| --- | --- |
+| Whole bot | bot |
+| Server | server |
+| User | user, in every server |
+| Member | user in one server |
+| Channel | channel |
+
+So `xp` for *Member* gives everyone their own XP in each server, while `xp` for *User* follows a person across servers.
+
+The data is kept in `store.json`: in the project's `.circuit/data/` folder while the bot runs from the editor, and in `data/` next to an exported bot. While you work in the editor, the **Stored Data** view in the side bar shows it.
+
+## Backups of bot data
+
+A bot backs up its stored data when it starts and every 6 hours, keeping the newest 10 in a `backups` folder next to `store.json`. If the data is empty or damaged at start, the bot asks whether to restore a backup or start empty (a dialog in XC Circuit, a question in the terminal for exported bots).
+
+## Timers: later, once
+
+**Schedule** runs the **On Scheduled** blocks with the same name once, after a while (`30s`, `10m`, `1h 30m`, `3d`) or at a time (`2026-12-24 18:00`), with a **value** along: a text, or an object with what's needed later (`{ user, channel, text }`). For reminders, temporary bans, giveaways that end, a message that goes out on a day.
+
+Timers are kept with the stored data, so they still run after the bot restarts. One that was due while the bot was off runs when it starts again, with **Late** saying by how much; turn off *Run missed ones* on On Scheduled to drop those instead. Users, channels and messages in the value come back as their data (id, name …), not as live objects: find the member again with its id when you need more.
+
+- A **key** (under Advanced) replaces an earlier timer with the same key: `remind-${user.id}` gives everyone one reminder at most.
+- **Cancel Scheduled** removes timers before they run: by the id Schedule gave, by key, or all with a name.
+- **List Scheduled** gives the waiting timers, soonest first.
+
+**Every** is for things that repeat (every 10 minutes, every day at 9:00); it doesn't need saving.
+
+## Files
+
+The blocks in **Files** keep files in the bot's **files folder**: `.circuit/data/files` in the project while it runs from XC Circuit, `data/files` next to an exported bot. Paths are inside it (`notes.txt`, `tickets/123.json`); paths outside it are refused, so a bot can't touch the rest of the computer.
+
+| Block | What it does |
+| --- | --- |
+| **Read File** | As text, JSON, a table (CSV: a list of rows, by the first line's column names), lines, or bytes. A missing file gives nothing (or an error, if you like). |
+| **Write File** | Text, JSON, a table or bytes (a Build Canvas picture); replaces the file, or adds to its end (added text gets a line of its own; added rows no second header). |
+| **List Files** | A folder's files, newest first, matching a name like `*.png`. |
+| **File Action** | Checks that a file is there, deletes, copies or moves it, makes a folder. |
+| **Download File** | Saves a file from the web, or a message's attachment (at most 25 MB unless you say otherwise). An address that comes from `${…}` or a wire (one people type) may only go to the public web; *Private addresses too* (under Advanced) lifts that for addresses only you choose. |
+
+Each gives the file's whole **path** on disk, which Send Message's **Files** takes.
+
+## In a database
+
+Stored values can be kept in MariaDB, MySQL, PostgreSQL, SQLite or MongoDB instead of `store.json`, and the database blocks read and write your own tables there. See [Databases](./databases).
+
+## In your own blocks
+
+Blocks reach the same data through [`ctx.vars`](/api/ctx#vars) and [`ctx.store`](/api/ctx#store), so a custom block and the built-in ones share it.
+
+
+---
+
+<!-- docs/explanations/databases.md · https://xcrafttm.github.io/XC-Circuit/explanations/databases -->
+
+# Databases
+
+::: info In short
+Add a database in **Bot › Settings › Databases** (MariaDB, MySQL, PostgreSQL, SQLite or MongoDB), then read and write it with **Get Rows**, **Insert Row**, **Update Rows**, **Delete Rows** and **SQL Query**. Stored values can live there too.
+:::
+
+[Stored data](./data) is enough for most bots. A database is worth it when the data gets big, when another program (a website, a dashboard) reads it too, or when you have one already.
+
+## Adding a database
+
+**Bot › Settings › Databases › + Add database**, then:
+
+| Kind | What it needs |
+| --- | --- |
+| **MariaDB / MySQL**, **PostgreSQL** | Host, port, user, password and the database's name. Turn on SSL/TLS for databases on the internet. |
+| **SQLite** | Only a file name, such as `bot.sqlite`: it's made in the bot's data folder the first time. Nothing to install. |
+| **MongoDB** | Host and port, or a connection URL such as the `mongodb+srv://…` MongoDB Atlas gives. |
+
+Instead of host, port, user and password, any kind can take a **connection URL**: `mysql://user:password@host:3306/name`, `postgres://…`, `mongodb+srv://…`.
+
+**Test connection** connects the way the bot will and shows the server's version and its tables, or what went wrong: a wrong password, a host that isn't found, a port nothing answers on.
+
+Passwords and connection URLs are kept in the system's password store, like the bot token, never in the project. The rest (host, user, database name) is in the project.
+
+### The default database
+
+One database is the **default**. Every database block has a **Database** list: *Default database*, or one by name. Blocks left on Default all switch when you choose another default, so a bot can move from a test database to the real one in one place.
+
+### A database given on the block
+
+**Database** can also be *Given here*: the block connects to a MariaDB / MySQL, PostgreSQL or MongoDB server it's given, such as one from a slash command's options. Kind, host, port, user, database name and SSL are fields you can type or connect; the **password** and the **connection URL** (which holds one) can only be connected: typed into a block they'd be saved in the project file.
+
+This is off until you allow it: Bot › Settings › Databases › Safety › *Allow databases given on blocks*. Anyone who can use such a command can make the bot connect where they say (to machines on your own network, too), so only turn it on for commands you trust them with.
+
+The bot keeps up to 8 given connections open for the next run with the same details, and closes the one used longest ago after that. An export gets the npm package of each kind chosen on a block.
+
+## The blocks
+
+| Block | What it does |
+| --- | --- |
+| **Get Rows** | The rows of a table that match the conditions: all of them (`rows`), the first one, and how many. In the Inspector: sort, at most, skip (for pages). |
+| **Insert Row** | Adds a row. Gives the new row's id (an auto-increment column, or MongoDB's `_id`). |
+| **Update Rows** | Changes columns of the rows that match. Gives how many. |
+| **Delete Rows** | Deletes the rows that match. Gives how many. |
+| **SQL Query** | Runs your own SQL (not MongoDB). |
+
+**Conditions** are a column, a comparison (*is*, *is not*, *is more than*, *contains*, *starts with*, *is empty* …) and a value; a row has to match all of them (or, in the Inspector, any one). The number on the block says how many there are.
+
+Update Rows and Delete Rows without any condition would change or delete every row, so they refuse unless **Every row without conditions** is turned on in the Inspector.
+
+A user, channel or server given as a value counts as its **id**. Lists and objects are kept as JSON (in MongoDB, as they are). Keep Discord ids in text columns (`VARCHAR`, `TEXT`): they're too big for exact numbers in some databases.
+
+In MongoDB, a *table* is a collection and a *column* is a field.
+
+### SQL Query and `${…}`
+
+```sql
+SELECT xp, level FROM levels WHERE user_id = ${user.id} AND guild_id = ${server.id}
+```
+
+Each `${…}` is sent to the database as a **value**, separately from the SQL. So whatever people type into a command can't change the query (no SQL injection), and quotes need no escaping. That's also why `${…}` can't be a table or column name.
+
+The tables have to exist before the bot uses them; SQL Query can make them:
+
+```sql
+CREATE TABLE IF NOT EXISTS levels (user_id VARCHAR(20) PRIMARY KEY, xp INTEGER DEFAULT 0)
+```
+
+## Stored values in a database
+
+**Keep stored values in** (on the same page) moves Set Stored Value, Get Stored Value, Increase, Leaderboard and the rest into a database, in a table `xc_store` the bot makes. The blocks don't change.
+
+The first time, the bot copies what's in `store.json` into the database (when its table is still empty); `store.json` stays as it was. The Stored Data view shows and changes the values there, and each database's tables too. Backups of stored data are for `store.json` only: back up a database with its own tools.
+
+## Exported bots
+
+An export gets the database's npm package (`mysql2`, `pg` or `mongodb`) in its `package.json`. Passwords and URLs go to `.env`, as `XC_SECRET_DB_<ID>_PASSWORD` and `XC_SECRET_DB_<ID>_URL` (with *Include the bot token and secrets*); the id is the database's, such as `DB1`. A SQLite file is in the export's `data/` folder.
+
+## In your own blocks
+
+[`ctx.db()`](/api/ctx#db) is the same connection the built-in blocks use.
+
+
+---
+
+<!-- docs/explanations/canvas.md · https://xcrafttm.github.io/XC-Circuit/explanations/canvas -->
+
+# Pictures with Build Canvas
+
+::: info In short
+**Build Canvas** draws a picture (a welcome card, a rank card, a profile) from a design you make in the **Canvas Builder**. Connect its **File** to Send Message's **Files**.
+:::
+
+## The Canvas Builder
+
+Add **Build Canvas** (in *Embeds & Layouts*) and press **Edit canvas…** on it, or **Open Canvas Builder** in the Inspector.
+
+- **Start from** a Rank card, Welcome card or Profile card, or start empty.
+- **Size** in pixels, with common sizes to pick from, and a **background** colour (or see-through).
+- **Layers**, drawn bottom to top:
+
+| Layer | What it is |
+| --- | --- |
+| **Shape** | A rectangle, with round corners if you like. |
+| **Circle** | A circle or an ellipse. |
+| **Picture** | From a web address, a file, or `${…}` such as a user's avatar. Square, round corners or a circle; *Fill* cuts off what doesn't fit, *Whole picture* shows all of it. |
+| **Text** | In Regular, Bold or Monospace; left, centred or right in its width. Long texts wrap; *Shrink to fit* makes one line smaller until it fits (good for names). |
+| **Bar** | A progress bar: *Value* out of *Out of*, such as `${xp}` out of `${needed}`. |
+
+Click a layer in the picture (or the list) to choose it, drag it to move it, drag its corner to make it bigger or smaller (hold Shift to keep its shape). The arrow keys move it by a pixel, with Shift by ten. On the right are its settings: position, size, opacity, colour, a **gradient** to a second colour, an **outline**, and the rest of what its kind has.
+
+The preview uses the same fonts as the bot, so what you see is what the bot draws, with two differences: pictures only show where they go (the bot loads them when it runs), and `${…}` shows its **preview value**.
+
+### `${…}` in a design
+
+Texts, pictures, bar values and colours can hold `${…}`: `${user.username}`, `${level}`, `${role.hexColor}`. As in other texts, a name that no earlier block gives gets an input on the block to connect.
+
+Under the picture, **Preview values** has a box for each `${…}`: type what to show in the preview (`Alex` for `${user.username}`). They're only for the preview.
+
+A user's avatar: `${user.displayAvatarURL({ extension: 'png', size: 256 })}`.
+
+## Sending the picture
+
+- Connect **File** to Send Message's **Files** (in the Inspector, under Advanced).
+- To show it inside an embed, put the block's **URL** (`attachment://canvas.png`) into the embed's image, and send the file with the message too.
+
+**File name** (under Advanced) changes `canvas.png`.
+
+A picture that can't be loaded (a wrong address, say) is left out, with a warning in the Console; the rest is drawn.
+
+## Under the hood
+
+The bot draws with [@napi-rs/canvas](https://www.npmjs.com/package/@napi-rs/canvas), installed with the bot's other packages. The fonts (Ubuntu, Ubuntu Bold, Hack and Noto Emoji) come with the block, so exported bots draw the same on any server.
+
+Fluxer bots send the picture the same way: Send Message's **Files**.
+
+
+---
+
+<!-- docs/explanations/alerts.md · https://xcrafttm.github.io/XC-Circuit/explanations/alerts -->
+
+# New-post alerts
+
+::: info In short
+**On New Post** runs once for each new video, post or release of a source you choose, and when a Twitch or Kick channel goes live. Connect it to Send Message to announce it.
+:::
+
+## Sources
+
+| Source | What to write in *Channel* | Needs |
+| --- | --- | --- |
+| **YouTube channel** | `@handle`, the channel's link, or its id (`UC…`) | nothing. *Skip Shorts* leaves Shorts out. |
+| **Twitch** (goes live) | the channel name, or its link | a client id and secret: Bot › Settings › New-post alerts |
+| **Kick** (goes live) | the channel name, or its link | a client id and secret: Bot › Settings › New-post alerts |
+| **Reddit** | the subreddit: `r/name` or `name` | nothing |
+| **Bluesky** | the handle: `name.bsky.social` | nothing |
+| **Mastodon** | `@name@server`, or the profile's link | nothing |
+| **GitHub releases** | the repository: `owner/name` | nothing |
+| **Steam news** | the game's app id (the number in its store link), or the link | nothing |
+| **RSS or Atom feed** | the feed's address, under *Feed address* | nothing. Most blogs, news sites and podcasts have one. |
+
+### Twitch and Kick keys
+
+Both want an application of your own, which takes a minute and costs nothing:
+
+- **Twitch:** at [dev.twitch.tv](https://dev.twitch.tv/console/apps) › Your Console › Applications › Register, with any name, the category *Chat Bot* and `http://localhost` as OAuth Redirect URL. Copy the **Client ID**, press **New Secret** and copy that too.
+- **Kick:** at kick.com › Settings › Developer › Create app, with `http://localhost` as Redirect URL. Copy the **Client ID** and **Client Secret**.
+
+Paste them into **Bot › Settings › New-post alerts**. The secrets are kept in the system's password store.
+
+## What comes out
+
+**Title**, **URL**, **Text** (without formatting, shortened), **Author**, **Image** (a thumbnail, when there is one) and **Date**. **Post** has all of it, with what the source has besides: `post.game` and `post.viewers` for streams, `post.nsfw` for Reddit, `post.short` for YouTube.
+
+Announcing a new video in an embed: On New Post › Build Embed (title `${title}`, link `${url}`, image `${image}`) › Send Message to your channel.
+
+## How it checks
+
+- It looks every **Check every** minutes (5 by default; at least 1).
+- **The first time**, posts that are already there only count as seen, so a new bot doesn't announce a channel's last 15 videos. Turn on *Announce what's there at first* (under Advanced) to announce the newest few.
+- **Nothing twice:** what it has seen is kept with the stored data, so a restart doesn't announce old posts again. More than 5 new posts at once (a feed that was off for a while): the 5 newest are announced.
+- **Only if it contains** (under Advanced) announces only posts whose title or text has a word or phrase.
+- When a source can't be reached, the Console says so once and it keeps trying; it says when it works again.
+
+Two On New Post blocks for the same channel each announce on their own (to two servers, say).
+
+
+---
+
+<!-- docs/explanations/server-tools.md · https://xcrafttm.github.io/XC-Circuit/explanations/server-tools -->
+
+# Server tools
+
+::: info In short
+The blocks in **Server Tools** look after servers: run commands over SSH, see CPU, memory and disk, restart Docker containers, send console commands to game servers (RCON), check a Minecraft server or any port. SSH, RCON and Docker only run once you allow them in **Bot › Settings › Server tools**.
+:::
+
+## Blocks
+
+| Block | What it does | Needs |
+| --- | --- | --- |
+| **SSH Command** | Runs a command on your server and gives what it printed, errors and exit code. | SSH in Bot › Settings, allowed |
+| **Server Usage** | CPU %, memory, disk and uptime of the computer the bot runs on, or of an SSH server (Linux). | over SSH: allowed |
+| **Docker** | Lists containers, starts, stops or restarts one, reads its latest log lines. | allowed; Docker on this computer, or `tcp://host:2375` |
+| **RCON Command** | Sends a console command to a game server (Minecraft, Rust, ARK, CS2 …) and gives its answer. | RCON in Bot › Settings, allowed |
+| **Minecraft Server** | Whether a Java or Bedrock server is up, players (and some names), version, message of the day, icon. | nothing |
+| **Port Check** | Whether a server answers on a port, and how fast. | nothing |
+
+Minecraft Server and Port Check say *offline* as an answer (with why), so a status message goes on instead of stopping.
+
+## Safety
+
+These blocks act on your servers, so:
+
+- **They're off until you allow them**: Bot › Settings › Server tools › *Allow SSH, RCON and Docker*. Only turn it on for a bot whose commands you wrote yourself.
+- **`${…}` in SSH Command is quoted for the shell.** `whitelist add ${name}` stays one command even if someone's name is `x; rm -rf ~`: the shell gets `'x; rm -rf ~'` as one word. Write `${…}` where a value goes, never around a whole command.
+- **Use a user just for the bot** on the server, with only the rights it needs (no root), and a key rather than a password.
+- **The server's key is remembered** the first time the bot connects. If it ever changes (another machine at that address), SSH Command refuses. After replacing the server on purpose, delete the stored value `hostkey:…` in the namespace `xc.server` (Stored Data view).
+- Passwords, keys and the RCON password are kept in the system's password store, like the bot token.
+
+## Servers given on the block
+
+SSH Command, Server Usage, RCON Command and Docker can also connect to a server the block is **given**, instead of the one in Bot › Settings: set **Server** (Server Usage: *Where*) to *Given here*. Host, port and user are fields you can type or connect; the **password** and the **private key** can only be connected, from a slash command's option or a form, say. Typed into a block they'd be saved in the project file.
+
+This needs its own switch, Bot › Settings › Server tools › *Allow servers given on blocks*, as well as *Allow SSH, RCON and Docker*. Anyone who can use such a command can make the bot connect where they say (to machines on your own network, too), so only turn it on for commands you trust them with: one only you or your staff can use.
+
+- The password of Bot › Settings only ever goes to the server of Bot › Settings, never to one given on a block.
+- SSH remembers each given server's key too, by host and port.
+- A password typed into a normal message stays in the chat. Ask for it in a slash command's option or a form: only the bot sees those.
+
+## Setting up
+
+- **SSH:** host, port, user, and a password or a private key (the whole key text). Test with `SSH Command` running `whoami`.
+- **RCON:** for Minecraft, in `server.properties`: `enable-rcon=true`, `rcon.port=25575`, `rcon.password=…`. Then host, port and password in Bot › Settings. Other servers: *Given here* (above).
+- **Docker:** nothing when the bot runs on the same computer; the bot's user needs to be in the `docker` group. For Docker elsewhere: `tcp://host:2375` (only on a private network: Docker's API has no password).
+
+
+---
+
+<!-- docs/explanations/captcha.md · https://xcrafttm.github.io/XC-Circuit/explanations/captcha -->
+
+# Captcha
+
+::: info In short
+**Captcha** checks that someone is a person before they get in. It ends on **Passed**, **Failed** or **Timed Out**; connect Passed to Add Role, say.
+:::
+
+## Discord
+
+A typical verification: a message with a **Verify** button in a `#verify` channel, an **On Button** for it, then **Captcha** with the button's **interaction**. The challenge appears in a message only that person sees.
+
+| Mode | They… |
+| --- | --- |
+| **Type the code from a picture** | press *Answer* and type the code shown in a picture (letters that can't be mixed up; upper or lower case doesn't matter) |
+| **Solve a sum** | press *Answer* and type the result, such as 7 × 6 |
+| **Click the named emoji** | click the one of five emoji the message names (*Click the pizza*) |
+| **Just click a button** | click *I'm a person*: the easiest, it stops only simple bots |
+
+- **Tries** (3) and **Time** (3 minutes, in all). After a wrong answer they get a new challenge.
+- **Where**: to the interaction (from a button or a slash command; only they see it), or as a **direct message** (from On Member Join, say; people can turn DMs off, so a button is more reliable).
+- **Code length** (under Advanced) for the picture: 4 to 8.
+
+Then, for example: Passed › Add Role *Verified*; Failed › Moderate *kick*; Timed Out › Moderate *kick*, or nothing.
+
+## Fluxer
+
+Fluxer has no buttons yet, so its Captcha asks in a **channel**, mentioning the person, and waits for their answer there: the code from a picture, or a sum. *Clean up* (on) deletes the questions and answers afterwards.
+
+## The picture
+
+The bot draws it with the same package as [Build Canvas](./canvas) and brings its own font, so it works on any server.
+
+
+---
+
+<!-- docs/explanations/transcripts.md · https://xcrafttm.github.io/XC-Circuit/explanations/transcripts -->
+
+# Transcripts
+
+::: info In short
+**Create Transcript** saves a channel's messages as one HTML file that looks like Discord: for a ticket before it's closed, or a channel you archive. Send it with Send Message's **Files**, or keep it with **Write File**.
+:::
+
+## Using it
+
+A ticket's *Close* button, for example: On Button › **Create Transcript** (the ticket's channel) › Send Message to a `#ticket-logs` channel with the transcript in **Files** › Delete Channel.
+
+| Setting | What it does |
+| --- | --- |
+| **At most** | The latest messages to keep (1000). 0 keeps all; in a long channel that takes a while. |
+| **File name** | `transcript-${channel.name}.html` by default. |
+| **Keep pictures** | Puts pictures into the file, so they still show when Discord's links expire. The file gets much bigger. |
+| **Bots' messages too** | Off leaves out what bots wrote, such as the ticket's own buttons (under Advanced). |
+
+It gives the **file**, how many messages it holds (**count**) and its **size**.
+
+The file shows messages as Discord does: names and avatars, replies, embeds, Components V2 layouts, attachments, polls, threads. It opens in any browser.
+
+## Safety
+
+The bot needs **Read Message History** in the channel, and the *Message Content* intent (Bot › Settings › Privileged intents).
+
+The transcript is drawn completely on the bot, so the file loads no scripts from the web, and what people wrote (names, messages) can't put code into it.
+
+It uses [better-discord-transcripts](https://www.npmjs.com/package/better-discord-transcripts) 2.0.0, a version we read through before using it (no install scripts, nothing sent anywhere). It's installed with the bot the first time the block runs (with its helpers, about 80 MB).
+
+
+---
+
+<!-- docs/explanations/errors.md · https://xcrafttm.github.io/XC-Circuit/explanations/errors -->
+
+# Try Zones and errors
+
+Things go wrong in bots: Discord says no, a member left a moment ago, a website is down. XC™ Circuit makes failures visible and gives you a way to deal with them.
+
+## What happens when a block fails
+
+When a block throws an error, its run stops there. The block turns red on the canvas, the Console says which block failed and why, and the other runs of the bot carry on. A failed run doesn't stop the bot.
+
+If you have an **On Error** event, it runs when a block outside any Try Zone fails, with the message, the block's name and details: use it to log errors to a channel, for example.
+
+## Try Zones
+
+A Try Zone is a frame around some blocks that catches what goes wrong inside it. Select a block and choose **Try Zone** above it; drop more blocks in or out.
+
+A zone has its own outputs:
+
+- **Done**: the flow continues here when everything inside finished.
+- **Error**: the flow continues here when something inside failed, with the error's **message** (and details) as outputs.
+
+And two settings (the gear on the zone's title):
+
+- **Retries**: try the blocks inside again this many times before giving up. Good for things that fail now and then, such as web requests.
+- **Timeout**: give up when the blocks inside take longer than this.
+
+If nothing is connected to **Error**, the zone logs a warning and the run ends there quietly: it doesn't count as a failure, and On Error doesn't run.
+
+## Problems before running
+
+The Problems panel lists what the editor can see before the bot runs, such as required fields that are empty or blocks from plugins that aren't installed. Click an entry to go to the block. Plugins can add their own [checks](/api/editor#xc-check).
+
+## In your own blocks
+
+A block fails by throwing: `throw new Error("No channel with that id")`. Write messages for the person building the bot: say what's wrong and, if you can, what to do about it.
+
+
+---
+
+<!-- docs/explanations/plugins.md · https://xcrafttm.github.io/XC-Circuit/explanations/plugins -->
+
+# Plugins
+
+Almost everything in XC™ Circuit comes from plugins: the blocks, the Discord and Fluxer build modes, their pin types, the themes, the translations, the starters. The editor itself only knows how to load plugins, draw graphs and run bots. Even the bundled blocks are ordinary plugin files you can read in `plugins/`.
+
+## What a plugin is
+
+A folder with a [`plugin.toml`](/api/plugin-toml) that says what it contributes:
+
+| Part | What it adds | Runs in |
+| --- | --- | --- |
+| [Blocks](/api/blocks) | blocks for the picker | the bot (and `define()` in the editor) |
+| [Build modes](/api/build-modes) | a kind of bot: blocks, categories, settings, npm packages | — |
+| [Runtime libraries](/api/runtime-libs) | shared code for a mode's blocks, such as the Discord client | the bot |
+| [Pin types](/api/pin-types) | value types with colours and conversions | the bot (checks) and the editor |
+| [Themes](/api/themes), [translations](/api/locales), [templates](/api/templates) | looks, languages, starters | the editor |
+| [Editor script](/api/editor) | panels, commands, checks | the editor, sandboxed |
+
+## Where plugins come from
+
+XC Circuit loads plugins from:
+
+- Folders listed in the `XC_CIRCUIT_PLUGINS` environment variable (handy while developing plugins).
+- The **app's own** `plugins/` folder (Circuit Core, Discord Bot, Fluxer Bot).
+- **Your plugins folder**: `%APPDATA%\XC Circuit\plugins` on Windows, `~/.local/share/xc-circuit/plugins` on Linux. Plugins › Open folder opens it.
+- The open **project's** `plugins/` folder: plugins that belong to one bot and travel with it.
+
+**Installing a plugin someone shared:** Plugins › *Install from Zip…* (or drop the `.zip` on the window). It goes into your plugins folder and loads right away. A zip holds the plugin folder: `plugin.toml` at its top, or in one folder at its top, as GitHub's *Download ZIP* makes them.
+
+Plugin files are watched: saving a block, a theme or an editor script reloads it right away.
+
+## Turning plugins off and removing them
+
+The **Plugins view** in the side bar (the plug icon) lists every plugin. A plugin you installed has a switch, which turns it off (it stays listed, to turn on again), and a trash can, which removes it after you confirm. The plugins that come with the app say *Built in* and can't be turned off or removed. To make, test and share plugins, see the [Plugin guide](/plugins/).
+
+## Block updates
+
+The bundled blocks (Circuit Core, Discord Bot, Fluxer Bot) can get new versions without a new app version. When XC Circuit checks for updates (at start, unless turned off in Settings, and from Help › Check for Updates), it also asks the repository for newer versions of these plugins. If there are some, it lists them; **Update** downloads them, checks them and loads them right away. Projects keep working: blocks that changed are upgraded when a project opens, as after an app update.
+
+Updates go into `plugin-updates` next to your plugins folder. **Help › Undo Block Updates** deletes them, and the blocks the app came with are back. When a later app version brings the same or newer blocks, those are used again by themselves: of two copies of a plugin, the higher version loads. An update that needs a newer app (`engines.app` in its plugin.toml) isn't offered to older apps.
+
+For the people who make XC Circuit: changing a bundled plugin means raising its `version`, or the Checks on pull requests fail. When the version changes on `main`, the Plugins workflow publishes it.
+
+## Editor code
+
+Plugins change the editor with **editor scripts (JavaScript)**. Each runs in its own sandbox with a time and memory limit, and can only reach the app through the [`xc` object](/api/editor): read and change the project, add panels and commands, log. No files, no network, no programs. Because of that, scripts start without asking, also in a project you downloaded.
+
+XC Circuit used to load compiled Rust libraries (native plugins) too. It doesn't any more: they had full access to your computer and had to be built with exactly the app's own compiler and libraries.
+
+## Bot code is different
+
+Blocks and runtime libraries don't run in the editor; they run in your **bot**, a Node.js program with the same access as any other program. That's the point: a bot needs the network, files and npm packages. Only use block plugins from people you trust, as you would with any npm package.
+
+
+---
+
+<!-- docs/explanations/running.md · https://xcrafttm.github.io/XC-Circuit/explanations/running -->
+
+# Running and exporting
+
+## What Run does
+
+Your bot is a Node.js program. When you press **Run** (F5), XC Circuit:
+
+1. Makes sure **Node.js 22 or newer** is there (the first start page sets it up).
+2. Installs the npm packages the build mode and its blocks need (discord.js, @fluxerjs/core, and any a block lists in `requires.dependencies`), once, into a shared packages folder.
+3. Bundles the runtime, your project and the blocks it uses into a run folder in the project's `.circuit/` folder.
+4. Starts Node.js with the bot token from the credential store, and stays connected to it.
+
+While the bot runs, the editor shows what it does: blocks glow when they run, failures turn them red, logs go to the Console, and the Stored Data view shows the bot's data. **Save** (Ctrl+S) restarts a running bot with your changes. **Stop** (Shift+F5) ends it.
+
+The bot runs as its own process: if a block crashes Node.js, the editor is unaffected, and the editor can't freeze the bot.
+
+## What Export does
+
+**Bot › Export…** writes a folder that runs on its own, without XC Circuit:
+
+| File | What it is |
+| --- | --- |
+| `index.js` | the runtime, your project and its blocks in one file |
+| `package.json` | the npm packages the bot needs |
+| `.env` | the bot token and other secrets, if you chose to include them; otherwise empty lines to fill in |
+| `.gitignore` | keeps `.env`, `node_modules/` and `data/` out of Git |
+| `README.txt` | how to start it |
+
+To start an exported bot anywhere Node.js runs (your PC, a server, a hosting service):
+
+```bash
+npm install
+node index.js
+```
+
+The token is read from `.env` (`DISCORD_TOKEN=…` for Discord bots, `FLUXER_BOT_TOKEN=…` for Fluxer bots). Stored data goes into `data/`. Exporting again into the same folder keeps what you filled into `.env`.
+
+Exported bots are yours: you may run, share and sell them. See the [licence](https://github.com/XCraftTM/XC-Circuit/blob/main/LICENSE).
+
+
+---
+
+<!-- docs/explanations/ai-agents.md · https://xcrafttm.github.io/XC-Circuit/explanations/ai-agents -->
+
+# AI agents (MCP)
+
+AI agents such as Claude can work on your bot in XC Circuit: look at your workspaces, add blocks and wire them up, fix problems, and start the bot to try it. They do it through XC Circuit's **MCP server** ([Model Context Protocol](https://modelcontextprotocol.io)), which comes with the app in the **AI agents (MCP)** plugin.
+
+## Add it to your AI client
+
+Open **Plugins › AI agents panel**. For each AI client found on your computer there's a button:
+
+| Client | What **Add** does | Then |
+| --- | --- | --- |
+| Claude Desktop | adds XC Circuit to `claude_desktop_config.json` | quit and reopen Claude Desktop |
+| Claude Code | runs `claude mcp add --scope user xc-circuit …` | start a new Claude Code session |
+| Cursor | adds it to `~/.cursor/mcp.json` | restart Cursor |
+| VS Code | adds it to your user `mcp.json` | it shows under MCP servers in the Chat view |
+
+For any other MCP client, **Copy settings** copies the entry to paste into its MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "xc-circuit": { "command": "C:\\…\\XC Circuit\\xc-circuit.exe", "args": ["--mcp"] }
+  }
+}
+```
+
+The panel shows **Added, but for another copy of XC Circuit** when the entry points to a different `xc-circuit` (after moving the app, say): **Update** points it here. **Remove** takes it out again. Before changing a settings file for the first time, XC Circuit keeps a copy next to it (`….json.before-xc-circuit`).
+
+## Use it
+
+Keep XC Circuit open with your project, and ask the agent, for example: *"Add a /ping command that answers with the bot's ping"*. If XC Circuit isn't open, the agent sees one tool, `open_xc_circuit`, which opens it.
+
+What the agent can do:
+
+| Tool | |
+| --- | --- |
+| `get_project` | the project, its workspaces, problems and slash commands |
+| `get_workspace` · `get_block` | a workspace's blocks and wires · one block's values and pins |
+| `find_block_types` · `get_block_type` | the installed blocks and their fields |
+| `add_block` · `set_block_values` · `move_block` · `delete_blocks` | change blocks |
+| `connect` · `disconnect` | wires, checked like ones you draw |
+| `create_workspace` · `get_slash_commands` · `set_slash_commands` | workspaces and commands |
+| `add_note` · `set_note` · `delete_note` | notes on the canvas, also framing blocks you name |
+| `open_builder` | opens the Embed, Layout or Canvas Builder (or Slash Commands) on a block, to show you |
+| `get_problems` · `get_console` | what's wrong, and what the bot logged |
+| `run_bot` · `stop_bot` · `save_project` · `show_in_editor` | run it, save it, show you a block |
+| `run_script` | many of these at once: JavaScript that gets every tool as a function (`tools.add_block({ … })`), the [plugin API](/api/editor) as `xc`, and `print()` |
+
+Embeds, layouts and canvases are what Build Embed, Build Layout and Build Canvas keep in a field: agents fill them with `set_block_values`, and `get_block_type` tells them the format. Embeds and layouts can also be given as Discord's own JSON, as in the builders' JSON tab.
+
+`run_script` lets an agent build a whole flow in one step instead of a call per block. It runs in the same sandbox as plugins: no files, no network, at most 5 seconds.
+
+Every change shows in the editor right away and can be undone with **Ctrl+Z**, like your own. The agent never sees the bot's token.
+
+## How it works
+
+The AI client starts `xc-circuit --mcp`, which speaks MCP over its input and output. It passes the agent's requests to the running app through a connection on your computer only (`127.0.0.1`, with a secret written to XC Circuit's data folder). The app answers them with the plugins' tools: plugins can add their own with [`xc.tool`](/api/editor#xc-tool).
+
+## Turn it off
+
+Under **Plugins**, switch **AI agents (MCP)** off: the server stops listening and agents see only `open_xc_circuit`. The trash can removes it; it comes with the app, so **Add back** at the end of the Plugins list brings it back.
+
+
+---
+
+<!-- docs/explanations/safety.md · https://xcrafttm.github.io/XC-Circuit/explanations/safety -->
+
+# Tokens and safety
+
+## The bot token never goes into the project
+
+A bot token is a password: whoever has it controls the bot. XC™ Circuit keeps tokens and other secrets (settings marked `secret` by a build mode, such as music service logins) in your operating system's credential store:
+
+- **Windows**: Credential Manager
+- **Linux**: the Secret Service (GNOME Keyring, KWallet)
+
+The project folder never contains them, so you can put a project in Git, share it or send it to someone for help without leaking the token. In Bot › Settings the eye button shows what you're typing, and Copy copies the saved token without showing it.
+
+An exported bot reads its token from `.env`. Export only includes the token there when you ask it to, and its `.gitignore` keeps `.env` out of Git.
+
+## What editor plugins can do
+
+[Editor scripts](/api/editor) run in a sandbox (QuickJS) inside the editor:
+
+- They reach the app **only** through the `xc` object: the open project, panels, commands, the Console, their own small storage.
+- They have **no** access to files, the network, other programs or your secrets.
+- Each call has a **time limit** (an endless loop is stopped) and each plugin a **memory limit**.
+
+That's why they start without asking.
+
+## What bot code can do
+
+Blocks run in your bot, which is a normal Node.js program. A block can read files, use the network and start programs, because bots need to. Treat block plugins like npm packages: use ones from people you trust, and read the code of ones you don't know. Blocks are plain JavaScript files, so you can.
+
+
+---
+
+<!-- docs/explanations/editor-reference.md · https://xcrafttm.github.io/XC-Circuit/explanations/editor-reference -->
+
+<!-- Kept from the README: every feature of the editor, one row each. -->
+# Everything the editor does
+
+| Action | How |
+| --- | --- |
+| Add a block | Add block in the canvas toolbar (bottom left), right-click empty canvas, or press Space |
+| Connect | Drag from a pin to another pin |
+| Add a connected block | Drag a wire into empty space; the picker shows only compatible blocks |
+| Move a block | Drag its title bar |
+| Pan / zoom | Drag empty canvas or middle mouse / mouse wheel |
+| Templates | File › New Project starts empty or from a working bot, grouped by kind. Discord: Welcome & auto role, Levels & XP, Role menu, Reminders, Moderation, Tickets (with a transcript), Verify with a captcha, New-post alerts, Minecraft server status (in `examples/templates/`). Fluxer: Basic commands, Reminders, Moderation, Verify with a captcha, New-post alerts, Minecraft server status. A plugin adds its own in a `templates` folder; `template.json` gives each its `category` and `icon` |
+| JavaScript in texts | Any text field (Send Message, Log, Text, the Embed and Layout Builders …) can hold JavaScript in `${…}`, as in a JavaScript template string: `${user.username}`, `${xp * 2}`, `${member?.nickname ?? user.username}`, `${new Date().getFullYear()}`. `#4` is block #4's outputs: `${#4.message.url}`. Names come from the event, run variables, the block's fields and earlier outputs; a name nothing earlier gives gets an input below the text to connect a value to. A mistake in an expression stops the block with an error naming it. Texts from before, with `{name}`, are changed to `${name}` when a project opens |
+| Values from earlier blocks | Type `${` in any text (on a block, in the Inspector or a builder), or right-click it, for the values the block can use. `${` lists the blocks before this one on its action path; pick one and the list slides to its values (`${#1.user}`, the User output of block #1), and › (or →) goes on to a value's members; ← goes back. Typing a name, or a `.` after a value, inside `${…}` lists what fits with its type, like a code editor: `${#1.user.username}`, `${#1.member.roles.highest.name}`, `${#1.user.displayAvatarURL()}`. Run variables are `${name}`. The Embed and Layout Builders list the values too: click one to put it where the text cursor is |
+| Members of Discord values | They come from discord.js itself: `plugins/xc.discord/types/discordjs.classes.json` is made from discord.js's type definitions by `node plugins/xc.discord/tools/discordjs-catalog.js` (run it again after updating discord.js). Only methods that read are listed |
+| Message previews | The Embed and Layout Builders show the message as Discord will: with the bot's own name and picture (read from Discord with the saved bot token, when there is one) and each `${…}` as a chip, since its value is only known when the bot runs |
+| One path per action | An action output leads to one block: connecting it to another block replaces the old wire. Paths can join, and branch only through blocks made for it (If, Switch, For Each). Older projects with split paths show them in Problems |
+| Yes/no inputs | Switches like Private reply can be connected too: click their pin toggle in the Inspector |
+| Long text | Text fields on blocks are boxes of a few lines; drag a box's corner down to make it taller or shorter and sideways to make the whole block wider or narrower (the block saves both in the project), double-click the corner to reset them |
+| Colors | Click a color swatch for the picker: square and hue bar, hex and RGB, Discord colors and your recent ones |
+| Field as pin | Click a field's faint pin, or "pin" in the Inspector |
+| Select several | Shift-drag a box on empty canvas, or Ctrl+click blocks; Ctrl+A selects all |
+| Block actions | Select a block: Duplicate, Try Zone, Source and Delete are buttons above it (Delete key works too) |
+| Remove a wire | Click it, then its Delete wire button (or press Delete); or drag it off its input and drop it on empty canvas |
+| Zoom | The canvas toolbar: − / + , the percentage goes back to 100%, the corners button shows every block; or the mouse wheel |
+| Undo / Redo | Ctrl+Z / Ctrl+Y (per workspace) |
+| Copy / Paste / Duplicate | Ctrl+C / Ctrl+V (at the mouse) / Ctrl+D; works across workspaces and projects |
+| First start | The welcome page sets up Node.js (finds it, or installs it: winget or the official installer on Windows, a private copy on Linux), a theme and an accent; Help › Welcome and setup… opens it again |
+| Workspaces in order | Drag a workspace above or below another (a line shows where), or onto a folder to move it there; drag folders to order them too. The order is saved with the project |
+| Side bar | The activity bar's icon picks what it shows (Workspaces, Stored Data, Plugins to start with); clicking the one shown folds it away. The icons work like tabs: drag one to reorder them, or out onto the main area to make it a tab there. Drag a tab (Workspaces, Inspector, Console, Problems, a plugin's panel) onto the activity bar to make it an icon. Right-click an icon › Move to the main area. View › Side bar and View › Panels tick what's open, as an icon or a tab: untick to take it away, tick to bring it back (Workspaces, Stored Data and Plugins into the activity bar, panels as a tab). Narrow, Settings and Bot settings show their pages as a dropdown |
+| Tour | Help › Take the tour: build a tiny bot on a practice project. What to click next glows (the Add block button, the Math entry, the two pins to wire, the Inspector's fields, Run), the card says what to do right now and what went wrong, and Do it for me does any step. Skip any time; arrow keys move between steps |
+| Backups | Every save keeps a snapshot outside the project (newest 20, plus one a day for 14 days; Settings › Backups). File › Restore from backup… compares them with now and restores the project or one workspace. Unsaved changes are copied every 30 s and offered back after a crash |
+| Bot data backups | A bot backs up its saved data (store.json) when it starts and every 6 hours, keeping the newest 10 in data/backups. If the data is empty or damaged it asks: restore a backup or start empty (a dialog in XC Circuit, a question in the terminal) |
+| Shortcuts | Settings › Shortcuts: click a shortcut and press the keys you want: any key (letters, digits, F1–F24, arrows, punctuation, Home, Insert …) with any mix of Ctrl, Shift and Alt, or the mouse's side buttons. Each action can have two; a shortcut taken from another action says so. Shortcuts without Ctrl or Alt don't fire while typing. Copy, cut and paste stay the system's keys |
+| Settings | Ctrl+, or the gear at the bottom of the activity bar: theme, accent color (changes live), touch mode, interface size, canvas, window, the Console's font, size and line spacing (any font installed on the computer; monospaced ones first, with a search), bot, plugins, shortcuts |
+| Language | English and German come with the app: pick one on the first start page or in Settings › Appearance; it switches right away. Blocks (their names, descriptions and fields) stay in English |
+| Touch mode | Settings › Appearance (or the first start's Look step): bigger buttons, rows and pins with more room between them, for touch screens and pens |
+| Command palette | Ctrl+P or the search box in the title bar: run any command, open a workspace, or jump to a block |
+| Editor tabs | Every tab shows an icon before its name. The Embed Builder, Layout Builder, Slash Commands, Bot settings and Export open as tabs in their own floating window, which moves by the empty part of its tab bar; drag a tab onto any side or next to other tabs to dock it, or out of every area to give it a window again. A line or a lit area shows where it goes. Closing the tab cancels it |
+| Title bar | Drag to move, double-click to maximize, drag the window edges to resize; View › Use system title bar switches to the system one |
+| Save | Ctrl+S (restarts a running bot) |
+| Panels | The Inspector, Console and Problems are tabs: drag them to dock anywhere, or onto the activity bar. Right-click a tab › Close or Move to the activity bar; middle-click closes it. Drag the line between two areas to resize them. Reopen closed ones from View › Panels |
+| Workspaces | The Workspaces panel lists them in folders: + and the folder button on the project row add them, drag a workspace onto a folder to move it, double-click a name to rename. On the right of each: an orange number for its problems, a green dot while its blocks run (red after one failed), and **off** when it's turned off; folders show how many workspaces they hold (and, closed, their problems). Hover a workspace for its blocks, events, problems and when it last ran. The ⋯ button (or right-click) has Open, Rename, **Duplicate** (a copy with all its blocks, turned off so it doesn't answer twice), Turn off/on, Move to, Export and Delete. **Turn off** leaves a workspace out of the bot (its events don't fire, its blocks don't run) without deleting it |
+| Snap and arrange | The magnet in the canvas toolbar (or Settings › Canvas) snaps dropped blocks and notes to the grid. With several blocks selected, Arrange above them aligns their edges or centres, or spreads them out evenly |
+| Run times and values | While the bot runs from the editor, each block shows how long it took above its corner for 30 seconds, and hovering a wire shows the last value that went through it |
+| Favourite blocks | Star a block in the picker (on its row or in its details): favourites and the blocks you placed lately are listed at the top |
+| Notes | Add note in the canvas toolbar, or select blocks › Note to frame them: a title, a description and a colour (pencil button or double-click the title). Drag the title to move the note; with its "Move blocks with the note" switch on (off for new notes), the blocks inside move along. Alt does the opposite for one drag; drag its edges or corners to resize it. Notes don't run |
+| Try Zone | Select a block › Try Zone; drop blocks in or out; the gear on the zone's title sets retries and timeout |
+| Embeds | Select a Build Embed block › Open Embed Builder; the block shows a live preview. Every part of an embed is there: author with link and icon, title link, fields, images, footer, and a timestamp (when it's sent, or a set time) |
+| Pictures | Select a Build Canvas block › Edit canvas…: the Canvas Builder. Start from a Rank, Welcome or Profile card; add shapes, circles, pictures, texts and bars; click to choose a layer, drag to move it, drag its corner to resize it (Shift keeps its shape), arrow keys to nudge it. Preview values show `${…}` with a value. The block shows the picture ([Pictures with Build Canvas](./canvas)) |
+| Components V2 | A Build Layout block designs a whole message from Discord's components: containers with an accent color, text (markdown), sections with a picture or button next to the text, media galleries, files, separators, rows of buttons (every style, emoji, link and premium) and select menus (options, users, roles, channels). Edit layout… opens the Layout Builder with a Discord preview; set Send Message's Format to Layout and connect the block. Pictures and files given as file paths are attached when sending |
+| JSON | The Embed Builder, Layout Builder and Slash Commands each switch between Builder and JSON. The JSON is Discord's own: edit it or paste JSON from the Discord docs, discord.js `toJSON()` or a message designer, and it applies as soon as it is valid (errors show the line and column) |
+| Slash commands | Bot › Slash Commands…: options with choices (a name and a value each), length and number limits, channel kinds and autocomplete; subcommands and groups; translations of every name and description into Discord's languages; the permissions people need (any number), where the command works (servers, DMs with the bot, other DMs), how the bot is installed (server or account) and age-restricted. Registered when the bot starts |
+| Databases | Bot › Settings › Databases: connections to MariaDB, MySQL, PostgreSQL, SQLite or MongoDB, each with Test connection; the default database; where stored values are kept. The blocks Get Rows, Insert Row, Update Rows, Delete Rows and SQL Query use them ([Databases](./databases)) |
+| Stored data | Stored Data (the database icon in the activity bar) shows what `ctx.store` saved: add, change or delete values (read-only while the bot runs). Pick a database at the top to see its tables as a grid: page through the rows, double-click a cell to change it, Change and Delete in front of each row, Add row |
+| Plugins | The Plugins view of the side bar: every plugin and how it runs, Install…, Reload, Open folder. A switch turns a plugin off or on; the trash can removes it (after asking). The plugins that come with the app can't be turned off or removed |
+| Bot settings | Bot › Settings: pages on the left (Connection, Slash commands, Messages, Music, Privileged intents, and pages plugins add), the page on the right, Save at the bottom. A page with something required but unset shows a count in the list, one with a value that doesn't fit shows it in red |
+| Bot token | Bot › Settings › Connection (kept in Windows Credential Manager / Linux Secret Service). The eye button shows what you typed, Copy copies the saved token without showing it, and values are checked as you type (a build mode's settings can set `pattern`, a regular expression, and `patternHint`; `sensitive = true` hides a text setting behind the eye button) |
+| Run / Stop | F5 / Shift+F5, or Run in the title bar. Running blocks glow; failures show on the block |
+| Export | Bot › Export… writes a folder that runs with `node index.js` |
+
+Running needs Node.js 22 or newer; the first start page (or Settings › Bot › Node.js) finds or installs it. The first run installs the mode's npm packages (discord.js, or @fluxerjs/core for Fluxer bots) once, into `%APPDATA%\XC Circuit\packages` or `~/.local/share/xc-circuit/packages`.
+
+
+---
+
+<!-- docs/plugins/recipes.md · https://xcrafttm.github.io/XC-Circuit/plugins/recipes -->
+
+# Recipes
+
+::: info In short
+Complete examples for things plugins often do. Copy one into your plugin, change the ids to your plugin's, and save: it loads right away. Blocks go into a file listed under `[contributes] blocks`; editor code goes into the `editor.js` named under `[editor]`.
+:::
+
+Each recipe says where its code goes. The ids start with `acme.`: use your plugin's id instead.
+
+## Blocks
+
+### A value block
+
+Turns its input into something else; no action wires. `blocks/initials.js`:
+
+```js
+module.exports = {
+  id: "acme.initials",
+  kind: "value",
+  info: { name: "Initials", description: "The first letter of each word, in capitals: Ada Lovelace → AL.", author: "Acme", version: "1.0.0" },
+  search: { category: "text", aliases: ["Monogram"] },
+  look: { icon: "text" },
+  fields: { text: { type: "text", pin: true } },
+  outputs: { initials: { type: "text" } },
+  run({ fields }) {
+    const initials = String(fields.text).split(/\s+/).filter(Boolean).map((w) => w[0].toUpperCase()).join("");
+    return { initials };
+  },
+};
+```
+
+### An action with a choice
+
+An action runs in a flow and continues on its action output. A `select` field gives a dropdown, and `show` hides fields that don't apply. `blocks/count.js`:
+
+```js
+module.exports = {
+  id: "acme.count",
+  kind: "action",
+  info: { name: "Count", description: "Adds one to a counter kept for the bot or for a member, and gives the new count.", author: "Acme", version: "1.0.0" },
+  search: { category: "data" },
+  look: { icon: "hash" },
+  fields: {
+    scope: { type: "select", choices: { bot: "Whole bot", user: "Per user" }, default: "bot" },
+    user: { type: "discord.user", pin: "only", show: { scope: ["user"] } },
+    key: { type: "text", default: "count" },
+  },
+  outputs: { count: { type: "number" } },
+  async run({ fields, ctx }) {
+    const store = fields.scope === "user" ? ctx.store.user(fields.user.id) : ctx.store.global();
+    return { count: await store.inc(fields.key) };
+  },
+};
+```
+
+### Branching
+
+`flows` gives an action several ways out; [`ctx.next`](/api/ctx#next) picks one. `blocks/chance.js`:
+
+```js
+module.exports = {
+  id: "acme.chance",
+  kind: "action",
+  info: { name: "Chance", description: "Goes on through Hit with the given chance, otherwise through Miss.", author: "Acme", version: "1.0.0" },
+  search: { category: "flow", aliases: ["Random", "Probability"] },
+  look: { icon: "branch" },
+  fields: { percent: { type: "number", default: 50, min: 0, max: 100 } },
+  flows: ["hit", "miss"],
+  async run({ fields, ctx }) {
+    await ctx.next(Math.random() * 100 < fields.percent ? "hit" : "miss");
+  },
+};
+```
+
+### Calling a web API
+
+Use [`ctx.util.fetch`](/api/ctx#util): it limits the size of the answer and, for addresses the bot's users typed, keeps to the public web. `blocks/joke.js`:
+
+```js
+module.exports = {
+  id: "acme.joke",
+  kind: "action",
+  info: { name: "Get Joke", description: "Gets a random joke from the web.", author: "Acme", version: "1.0.0" },
+  search: { category: "web" },
+  look: { icon: "message" },
+  outputs: { joke: { type: "text" } },
+  async run({ ctx }) {
+    const { res, body } = await ctx.util.fetch("https://official-joke-api.appspot.com/random_joke", { headers: { accept: "application/json" } });
+    if (!res.ok) throw new Error(`The joke service answered ${res.status}`);
+    const j = JSON.parse(body.toString("utf8"));
+    return { joke: `${j.setup} ${j.punchline}` };
+  },
+};
+```
+
+A thrown `Error` fails the block: it turns red, and the message goes to the Console (or to a [Try Zone](/explanations/errors)).
+
+### An npm package
+
+List it under `requires.dependencies`; XC Circuit installs it before Run and puts it into exports. Load it with [`ctx.require`](/api/ctx#require). `blocks/slug.js`:
+
+```js
+module.exports = {
+  id: "acme.slug",
+  kind: "value",
+  info: { name: "Slug", description: "A text as a web-address-friendly slug: Hello World! → hello-world.", author: "Acme", version: "1.0.0" },
+  search: { category: "text" },
+  requires: { dependencies: { slugify: "^1.6.6" } },
+  fields: { text: { type: "text", pin: true } },
+  outputs: { slug: { type: "text" } },
+  run({ fields, ctx }) {
+    const slugify = ctx.require("slugify");
+    return { slug: slugify(String(fields.text), { lower: true, strict: true }) };
+  },
+};
+```
+
+### Keeping data apart
+
+Stored data your blocks keep can go into a namespace of your own, so it can't clash with the bot's own keys: [`ctx.store.ns`](/api/ctx#store).
+
+```js
+const seen = ctx.store.ns("acme.tools");
+await seen.set(`last:${fields.user.id}`, Date.now());
+```
+
+It shows in Stored Data under `ns:acme.tools`.
+
+## The editor
+
+### A command
+
+In the Plugins menu and the command palette (Ctrl+P). `editor.js`:
+
+```js
+xc.command({
+  id: "acme.count-logs",
+  title: "Count Log blocks",
+  run() {
+    const logs = xc.blocks().filter((b) => b.type === "core.log");
+    xc.success(`${logs.length} Log blocks in ${xc.project().name}`);
+  },
+});
+```
+
+### A check for the Problems panel
+
+Runs about once a second. A problem that names a block selects it when clicked.
+
+```js
+xc.check(() =>
+  xc.blocks()
+    .filter((b) => b.type === "core.log" && !b.values.message)
+    .map((b) => ({ message: "This Log has no message", workspace: b.workspace, block: b.id })),
+);
+```
+
+### A panel that lists and jumps
+
+`render` runs again when the project changes, so it's always current.
+
+```js
+xc.panel({
+  id: "acme.todo",
+  title: "TODO notes",
+  render(ui) {
+    const todos = xc.workspaces().flatMap((w) =>
+      Object.values(xc.workspace(w.key).notes ?? {})
+        .filter((n) => /TODO/i.test(n.text ?? ""))
+        .map((n) => ({ workspace: w, note: n })),
+    );
+    if (!todos.length) return ui.muted("No notes with TODO.");
+    for (const t of todos) {
+      ui.row((ui) => {
+        ui.text(t.workspace.name, { bold: true });
+        ui.text(t.note.text);
+      });
+    }
+  },
+});
+```
+
+### Settings for your plugin
+
+Panels are *controlled*: keep what people type and give it back on the next render. [`xc.storage`](/api/editor#quick-reference) keeps it on this computer, between sessions.
+
+```js
+xc.panel({
+  id: "acme.settings",
+  title: "Acme settings",
+  render(ui) {
+    const s = xc.storage.get("settings") ?? { greeting: "Hello", loud: false };
+    const save = (change) => xc.storage.set("settings", { ...s, ...change });
+    ui.input(s.greeting, (greeting) => save({ greeting }), { placeholder: "Greeting", key: "greeting" });
+    ui.toggle("Shout it", s.loud, (loud) => save({ loud }));
+    ui.button("Try it", () => xc.log(s.loud ? s.greeting.toUpperCase() + "!" : s.greeting), { primary: true });
+  },
+});
+```
+
+For settings that belong to the project (and go with it to other computers), use `xc.data` with a key starting with your plugin's id.
+
+### Adding blocks for someone
+
+Changes go through undo like the person's own edits.
+
+```js
+xc.command({
+  id: "acme.add-log",
+  title: "Add a Log next to the selection",
+  run() {
+    const ws = xc.activeWorkspace();
+    const [first] = xc.selection();
+    if (!ws || !first) return xc.warn("Select a block first.");
+    const at = xc.workspace(ws).nodes[first].at ?? [0, 0];
+    const id = xc.addBlock(ws, "core.log", { x: at[0] + 260, y: at[1], values: { message: "Here!" } });
+    xc.select(ws, [id]);
+  },
+});
+```
+
+### Reacting to the running bot
+
+`xc.on("botEvent")` gets what the bot run from the editor does: starts, stops, logs, and every block that runs (keep that quick).
+
+```js
+let failed = 0;
+xc.on("botEvent", (e) => {
+  if (e.type === "started") failed = 0;
+  if (e.type === "block" && e.error) failed += 1;
+});
+xc.panel({
+  id: "acme.health",
+  title: "Bot health",
+  render(ui) {
+    ui.stat("failed blocks since start", failed);
+    ui.button(xc.botRunning() ? "Stop" : "Run", () => xc.run(xc.botRunning() ? "bot.stop" : "bot.run"));
+  },
+});
+```
+
+### Something on a timer
+
+```js
+let ticks = 0;
+xc.every(60_000, () => {
+  ticks += 1;
+  if (ticks % 30 === 0) xc.log("Half an hour of work: time for a break?");
+});
+```
+
+## More
+
+- DemoBot's `plugins/demo.custom/`: a block, a panel, a command and a check together.
+- [Desk Pet](https://github.com/XCraftTM/XC-Circuit/tree/main/examples/plugins/desk-pet): an overlay with pictures, sounds and timers.
+- The bundled plugins in the app's `plugins/` folder: every block XC Circuit has, as ordinary plugin files.
+
+
+---
+
+<!-- docs/plugins/share.md · https://xcrafttm.github.io/XC-Circuit/plugins/share -->
+
+# Share and update
+
+::: info In short
+Raise `version` in `plugin.toml` for every change, zip the plugin folder, and share the zip: people install it with Plugins › Install from Zip… (or by dropping it on the window). Of two copies of a plugin, the higher version loads. Never change a block's `id`; raise its own major version and add `migrate` when its saved values change.
+:::
+
+## Before you share
+
+- [ ] `id` is yours and every block and command id starts with it.
+- [ ] `name`, `author`, `description` and `version` are filled in: the Plugins view shows them.
+- [ ] `[engines] circuit = "^1.0"`, and `app = "…"` if your blocks need something only newer XC Circuit versions have.
+- [ ] `[dependencies]` names the plugins yours needs (`"xc.discord" = "^1.0"` for Discord blocks).
+- [ ] Every block has `info.name`, `info.description`, `info.author` and `info.version`, and a `search.category`.
+- [ ] Nothing in the folder you don't want to give away: no `.env`, tokens, test data or `node_modules`.
+- [ ] It loads without problems on a fresh project: the Problems panel is empty.
+
+## Make the zip
+
+Zip the plugin **folder** (so `plugin.toml` is in one folder at the top of the zip) or its **contents** (`plugin.toml` at the top). Both install. GitHub's *Code › Download ZIP* of a repository that is one plugin works too.
+
+```
+acme.tools-1.2.0.zip
+└─ acme.tools/
+   ├─ plugin.toml
+   ├─ blocks/…
+   └─ editor.js
+```
+
+## Installing
+
+**Plugins › Install from Zip…**, the **Install…** button in the Plugins view, or dropping the `.zip` on the window. It goes into your plugins folder and loads right away; the Console says what was installed.
+
+A plugin can also come with a project: one in the project's `plugins/` folder loads whenever the project is open, and goes along when the project is copied or shared. That's the way for a plugin made for one bot.
+
+## Turning off and removing
+
+In the **Plugins view** of the side bar (the plug icon), each plugin you installed has a switch and a trash can:
+
+- **The switch** turns the plugin off: its blocks, panels, commands and themes are gone until you turn it on again. It stays listed. A project that uses its blocks needs it turned on again to work as before.
+- **The trash can** removes it: after you confirm, its folder is deleted.
+
+The plugins that come with XC Circuit (Circuit Core, Discord Bot, Fluxer Bot, Server Tools) say *Built in* and can't be turned off or removed.
+
+## Versions
+
+`version` is `major.minor.patch`. Raise it **for every change you share**:
+
+| Change | Raise | Example |
+| --- | --- | --- |
+| a fix | patch | 1.2.0 → 1.2.1 |
+| something new (a block, a panel, a field with a default) | minor | 1.2.1 → 1.3.0 |
+| something that breaks what people built | major | 1.3.0 → 2.0.0 |
+
+**Updating is installing the newer zip.** When the same plugin (`id`) is in two places, the higher `version` loads, so a newer copy in the plugins folder wins over an older one in a project, and the other way round.
+
+### Changing a block that's in use
+
+Projects save each block by its `id` and its own **major** version (`acme.count@1`), with the values filled in:
+
+- **Never change a block's `id`**: projects that use it would show it as unknown.
+- Adding a field with a `default`, a new output or a better description: no new major version needed.
+- Renaming or removing a field, or changing what a value means: raise the block's `info.version` major (`1.4.0` → `2.0.0`) and add [`migrate`](/api/blocks#migrate), which turns old saved values into new ones when a project opens.
+- A block you want to retire: `info.deprecated: "Use Count instead"`. It keeps working, but the picker hides it.
+
+### Needing a newer XC Circuit
+
+If your blocks use something new in XC Circuit (a `ctx` member, a field type), set `[engines] app` to the version that has it. Older versions then don't load your plugin, instead of failing while the bot runs.
+
+## Publishing a plugin's code
+
+A Git repository whose top folder is the plugin is the easiest to share: people download the zip from GitHub, and you develop it with [`XC_CIRCUIT_PLUGINS`](./#where-to-keep-it-while-you-work) pointing at the folder above it. Put a `README.md` in the folder; XC Circuit ignores files it doesn't know.
+
+
+---
+
+<!-- docs/api/blocks.md · https://xcrafttm.github.io/XC-Circuit/api/blocks -->
+
+# Blocks
+
+::: info In short
+A block is one JavaScript or TypeScript file that exports an object: an `id`, a `kind` (`"event"`, `"action"` or `"value"`), `info` (name, description…), `fields` (what you fill in), `outputs` (what it gives) and `run()` (what it does).
+:::
+
+A block is one `.js`, `.cjs`, `.mjs` or `.ts` file that exports an object. Files are found through the plugin's `contributes.blocks` patterns.
+
+```js
+module.exports = {
+  id: "acme.shout",
+  kind: "value",
+  info: { name: "Shout", description: "Upper-cases a text.", author: "Acme", version: "1.0.0" },
+  search: { category: "text", aliases: ["Uppercase"] },
+  look: { icon: "text" },
+  fields: { text: { type: "text", pin: true } },
+  outputs: { result: { type: "text" } },
+  run({ fields }) {
+    return { result: String(fields.text).toUpperCase() + "!" };
+  },
+};
+```
+
+`export default { … }` works too, and so do TypeScript files: XC Circuit strips the types when it loads them (it doesn't check them; your code editor does, with [`@xc-circuit/sdk`](#typescript)).
+
+## Keys
+
+| Key | Type | Description |
+| --- | --- | --- |
+| `id` | text | **Required.** Unique id, starting with your plugin's id: `acme.shout`. Never change it once people use the block: projects refer to blocks by id. |
+| `kind` | `"event"` · `"action"` · `"value"` | **Required.** See [Events, actions and values](/explanations/blocks-and-wires). |
+| `info` | object | What the block is. [Below](#info). |
+| `search` | object | How the block picker finds it. [Below](#search). |
+| `look` | object | How it looks. [Below](#look). |
+| `requires` | object | What it needs to run. [Below](#requires). |
+| `fields` | object | Inputs filled in on the block (or connected), by key. See [Fields and types](./fields). |
+| `outputs` | object | Values it gives, by key: `{ type, label?, description? }`. |
+| `flows` | list of text | Action outputs of an action with more than one way out. [Below](#flows). |
+| `pure` | boolean | Value blocks only. By default a value block runs once per run and its outputs are reused; `pure: false` runs it again every time a value is needed (for random numbers, the current time…). |
+| `run` | function | What the block does. [Below](#run). |
+| `listen` | function | Events only: subscribes to what starts a flow. [Below](#listen). |
+| `setup` | function | Runs once when the bot starts, before events subscribe. |
+| `define` | function | Runs in the **editor** to change fields and outputs from the block's values and connections. [Below](#define). |
+| `migrate` | function | Upgrades saved values when the major version changes. [Below](#migrate). |
+
+The keys inside `info`, `search`, `look` and `requires` may also stand at the top level (older block files do this); a key given in both places is reported.
+
+### info
+
+| Key | Description |
+| --- | --- |
+| `name` | **Required.** The block's name, in English, in Title Case: *Send Message*. |
+| `description` | **Required.** One or two sentences: what it does, for someone who hasn't used it. |
+| `author` | **Required.** Who wrote it. |
+| `version` | **Required.** `major.minor.patch`. The **major** version is saved with every use of the block (`acme.shout@1`); raise it when old saved values need [`migrate`](#migrate). |
+| `docs` | A web address with more help. |
+| `deprecated` | `true` or a text saying what to use instead. The block stays usable, but the picker hides it. |
+
+### search
+
+| Key | Description |
+| --- | --- |
+| `category` | A category id of the build mode, such as `send`, `members`, `text` or `flow` (see [Build modes](./build-modes#categories)). Events go into the category of the blocks they work with. |
+| `aliases` | Other English names the picker finds the block by (*Reply* for Send Message). They rank like the name and are never shown. |
+| `tags` | More search words, ranked after the name and aliases. |
+
+### look
+
+| Key | Description |
+| --- | --- |
+| `icon` | An icon name from any plugin's `icons`: `message`, `user`, `clock`, `hash`, `branch`… |
+| `width` | The block's width on the canvas, in points. |
+| `preview` | A built-in preview drawn on the block. `embed` draws the block's embed as Discord shows it, `canvas` its picture (both make the block wider). |
+
+### requires
+
+| Key | Description |
+| --- | --- |
+| `intents` | Discord gateway intents the block needs, such as `GuildMessages` or `GuildMembers`. The bot asks Discord for the intents of the blocks used. |
+| `dependencies` | npm packages the block's code needs: `{ "node-fetch": "^3.3.0" }`. They're installed before Run and listed in exports. Load them with [`ctx.require`](./ctx#require). |
+| `assets` | Files the block needs in the bot, such as fonts or pictures, as paths relative to the block file: `["../../fonts/MyFont.ttf"]`. They go into the bot (and into exports) with the block; [`ctx.asset(name)`](./ctx#asset) gives a path to one. |
+| `permissions` | The bot's permissions the block needs, by the platform's flag names: `["ManageRoles"]`, or a list per value of one field: `{ action: { kick: ["KickMembers"], ban: ["BanMembers"] } }`. When the platform answers "Missing Permissions", the error names them. |
+
+Discord's privileged intents (`GuildMembers`, `GuildPresences`, `MessageContent`) have to be turned on for the bot in the developer portal; Bot settings lists the ones the project's blocks need, with a link there.
+
+## run
+
+```js
+async run({ fields, ctx, node }) { … }
+```
+
+| Argument | Description |
+| --- | --- |
+| `fields` | Every field's value, with `${…}` already filled in and connected values read. |
+| `ctx` | The [run context](./ctx): logging, variables, stored data, the Discord client… |
+| `node` | `{ id, workspace }`: which block on which canvas is running. |
+
+What `run` does depends on the kind:
+
+- **Value blocks** return their outputs: `return { result: 42 }`. They run when an action needs one of the outputs.
+- **Actions without `flows`** return their outputs (or nothing). The flow continues on their single action output after `run` finishes.
+- **Actions with `flows`** call [`ctx.next(flow, outputs)`](./ctx#next) for the way to continue, once or several times (a loop calls it for every item).
+
+`run` may be `async`; write it that way only when it awaits something. The block picker tags a block **Async** when its `run` waits for something (Discord, the web, a timer, stored data): when it uses `await`, `.then(` or a new `Promise`. Waiting for the rest of the flow (`await ctx.next(…)`) doesn't count. Every other action and value block is **Sync**. Searching for *async* or *sync* finds them.
+
+Throw an `Error` to fail the block; the message is shown on the block and in the Console.
+
+## flows
+
+```js
+flows: ["true", "false"],
+async run({ fields, ctx }) {
+  await ctx.next(fields.condition ? "true" : "false");
+}
+```
+
+Each name becomes an action output. A loop:
+
+```js
+flows: ["each", "done"],
+outputs: { item: { type: "any" }, index: { type: "number" } },
+async run({ fields, ctx }) {
+  for (const [index, item] of fields.list.entries()) await ctx.next("each", { item, index });
+  await ctx.next("done");
+}
+```
+
+## listen
+
+Event blocks subscribe in `listen(ctx, emit)`. Each call of `emit(outputs)` starts a new run with those outputs; it returns a promise of the value the run gives back with Return.
+
+```js
+listen(ctx, emit) {
+  ctx.discord.client.on("guildMemberAdd", (member) => {
+    emit({ member, user: member.user, server: member.guild });
+  });
+},
+```
+
+`ctx.fields` holds the event block's own field values. Use [`ctx.runtime.onStart`](./ctx#runtime) for work that should wait until the bot is connected.
+
+## define
+
+`define()` runs **in the editor** (in a sandbox, with a 50 ms limit) whenever the block's values or connections change. It changes the block's shape: extra fields, hidden fields, the type of an output. It can't do anything else: no network, no files.
+
+```js
+define({ values, connected, project }) {
+  // A For Each over a list of members gives members.
+  return { outputs: { item: { type: circuit.types.elementOf(connected.list) } } };
+}
+```
+
+| Argument | Description |
+| --- | --- |
+| `values` | The values filled in on the block. |
+| `connected` | The type string of what's connected to each input, by field key. |
+| `project` | `{ data, settings }`: the project's data, such as `slashCommands`, and Bot › Settings (without secrets), such as `databases`. |
+
+It returns a [DefineResult](./fields#define-results): `add`, `hide`, `set`, `outputs`, `flows`. The global `circuit` has helpers: `circuit.types.elementOf("list<discord.role>")` is `"discord.role"`, `circuit.types.shape("object<{ name: text }>")` is `{ name: "text" }`, and `circuit.object.keysToChoices(shape)` turns a shape into choices.
+
+Top-level `require()` calls return a harmless stand-in in the editor, so a block file that needs a package at run time still loads.
+
+## migrate
+
+```js
+info: { …, version: "2.0.0" },
+migrate(values, fromVersion) {
+  // In version 1, "message" was called "text".
+  if (fromVersion === "1") return { ...values, message: values.text };
+  return values;
+}
+```
+
+When a project saved with an older **major** version opens, XC Circuit calls `migrate` with the saved values and the old major version, saves what it returns, and updates the block to the new version. Without `migrate`, the values are kept as they are.
+
+## TypeScript
+
+Block files can be `.ts`. For types in your code editor, use the `@xc-circuit/sdk` package (in the repository's [`sdk/`](https://github.com/XCraftTM/XC-Circuit/tree/main/sdk) folder):
+
+```ts
+import { defineBlock } from "@xc-circuit/sdk";
+
+interface Fields { xp: number; perLevel: number }
+
+export default defineBlock<Fields>({
+  id: "demo.level_from_xp",
+  kind: "value",
+  info: { name: "Level From XP", description: "Turns XP into a level.", author: "You", version: "1.0.0" },
+  fields: { xp: { type: "number", pin: true }, perLevel: { type: "number", default: 100 } },
+  outputs: { level: { type: "number" } },
+  run({ fields }) {
+    return { level: Math.floor(fields.xp / fields.perLevel) + 1 };
+  },
+});
+```
+
+`defineBlock` only helps the types: it returns the block unchanged.
+
+## Writing good blocks
+
+- **English, plain words.** Names in Title Case, descriptions for people who don't program.
+- **One job per block.** Combine blocks on the canvas rather than adding modes to one.
+- **Accept ids and objects.** Where a block needs a user, take a user, a member or an id.
+- **Fail with a reason.** `throw new Error("Connect a channel or type its id")`, not a stack trace.
+- **Keep ids and field keys stable.** Projects store them.
+
+
+---
+
+<!-- docs/api/fields.md · https://xcrafttm.github.io/XC-Circuit/api/fields -->
+
+# Fields and types
+
+::: info In short
+A block's `fields` are what people fill in on it (or connect a wire to); each has a `type` that decides its editor and which wires fit.
+:::
+
+## Field options
+
+```js
+fields: {
+  mode: { type: "select", default: "reply", pin: false, choices: { reply: "Reply", send: "Send to channel" } },
+  channel: { type: "discord.channel", pin: "only", show: { mode: ["send"] }, description: "Where to send it." },
+  text: { type: "textarea", default: "", description: "The message. ${…} holds JavaScript." },
+  delay: { type: "number", default: 0, min: 0, step: 0.5, advanced: true, label: "Delay (s)" },
+}
+```
+
+| Key | Type | Description |
+| --- | --- | --- |
+| `type` | text | **Required.** A [type string](#type-strings) or one of the [editors](#field-editors) below. |
+| `label` | text | The name shown. Default: the key, in words (`deleteAfter` → *Delete after*). |
+| `description` | text | Help shown on hover and in the Inspector. |
+| `default` | any | The value of a new block. |
+| `required` | boolean | Empty is a problem (listed in Problems). |
+| `pin` | `"auto"` · `true` · `false` · `"only"` | `"auto"` (default): filled in on the block, with a pin toggle. `true`: starts as a pin. `false`: never a pin. `"only"`: must be connected. |
+| `multi` | boolean | The pin accepts several wires; the block gets their values as one list. |
+| `advanced` | boolean | Not shown on the block; the Inspector lists it under *Advanced*. |
+| `show` | object | Shown only when other fields have one of these values: `{ mode: ["send", "edit"] }`. |
+| `choices` | object | For `select`: value → label. A nested object makes a group: `{ "Text": { plain: "Plain", bold: "Bold" } }`. |
+| `template` | boolean | Whether `${…}` in the text is filled in. Default: yes for text fields. |
+| `templateParts` | boolean | Instead of filling `${…}` in, give the block `{ strings, values }`: the text around them and their values, as a JavaScript tagged template gets them. SQL Query uses it to send the values as parameters. |
+| `min`, `max`, `step` | number | For numbers. |
+| `placeholder` | text | Grey hint in an empty text box. |
+
+## Field editors
+
+Besides the [type strings](#type-strings), a field's `type` can name an editor:
+
+| Type | Editor | Value |
+| --- | --- | --- |
+| `text` | a text box | text |
+| `textarea` | a box of several lines, resizable | text |
+| `number` | number box | number |
+| `boolean` | switch | `true` / `false` |
+| `select` | drop-down of `choices` | the chosen value |
+| `color` | swatch with a colour picker | `"#RRGGBB"` |
+| `embed` | the Embed Builder (Discord) | embed object |
+| `slash-command-ref` | a slash command of the project (Discord) | its name |
+| `canvas` | the Canvas Builder, and the picture on the block | a design: `{ width, height, background, layers, samples }` ([Build Canvas](/explanations/canvas)) |
+
+## Type strings
+
+Types say what a pin carries. The editor only connects pins whose types fit.
+
+| Type | Values |
+| --- | --- |
+| `text`, `number`, `boolean`, `date` | the basic values |
+| `object` | any object |
+| `any` | anything; fits everywhere |
+| `list<T>` | a list of `T`: `list<text>`, `list<discord.member>` |
+| `T?` | a `T` or nothing: `discord.member?` |
+| `A \| B` | either |
+| `object<{ name: text, xp: number }>` | an object with these keys |
+| `discord.user`, `fluxer.message`, … | [pin types](./pin-types) from plugins |
+
+A type fits where its parent type is expected (`discord.member` extends `object`), and plugins can declare [conversions](./pin-types#conversions) (a member fits where a user is needed).
+
+## define results
+
+[`define()`](./blocks#define) returns any of these:
+
+| Key | Description |
+| --- | --- |
+| `add` | More fields, by key, as field options. |
+| `hide` | Keys of fields to hide. |
+| `set` | Changes to existing fields: `{ text: { label: "Reason", required: true } }`. |
+| `outputs` | Outputs to add or replace, by key: `{ item: { type: "discord.role" } }`. |
+| `flows` | Replaces the block's `flows`. |
+
+Example: Slash Command adds an output for each option of the chosen command.
+
+```js
+define({ values, project }) {
+  const cmd = (project.data?.slashCommands || []).find((c) => c.name === values.command);
+  const outputs = {};
+  for (const o of cmd?.options || []) outputs[o.name] = { type: "text", description: o.description };
+  return { outputs };
+}
+```
+
+
+---
+
+<!-- docs/api/ctx.md · https://xcrafttm.github.io/XC-Circuit/api/ctx -->
+
+# Run context (ctx)
+
+::: info In short
+Inside a block's `run()`, `ctx` is the running bot: `ctx.next()` to continue a flow, `ctx.log`, variables (`ctx.vars`), saved data (`ctx.store`), the Discord client (`ctx.discord.client`) and more.
+:::
+
+Blocks get `ctx` in [`run({ fields, ctx, node })`](./blocks#run), [`listen(ctx, emit)`](./blocks#listen) and `setup(ctx)`. It's how a block reaches the running bot: logging, variables, stored data, signals, and the libraries of the build mode.
+
+This runs in the **bot** (Node.js), not in the editor.
+
+## next
+
+```js
+await ctx.next(flow, outputs?)
+```
+
+Continues the flow on one of the block's [`flows`](./blocks#flows), after setting `outputs`. Resolves when everything after it has finished, so a loop can call it once per item. Only actions with `flows` call it.
+
+## set
+
+```js
+ctx.set("progress", 50)
+```
+
+Sets one output without continuing. Useful in loops, or before a `next` that doesn't pass outputs.
+
+## id
+
+`"workspace:node"`: this block in this workspace, for keeping data of its own (in [`ctx.store.ns`](#store), say), apart from other copies of the block.
+
+## fields
+
+The block's own field values as filled in (without connected values). In `run`, prefer the `fields` argument, which includes connected values.
+
+## typed · authored
+
+`ctx.typed(key)` is what the bot's author typed into field `key`, before `${…}` was filled in, and `undefined` when the field is connected. `ctx.authored(key)` says whether the field is exactly that: not connected and without `${…}`.
+
+A value that isn't authored may come from what the bot's users type (a command option, a message). Treat it so where that matters: a web address only to the public web, a file only inside the bot's files folder.
+
+```js
+const publicOnly = !ctx.authored("url") && !fields.privateOk;
+const { res, body } = await ctx.util.fetch(fields.url, {}, { publicOnly, maxBytes: 10 * 1024 * 1024 });
+```
+
+## event
+
+The outputs of the event that started this run: `ctx.event.user`, `ctx.event.message`… Undefined in `listen` and `setup`.
+
+## log
+
+```js
+ctx.log.info("Synced", count, "roles");
+ctx.log.success("Done");
+ctx.log.warn("Slow answer");
+ctx.log.error("Could not reach the API");
+ctx.log.debug({ payload });
+```
+
+Writes to the Console (and, in exported bots, the terminal), naming the block. Objects are shown readably.
+
+## vars
+
+Variables in memory, gone when the bot stops. See [Variables and stored data](/explanations/data).
+
+```js
+ctx.vars.run.set("total", 3);           // this run only
+ctx.vars.workspace.get("queue", []);    // shared by this workspace's runs
+ctx.vars.global.has("ready");           // shared by the whole bot
+```
+
+Each has `get(name, fallback?)`, `set(name, value)`, `has(name)` and `delete(name)`.
+
+## store
+
+Data kept in `store.json`, which survives restarts.
+
+```js
+const xp = await ctx.store.member(server.id, user.id).inc("xp", 5);
+await ctx.store.global().set("lastRestart", Date.now());
+```
+
+| Scope | Values per |
+| --- | --- |
+| `ctx.store.global()` | bot |
+| `ctx.store.server(id)` | server |
+| `ctx.store.user(id)` | user |
+| `ctx.store.member(serverId, userId)` | member of a server |
+| `ctx.store.channel(id)` | channel |
+| `ctx.store.ns(name)` | your own namespace: keep a plugin's data apart |
+
+Each scope has (all return promises):
+
+| Method | Description |
+| --- | --- |
+| `get(key, fallback?)` | The value, or `fallback`. |
+| `set(key, value)` | Stores a value (anything JSON can hold). |
+| `has(key)` | Whether there's a value. |
+| `delete(key)` | Removes it. |
+| `inc(key, by = 1)` | Adds to a number (from 0) and gives the new number. |
+| `push(key, value)` | Appends to a list (from empty) and gives the list. |
+| `keys()` | Every key in this scope. |
+
+`ctx.store.each(scope, serverId?)` lists every stored entity of a scope: `[{ id, values }]`, for leaderboards. Writes are saved to disk within a quarter of a second.
+
+## signal
+
+```js
+ctx.signal.emit("level-up", { user, level });
+```
+
+Starts every **On Signal** event with that name, without waiting for them.
+
+## runtime
+
+| Member | Description |
+| --- | --- |
+| `onStart(fn)` | Runs `fn` once the bot has started and is connected. |
+| `onSignal(name, fn)` | Runs `fn(data)` for each signal with that name. |
+| `onError(fn)` | Runs `fn(error)` for errors outside any Try Zone. |
+| `onCall(name, fn)` | Answers Call blocks with that name: `fn(data)` starts a run and resolves to what it returns. |
+| `call(name, data)` | Runs the When Called flows with that name and resolves to the first one's return value. |
+| `setting(name)` | A setting of Bot › Settings (not a secret). |
+| `dataDir` | The bot's data folder (stored data, SQLite files, the files folder `files/`). |
+| `secret(name)` | A secret of Bot › Settings, such as an API key a [plugin's page](./build-modes#plugin-settings) asks for. |
+
+## returnValue
+
+```js
+ctx.returnValue(value)
+```
+
+Sets what this run gives back to the Call block (or `emit`) that started it. The Return block uses this.
+
+## resolve
+
+```js
+const fresh = await ctx.resolve();
+```
+
+Reads the block's inputs again. Loops whose condition changes while they run (Loop While) use it.
+
+## project
+
+`{ name, mode, settings, data }`: the project's name, build mode, settings (without secrets) and data, such as `data.slashCommands`. `settings.databases` lists the databases (without passwords).
+
+## fill
+
+```js
+ctx.fill("Hello ${name}!", { name: "Alex" })
+```
+
+Fills `${…}` in a text the way text fields are filled: from the event, run variables, earlier outputs and the names you pass.
+
+## db
+
+```js
+const db = ctx.db("default");              // or a database's name, or its id
+const rows = await db.select("levels", [{ column: "xp", op: ">", value: 100 }], { order: "xp", desc: true, limit: 10 });
+const { id } = await db.insert("levels", { user_id: user.id, xp: 0 });
+await db.update("levels", { xp: 50 }, [{ column: "user_id", op: "=", value: user.id }]);
+await db.remove("levels", [{ column: "user_id", op: "=", value: user.id }]);
+const { rows: top } = await db.run("SELECT * FROM levels WHERE xp > ?", [100]);
+```
+
+A database of [Bot › Settings › Databases](/explanations/databases). `"default"` (or nothing) is the default one. It connects the first time it's used; every block shares the connection.
+
+`ctx.db({ kind, host, port, user, password, database, ssl, url })` connects to a database the block is given instead (`kind` is `"mariadb"`, `"postgres"` or `"mongodb"`; `url` instead of the others). It throws unless Bot › Settings › Databases allows [databases given on blocks](/explanations/databases#a-database-given-on-the-block). The same details give the same connection; up to 8 stay open. List the kind's npm package in your block's `requires.dependencies`, since the bundle only adds drivers for the databases of Bot › Settings and the built-in blocks.
+
+| Method | Gives |
+| --- | --- |
+| `select(table, conditions?, { order, desc, limit, offset, any }?)` | The rows, as objects. |
+| `insert(table, values)` | `{ id, row }`: the new row's id, and the row where the database gives it back. |
+| `update(table, values, conditions?, any?)` | How many rows changed. |
+| `remove(table, conditions?, any?)` | How many rows were deleted. |
+| `query(sql)` | `{ rows, affected, id }`. `sql` is text, or `{ strings, values }` from a [`templateParts`](./fields#field-options) field: the values are sent as parameters. Not for MongoDB. |
+| `run(sql, params)` | The same, with your own parameters: `?` for MariaDB, MySQL and SQLite, `$1, $2…` for PostgreSQL. |
+| `describe()` | `{ version, tables }`. |
+
+A condition is `{ column, op, value }`; `op` is `"="`, `"!="`, `">"`, `">="`, `"<"`, `"<="`, `"contains"`, `"starts"`, `"ends"` (these three ignore upper and lower case), `"null"` or `"notNull"`. With `any`, one condition is enough. Table and column names must be letters, digits and `_` (a `.` between schema and table); values are always sent as parameters. `db.kind` is `"mariadb"`, `"postgres"`, `"sqlite"` or `"mongodb"`, and `db.client` the driver's own pool or client once connected.
+
+## timers
+
+```js
+const { id, due } = await ctx.timers.schedule({ name: "reminder", due: Date.now() + 600000, data: { text }, key: `remind-${user.id}` });
+await ctx.timers.cancel({ key: `remind-${user.id}` });   // or { id } or { name }; gives how many
+const waiting = await ctx.timers.list("reminder");       // soonest first
+ctx.timers.on("reminder", (t) => { /* t.data, t.due, t.late */ }, { catchUp: true });
+```
+
+One-time timers, kept with the [stored data](#store) so they survive restarts. `on` is for event blocks' `listen`; missed timers (more than a minute late) reach only listeners with `catchUp`. `data` is kept as JSON: live objects become their data.
+
+## asset
+
+```js
+const font = ctx.asset("../../fonts/MyFont.ttf");
+```
+
+The path on disk of a file the block lists in [`requires.assets`](./blocks#requires), as written there. It's written into the bot's data folder the first time.
+
+## util
+
+| Member | Description |
+| --- | --- |
+| `sleep(ms)` | A promise that resolves after `ms` milliseconds. |
+| `isURL(text)` | Whether the text is a web address. |
+| `id(length = 10)` | A random id of letters and digits. |
+| `shuffle(list)` | A shuffled copy. |
+| `typeOf(value)` | `"null"`, `"list"`, or JavaScript's `typeof`. |
+| `fetch(url, init?, { publicOnly, maxBytes, redirects }?)` | `fetch`, guarded: resolves to `{ res, body }` with the body as a Buffer, read up to `maxBytes` (10 MB; more fails). With `publicOnly`, the address and each redirect must be on the public web, not this computer, a private network or a cloud's metadata service. |
+| `checkPublic(url)` | Throws unless a web address is public, as above. |
+
+## bot
+
+| Member | Description |
+| --- | --- |
+| `uptime` | Milliseconds since the bot started. |
+| `stop()` | Stops the bot. |
+| `restart()` | Restarts the bot. |
+
+## abortSignal
+
+Inside a [Try Zone](/explanations/errors) with a timeout: an `AbortSignal` that fires when the zone gives up. Pass it to `fetch` and other APIs that accept one, so long work stops in time.
+
+## require
+
+```js
+const fetch = ctx.require("node-fetch");
+```
+
+Loads an npm package. List it in the block's [`requires.dependencies`](./blocks#requires) so it's installed before Run and included in exports. Node's own modules (`node:crypto`, `node:fs`) work too.
+
+## Mode libraries
+
+[Runtime libraries](./runtime-libs) add their API under their id:
+
+| Mode | Member | What it is |
+| --- | --- | --- |
+| Discord Bot | `ctx.discord.client` | the discord.js `Client` |
+| Fluxer Bot | `ctx.fluxer.client`, `ctx.fluxer.prefix()`, `ctx.fluxer.channel(v)`, `ctx.fluxer.user(v)`, `ctx.fluxer.member(v, server)`… | the fluxer.js client and helpers that accept objects or ids |
+
+
+---
+
+<!-- docs/api/editor.md · https://xcrafttm.github.io/XC-Circuit/api/editor -->
+
+# Editor plugins (xc)
+
+::: info In short
+An `editor.js` in your plugin, named in `plugin.toml` under `[editor] script = "editor.js"`. It uses the global `xc` to add commands, panels, checks and overlays to XC™ Circuit, and to read and change the project. It reloads when you save it.
+:::
+
+```js
+xc.command({ id: "hello.greet", title: "Say hello", run() { xc.log("Hello from", xc.project()?.name) } });
+```
+
+Types for your code editor: `/// <reference types="@xc-circuit/sdk/editor" />` (from the repository's `sdk/` folder).
+
+## Quick reference
+
+### Add things to the app
+
+| | |
+| --- | --- |
+| [`xc.command({ id, title, run })`](#xc-command) | a command in the Plugins menu and the command palette |
+| [`xc.panel({ id, title, render })`](#xc-panel) | a dockable panel |
+| [`xc.check(fn)`](#xc-check) | problems for the Problems panel |
+| [`xc.overlay({ id, width, height, render, onClick })`](#xc-overlay) | something floating over the editor |
+| [`xc.on(event, fn)`](#xc-on) | react to `"save"`, `"botEvent"`, `"selection"` |
+| [`xc.every(ms, fn)` · `xc.after(ms, fn)` · `xc.cancel(id)`](#timers) | timers |
+| [`xc.playSound(file, { volume })`](#sounds) | play a sound from the plugin |
+| [`xc.tool({ name, description, input, run })`](#xc-tool) | something AI agents can do through the MCP server |
+
+### Read the project
+
+| | |
+| --- | --- |
+| `xc.project()` | `{ name, root }` or `null` |
+| `xc.workspaces()` | `[{ key, name }]` |
+| `xc.workspace(key)` | a workspace as saved: `{ name, nodes, links, zones, notes }` |
+| `xc.blocks()` | every block: `[{ workspace, id, type, values, … }]` |
+| `xc.activeWorkspace()` · `xc.selection()` | what's open and selected |
+| `xc.blockName(type)` | `"core.log"` → `"Log"` |
+| `xc.data.get(key)` | project data (in `circuit.json`) |
+| `xc.storage.get(key)` | the plugin's own store (on this computer) |
+| `xc.botRunning()` · `xc.screen()` | is the bot running · window size |
+| `xc.blockTypes(query)` · `xc.blockType(type)` | installed block types · one type's fields, outputs and flows |
+| `xc.blockPins(workspace, id)` | a block as it is now: its values and pins, with types and wires |
+| `xc.problems()` · `xc.console(lines)` | what the Problems panel and the Console show |
+| `xc.t(text)` | text in the app's language, from the plugins' `locales/*.toml` |
+
+### Change things
+
+| | |
+| --- | --- |
+| `xc.addBlock(workspace, type, { x, y, values })` | place a block, returns its id |
+| `xc.setWorkspace(key, workspace)` | replace a workspace |
+| `xc.connect(workspace, "3.next", "4.in")` | draw a wire, checked like one drawn on the canvas |
+| `xc.addWorkspace(name, { folder })` | make a workspace, returns its key |
+| `xc.copyText(text)` | put text on the clipboard |
+| `xc.fieldValue(type, field, value)` | a value as the block keeps it: embeds, layouts and canvases as the builders save them |
+| `xc.openBuilder(workspace, id, field)` | open the Embed, Layout or Canvas Builder on a block's field |
+| `xc.select(workspace, ids)` · `xc.reveal(workspace, id)` | select · go to a block |
+| `xc.data.set(key, value)` · `xc.storage.set(key, value)` | save data |
+| `xc.log(…)` · `xc.success(…)` · `xc.warn(…)` · `xc.error(…)` | write to the Console |
+| `xc.run(id)` | run a command: a plugin's, or `"bot.run"`, `"bot.stop"`, `"file.save"` |
+| `xc.moveOverlay(id, x, y)` · `xc.overlayPosition(id)` | move an overlay |
+
+Every change can be undone with Ctrl+Z, like your own edits.
+
+## Adding things
+
+### xc.command
+
+```js
+xc.command({ id: "acme.tidy", title: "Tidy up", description: "Shown on hover", run() { … } });
+```
+
+The `id` must be unique: start it with your plugin's id.
+
+### xc.panel
+
+```js
+xc.panel({ id: "stats", title: "Stats", render(ui) { ui.heading("Hello") } });
+```
+
+Opened from the Plugins menu. `render(ui)` describes the panel with [`ui`](./panels); it runs whenever the panel is drawn, so it always shows the current project.
+
+### xc.check
+
+```js
+xc.check(() =>
+  xc.blocks()
+    .filter((b) => b.type === "core.log" && !b.values.message)
+    .map((b) => ({ message: "Log has no message", workspace: b.workspace, block: b.id })),
+);
+```
+
+Runs about once a second. Return problems: a text, or `{ message, workspace, block }` (then clicking the problem selects the block).
+
+### xc.overlay
+
+```js
+xc.overlay({
+  id: "pet",
+  width: 96, height: 96,
+  x: -28, y: -60,            // where it starts; negative: from the right or bottom edge
+  render(ui) { ui.image("art/pet.svg", { width: 96 }) },
+  onClick() { xc.playSound("sounds/boop.wav") },
+});
+```
+
+Floats over the whole editor. People can drag it (`draggable: false` stops that). `frame: true` puts it on a card. Drawn again after a click, a timer or an event, and at least once a second. Example: [Desk Pet](https://github.com/XCraftTM/XC-Circuit/tree/main/examples/plugins/desk-pet).
+
+### xc.on
+
+| Event | When | `fn` gets |
+| --- | --- | --- |
+| `"save"` | the project was saved | — |
+| `"selection"` | other blocks were selected | `{ workspace, blocks }` |
+| `"botEvent"` | the bot (run from the editor) did something | `{ type: "started" }`, `{ type: "stopped" }`, `{ type: "log", level, text }`, `{ type: "block", workspace, block, phase, ms, error }` |
+
+Block events come for every block that runs: keep that handler quick.
+
+### Timers
+
+```js
+const id = xc.every(500, () => { … });   // every half second (at least 50 ms)
+xc.after(2000, () => xc.cancel(id));      // once, two seconds later
+```
+
+They also work at the top of the script. A timer that throws is stopped and the error logged.
+
+### Sounds
+
+```js
+xc.playSound("sounds/ding.wav", { volume: 0.5 });
+```
+
+WAV, MP3 or Ogg Vorbis from the plugin's folder. Nothing plays (and nothing fails) without an audio device.
+
+### xc.tool
+
+Something AI agents such as Claude can do in XC Circuit, through its [MCP server](/explanations/ai-agents). `input` is a JSON Schema for the arguments; `run(args)` returns the answer: text, or any value (the agent gets it as JSON). Throwing an error tells the agent what went wrong. A tool may take 5 seconds.
+
+```js
+xc.tool({
+  name: "count_blocks",
+  description: "How many blocks each workspace has.",
+  input: { type: "object", properties: {} },
+  run() {
+    return xc.workspaces().map((w) => ({ workspace: w.name, blocks: Object.keys(xc.workspace(w.key).nodes).length }));
+  },
+});
+```
+
+The tools of every plugin that is on are offered together; the bundled AI agents plugin has the usual ones. `xc.agents` (`clients()`, `install(id)`, `remove(id)`, `snippet()`, `link()`) is what its panel uses to add the server to AI clients.
+
+## Good to know
+
+**Sandbox.** Scripts run in their own JavaScript engine (QuickJS) and only reach the app through `xc`: no files, no network, no programs. That's why they load without asking you first.
+
+**Time limits.** A render, check or event may take 100 ms; a command, click or save 1 s. Longer, and it's stopped with an error. Memory: 32 MB per plugin.
+
+**Errors** name the file and line: in the Console for commands and events, in the Problems panel for checks, in the panel itself for panels.
+
+**Modules.** `require("./lib/util.js")` loads another file of the plugin (`.js`, `.ts`, `.json`). Only the plugin's own files.
+
+**State.** Variables at the top of the script live until the script reloads. Use `xc.storage` for what should last, `xc.data` for what belongs to the project. Keys in `xc.data` are shared, so prefix yours: `"acme.notes"`.
+
+**Not while loading.** The top of the script registers things (and may start timers). The project is only reachable inside the functions you register.
+
+Bigger example: DemoBot's `plugins/demo.custom/editor.js` (panel, command, check).
+
+
+---
+
+<!-- docs/api/panels.md · https://xcrafttm.github.io/XC-Circuit/api/panels -->
+
+# Panels (ui)
+
+::: info In short
+`render(ui)` of a [panel](./editor#xc-panel) or [overlay](./editor#xc-overlay) lists what to show, top to bottom: `ui.heading("…")`, `ui.button("…", onClick)`… XC Circuit draws it with the same UI kit as the rest of the app (its buttons, switches, dropdowns, numbers and colours, in the theme in use) and calls `render` again when something changes.
+:::
+
+A panel's `render(ui)` describes what it shows by calling `ui` methods in order. XC Circuit draws the result with the app's own look and theme.
+
+```js
+xc.panel({
+  id: "stats",
+  title: "Stats",
+  render(ui) {
+    ui.heading("Project");
+    ui.row((ui) => {
+      ui.stat("workspaces", xc.workspaces().length);
+      ui.stat("blocks", xc.blocks().length);
+    });
+    ui.section("Actions", (ui) => {
+      ui.button("Save", () => xc.run("file.save"), { primary: true });
+    });
+  },
+});
+```
+
+## How panels update
+
+- `render` runs when the panel is drawn: when it's opened, after a click or a change in it, and at most four times a second otherwise (about once a second while nothing else happens).
+- Handlers (the functions given to buttons, links, check boxes and inputs) run when the person uses that element; the panel is drawn again right after.
+- Panels are **controlled**: an input shows the value `render` gives it. Store what the person types (in a variable, `xc.storage` or `xc.data`) and give it back on the next render, or it will be undone.
+
+## Elements
+
+Every method returns `ui`, so calls can be chained.
+
+### Text
+
+| Method | Shows |
+| --- | --- |
+| `ui.heading(text)` | A bold title. |
+| `ui.text(text, options?)` | A paragraph; wraps. |
+| `ui.muted(text)` | Grey text, for hints. |
+| `ui.stat(label, value)` | A big value with a small label under it. Put several in a `row`. |
+
+`ui.text` options:
+
+| Option | Description |
+| --- | --- |
+| `muted` | grey |
+| `bold` | strong |
+| `mono` | monospaced |
+| `size` | font size in points (default 12.5) |
+| `color` | `"accent"`, `"success"`, `"warning"`, `"error"`, `"muted"` or `"#RRGGBB"` |
+
+### Controls
+
+| Method | Shows |
+| --- | --- |
+| `ui.button(label, onClick, options?)` | A button. Options: `primary` (filled with the accent), `tooltip`. Without `onClick` it's disabled. |
+| `ui.link(label, onClick, options?)` | A link-style button. Options: `tooltip`. |
+| `ui.checkbox(label, checked, onChange)` | A check box. `onChange(checked)`. |
+| `ui.toggle(label, on, onChange)` | A switch, like the app's settings. `onChange(on)`. |
+| `ui.select(value, choices, onChange, options?)` | A dropdown. `choices`: `{ value: "Label" }` or `[["value", "Label"], …]` (or plain values). `onChange(value)`. Options: `width` (default 200). |
+| `ui.number(value, onChange, options?)` | A number to type or drag. `onChange(number)`. Options: `min`, `max`, `step`, `suffix` (`" px"`). |
+| `ui.slider(value, min, max, onChange, options?)` | A slider with its number beside it. `onChange(number)`. Options: `step`, `suffix`. |
+| `ui.color(value, onChange)` | A colour with the app's picker. `value` and `onChange(value)` as `"#RRGGBB"`. |
+| `ui.note(text, options?)` | A box of text. Options: `tone` (`"info"`, `"warning"` or `"success"`), `title`. |
+| `ui.input(value, onChange, options?)` | A text box. `onChange(text)` on every change. Options: `placeholder`, `multiline` (a box of several lines), `key` (keeps the text box's focus when the panel's layout around it changes). |
+| `ui.progress(fraction, label?)` | A progress bar, `fraction` from 0 to 1. |
+| `ui.image(file, options?)` | A picture from the plugin's folder (PNG, JPEG or SVG). Options: `width`, `height` (default 64), `tint` (a colour, as for text). |
+
+### Layout
+
+| Method | Shows |
+| --- | --- |
+| `ui.row(fn)` | What `fn(ui)` adds, side by side (wrapping when narrow). |
+| `ui.section(title, fn, options?)` | A section with a title that folds open and closed. Options: `open: false` starts it closed. |
+| `ui.separator()` | A line. |
+| `ui.space(points = 8)` | Empty space. |
+
+`row` and `section` get their own `ui`; use it for what goes inside:
+
+```js
+ui.section("Workspaces", (ui) => {
+  for (const w of xc.workspaces()) {
+    ui.row((ui) => {
+      ui.text(w.name, { bold: w.key === xc.activeWorkspace() });
+      ui.link("Open", () => xc.reveal(w.key, Object.keys(xc.workspace(w.key).nodes)[0]));
+    });
+  }
+});
+```
+
+## Errors
+
+If `render` throws, the panel shows the error with its file and line, above what it showed last. Fix the script and save it: the plugin reloads by itself.
+
+
+---
+
+<!-- docs/api/plugin-toml.md · https://xcrafttm.github.io/XC-Circuit/api/plugin-toml -->
+
+# plugin.toml
+
+::: info In short
+The file that makes a folder a plugin: its `id`, `name` and `version`, and what it adds (`[contributes]`, `[editor]`).
+:::
+
+Every plugin folder has a `plugin.toml` at its top. It says what the plugin is and what it contributes.
+
+```toml
+id          = "acme.tools"
+name        = "Acme Tools"
+version     = "1.2.0"
+author      = "Acme"
+description = "Blocks and a panel for Acme bots."
+icon        = "icons/acme.svg"
+
+[engines]
+circuit = "^1.0"
+
+[dependencies]
+"xc.core" = "^1.0"
+
+[contributes]
+blocks  = ["blocks/**/*.{js,ts}"]
+themes  = ["themes/*.toml"]
+locales = ["locales/*.toml"]
+
+[editor]
+script = "editor.js"
+```
+
+## Top level
+
+| Key | Type | Description |
+| --- | --- | --- |
+| `id` | text | **Required.** Unique, lowercase, dotted: `you.plugin`. Block ids usually start with it. |
+| `name` | text | **Required.** Shown in the Plugins view and the manager. |
+| `version` | text | The plugin's version, `major.minor.patch`. |
+| `author` | text | Who made it. |
+| `description` | text | One or two sentences, shown under the name. |
+| `icon` | path | An SVG or PNG in the plugin folder. |
+| `optional` | true / false | For plugins that come with the app: it can be turned off and removed (and added back), unlike the others. |
+| `overrides` | list of block ids | Blocks of other plugins this plugin may replace with blocks of the same id. Without it, a second block with an id that exists is refused. |
+
+## `[engines]`
+
+| Key | Description |
+| --- | --- |
+| `circuit` | The plugin API versions the plugin works with: `"^1.0"`, `"1.x"` or `">=1.0"`. Plugins for another major version aren't loaded. Missing means any. |
+| `app` | The oldest XC Circuit version the plugin works with: `"0.2.0"`. Older apps don't load it (and don't download it as a block update). Set it when the plugin's blocks need something only newer apps have. Missing means any. |
+
+When the same plugin (by `id`) is in two folders, the one with the higher `version` loads.
+
+## `[dependencies]`
+
+Other plugins this one needs, by id, with a version range: `"xc.core" = "^1.0"`. They are loaded first; a plugin whose dependencies are missing isn't loaded, and the Problems panel says why.
+
+These are **plugins**. npm packages for the bot go in a block's [`requires.dependencies`](./blocks#requires) or a build mode's [`[dependencies]`](./build-modes#dependencies).
+
+## `[contributes]`
+
+Each entry is a list of paths or glob patterns relative to the plugin folder. `**` matches any folders, `{a,b}` either word.
+
+| Key | Contributes | Reference |
+| --- | --- | --- |
+| `blocks` | block files | [Blocks](./blocks) |
+| `buildModes` | build modes | [Build modes](./build-modes) |
+| `pinTypes` | pin types | [Pin types](./pin-types) |
+| `classes` | class catalogs: the members of the values behind pin types, for completion in `${…}` | [Pin types](./pin-types#class-catalogs) |
+| `themes` | themes | [Themes](./themes) |
+| `locales` | translations | [Translations](./locales) |
+| `botSettings` | pages and settings for Bot › Settings | [Plugin settings](./build-modes#plugin-settings) |
+| `icons` | icons, by file name without extension (`icons/rocket.svg` is `rocket`) | — |
+
+Runtime libraries are named by the build mode that uses them ([`runtimeLibs`](./build-modes#keys)), and templates are found in the plugin's `templates/` folder without being listed.
+
+## `[editor]`
+
+| Key | Description |
+| --- | --- |
+| `script` | The editor script, relative to the plugin folder: `editor.js` or `editor.ts`. Default `editor.js`. See [Editor plugins](./editor). |
+
+A `[native]` section (a compiled Rust library) is no longer loaded: XC Circuit runs editor code written in JavaScript only. Such a plugin's blocks and settings still load, and the Plugins view says its native part isn't supported.
+
+## Where plugins are loaded from
+
+The app's `plugins/` folder, your plugins folder (`%APPDATA%\XC Circuit\plugins` or `~/.local/share/xc-circuit/plugins`), the folders in `XC_CIRCUIT_PLUGINS` (separated like `PATH`), and the open project's `plugins/` folder. Plugin files are watched and reload when saved.
+
+
+---
+
+<!-- docs/api/build-modes.md · https://xcrafttm.github.io/XC-Circuit/api/build-modes -->
+
+# Build modes
+
+::: info In short
+A build mode is a kind of bot (Discord Bot, Fluxer Bot): which blocks it offers, the picker's categories, the settings in Bot › Settings and the npm packages it needs.
+:::
+
+A build mode is a kind of bot: *Discord Bot*, *Fluxer Bot*. It decides which blocks the picker offers and how they're sorted, which settings Bot › Settings asks for, which npm packages the bot needs, and which [runtime libraries](./runtime-libs) set the bot up. Modes are TOML files listed in a plugin's `contributes.buildModes`.
+
+```toml
+id          = "fluxer-bot"
+name        = "Fluxer Bot"
+icon        = "message"
+description = "A bot for Fluxer, built with fluxer.js."
+
+blocks      = ["xc.core/*", "xc.fluxer/*"]
+runtime     = "node"
+runtimeLibs = ["xc.fluxer/runtime/fluxer.js"]
+exporter    = "xc.fluxer/node-bundle"
+tokenEnv    = "FLUXER_BOT_TOKEN"
+
+[[categories]]
+id = "send"
+name = "Send Messages"
+icon = "send"
+
+[[pages]]
+id = "connection"
+name = "Connection"
+icon = "plug"
+description = "How your bot logs in to Fluxer."
+order = 10
+
+[settings]
+token  = { type = "secret", group = "Connection", label = "Bot token", required = true }
+prefix = { type = "text", group = "Messages", label = "Text command prefix", default = "!", pattern = '\S{1,5}', patternHint = "1 to 5 characters, without spaces." }
+
+[dependencies]
+"@fluxerjs/core" = "^3.3.0"
+```
+
+## Keys
+
+| Key | Description |
+| --- | --- |
+| `id` | **Required.** Unique id, saved in projects' `circuit.json` as `mode`. |
+| `name` | Shown in File › New Project. |
+| `icon` | An icon name. |
+| `description` | One sentence, shown in File › New Project. |
+| `blocks` | Which blocks appear: `"plugin.id/*"` for all blocks of a plugin. |
+| `runtime` | `"node"`. |
+| `runtimeLibs` | [Runtime libraries](./runtime-libs), as `"plugin.id/path/in/plugin.js"`. |
+| `exporter` | How Bot › Export packages the bot (`"<plugin>/node-bundle"`: a Node.js folder). |
+| `tokenEnv` | The environment variable an exported bot reads its token from. Default `DISCORD_TOKEN`. |
+| `features` | What the mode's projects have. `"slashCommands"` shows the Slash Command Builder. |
+
+## categories
+
+The block picker's categories, in order. Blocks name one in [`search.category`](./blocks#search).
+
+| Key | Description |
+| --- | --- |
+| `id` | What blocks refer to. |
+| `name` | Shown in the picker (translatable). |
+| `icon` | An icon name. |
+
+The Discord mode's categories: `bot`, `commands`, `components`, `send`, `messages`, `design`, `reactions`, `members`, `moderation`, `roles`, `channels`, `server`, `voice`, `premium`, `format`, `flow`, `calls`, `time`, `variables`, `data`, `text`, `numbers`, `lists`, `web`, `code`. Fluxer's are similar, without those Fluxer doesn't have yet (slash commands, components).
+
+## pages
+
+Bot › Settings is a list of pages on the left, like the app's Settings, with the page shown on the right. A mode lists its pages here; [plugins add their own](#plugin-settings).
+
+| Key | Description |
+| --- | --- |
+| `id` | **Required.** What settings name in `page` (or match with `group`, see below). |
+| `name` | Shown in the list and as the page's title (translatable). |
+| `icon` | An icon name. |
+| `description` | One sentence under the title (translatable). |
+| `order` | Where it goes in the list: lower first. Without one it counts as 50; pages with the same order keep the order they're listed in, the mode's first. |
+
+Pages without settings aren't shown. The Discord mode's pages are `connection` (10), `slash-commands` (20), `messages` (30) and `music` (40); Bot › Settings adds **Privileged intents** last for modes that have them.
+
+## settings
+
+The fields of Bot › Settings, by key. Runtime libraries and blocks read them with `rt.setting(key)` / [`ctx.runtime.setting(key)`](./ctx#runtime), and get the `default` until another value is saved.
+
+| Key | Description |
+| --- | --- |
+| `type` | `"text"` (the default), `"secret"`, `"select"`, `"boolean"`, `"number"`, or one of the [elements](#elements) below. A secret is kept in the credential store, never in the project, and read with `rt.secret(key)`; the key `token` is the bot token. |
+| `page` | The `id` of the page it's on. |
+| `group` | With `page`: a heading on the page. Without `page`: the page itself, the one whose `id` is the group's name in lower case with dashes (`Slash commands` is `slash-commands`); a page is made for it when there's none. Without both, the setting is on *General*. |
+| `label` | Its name. |
+| `description` | Help under it. |
+| `placeholder` | Grey hint in the empty box. |
+| `default` | The value until one is set. |
+| `required` | Marked with * in Bot › Settings. |
+| `pattern` | A regular expression the value must match; checked as you type. |
+| `patternHint` | What to say when it doesn't. |
+| `sensitive` | `true` hides a text setting behind the eye button, like a secret. |
+| `choices` | For `select`: the values and what the list shows, `{ json = "JSON file", sqlite = "SQLite" }`, in that order. |
+| `min`, `max` | For `number` and `slider`: the smallest and largest value. |
+
+Texts, secrets and numbers are boxes with the name above them; switches (`boolean`) and lists (`select`) sit on the right of their name. A page whose required setting has no value shows how many in the list; one with a value that doesn't fit shows that in red, and Save waits until it's fixed. An unchanged default isn't written into the project.
+
+Secrets other than the token reach an exported bot through `.env` as `XC_SECRET_<KEY>` (`XC_SECRET_SPOTIFYCLIENTSECRET`).
+
+### Elements
+
+Besides texts, secrets, choices, switches and numbers, a page can hold these. XC Circuit draws them with its UI kit, the same buttons, fields, sliders and colours its own pages use, so a plugin's page looks and behaves like the rest of the app, in every theme.
+
+| `type` | What it is | Its own keys | The value a bot gets |
+| --- | --- | --- | --- |
+| `textarea` | Several lines of text | `rows` (2 to 20, default 4) | Text |
+| `color` | A colour picker | — | `"#RRGGBB"` |
+| `slider` | A slider with the number beside it | `min` (0), `max` (100), `step`, `suffix` (`" XP"`) | A number |
+| `list` | A list of texts, with + Add and a remove button on each | `placeholder` for each | A list of texts, `[]` when empty |
+| `path` | A file (or, with `pick = "folder"`, a folder) on this computer, with Browse… | `pick` | Text |
+| `note` | A box of text, no value | `tone`: `"info"` (default), `"warning"` or `"success"`; `label` is its title (optional) | — |
+| `link` | A button that opens a web page, no value | `url` (`https://` only), `button` (default *Open*) | — |
+
+```toml
+[settings]
+lvlAbout  = { type = "note", page = "levels", description = "Members earn XP for each message." }
+lvlXp     = { type = "slider", page = "levels", label = "XP for a level", min = 50, max = 1000, step = 50, default = 100, suffix = " XP" }
+lvlColor  = { type = "color", page = "levels", label = "Rank card colour", default = "#00D8F0" }
+lvlText   = { type = "textarea", page = "levels", label = "Level-up message", rows = 3, default = "GG ${user}!" }
+lvlNoXp   = { type = "list", page = "levels", label = "Channels without XP", placeholder = "Channel id", default = [] }
+lvlImage  = { type = "path", page = "levels", label = "Card background" }
+lvlDocs   = { type = "link", page = "levels", label = "How levels work", url = "https://example.com/levels", button = "Read" }
+```
+
+The DemoBot example has a page like this: `plugins/demo.custom/settings/levels.toml`.
+
+## Plugin settings
+
+Any plugin can add pages and settings to Bot › Settings, without a build mode of its own: list TOML files in [`contributes.botSettings`](./plugin-toml#contributes). A file has the same `[[pages]]` and `[settings]` as a mode, and `modes` to show them only for some build modes:
+
+```toml
+# plugins/my.database/settings.toml
+modes = ["discord-bot", "fluxer-bot"]   # leave out for every mode
+
+[[pages]]
+id = "databases"
+name = "Databases"
+icon = "database"
+description = "Where your bot keeps its data."
+order = 25
+
+[settings]
+dbKind     = { type = "select", page = "databases", group = "Connection", label = "Kind", choices = { mariadb = "MariaDB / MySQL", postgres = "PostgreSQL" }, default = "mariadb" }
+dbHost     = { page = "databases", group = "Connection", label = "Host", placeholder = "localhost" }
+dbPort     = { type = "number", page = "databases", group = "Connection", label = "Port", default = 3306, min = 1, max = 65535 }
+dbPassword = { type = "secret", page = "databases", group = "Connection", label = "Password" }
+dbLog      = { type = "boolean", page = "databases", group = "Debugging", label = "Log every query", default = false }
+```
+
+Setting keys are shared by the mode and every plugin: one that's taken already isn't shown, and the Problems panel says so. Start yours with something of your own (`dbHost`, `myPluginKey`). Secrets reach a running bot and an exported one's `.env` like the mode's.
+
+## dependencies
+
+npm packages the runtime libraries need, installed before Run and listed in an export's `package.json`. Blocks add their own with [`requires.dependencies`](./blocks#requires).
+
+
+---
+
+<!-- docs/api/runtime-libs.md · https://xcrafttm.github.io/XC-Circuit/api/runtime-libs -->
+
+# Runtime libraries
+
+::: info In short
+Code a build mode runs when the bot starts: it creates the client, logs in, and gives the blocks a shared API (`ctx.discord`, `ctx.fluxer`).
+:::
+
+A runtime library is code a build mode runs when the bot starts: it creates the client (discord.js, fluxer.js), logs in, and gives the mode's blocks a shared API. A mode names its libraries in [`runtimeLibs`](./build-modes#keys).
+
+```js
+// plugins/acme.chat/runtime/chat.js
+module.exports = {
+  id: "chat",                         // blocks get the API as ctx.chat
+
+  setup(rt) {
+    const { Client } = rt.require("acme-chat");
+    const client = new Client();
+    client.on("error", (e) => rt.log.error(`Chat: ${e.message}`));
+    return { client, prefix: () => rt.setting("prefix") || "!" };
+  },
+
+  async start(rt, api) {
+    const token = rt.secret("token");
+    if (!token) throw new Error("No bot token set. Add it in Bot › Settings.");
+    api.client.once("ready", () => rt.log.success(`Logged in as ${api.client.user.name}`));
+    await api.client.login(token);
+  },
+};
+```
+
+## When they run
+
+1. **`setup(rt)`** for each library, in order. What it returns becomes `ctx[id]` for every block.
+2. Blocks' own `setup(ctx)`.
+3. Event blocks' [`listen(ctx, emit)`](./blocks#listen): they subscribe to the client now, before it connects.
+4. **`start(rt, api)`** for each library: connect and log in. A thrown error is shown in the Console.
+5. [`ctx.runtime.onStart`](./ctx#runtime) handlers.
+
+## rt
+
+| Member | Description |
+| --- | --- |
+| `rt.require(name)` | Loads an npm package (list it in the mode's [`[dependencies]`](./build-modes#dependencies)). |
+| `rt.setting(key)` | A setting of Bot › Settings. |
+| `rt.secret(key)` | A secret setting: from the credential store when run from the editor, from `.env` in an exported bot. `rt.secret("token")` is the bot token. |
+| `rt.log.info/success/warn/error/debug(...)` | Writes to the Console. |
+| `rt.intents()` | The Discord intents the blocks in the project need (their `requires.intents`). |
+
+Look at `plugins/xc.discord/runtime/discord.js` and `plugins/xc.fluxer/runtime/fluxer.js` for complete libraries.
+
+
+---
+
+<!-- docs/api/pin-types.md · https://xcrafttm.github.io/XC-Circuit/api/pin-types -->
+
+# Pin types
+
+::: info In short
+Types of values on wires (`discord.member`, `fluxer.message`…): their name, colour, how to check a value, and what they convert to.
+:::
+
+Pin types are the types of values that go through wires besides the basic ones (`text`, `number`, `boolean`, `date`, `object`, `list<…>`, `any`). They're TOML files listed in a plugin's `contributes.pinTypes`, each with one `[[type]]` table per type.
+
+```toml
+[[type]]
+id = "discord.member"
+name = "Member"
+extends = "object"
+color = "#6C7BFF"
+icon = "user"
+check = "v => v?.constructor?.name === 'GuildMember'"
+description = "A person inside one server, with roles and a nickname."
+
+[[type.converts]]
+to = "discord.user"
+via = "v => v.user"
+```
+
+## Keys
+
+| Key | Description |
+| --- | --- |
+| `id` | **Required.** `plugin.name`, used in [type strings](./fields#type-strings). |
+| `name` | Shown on pins and in tooltips. |
+| `extends` | The type this one fits into, usually `object`. A `discord.member` pin can connect where an `object` is expected. |
+| `color` | The colour of its pins and wires. Themes can change it. |
+| `icon` | An icon name. |
+| `check` | A JavaScript function (as text) that tells whether a value is of this type. The runtime uses it to recognise values to [convert](#conversions). |
+| `description` | What the type is, for tooltips. |
+
+## Conversions
+
+`[[type.converts]]` lets a value of this type go where another type is needed. `via` is a JavaScript function (as text) that turns the value into the other type when the block runs.
+
+```toml
+[[type.converts]]
+to = "discord.user"
+via = "v => v.user"
+```
+
+Now a Member output connects to a User input, and the block gets the member's user. The runtime converts a wired value when it passes this type's `check`, so a type needs `check` for its conversions to work. Lists are converted item by item; inputs of type `any` get the value as it is.
+
+## Class catalogs
+
+A class catalog tells the editor what members the values behind pin types have, for completion inside `${…}` (`${member.roles.highest.name}`). It's a JSON file listed in `contributes.classes`:
+
+```json
+{
+  "source": "discord.js 14.28.0",
+  "roots": { "discord.user": "User", "discord.member": "GuildMember" },
+  "classes": {
+    "User": {
+      "members": [
+        { "name": "username", "kind": "property", "type": "Text" },
+        { "name": "avatar", "kind": "property", "type": "Text", "optional": true },
+        { "name": "displayAvatarURL", "kind": "method", "type": "Text", "doc": "The avatar's address." }
+      ]
+    }
+  }
+}
+```
+
+| Key | Description |
+| --- | --- |
+| `source` | What it was made from. |
+| `roots` | The class behind each pin type. |
+| `classes` | Classes by name, each with `members`. |
+| member `name` | The property or method name. |
+| member `kind` | `property`, `getter` or `method`. |
+| member `type` | How its type is shown: `Text`, `Number`, `Yes/no`, `Date` or a class name. |
+| member `optional` | It can be empty. |
+| member `class` | The class of its value, when that has members of its own (completion goes on after the next `.`). |
+| member `doc` | A short description. |
+
+The Discord plugin makes its catalog from discord.js's type definitions with `node plugins/xc.discord/tools/discordjs-catalog.js`; only methods that read are listed.
+
+
+---
+
+<!-- docs/api/themes.md · https://xcrafttm.github.io/XC-Circuit/api/themes -->
+
+# Themes
+
+::: info In short
+A TOML file with colours (and a few shapes) for the editor. Picked in Settings › Appearance.
+:::
+
+A theme sets the editor's colours and a few shapes. Themes are TOML files listed in a plugin's `contributes.themes`, and are picked in Settings › Appearance. The accent colour can also be changed there, on top of any theme.
+
+```toml
+id   = "midnight"
+name = "Midnight"
+base = "dark"
+
+[colors]
+frame       = "#0A0D10"
+panel       = "#11161B"
+canvas      = "#0D1115"
+canvasDots  = "#00D8F014"
+node        = "#18212A"
+text        = "#E4F1F4"
+accent      = "#00E5FF"
+action      = "#3DFF6E"
+
+[pinColors]
+text = "#F5C451"
+"discord.member" = "#8A7BFF"
+
+[shape]
+nodeRadius = 9
+wireWidth  = 2.6
+
+[motion]
+speed = 1.0
+```
+
+## Keys
+
+| Key | Description |
+| --- | --- |
+| `id` | **Required.** Unique id. |
+| `name` | Shown in Settings. |
+| `base` | `"dark"` or `"light"`: the defaults for colours the theme doesn't set. |
+
+## colors
+
+Colours are `#RRGGBB` or `#RRGGBBAA`. Any you leave out come from `base`.
+
+| Key | Used for |
+| --- | --- |
+| `frame` | the window frame and title bar |
+| `panel` | panels and side bars |
+| `panelHeader` | panel headers and tab bars |
+| `canvas` | the canvas background |
+| `canvasDots` | the dot grid on the canvas |
+| `node` | block bodies |
+| `nodeHeader` | block title bars |
+| `nodeBorder` | block outlines |
+| `field` | text boxes and fields |
+| `line` | separators |
+| `text` | text |
+| `textMuted` | secondary text |
+| `accent` | selection, links, highlights |
+| `action` | action wires and the Run button |
+| `statusBar` | the status bar |
+| `statusText` | text in the status bar |
+| `error` | errors |
+| `warning` | warnings |
+
+## pinColors
+
+Pin and wire colours by type id: the basic types `text`, `number`, `boolean`, `date`, `any`, `object`, `list`, and any [pin type](./pin-types) such as `discord.member`.
+
+## shape
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `nodeRadius` | `9` | Corner radius of blocks. |
+| `wireWidth` | `2.6` | Width of wires. |
+
+## motion
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `speed` | `1.0` | Speed of animations; `0` turns them off. |
+
+Circuit Core's themes (`plugins/xc.core/themes/`) are good starting points.
+
+
+---
+
+<!-- docs/api/locales.md · https://xcrafttm.github.io/XC-Circuit/api/locales -->
+
+# Translations
+
+::: info In short
+A TOML file per language: the app's English texts and their translations.
+:::
+
+A translation is a TOML file per language in a plugin, listed in `contributes.locales`. It translates the interface by its English texts. Blocks are not translated. See the [tutorial](/tutorials/translate) for how to start one from the app.
+
+```toml
+[meta]
+code = "de"
+name = "Deutsch"           # the language's own name, shown in the picker
+english_name = "German"
+
+[strings]
+"Save and close" = "Speichern und schließen"
+"{count} to fix" = "{count} zu beheben"
+"Run" = ""                 # empty: shown in English
+```
+
+## meta
+
+| Key | Description |
+| --- | --- |
+| `code` | The language code: `de`, `fr`, `pt-BR`. |
+| `name` | The language's name in itself. |
+| `english_name` | Its name in English. |
+
+## strings
+
+Each key is an English text exactly as the app shows it; each value its translation.
+
+- Keep `{placeholders}` such as `{count}` or `{name}`: the app fills them in. You may move them.
+- Empty values fall back to English.
+- Several plugins can add to the same language. The app's own texts are in Circuit Core's file; each build mode translates its own category names and settings in its plugin.
+
+Settings › Appearance › *Create a translation…* writes a file with every text of the app to fill in. Files reload when saved.
+
+
+---
+
+<!-- docs/api/templates.md · https://xcrafttm.github.io/XC-Circuit/api/templates -->
+
+# Templates
+
+::: info In short
+Finished bots in a plugin's `templates/` folder, offered under *Start from* in File › New Project.
+:::
+
+Templates are the starters File › New Project offers: working bots people begin from. A plugin adds them by putting project folders into its `templates/` folder; they don't need to be listed in `plugin.toml`.
+
+```
+acme.chat/
+└─ templates/
+   └─ basics/
+      ├─ template.json
+      ├─ circuit.json
+      └─ workspaces/
+         ├─ ping.json
+         └─ help.json
+```
+
+Each template is an ordinary [project](./project-format) with a `template.json`:
+
+```json
+{
+  "name": "Basic commands",
+  "description": "!ping shows how fast the bot answers, !help lists the commands.",
+  "mode": "fluxer-bot"
+}
+```
+
+| Key | Description |
+| --- | --- |
+| `name` | Shown in the list of starters. |
+| `description` | One or two sentences: what the bot does and what to set up. |
+| `mode` | The [build mode](./build-modes) it's for. Default: the `mode` in its `circuit.json`. New Project only offers it for that mode. |
+
+Creating a project from a template copies its `circuit.json` and workspaces (other files, such as a `plugins/` folder, are not copied), gives it the name typed in New Project, and adds a `.gitignore` for `.circuit/`. The app's own starters are in `examples/templates/`.
+
+Tips:
+
+- Say in the description what has to be filled in (a role id, a channel).
+- Keep templates small and readable: people learn from them.
+
+
+---
+
+<!-- docs/api/project-format.md · https://xcrafttm.github.io/XC-Circuit/api/project-format -->
+
+# Project format
+
+::: info In short
+A project is a folder: `circuit.json` (name, mode, settings, slash commands) and `workspaces/*.json` (one per canvas: blocks, wires, Try Zones, notes).
+:::
+
+A project is a folder. All files are JSON, written with stable key order and indentation so they diff well in Git.
+
+```
+My Bot/
+├─ circuit.json
+├─ workspaces/
+│  └─ <key>.json
+├─ plugins/          optional: project plugins
+└─ .circuit/         the editor's local state, run folder and bot data (leave out of Git)
+```
+
+## circuit.json
+
+```json
+{
+  "format": 1,
+  "name": "DemoBot",
+  "mode": "discord-bot",
+  "plugins": { "xc.core": "1.0.0", "xc.discord": "1.0.0" },
+  "settings": { "prefix": "!" },
+  "data": { "slashCommands": [] },
+  "folders": ["Commands", "Events"]
+}
+```
+
+| Key | Description |
+| --- | --- |
+| `format` | The file format version, `1`. |
+| `name` | The bot's name. |
+| `mode` | The [build mode](./build-modes) id. |
+| `plugins` | Plugins the project uses, with the versions it was saved with. |
+| `settings` | Bot › Settings values, without secrets. |
+| `data` | Project-wide data: `slashCommands` (the Slash Command Builder's), and anything [editor plugins](./editor#changing-the-project) keep. |
+| `folders` | Workspace folders in the order of the Workspaces panel. |
+
+## Workspaces
+
+Each file in `workspaces/` is one workspace; its file name without `.json` is its **key**.
+
+```json
+{
+  "name": "Startup",
+  "folder": "Events",
+  "nodes": {
+    "1": { "block": "core.on_start@1", "at": [40, 60] },
+    "2": {
+      "block": "core.increase_stored@1",
+      "at": [340, 60],
+      "values": { "scope": "global", "key": "starts", "by": 1 }
+    },
+    "3": {
+      "block": "core.log@1",
+      "at": [660, 60],
+      "values": { "message": "Started ${value} times", "level": "success" }
+    }
+  },
+  "links": ["1.next > 2.in", "2.next > 3.in", "2.value > 3.value"]
+}
+```
+
+| Key | Description |
+| --- | --- |
+| `name` | Shown in the Workspaces panel. |
+| `folder` | The folder it's listed in. |
+| `nodes` | Blocks by id (the number shown in their title bar). |
+| `links` | Wires. |
+| `zones` | Try Zones by id. |
+| `notes` | Notes on the canvas, by id. [Below](#notes). |
+| `disabled` | `true`: the workspace is turned off and left out when the bot runs or is exported. Missing: it is on. |
+
+### Nodes
+
+| Key | Description |
+| --- | --- |
+| `block` | The block id and its major version: `discord.send_message@3`. |
+| `at` | Position on the canvas `[x, y]`. |
+| `values` | Field values by key. Missing fields have their default. |
+| `pins` | Fields switched to pins. |
+| `zone` | The Try Zone the block is in. |
+| `heights` | Heights of resized text boxes, by field. |
+| `width` | The block's width, when resized. |
+
+### Links
+
+A link is `"from > to"`, each side `node.pin`:
+
+- `"1.next > 2.in"`: an action wire from block 1's `next` output (or one of its `flows`) to block 2's action input `in`.
+- `"2.value > 3.value"`: a value wire from block 2's output `value` to block 3's input `value` (a field or a `${…}` name).
+- A Try Zone's outputs are wired from the zone id: `"z1.done > 5.in"`, `"z1.error > 6.in"`, `"z1.message > 6.message"`.
+
+### Zones
+
+```json
+"zones": { "z1": { "title": "Reply", "rect": [740, 40, 380, 260], "retry": 2, "timeoutMs": 5000 } }
+```
+
+| Key | Description |
+| --- | --- |
+| `title` | Shown on the zone. |
+| `rect` | `[x, y, width, height]`, worked out from its blocks. |
+| `retry` | How many times to try again. |
+| `timeoutMs` | Give up after this many milliseconds. |
+
+### Notes
+
+```json
+"notes": { "n1": { "title": "Rank reply", "text": "Builds the embed and replies.", "rect": [0, -80, 1100, 620], "color": "#F5C451" } }
+```
+
+| Key | Description |
+| --- | --- |
+| `title` | Shown in the note's title band. |
+| `text` | The description, under the title. |
+| `rect` | `[x, y, width, height]` on the canvas. |
+| `color` | `#RRGGBB`; missing: the theme's accent. |
+| `loose` | `true`: dragging the note leaves the blocks inside where they are (new notes have this). Missing: they move with it. |
+
+Notes don't run: they only explain and group blocks in the editor.

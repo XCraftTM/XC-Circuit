@@ -63,6 +63,11 @@ jobs:
         if: matrix.os == 'ubuntu-22.04'
         run: python tools/plugin_updates.py check
 
+      # AGENTS.md points AI agents to every docs page in one file.
+      - name: Docs for AI agents
+        if: matrix.os == 'ubuntu-22.04'
+        run: python tools/agent_docs.py check
+
       - name: Runtime tests
         shell: bash
         run: |
