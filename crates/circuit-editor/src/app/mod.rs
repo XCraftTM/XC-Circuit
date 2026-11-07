@@ -340,6 +340,15 @@ impl CircuitApp {
 }
 
 impl eframe::App for CircuitApp {
+    /// Whether the window has the focus, from Windows itself: without it egui
+    /// draws no text cursor, and the focus event it waits for can be missed
+    /// while the window is still hidden at startup.
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        if let Some(front) = self.reveal.is_foreground() {
+            raw_input.focused = front;
+        }
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         if let Some(mut run) = self.fps.take()

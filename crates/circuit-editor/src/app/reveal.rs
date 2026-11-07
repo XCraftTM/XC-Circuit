@@ -37,6 +37,9 @@ pub struct Reveal {
     /// still cloaked.
     #[cfg(windows)]
     hwnd: Option<isize>,
+    /// The window, for [`Reveal::is_foreground`].
+    #[cfg(windows)]
+    window: Option<isize>,
     frames: u32,
 }
 
@@ -50,6 +53,7 @@ impl Reveal {
                 Ok(RawWindowHandle::Win32(h)) => Some(h.hwnd.get()),
                 _ => None,
             };
+            let window = hwnd;
             let hwnd = hwnd.filter(|&h| cloak(h, true));
             if let Some(h) = hwnd {
                 std::thread::spawn(move || {
@@ -57,7 +61,7 @@ impl Reveal {
                     cloak(h, false);
                 });
             }
-            Reveal { hwnd, frames: 0 }
+            Reveal { hwnd, window, frames: 0 }
         }
         #[cfg(not(windows))]
         {
@@ -84,6 +88,23 @@ impl Reveal {
         }
         #[cfg(not(windows))]
         let _ = (ctx, self.frames, FRAMES);
+    }
+}
+
+impl Reveal {
+    /// Whether the window is the one in front, taking the keyboard: asked of
+    /// Windows itself (None where that isn't known). egui only draws the text
+    /// cursor while it thinks the window has the focus, and learns that from
+    /// focus events, which a window cloaked at startup can miss.
+    pub fn is_foreground(&self) -> Option<bool> {
+        #[cfg(windows)]
+        {
+            // SAFETY: no arguments; it returns the foreground window's handle, or null.
+            let front = unsafe { windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow() };
+            self.window.map(|w| front as isize == w)
+        }
+        #[cfg(not(windows))]
+        None
     }
 }
 

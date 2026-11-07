@@ -8,6 +8,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **The builders fit narrow tabs**: when there isn't room for the preview beside the form, the Embed and Layout Builders show it on top, with the values from earlier blocks at the end of the form. Slash Commands shows its Discord preview above the command's settings and starts with just the list of commands; once you pick one, the list folds into a slim bar on the left (with how many commands there are, and a dot when one needs fixing) that opens it over the form with a click. And the Canvas Builder puts the picture on top with its settings in two columns below.
 
 ### Fixed
+- **The text cursor shows in text boxes**: the app now asks Windows whether its window is in front, instead of waiting for a focus message that could be missed while the window was still hidden at startup (without it, no cursor is drawn).
 - **Blocks grow to fit their dropdowns**: a choice too long for the block (the Captcha block's "To the interaction (only they see it)", say) made the dropdown stick out over the labels; the block now gets wide enough for it.
 - **New Project remembers the folder you browse to**, right when you choose it, not only once a project is made there. And it tells you when the folder isn't there (a drive that's not connected, say) or is a file, before you press Create.
 - **Long starter names in New Project stay on one line**: a name too long for its card (in German, say) ends in … instead of running into the description below it; hover the card for the whole name.
