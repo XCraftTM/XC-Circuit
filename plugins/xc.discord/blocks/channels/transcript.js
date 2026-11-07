@@ -11,7 +11,7 @@ module.exports = {
     name: "Create Transcript",
     description: "Saves a channel's messages as an HTML file that looks like Discord, such as a ticket before it's closed. Send it with Send Message's Files, or keep it with Write File.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.0.1",
   },
   search: {
     category: "channels",
@@ -23,7 +23,8 @@ module.exports = {
   },
   requires: {
     // Pinned: a package checked by hand for this block (see the commit).
-    dependencies: { "better-discord-transcripts": "2.0.0" },
+    // sharp: makes the pictures kept in a transcript smaller (it asks for it).
+    dependencies: { "better-discord-transcripts": "2.0.0", sharp: "0.34.5" },
     intents: ["GuildMessages", "MessageContent"],
     permissions: ["ViewChannel", "ReadMessageHistory"],
   },

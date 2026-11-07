@@ -8,6 +8,8 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **An Updates window**: Help › Check for Updates now opens a window that shows whether a newer app is out and, for each bundled plugin, your version and the published one (up to date, newer, or needing a newer app). **Update blocks** gets the newer ones; **Download blocks again** downloads the published blocks again even when you have them, for when blocks seem out of date or broken. When GitHub can't be asked, the window and the Console say why, instead of "up to date (or GitHub couldn't be asked)".
 
 ### Changed
+- **Get Property: pick the property from a list, or connect it**: with a value connected whose properties are known (a Discord user, member, channel, message … or an object of a known shape), Property lists them; **Custom…** at the end shows a text box for any other, such as `guild.name`. Property can also be connected now, to choose it while the bot runs. So can the variable name of Get Variable and Set Variable.
+- **Create Transcript installs sharp**, which better-discord-transcripts asks for: pictures kept in a transcript are made smaller, and the Console no longer warns that it's missing.
 - **Errors show in full in the Console**: a block's error now comes with the rest of what the bot knows about it, each on its own line: the original message (when a clearer one is shown), the kind of error with its code, HTTP status and request, where in the code it happened, and what caused it.
 
 ### Fixed
