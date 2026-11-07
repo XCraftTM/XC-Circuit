@@ -2,16 +2,12 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## Unreleased
-
-### Fixed
-- **Older graphics cards are used again instead of software drawing**: cards too old for DirectX 12 and Vulkan, such as a Radeon HD 5000, got Windows' slow software renderer. When the app finds itself drawing in software, it now checks whether OpenGL can use the card and, if so, starts again with OpenGL, and keeps using it from then on.
-- **AI agents can't save slash commands Discord would refuse**: `set_slash_commands` now checks names the way the Slash Commands editor does (1–32 lowercase letters, numbers, - or _ per word; a space starts a subcommand) and says what's wrong instead of saving them.
-
 ## 0.1.8
 
 ### Fixed
 - **Updating from inside the app works while an AI client is connected**: Setup couldn't replace XC Circuit while an AI client (Claude, Cursor …) had its MCP server running, so it undid the update. It now moves the running copy aside and finishes. Setup also keeps a log of the update now, `setup.log` in the `xc-circuit-update` folder in your temporary files.
+- **Older graphics cards are used again instead of software drawing**: cards too old for DirectX 12 and Vulkan, such as a Radeon HD 5000, got Windows' slow software renderer. When the app finds itself drawing in software, it now checks whether OpenGL can use the card and, if so, starts again with OpenGL, and keeps using it from then on.
+- **AI agents can't save slash commands Discord would refuse**: `set_slash_commands` now checks names the way the Slash Commands editor does (1–32 lowercase letters, numbers, - or _ per word; a space starts a subcommand) and says what's wrong instead of saving them.
 
 ## 0.1.7
 
