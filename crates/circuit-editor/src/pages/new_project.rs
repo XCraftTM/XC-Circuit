@@ -21,6 +21,9 @@ pub struct NewProject {
     pub picked: usize,
     pub name: String,
     pub location: String,
+    /// A folder just chosen with Browse…, to be remembered for next time
+    /// even if this project isn't made.
+    pub browsed: Option<String>,
 }
 
 /// What the window asked for when it closed.
@@ -78,7 +81,7 @@ impl NewProject {
         let mode = reg.modes.first().map(|m| m.id.clone()).unwrap_or_default();
         // "New Project", or "New Project 2" … when that folder is taken.
         let name = (1..).map(|i| if i == 1 { "New Project".to_string() } else { format!("New Project {i}") }).find(|n| !location.join(n).exists()).expect("unbounded");
-        NewProject { mode, picked: 0, name, location: location.display().to_string() }
+        NewProject { mode, picked: 0, name, location: location.display().to_string(), browsed: None }
     }
 
     /// The folder the project goes in, or why it can't be made.
@@ -93,7 +96,11 @@ impl NewProject {
         if self.location.trim().is_empty() {
             return Err(t!("Choose where it goes.").into());
         }
-        let dir = Path::new(self.location.trim()).join(name);
+        let location = Path::new(self.location.trim());
+        if !location.is_dir() {
+            return Err(if location.exists() { t!("That's a file, not a folder.") } else { t!("That folder isn't there. Is its drive connected?") }.into());
+        }
+        let dir = location.join(name);
         if std::fs::read_dir(&dir).is_ok_and(|mut d| d.next().is_some()) {
             return Err(t!("That folder already exists and isn't empty.").into());
         }
@@ -219,6 +226,7 @@ fn form(ui: &mut Ui, theme: &Theme, state: &mut NewProject, reg: &Registry, temp
             }
             if let Some(dir) = picker.pick_folder() {
                 state.location = dir.display().to_string();
+                state.browsed = Some(state.location.clone());
             }
         }
     });
@@ -335,7 +343,7 @@ mod tests {
         std::fs::create_dir_all(dir.join("Taken")).unwrap();
         std::fs::write(dir.join("Taken").join("x.txt"), "").unwrap();
         std::fs::create_dir_all(dir.join("Empty")).unwrap();
-        let mut p = NewProject { mode: "discord-bot".into(), picked: 0, name: "My Bot".into(), location: dir.display().to_string() };
+        let mut p = NewProject { mode: "discord-bot".into(), picked: 0, name: "My Bot".into(), location: dir.display().to_string(), browsed: None };
         assert_eq!(p.target(), Ok(dir.join("My Bot")));
         p.name = "Empty".into();
         assert!(p.target().is_ok(), "an empty folder is fine");
@@ -345,6 +353,11 @@ mod tests {
             p.name = bad.into();
             assert!(p.target().is_err(), "{bad:?}");
         }
+        p.name = "My Bot".into();
+        p.location = dir.join("Missing").display().to_string();
+        assert!(p.target().is_err(), "a folder that isn't there");
+        p.location = dir.join("Taken").join("x.txt").display().to_string();
+        assert!(p.target().is_err(), "a file");
         let _ = std::fs::remove_dir_all(dir);
     }
 }

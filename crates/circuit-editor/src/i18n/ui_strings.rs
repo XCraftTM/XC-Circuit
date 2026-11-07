@@ -806,6 +806,8 @@ pub const UI_STRINGS: &[&str] = &[
     "{count} values",
     "Give the project a name.",
     "Choose where it goes.",
+    "That's a file, not a folder.",
+    "That folder isn't there. Is its drive connected?",
     "That folder already exists and isn't empty.",
     "Create",
     "More via plugins…",

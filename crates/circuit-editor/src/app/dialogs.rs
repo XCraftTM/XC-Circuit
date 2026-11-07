@@ -251,7 +251,12 @@ impl CircuitApp {
         use crate::pages::new_project::Outcome;
         let Some(mut state) = self.new_project.take() else { return };
         let templates = crate::pages::new_project::templates(self.ed.examples_dir.as_deref(), &self.ed.reg);
-        match crate::pages::new_project::show(ctx, theme, &mut state, &self.ed.reg, &templates) {
+        let outcome = crate::pages::new_project::show(ctx, theme, &mut state, &self.ed.reg, &templates);
+        // A folder chosen with Browse… is where the next project goes too.
+        if let Some(dir) = state.browsed.take() {
+            self.ed.prefs.new_project_location = Some(dir);
+        }
+        match outcome {
             None => self.new_project = Some(state),
             Some(Outcome::Cancel) => {}
             Some(Outcome::MorePlugins) => self.open_plugins(),
