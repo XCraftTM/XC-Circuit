@@ -207,8 +207,12 @@ fn level_look(level: Level, theme: &crate::ui::theme::Theme) -> (&'static str, C
         Level::Success => ("DONE ", Color32::from_rgb(0x3D, 0xDC, 0x97)),
         Level::Warn => ("WARN ", theme.warning),
         Level::Error => ("ERROR", theme.error),
+        Level::Mcp => ("MCP  ", Color32::from_rgb(0xB9, 0x8C, 0xFF)),
     }
 }
+
+/// The Console's text filter, kept while the app runs.
+const CONSOLE_FILTER_KEY: &str = "console-filter";
 
 pub fn console(ui: &mut Ui, ed: &mut Editor) {
     let theme = ed.theme.clone();
@@ -218,8 +222,11 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
         2 => Some(Level::Success),
         3 => Some(Level::Warn),
         4 => Some(Level::Error),
+        5 => Some(Level::Mcp),
         _ => None,
     });
+    let filter_key = egui::Id::unique(CONSOLE_FILTER_KEY);
+    let mut filter: String = ui.ctx().data(|d| d.get_temp(filter_key)).unwrap_or_default();
     // A toolbar row like the Stored Data panel's: Clear, then chips that show
     // one level of lines, each with how many there are.
     Frame::new().inner_margin(Margin::symmetric(12, 8)).show(ui, |ui| {
@@ -238,6 +245,9 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
                 (Some(Level::Warn), format!("{} {}", t!("Warnings"), count(Level::Warn)), theme.warning),
                 (Some(Level::Error), format!("{} {}", t!("Errors"), count(Level::Error)), theme.error),
             ];
+            // MCP: what AI agents did, shown once there is some.
+            let mcp = count(Level::Mcp);
+            let options = options.into_iter().chain((mcp > 0 || level == Some(Level::Mcp)).then(|| (Some(Level::Mcp), format!("MCP {mcp}"), level_look(Level::Mcp, &theme).1)));
             for (l, label, color) in options {
                 if crate::ui::kit::filter_chip(ui, &theme, &label, color, l == level).clicked() {
                     let n: u8 = match l {
@@ -246,12 +256,22 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
                         Some(Level::Success) => 2,
                         Some(Level::Warn) => 3,
                         Some(Level::Error) => 4,
+                        Some(Level::Mcp) => 5,
                     };
                     ui.ctx().data_mut(|d| d.insert_persisted(key, n));
                 }
             }
+            // Only lines with this text in them.
+            ui.add_space(6.0);
+            let input = ui.add(crate::ui::kit::TextLine::new(&mut filter).hint(t!("Filter…")).width(180.0).compact());
+            crate::ui::kit::describe(&input, egui::Role::SearchInput, t!("Filter the Console"));
+            if !filter.is_empty() && crate::ui::kit::link(ui, &theme, t!("Clear filter"), egui::FontId::proportional(12.0)).clicked() {
+                filter.clear();
+            }
         });
     });
+    ui.ctx().data_mut(|d| d.insert_temp(filter_key, filter.clone()));
+    let needle = filter.trim().to_lowercase();
     let mut jump: Option<(String, String)> = None;
     // One screen row per line of text (stack traces span several), all as tall
     // as the Show block button, so only the rows in view are laid out. A line
@@ -279,6 +299,7 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
         .iter()
         .enumerate()
         .filter(|(_, l)| level.is_none_or(|want| l.level == want))
+        .filter(|(_, l)| needle.is_empty() || l.text.to_lowercase().contains(&needle))
         .flat_map(|(i, l)| {
             let cols = columns(l.target.is_some());
             // Stacked, row 0 is the time and level alone; the text starts at row 1.

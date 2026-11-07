@@ -154,7 +154,7 @@ impl CircuitApp {
             None => tf!("AI agent: {tool} {given}", tool = tool, given = given),
             Some(e) => tf!("AI agent: {tool} {given} failed: {error}", tool = tool, given = given, error = e.lines().next().unwrap_or_default()),
         };
-        let mut line = crate::editor::LogLine::new(if failed.is_some() { Level::Warn } else { Level::Info }, text.trim().replace("  ", " "));
+        let mut line = crate::editor::LogLine::new(Level::Mcp, text.trim().replace("  ", " "));
         if let (Some(ws), Some(block)) = (args["workspace"].as_str(), args["block"].as_str())
             && self.ed.workspace(ws).is_some_and(|w| w.nodes.contains_key(block))
         {

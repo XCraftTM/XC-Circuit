@@ -37,6 +37,8 @@ pub enum Level {
     Success,
     Warn,
     Error,
+    /// What an AI agent did through the MCP server.
+    Mcp,
 }
 
 #[derive(Clone, Debug)]

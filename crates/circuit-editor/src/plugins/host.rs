@@ -614,6 +614,7 @@ impl api::Host for EditorHost<'_> {
                         Level::Success => "success",
                         Level::Warn => "warn",
                         Level::Error => "error",
+                        Level::Mcp => "mcp",
                     };
                     serde_json::json!({ "time": l.time, "level": level, "text": l.text, "workspace": l.target.as_ref().map(|t| &t.0), "block": l.target.as_ref().map(|t| &t.1) })
                 })
