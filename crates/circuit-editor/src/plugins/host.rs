@@ -767,7 +767,25 @@ mod tests {
         assert_eq!(after["blocks"].as_array().unwrap().len(), 1);
         assert!(ed.edited, "the changes are edits the editor saves and can undo");
         let made = host.call_tool(&mut ed, "create_workspace", &serde_json::json!({ "name": "Moderation", "folder": "Events" }), false).unwrap().unwrap();
-        assert!(ed.workspace(made["key"].as_str().unwrap()).is_some());
+        let moderation = made["key"].as_str().unwrap().to_string();
+        assert!(ed.workspace(&moderation).is_some());
+
+        // Many things in one call: a flow built and wired by a script.
+        let code = format!(
+            r#"const ws = "{moderation}";
+            const a = tools.add_block({{ workspace: ws, type: "discord.on_message" }});
+            const b = tools.add_block({{ workspace: ws, type: "core.log", after: a.id, values: {{ message: "seen" }} }});
+            print("made", a.id, b.id);
+            tools.connect({{ workspace: ws, from: a.id + ".next", to: b.id + ".in" }});
+            return xc.workspace(ws).links;"#
+        );
+        let ran = host.call_tool(&mut ed, "run_script", &serde_json::json!({ "code": code }), false).unwrap().unwrap();
+        assert_eq!(ran["result"].as_array().map(Vec::len), Some(1), "{ran}");
+        assert!(ran["output"][0].as_str().unwrap().starts_with("made "), "{ran}");
+        let stopped = host.call_tool(&mut ed, "run_script", &serde_json::json!({ "code": "print('half'); tools.connect({ workspace: 'nope', from: '1.next', to: '2.in' });" }), false).unwrap().unwrap_err();
+        assert!(stopped.contains("The script stopped: No workspace \"nope\"") && stopped.contains("half"), "{stopped}");
+        let broken = host.call_tool(&mut ed, "run_script", &serde_json::json!({ "code": "return (" }), false).unwrap().unwrap_err();
+        assert!(broken.contains("doesn't parse"), "{broken}");
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }

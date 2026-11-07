@@ -38,9 +38,16 @@ const workspaceArg = { type: "string", description: "The workspace's key or name
 const blockArg = { type: "string", description: "The block's id in the workspace (from get_workspace)." };
 const schema = (properties, required = []) => ({ type: "object", properties, required });
 
+// Every tool's run(), for run_script: tools.add_block({ … }) does what the tool does.
+const runs = {};
+function tool(def) {
+  runs[def.name] = def.run;
+  xc.tool(def);
+}
+
 // ---- Reading ----------------------------------------------------------------
 
-xc.tool({
+tool({
   name: "get_project",
   description: "The open project: its name, workspaces (key, name, folder, block count, whether turned off), how many problems it has, its slash commands and whether the bot is running. Start here.",
   input: schema({}),
@@ -56,7 +63,7 @@ xc.tool({
   },
 });
 
-xc.tool({
+tool({
   name: "get_workspace",
   description: "A workspace's blocks (id, type, name, position, values, fields made pins) and wires (\"1.next > 2.in\": block 1's flow runs block 2; \"3.result > 4.text\": a value into a field).",
   input: schema({ workspace: workspaceArg }, ["workspace"]),
@@ -68,7 +75,7 @@ xc.tool({
   },
 });
 
-xc.tool({
+tool({
   name: "find_block_types",
   description: "Searches the installed block types by words (\"send message\", \"timer\", \"database\"). Without a query, lists them all. Returns type, name, category, kind (event, action, value) and description.",
   input: schema({ query: { type: "string", description: "Words to look for; empty for all." } }),
@@ -79,7 +86,7 @@ xc.tool({
   },
 });
 
-xc.tool({
+tool({
   name: "get_block_type",
   description: "A block type's fields (key, type, default, choices, whether it can take a wire), outputs and flows. Read it before adding or setting a block.",
   input: schema({ type: { type: "string", description: "The block type, such as discord.send_message." } }, ["type"]),
@@ -90,7 +97,7 @@ xc.tool({
   },
 });
 
-xc.tool({
+tool({
   name: "get_block",
   description: "One block as it is now: its field values and every pin it has (a block's settings can add pins), with their types and the wires on them.",
   input: schema({ workspace: workspaceArg, block: blockArg }, ["workspace", "block"]),
@@ -100,7 +107,7 @@ xc.tool({
   },
 });
 
-xc.tool({
+tool({
   name: "get_problems",
   description: "What the Problems panel lists: missing settings, unconnected required inputs, plugin problems. Each with the workspace and block it's about.",
   input: schema({}),
@@ -111,7 +118,7 @@ xc.tool({
   },
 });
 
-xc.tool({
+tool({
   name: "get_console",
   description: "The Console's last lines: the running bot's log and errors (with the block that wrote them), and the editor's messages.",
   input: schema({ lines: { type: "integer", description: "How many lines (50 when not given, at most 1000).", minimum: 1, maximum: 1000 } }),
@@ -120,7 +127,7 @@ xc.tool({
   },
 });
 
-xc.tool({
+tool({
   name: "get_slash_commands",
   description: "The project's slash commands as the Slash Commands editor keeps them: name (with spaces for subcommands), description, options, who can use them and where.",
   input: schema({}),
@@ -132,7 +139,7 @@ xc.tool({
 
 // ---- Changing ---------------------------------------------------------------
 
-xc.tool({
+tool({
   name: "add_block",
   description: "Adds a block to a workspace. Without x and y it goes right of the block given as `after` (or of the rightmost block). Returns the new block with its pins. Wire it up with connect.",
   input: schema(
@@ -162,7 +169,7 @@ xc.tool({
   },
 });
 
-xc.tool({
+tool({
   name: "set_block_values",
   description: "Sets fields of a block: { fieldKey: value }. null puts a field back to its default. Text fields can hold ${…} with JavaScript.",
   input: schema({ workspace: workspaceArg, block: blockArg, values: { type: "object" } }, ["workspace", "block", "values"]),
@@ -183,7 +190,7 @@ xc.tool({
   },
 });
 
-xc.tool({
+tool({
   name: "move_block",
   description: "Moves a block on the canvas.",
   input: schema({ workspace: workspaceArg, block: blockArg, x: { type: "number" }, y: { type: "number" } }, ["workspace", "block", "x", "y"]),
@@ -197,7 +204,7 @@ xc.tool({
   },
 });
 
-xc.tool({
+tool({
   name: "connect",
   description: "Draws a wire, checked like one drawn on the canvas. Flow: from a block's flow (\"next\", \"failed\", …) to another block's \"in\". Value: from an output to a field (it becomes a pin). Pins are written block.pin, such as 1.next and 2.in.",
   input: schema({ workspace: workspaceArg, from: { type: "string", description: "block.pin, such as 1.next or 3.result" }, to: { type: "string", description: "block.pin, such as 2.in or 4.text" } }, ["workspace", "from", "to"]),
@@ -208,7 +215,7 @@ xc.tool({
   },
 });
 
-xc.tool({
+tool({
   name: "disconnect",
   description: "Takes a wire out: the same from and to as connect.",
   input: schema({ workspace: workspaceArg, from: str, to: str }, ["workspace", "from", "to"]),
@@ -224,7 +231,7 @@ xc.tool({
   },
 });
 
-xc.tool({
+tool({
   name: "delete_blocks",
   description: "Deletes blocks from a workspace, with their wires. It can be undone in the editor.",
   input: schema({ workspace: workspaceArg, blocks: { type: "array", items: str, description: "Block ids." } }, ["workspace", "blocks"]),
@@ -240,7 +247,7 @@ xc.tool({
   },
 });
 
-xc.tool({
+tool({
   name: "create_workspace",
   description: "Makes a new, empty workspace (in a sidebar folder, when given) and opens it. Returns its key.",
   input: schema({ name: str, folder: { type: "string", description: "A sidebar folder to put it in." } }, ["name"]),
@@ -251,7 +258,7 @@ xc.tool({
   },
 });
 
-xc.tool({
+tool({
   name: "set_slash_commands",
   description: "Replaces the project's slash commands (the list get_slash_commands gives, changed). The bot registers them with Discord when it starts. Read them first: entries you leave out are deleted.",
   input: schema({ commands: { type: "array", items: { type: "object" } } }, ["commands"]),
@@ -266,7 +273,7 @@ xc.tool({
   },
 });
 
-xc.tool({
+tool({
   name: "show_in_editor",
   description: "Opens a workspace in the editor and, with a block, selects it and centres the canvas on it: shows the user what you mean.",
   input: schema({ workspace: workspaceArg, block: blockArg }, ["workspace"]),
@@ -279,7 +286,7 @@ xc.tool({
   },
 });
 
-xc.tool({
+tool({
   name: "save_project",
   description: "Saves the project's files (the editor saves by itself too, before the bot runs).",
   input: schema({}),
@@ -292,7 +299,7 @@ xc.tool({
 
 // ---- Running ----------------------------------------------------------------
 
-xc.tool({
+tool({
   name: "run_bot",
   description: "Starts (or restarts) the bot with the project as it is. Check get_console a few seconds later to see it log in and what it does.",
   input: schema({}),
@@ -303,7 +310,7 @@ xc.tool({
   },
 });
 
-xc.tool({
+tool({
   name: "stop_bot",
   description: "Stops the running bot.",
   input: schema({}),
@@ -311,6 +318,38 @@ xc.tool({
     if (!xc.botRunning()) return "The bot isn't running.";
     xc.run("bot.stop");
     return "Stopping the bot.";
+  },
+});
+
+// ---- Many things at once ------------------------------------------------------
+
+xc.tool({
+  name: "run_script",
+  description:
+    "Runs JavaScript in XC Circuit to do many things in one call: build a whole flow, change many blocks, look things up. " +
+    "The script gets `tools` (every other tool as a function taking the same arguments and returning the same answer, such as " +
+    "tools.add_block({ workspace, type, values }) and tools.connect({ workspace, from, to })), `xc` (XC Circuit's plugin API: " +
+    "xc.workspace(key), xc.setWorkspace(key, ws), xc.blockTypes(query) …) and `print(...)`. It returns what was printed and the " +
+    "script's return value. A thrown error stops it and says where it got to; changes made before stay (undo them in the editor). " +
+    "It runs for at most 5 seconds, synchronously, and can't reach files or the network.",
+  input: schema({ code: { type: "string", description: "The body of a function: statements, and `return` for a result." } }, ["code"]),
+  run({ code }) {
+    const output = [];
+    const print = (...parts) => output.push(parts.map((p) => (typeof p === "string" ? p : JSON.stringify(p))).join(" "));
+    const tools = Object.freeze(Object.fromEntries(Object.entries(runs).map(([name, run]) => [name, (args) => run(args || {})])));
+    let fn;
+    try {
+      fn = new Function("xc", "tools", "print", `"use strict";\n${code}`);
+    } catch (e) {
+      throw new Error(`The script doesn't parse: ${e.message}`);
+    }
+    try {
+      const result = fn(xc, tools, print);
+      return { output, result: result === undefined ? null : result };
+    } catch (e) {
+      const said = output.length ? `\nPrinted before it stopped:\n${output.join("\n")}` : "";
+      throw new Error(`The script stopped: ${e && e.message !== undefined ? e.message : String(e)}${said}`);
+    }
   },
 });
 

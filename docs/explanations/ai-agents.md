@@ -41,6 +41,9 @@ What the agent can do:
 | `create_workspace` · `get_slash_commands` · `set_slash_commands` | workspaces and commands |
 | `get_problems` · `get_console` | what's wrong, and what the bot logged |
 | `run_bot` · `stop_bot` · `save_project` · `show_in_editor` | run it, save it, show you a block |
+| `run_script` | many of these at once: JavaScript that gets every tool as a function (`tools.add_block({ … })`), the [plugin API](/api/editor) as `xc`, and `print()` |
+
+`run_script` lets an agent build a whole flow in one step instead of a call per block. It runs in the same sandbox as plugins: no files, no network, at most 5 seconds.
 
 Every change shows in the editor right away and can be undone with **Ctrl+Z**, like your own. The agent never sees the bot's token.
 
