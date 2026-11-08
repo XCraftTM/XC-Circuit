@@ -397,6 +397,7 @@ impl eframe::App for CircuitApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         // The freeze detector: where each frame is, and what it found.
+        watchdog::set_window(self.reveal.window());
         watchdog::start(ctx.clone(), crate::bot::app_data_dir().join("freezes.log"));
         // Any of its windows (a tab in a window of its own too).
         watchdog::focused(ctx.input(|i| i.focused || i.raw.viewports.values().any(|v| v.focused == Some(true))));

@@ -96,6 +96,14 @@ impl Reveal {
     /// Windows itself (None where that isn't known). egui only draws the text
     /// cursor while it thinks the window has the focus, and learns that from
     /// focus events, which a window cloaked at startup can miss.
+    /// The main window's handle (Windows only).
+    pub fn window(&self) -> Option<isize> {
+        #[cfg(windows)]
+        return self.window;
+        #[cfg(not(windows))]
+        None
+    }
+
     pub fn is_foreground(&self) -> Option<bool> {
         #[cfg(windows)]
         {

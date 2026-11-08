@@ -2,6 +2,11 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
+## Unreleased
+
+### Fixed
+- **The freeze detector found the wrong freezes**: it could report a freeze "after its frame" when the window only wasn't drawing for a few seconds (held while moved, minimized, covered), and it could freeze along with the app when the app was stuck inside egui, so real freezes went unreported. It now counts a freeze only when Windows can't reach the window either (what makes Windows say "Not Responding"), never waits on the app itself, and says when the app was stuck inside egui (laying out a long text, say, or the window's accessibility tree).
+
 ## 0.2.4
 
 ### Added
