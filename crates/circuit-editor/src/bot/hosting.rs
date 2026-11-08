@@ -547,13 +547,68 @@ fn place_name(h: &Hosting) -> String {
     }
 }
 
+/// The colour of a console piece: the terminal colours like a modern
+/// terminal shows them, darker on a light theme; bold makes the first eight
+/// bright (as terminals do), dim fades it; `text` without a colour.
+fn piece_color(style: calagopus::Style, text: egui::Color32, dark: bool) -> egui::Color32 {
+    use calagopus::Color;
+    // black, red, green, yellow, blue, magenta, cyan, white, then bright.
+    const DARK: [[u8; 3]; 16] = [
+        [0x6b, 0x72, 0x80],
+        [0xf0, 0x71, 0x78],
+        [0x9c, 0xd0, 0x7a],
+        [0xe8, 0xc4, 0x6b],
+        [0x6c, 0xb2, 0xf5],
+        [0xc9, 0x8b, 0xe6],
+        [0x56, 0xc8, 0xd2],
+        [0xd6, 0xdb, 0xe2],
+        [0x8b, 0x92, 0x9e],
+        [0xff, 0x8a, 0x8f],
+        [0xb6, 0xe8, 0x91],
+        [0xff, 0xd8, 0x80],
+        [0x8f, 0xc6, 0xff],
+        [0xe0, 0xa6, 0xff],
+        [0x7d, 0xdf, 0xe8],
+        [0xff, 0xff, 0xff],
+    ];
+    const LIGHT: [[u8; 3]; 16] = [
+        [0x55, 0x5b, 0x66],
+        [0xc0, 0x26, 0x2d],
+        [0x2f, 0x7d, 0x32],
+        [0x9a, 0x6a, 0x00],
+        [0x1f, 0x5f, 0xc4],
+        [0x8e, 0x3a, 0xb5],
+        [0x0b, 0x7f, 0x8c],
+        [0x4a, 0x4f, 0x57],
+        [0x7a, 0x80, 0x8a],
+        [0xd6, 0x3c, 0x43],
+        [0x3e, 0x96, 0x42],
+        [0xb0, 0x7d, 0x00],
+        [0x2d, 0x74, 0xe0],
+        [0xa5, 0x4e, 0xcc],
+        [0x10, 0x96, 0xa4],
+        [0x22, 0x25, 0x2b],
+    ];
+    let table = if dark { &DARK } else { &LIGHT };
+    let color = match style.color {
+        None => text,
+        Some(Color::Ansi(n)) => {
+            let n = if style.bold && n < 8 { n + 8 } else { n } as usize;
+            let [r, g, b] = table[n.min(15)];
+            egui::Color32::from_rgb(r, g, b)
+        }
+        Some(Color::Rgb(r, g, b)) => egui::Color32::from_rgb(r, g, b),
+    };
+    if style.dim { color.gamma_multiply(0.6) } else { color }
+}
+
 /// A Calagopus server's console tab: state, power buttons, live output.
 pub struct ConsoleView {
     console: calagopus::Console,
     panel: calagopus::Panel,
     pub server: String,
     pub name: String,
-    lines: VecDeque<String>,
+    lines: VecDeque<Vec<calagopus::Piece>>,
     state: String,
     stats: Option<(u64, u64, f64)>,
     connected: bool,
@@ -564,12 +619,12 @@ pub struct ConsoleView {
 }
 
 impl ConsoleView {
-    fn new(panel: calagopus::Panel, server: String, name: String) -> ConsoleView {
+    pub(crate) fn new(panel: calagopus::Panel, server: String, name: String) -> ConsoleView {
         let console = calagopus::Console::open(panel.clone(), server.clone());
         ConsoleView { console, panel, server, name, lines: VecDeque::new(), state: String::new(), stats: None, connected: false, problem: None, input: String::new(), action: None }
     }
 
-    fn poll(&mut self, ctx: &egui::Context) {
+    pub(crate) fn poll(&mut self, ctx: &egui::Context) {
         let mut any = false;
         while let Ok(e) = self.console.events.try_recv() {
             any = true;
@@ -674,9 +729,22 @@ impl ConsoleView {
             let input_h = 34.0;
             let h = (ui.available_height() - input_h - 8.0).max(80.0);
             egui::Frame::new().fill(theme.field).corner_radius(6).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
-                egui::ScrollArea::both().id_salt("server-console").max_height(h).auto_shrink([false, false]).stick_to_bottom(true).show(ui, |ui| {
-                    for line in &self.lines {
-                        ui.label(RichText::new(line).font(font.clone()).color(theme.text));
+                // Only the lines in view are laid out, so a long console stays quick.
+                let row_h = ui.fonts_mut(|f| f.row_height(&font));
+                let dark = ui.visuals().dark_mode;
+                egui::ScrollArea::both().id_salt("server-console").max_height(h).auto_shrink([false, false]).stick_to_bottom(true).show_rows(ui, row_h, self.lines.len(), |ui, rows| {
+                    ui.spacing_mut().item_spacing.y = 0.0;
+                    for line in self.lines.range(rows) {
+                        let mut job = egui::text::LayoutJob::default();
+                        for piece in line {
+                            let format = egui::TextFormat { font_id: font.clone(), color: piece_color(piece.style, theme.text, dark), ..Default::default() };
+                            job.append(&piece.text, 0.0, format);
+                        }
+                        if line.is_empty() {
+                            job.append(" ", 0.0, egui::TextFormat { font_id: font.clone(), ..Default::default() });
+                        }
+                        job.wrap.max_width = f32::INFINITY;
+                        ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Extend));
                     }
                 });
             });

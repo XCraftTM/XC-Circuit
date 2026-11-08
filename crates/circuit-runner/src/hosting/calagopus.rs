@@ -325,8 +325,8 @@ fn random_hex(bytes: usize) -> Result<String> {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ConsoleEvent {
     Connected,
-    /// A line the server printed (colours taken out).
-    Output(String),
+    /// A line the server printed, in pieces of one colour each.
+    Output(Vec<Piece>),
     /// Its power state: "running", "starting", "stopping", "offline".
     Status(String),
     /// Memory in bytes, CPU in percent of a core.
@@ -422,7 +422,7 @@ fn run_console(panel: &Panel, server: &str, tx: &Sender<ConsoleEvent>, commands:
                 send(&mut socket, "send logs", &[])?;
                 Some(ConsoleEvent::Connected)
             }
-            "console output" | "install output" | "daemon message" => Some(ConsoleEvent::Output(strip_ansi(&arg(0)))),
+            "console output" | "install output" | "daemon message" => Some(ConsoleEvent::Output(read_line(&arg(0)))),
             "status" => Some(ConsoleEvent::Status(arg(0))),
             "stats" => serde_json::from_str::<Value>(&arg(0)).ok().map(|s| ConsoleEvent::Stats {
                 memory: s["memory_bytes"].as_u64().unwrap_or(0),
@@ -481,25 +481,160 @@ fn connect_socket(url: &str) -> Result<tungstenite::WebSocket<Box<dyn Stream>>> 
     }
 }
 
-/// Takes terminal colour codes (ESC [ … letter) out of a line.
-fn strip_ansi(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
+/// A colour from a terminal's colour codes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Color {
+    /// One of the 16 terminal colours: 0–7 (black, red, green, yellow, blue,
+    /// magenta, cyan, white) and 8–15 their bright versions.
+    Ansi(u8),
+    Rgb(u8, u8, u8),
+}
+
+/// How a piece of a line looks.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Style {
+    /// None: the console's own text colour.
+    pub color: Option<Color>,
+    pub bold: bool,
+    pub dim: bool,
+}
+
+/// A piece of a console line in one style.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Piece {
+    pub text: String,
+    pub style: Style,
+}
+
+/// A line's text without its colours.
+pub fn plain(pieces: &[Piece]) -> String {
+    pieces.iter().map(|p| p.text.as_str()).collect()
+}
+
+/// Reads a line a server printed as a terminal shows it: its colour codes
+/// (ESC [ … m: 16 and 256 colours, RGB, bold, dim) become the pieces'
+/// styles, a carriage return goes back to the start and writes over what's
+/// there (npm's spinner), and ESC [ K erases the rest of the line.
+pub fn read_line(text: &str) -> Vec<Piece> {
+    let text = text.trim_end_matches(['\r', '\n']);
+    let mut cells: Vec<(char, Style)> = Vec::new();
+    let mut col = 0;
+    let mut style = Style::default();
     let mut chars = text.chars().peekable();
     while let Some(c) = chars.next() {
-        if c == '\u{1b}' {
-            if chars.peek() == Some(&'[') {
+        match c {
+            '\r' => col = 0,
+            '\u{1b}' => {
+                if chars.peek() != Some(&'[') {
+                    chars.next();
+                    continue;
+                }
                 chars.next();
+                let mut params = String::new();
+                let mut end = None;
                 for d in chars.by_ref() {
-                    if d.is_ascii_alphabetic() {
+                    if d.is_ascii_alphabetic() || d == '@' || d == '~' {
+                        end = Some(d);
                         break;
                     }
+                    params.push(d);
+                }
+                match end {
+                    Some('m') => apply_sgr(&mut style, &params),
+                    // Erase in line: to its end (0), to the cursor (1), all of it (2).
+                    Some('K') => match params.as_str() {
+                        "2" => {
+                            cells.clear();
+                            col = 0;
+                        }
+                        "1" => cells.iter_mut().take(col).for_each(|c| c.0 = ' '),
+                        _ => cells.truncate(col),
+                    },
+                    // To a column (counted from 1).
+                    Some('G') => col = params.parse::<usize>().unwrap_or(1).saturating_sub(1).min(cells.len()),
+                    _ => {}
                 }
             }
-            continue;
+            '\t' => {
+                for _ in 0..(4 - col % 4) {
+                    put(&mut cells, &mut col, ' ', style);
+                }
+            }
+            c if c.is_control() => {}
+            c => put(&mut cells, &mut col, c, style),
         }
-        out.push(c);
     }
-    out.trim_end_matches(['\r', '\n']).to_string()
+    let mut pieces: Vec<Piece> = Vec::new();
+    for (c, st) in cells {
+        match pieces.last_mut() {
+            Some(p) if p.style == st => p.text.push(c),
+            _ => pieces.push(Piece { text: c.to_string(), style: st }),
+        }
+    }
+    pieces
+}
+
+fn put(cells: &mut Vec<(char, Style)>, col: &mut usize, c: char, style: Style) {
+    if *col < cells.len() {
+        cells[*col] = (c, style);
+    } else {
+        cells.push((c, style));
+    }
+    *col += 1;
+}
+
+/// Changes `style` by the numbers of a colour code ("1;33", "38;5;208", "0").
+fn apply_sgr(style: &mut Style, params: &str) {
+    let nums: Vec<u16> = if params.is_empty() { vec![0] } else { params.split([';', ':']).map(|n| n.parse().unwrap_or(0)).collect() };
+    let mut i = 0;
+    while i < nums.len() {
+        match nums[i] {
+            0 => *style = Style::default(),
+            1 => style.bold = true,
+            2 => style.dim = true,
+            22 => (style.bold, style.dim) = (false, false),
+            n @ 30..=37 => style.color = Some(Color::Ansi((n - 30) as u8)),
+            n @ 90..=97 => style.color = Some(Color::Ansi((n - 90 + 8) as u8)),
+            39 => style.color = None,
+            // 38;5;n (256 colours) or 38;2;r;g;b.
+            38 => match nums.get(i + 1) {
+                Some(5) => {
+                    style.color = nums.get(i + 2).map(|&n| color_256(n.min(255) as u8));
+                    i += 2;
+                }
+                Some(2) => {
+                    let c = |k: usize| nums.get(i + k).copied().unwrap_or(0).min(255) as u8;
+                    style.color = Some(Color::Rgb(c(2), c(3), c(4)));
+                    i += 4;
+                }
+                _ => {}
+            },
+            // Backgrounds are left out (the console keeps its own), with their numbers.
+            48 => match nums.get(i + 1) {
+                Some(5) => i += 2,
+                Some(2) => i += 4,
+                _ => {}
+            },
+            _ => {}
+        }
+        i += 1;
+    }
+}
+
+/// One of xterm's 256 colours.
+fn color_256(n: u8) -> Color {
+    match n {
+        0..=15 => Color::Ansi(n),
+        16..=231 => {
+            let n = n - 16;
+            let level = |v: u8| if v == 0 { 0 } else { 55 + v * 40 };
+            Color::Rgb(level(n / 36), level(n / 6 % 6), level(n % 6))
+        }
+        _ => {
+            let g = 8 + (n - 232) * 10;
+            Color::Rgb(g, g, g)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -513,8 +648,29 @@ mod tests {
         assert_eq!(base_url("http://10.0.0.2:8080"), "http://10.0.0.2:8080");
         assert_eq!(encode("/bots/my bot.js"), "/bots/my%20bot.js");
         assert_eq!(decode("c7sp_ab%2Bc+d"), "c7sp_ab+c d");
-        assert_eq!(strip_ansi("\u{1b}[33m[Bot]\u{1b}[0m ready\r\n"), "[Bot] ready");
     }
+
+    /// Colour codes become styles, as a terminal shows them.
+    #[test]
+    fn console_lines_keep_their_colours() {
+        let yellow = Style { color: Some(Color::Ansi(3)), ..Default::default() };
+        assert_eq!(
+            read_line("\u{1b}[33m[Bot]\u{1b}[0m ready\r\n"),
+            [Piece { text: "[Bot]".into(), style: yellow }, Piece { text: " ready".into(), style: Style::default() }]
+        );
+        let pieces = read_line("\u{1b}[90m10:53:29\u{1b}[39m \u{1b}[1;32mSUCCESS\u{1b}[22;39m Logged in");
+        assert_eq!(plain(&pieces), "10:53:29 SUCCESS Logged in");
+        assert_eq!(pieces[0].style.color, Some(Color::Ansi(8)), "bright black: grey");
+        assert_eq!(pieces[2].style, Style { color: Some(Color::Ansi(2)), bold: true, dim: false });
+        assert_eq!(pieces[3].style, Style::default());
+        assert_eq!(read_line("\u{1b}[38;5;208mx")[0].style.color, Some(Color::Rgb(255, 135, 0)), "256 colours");
+        assert_eq!(read_line("\u{1b}[38;2;1;2;3;48;2;9;9;9mx")[0].style.color, Some(Color::Rgb(1, 2, 3)), "RGB, background left out");
+        // npm's spinner: a character, back to the start, the text over it.
+        assert_eq!(plain(&read_line("/\rnpm warn install-scripts")), "npm warn install-scripts");
+        assert_eq!(plain(&read_line("loading 50%\rdone\u{1b}[K")), "done", "erased after the cursor");
+        assert_eq!(plain(&read_line("a\tb")), "a   b");
+    }
+
 
     /// The sign-in hands over the key the panel sends to the one-time
     /// address, and only with the right state.
@@ -629,10 +785,11 @@ Connection: close
         let console = Console::open(Panel::new(&format!("http://{panel_address}"), "c7sp_x"), "u-1".into());
         let next = || console.events.recv_timeout(Duration::from_secs(10)).unwrap();
         assert_eq!(next(), ConsoleEvent::Connected);
-        assert_eq!(next(), ConsoleEvent::Output("Bot ready".into()), "colours are taken out");
+        let ConsoleEvent::Output(ready) = next() else { panic!("a line") };
+        assert_eq!((plain(&ready), ready[0].style.color), ("Bot ready".to_string(), Some(Color::Ansi(2))), "with its colour");
         assert_eq!(next(), ConsoleEvent::Status("running".into()));
         console.send("say hi");
-        assert_eq!(next(), ConsoleEvent::Output("> say hi".into()));
+        assert!(matches!(next(), ConsoleEvent::Output(p) if plain(&p) == "> say hi"));
         assert_eq!(got.lock().unwrap()[2], r#"{"event":"send command","args":["say hi"]}"#);
     }
 }
