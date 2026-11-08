@@ -254,7 +254,7 @@ impl CircuitApp {
         if software {
             ed.log(
                 Level::Warn,
-                if ed.prefs.lighter_drawing == Some(false) {
+                if !ed.prefs.lighter_auto {
                     t!("No graphics card driver could be used, so the app is drawn in software, which is slower. Updating the graphics driver usually helps; Settings › Window › Graphics can try another way to draw.")
                 } else {
                     t!("No graphics card driver could be used, so the app is drawn in software, which is slower: lighter drawing is on (Settings › Window). Updating the graphics driver usually helps; Settings › Window › Graphics can try another way to draw.")
@@ -544,10 +544,12 @@ impl eframe::App for CircuitApp {
         self.ed.activity.retain(|_, a| a.error.is_some() || a.live());
         let glowing = self.ed.activity.values().any(|a| a.glow() > 0.0);
         let next_fade = self.ed.activity.values().filter_map(|a| a.ms).map(|(_, at)| crate::bot::TIME_SHOWN.saturating_sub(at.elapsed())).min();
+        // Lighter drawing: the glow fades in a few steps instead of smoothly.
+        let step = std::time::Duration::from_millis(if self.ed.theme.lighter.glows { 250 } else { 33 });
         match next_fade {
-            _ if glowing => ctx.request_repaint_after(std::time::Duration::from_millis(33)),
+            _ if glowing => ctx.request_repaint_after(step),
             // Fading out over the last second.
-            Some(left) if left <= std::time::Duration::from_secs(1) => ctx.request_repaint_after(std::time::Duration::from_millis(33)),
+            Some(left) if left <= std::time::Duration::from_secs(1) => ctx.request_repaint_after(step),
             Some(left) => ctx.request_repaint_after(left - std::time::Duration::from_secs(1)),
             None => {}
         }

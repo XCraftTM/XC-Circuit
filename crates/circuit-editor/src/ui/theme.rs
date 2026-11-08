@@ -39,10 +39,42 @@ pub struct Theme {
     /// Touch mode (a preference, not part of the theme file): bigger
     /// controls and more room between them.
     pub touch: bool,
-    /// Lighter drawing, for older computers (a preference, or by itself when
-    /// the app draws in software): no shadows, no animations, and edges
-    /// without their smoothing fringe, which about halves the triangles.
-    pub lighter: bool,
+    /// Lighter drawing, for older computers (preferences, or all of it by
+    /// itself when the app draws in software): which parts are left out.
+    pub lighter: Lighter,
+}
+
+/// The parts of lighter drawing, each chosen on its own: `true` leaves that
+/// part out (or keeps it still), so there's less to draw.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct Lighter {
+    /// No shadows under windows, menus and blocks.
+    pub shadows: bool,
+    /// No fading in and out: things appear and go at once.
+    pub animations: bool,
+    /// Glows (empty required fields, blocks that just ran) that don't pulse,
+    /// so the app doesn't draw itself again 30 times a second for them.
+    pub glows: bool,
+    /// Edges without their soft fringe, which about halves the triangles.
+    pub smoothing: bool,
+}
+
+impl Lighter {
+    pub const ALL: Lighter = Lighter { shadows: true, animations: true, glows: true, smoothing: true };
+    pub const NONE: Lighter = Lighter { shadows: false, animations: false, glows: false, smoothing: false };
+
+    fn parts(self) -> [bool; 4] {
+        [self.shadows, self.animations, self.glows, self.smoothing]
+    }
+
+    pub fn all(self) -> bool {
+        self.parts().iter().all(|p| *p)
+    }
+
+    pub fn any(self) -> bool {
+        self.parts().iter().any(|p| *p)
+    }
 }
 
 impl Theme {
@@ -84,7 +116,7 @@ impl Theme {
             node_radius: def.shape.node_radius,
             wire_width: def.shape.wire_width,
             touch: false,
-            lighter: false,
+            lighter: Lighter::NONE,
         }
     }
 
@@ -159,19 +191,19 @@ impl Theme {
         w.active.bg_stroke = Stroke::new(1.0, self.accent);
         w.open.bg_stroke = Stroke::new(1.0, self.node_border);
 
-        if self.lighter {
+        if self.lighter.shadows {
             v.window_shadow = Shadow::NONE;
             v.popup_shadow = Shadow::NONE;
         }
         let theme = if self.dark { egui::Theme::Dark } else { egui::Theme::Light };
         ctx.set_visuals_of(theme, v);
         let lighter = self.lighter;
-        ctx.tessellation_options_mut(|t| t.feathering = !lighter);
+        ctx.tessellation_options_mut(|t| t.feathering = !lighter.smoothing);
         ctx.set_theme(theme);
         let touch = self.touch;
         ctx.all_styles_mut(|s| {
             // Lighter drawing: things appear and go at once, no fading.
-            s.animation_time = if lighter { 0.0 } else { egui::Style::default().animation_time };
+            s.animation_time = if lighter.animations { 0.0 } else { egui::Style::default().animation_time };
             if touch {
                 // Everything a finger presses is at least 40 points tall.
                 s.spacing.item_spacing = egui::vec2(12.0, 10.0);

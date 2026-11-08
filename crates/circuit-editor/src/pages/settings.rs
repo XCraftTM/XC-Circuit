@@ -294,20 +294,49 @@ fn editor(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView, 
     });
     // For older computers: lighter drawing, and another way to draw.
     let software = crate::editor::prefs::software_drawing();
-    kit::setting_row(ui, theme, t!("Lighter drawing"), t!("For older computers: no shadows, no animations and simpler edges, so there's less to draw. Automatic turns it on when the app draws without a graphics card."), |ui| {
-        let auto = if software { t!("Automatic (on now)") } else { t!("Automatic (off now)") };
-        let options = [(None, auto), (Some(true), t!("On")), (Some(false), t!("Off"))];
-        let shown = options.iter().find(|(v, _)| *v == ed.prefs.lighter_drawing).map_or(auto, |(_, n)| *n);
-        let mut picked = None;
-        crate::ui::kit::dropdown(ui, egui::Id::unique("settings-lighter"), 200.0, shown, |ui| {
-            for (value, name) in options {
-                if crate::ui::kit::option(ui, ed.prefs.lighter_drawing == value, name).clicked() {
-                    picked = Some(value);
+    // A card, not a row: the list goes under the text.
+    crate::ui::kit::setting_card(ui, theme, |ui| {
+        use crate::ui::theme::Lighter;
+        crate::ui::kit::setting_title(ui, theme, t!("Lighter drawing"), t!("For older computers: tick what to leave out, so there's less to draw."));
+        ui.add_space(6.0);
+        // Automatic, while drawing in software, has all of them.
+        let forced = software && ed.prefs.lighter_auto;
+        let mut parts = ed.prefs.lighter(software);
+        let mut auto = ed.prefs.lighter_auto;
+        let mut changed = false;
+        ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = 4.0;
+            ui.add_enabled_ui(!forced, |ui| {
+                let mut all = parts.all();
+                if crate::ui::kit::checkbox_mixed(ui, theme, &mut all, parts.any(), t!("All")).changed() {
+                    parts = if all { Lighter::ALL } else { Lighter::NONE };
+                    changed = true;
                 }
+                ui.indent("lighter-parts", |ui| {
+                    let rows: [(&mut bool, &str, &str); 4] = [
+                        (&mut parts.shadows, t!("No shadows"), t!("Windows, menus and blocks without the shadow under them.")),
+                        (&mut parts.animations, t!("No fading"), t!("Menus, tooltips and panels appear and go at once instead of fading.")),
+                        (&mut parts.glows, t!("Still glows"), t!("Empty required fields and blocks that just ran glow without pulsing, so the app doesn't draw itself again 30 times a second for them.")),
+                        (&mut parts.smoothing, t!("Simpler edges"), t!("Edges without their soft fringe: about half as many triangles to draw, a little more jagged.")),
+                    ];
+                    for (on, name, tip) in rows {
+                        changed |= crate::ui::kit::checkbox(ui, theme, on, name).on_hover_text(tip).changed();
+                    }
+                });
+            });
+            ui.add_space(4.0);
+            changed |= crate::ui::kit::checkbox(ui, theme, &mut auto, t!("All without a graphics card"))
+                .on_hover_text(t!("When the app has to draw in software (no graphics card driver it could use), all of them are left out, whatever is ticked."))
+                .changed();
+            if forced {
+                ui.label(RichText::new(t!("All on now: the app draws without a graphics card.")).size(11.5).color(theme.text_muted));
             }
         });
-        if let Some(value) = picked {
-            ed.prefs.lighter_drawing = value;
+        if changed {
+            if !forced {
+                ed.prefs.lighter_parts = parts;
+            }
+            ed.prefs.lighter_auto = auto;
             ed.restyle();
             ed.theme.apply(&ctx);
         }
@@ -837,6 +866,41 @@ fn new_translation(ctx: &egui::Context, ed: &mut Editor, theme: &Theme, view: &m
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Lighter drawing's parts tick one by one, or all at once with All,
+    /// and the theme follows at once.
+    #[test]
+    fn lighter_drawing_parts_tick_one_by_one_or_all() {
+        use crate::ui::theme::Lighter;
+        use egui_kittest::{Harness, kittest::Queryable};
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.prefs.language = crate::i18n::ENGLISH.into();
+        ed.apply_language();
+        ed.restyle();
+        let view = SettingsView { section: Section::Editor, ..Default::default() };
+        let mut h = Harness::builder().with_size(vec2(1000.0, 4000.0)).build_ui_state(
+            |ui, (ed, view): &mut (Editor, SettingsView)| {
+                let mut asks = Vec::new();
+                super::ui(ui, ed, view, &mut asks);
+            },
+            (ed, view),
+        );
+        h.run();
+        h.get_by_label("No shadows").click();
+        h.run();
+        assert_eq!(h.state().0.prefs.lighter_parts, Lighter { shadows: true, ..Lighter::NONE });
+        assert!(h.state().0.theme.lighter.shadows && !h.state().0.theme.lighter.smoothing);
+        h.get_by_label("All").click();
+        h.run();
+        assert_eq!((h.state().0.prefs.lighter_parts, h.state().0.theme.lighter), (Lighter::ALL, Lighter::ALL));
+        h.get_by_label("All").click();
+        h.run();
+        assert_eq!(h.state().0.prefs.lighter_parts, Lighter::NONE);
+        h.get_by_label("All without a graphics card").click();
+        h.run();
+        assert!(!h.state().0.prefs.lighter_auto);
+    }
 
     #[test]
     fn accent_override_follows_theme_switches() {

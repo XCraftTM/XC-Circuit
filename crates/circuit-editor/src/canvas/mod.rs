@@ -168,7 +168,8 @@ enum NodeMenu {
 /// A soft red glow around a row whose required input is still empty,
 /// pulsing slowly so it catches the eye. `time` is egui's clock, in seconds.
 fn missing_glow(painter: &egui::Painter, theme: &Theme, row: Rect, time: f64) {
-    let pulse = glow_strength(time);
+    // Lighter drawing keeps it still, at about its middle.
+    let pulse = if theme.lighter.glows { 0.6 } else { glow_strength(time) };
     let area = row.shrink2(vec2(7.0, 1.5));
     painter.rect_filled(area, 6.0, with_alpha(theme.error, (14.0 + 22.0 * pulse) as u8));
     for i in 0..4 {
@@ -630,7 +631,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         };
         let radius = if layout.value_block { 14.0 } else { theme.node_radius };
 
-        if !theme.lighter {
+        if !theme.lighter.shadows {
             painter.add(Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha(if theme.dark { 90 } else { 30 }) }.as_shape(layout.rect, radius));
         }
         let failed = recent(id).and_then(|a| a.error.clone());
@@ -806,7 +807,9 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     let missing = f.required && empty && !connected && !from_event;
                     if missing {
                         missing_glow(&painter, theme, *r, ctx.input(|i| i.time));
-                        ctx.request_repaint_after(std::time::Duration::from_millis(33));
+                        if !theme.lighter.glows {
+                            ctx.request_repaint_after(std::time::Duration::from_millis(33));
+                        }
                     }
                     let label_color = if missing { theme.error } else { theme.text_muted };
                     let label = f.label(key);

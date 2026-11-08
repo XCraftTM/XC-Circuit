@@ -79,9 +79,11 @@ pub struct Prefs {
     /// The builders' and editors' windows (Embed Builder, Bot settings …)
     /// where they were last and as big: x, y, width and height, by kind.
     pub window_places: std::collections::BTreeMap<String, [f32; 4]>,
-    /// Lighter drawing for older computers: `None` lets the app decide (on
-    /// when it draws in software), or on or off by hand.
-    pub lighter_drawing: Option<bool>,
+    /// Lighter drawing for older computers: the parts picked by hand.
+    pub lighter_parts: crate::ui::theme::Lighter,
+    /// All of lighter drawing whenever the app draws in software (no
+    /// graphics card driver it could use), whatever is picked.
+    pub lighter_auto: bool,
 }
 
 /// How many projects File › Open Recent and the start page remember.
@@ -152,7 +154,7 @@ impl SideView {
 
 impl Default for Prefs {
     fn default() -> Self {
-        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), activity: SideView::ALL.iter().map(|v| v.key().to_string()).collect(), side_shown: Some(SideView::Workspaces.key().into()), side_lower: None, side_split: 0.5, disabled_plugins: Vec::new(), removed_plugins: Vec::new(), console_font: None, console_font_size: CONSOLE_FONT_SIZE, console_line_spacing: CONSOLE_LINE_SPACING, new_project_location: None, recent_projects: Vec::new(), check_updates: true, skipped_update: None, snap_to_grid: false, recent_blocks: Vec::new(), favorite_blocks: Vec::new(), shortcuts: Default::default(), last_crash_seen: 0, remote_bots: Vec::new(), window_places: Default::default(), lighter_drawing: None }
+        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), activity: SideView::ALL.iter().map(|v| v.key().to_string()).collect(), side_shown: Some(SideView::Workspaces.key().into()), side_lower: None, side_split: 0.5, disabled_plugins: Vec::new(), removed_plugins: Vec::new(), console_font: None, console_font_size: CONSOLE_FONT_SIZE, console_line_spacing: CONSOLE_LINE_SPACING, new_project_location: None, recent_projects: Vec::new(), check_updates: true, skipped_update: None, snap_to_grid: false, recent_blocks: Vec::new(), favorite_blocks: Vec::new(), shortcuts: Default::default(), last_crash_seen: 0, remote_bots: Vec::new(), window_places: Default::default(), lighter_parts: Default::default(), lighter_auto: true }
     }
 }
 
@@ -204,13 +206,41 @@ impl Prefs {
             theme.wire_width = w;
         }
         theme.touch = self.touch;
-        theme.lighter = self.lighter_drawing.unwrap_or(software_drawing());
+        theme.lighter = self.lighter(software_drawing());
+    }
+
+    /// The parts of lighter drawing in use: all of them when drawing in
+    /// software and Automatic is on, otherwise those picked.
+    pub fn lighter(&self, software: bool) -> crate::ui::theme::Lighter {
+        if software && self.lighter_auto { crate::ui::theme::Lighter::ALL } else { self.lighter_parts }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Lighter drawing: the parts picked, or all of them when drawing in
+    /// software (unless Automatic is off); kept in the preferences file.
+    #[test]
+    fn lighter_drawing_takes_the_picked_parts() {
+        use crate::ui::theme::Lighter;
+        let mut p = Prefs::default();
+        assert_eq!((p.lighter(false), p.lighter(true)), (Lighter::NONE, Lighter::ALL));
+        p.lighter_parts.shadows = true;
+        p.lighter_parts.glows = true;
+        let picked = p.lighter(false);
+        assert!(picked.shadows && picked.glows && !picked.animations && !picked.smoothing);
+        assert!(picked.any() && !picked.all());
+        assert_eq!(p.lighter(true), Lighter::ALL, "Automatic, in software");
+        p.lighter_auto = false;
+        assert_eq!(p.lighter(true), picked, "Automatic off");
+        let back: Prefs = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        assert_eq!((back.lighter_parts, back.lighter_auto), (p.lighter_parts, false));
+        // Older preference files: nothing picked, Automatic on.
+        let old: Prefs = serde_json::from_str(r#"{ "lighter_drawing": true }"#).unwrap();
+        assert_eq!((old.lighter_parts, old.lighter_auto), (Lighter::NONE, true));
+    }
 
     #[test]
     fn overrides_apply_to_any_theme() {
