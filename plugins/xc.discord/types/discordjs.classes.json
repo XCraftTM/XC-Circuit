@@ -396,7 +396,8 @@
     {
      "name": "attachments",
      "kind": "property",
-     "type": "Collection<Snowflake, Attachment>"
+     "type": "Collection<Attachment>",
+     "class": "Collection<Attachment>"
     },
     {
      "name": "author",
@@ -544,7 +545,8 @@
     {
      "name": "messageSnapshots",
      "kind": "property",
-     "type": "Collection<Snowflake, MessageSnapshot>"
+     "type": "Collection<MessageSnapshot>",
+     "class": "Collection<MessageSnapshot>"
     },
     {
      "name": "nonce",
@@ -617,7 +619,8 @@
     {
      "name": "stickers",
      "kind": "property",
-     "type": "Collection<Snowflake, Sticker>"
+     "type": "Collection<Sticker>",
+     "class": "Collection<Sticker>"
     },
     {
      "name": "system",
@@ -780,12 +783,13 @@
     {
      "name": "members",
      "kind": "getter",
-     "type": "Collection<Snowflake, GuildMember>"
+     "type": "Collection<GuildMember>",
+     "class": "Collection<GuildMember>"
     },
     {
      "name": "messages",
      "kind": "property",
-     "type": "If<InGuild, GuildMessageManager, If<InD…"
+     "type": "If<true, GuildMessageManager, If<InDM, …"
     },
     {
      "name": "name",
@@ -1397,7 +1401,8 @@
     {
      "name": "members",
      "kind": "getter",
-     "type": "Collection<Snowflake, GuildMember>"
+     "type": "Collection<GuildMember>",
+     "class": "Collection<GuildMember>"
     },
     {
      "name": "mentionable",
@@ -1499,7 +1504,8 @@
     {
      "name": "entitlements",
      "kind": "property",
-     "type": "Collection<Snowflake, Entitlement>"
+     "type": "Collection<Entitlement>",
+     "class": "Collection<Entitlement>"
     },
     {
      "name": "guild",
@@ -1667,6 +1673,13 @@
      "type": "Snowflake[]"
     },
     {
+     "name": "appPermissions",
+     "kind": "property",
+     "type": "PermissionsBitField",
+     "optional": true,
+     "class": "PermissionsBitField"
+    },
+    {
      "name": "archived",
      "kind": "property",
      "type": "Yes/no",
@@ -1727,13 +1740,50 @@
     {
      "name": "guildMembers",
      "kind": "getter",
-     "type": "Collection<Snowflake, GuildMember>"
+     "type": "Collection<GuildMember>",
+     "class": "Collection<GuildMember>"
+    },
+    {
+     "name": "id",
+     "kind": "property",
+     "type": "Text"
     },
     {
      "name": "invitable",
      "kind": "property",
      "type": "Yes/no",
      "optional": true
+    },
+    {
+     "name": "isDMBased",
+     "kind": "method",
+     "type": "Yes/no",
+     "class": "DMChannel"
+    },
+    {
+     "name": "isSendable",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isTextBased",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isThread",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isThreadOnly",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isVoiceBased",
+     "kind": "method",
+     "type": "Yes/no"
     },
     {
      "name": "joinable",
@@ -1797,6 +1847,18 @@
      "optional": true
     },
     {
+     "name": "partial",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "permissions",
+     "kind": "property",
+     "type": "PermissionsBitField",
+     "optional": true,
+     "class": "PermissionsBitField"
+    },
+    {
      "name": "rateLimitPerUser",
      "kind": "property",
      "type": "Number",
@@ -1827,6 +1889,11 @@
      "name": "unarchivable",
      "kind": "getter",
      "type": "Yes/no"
+    },
+    {
+     "name": "url",
+     "kind": "getter",
+     "type": "Text"
     },
     {
      "name": "viewable",
@@ -1935,7 +2002,8 @@
     {
      "name": "members",
      "kind": "getter",
-     "type": "Collection<Snowflake, GuildMember>"
+     "type": "Collection<GuildMember>",
+     "class": "Collection<GuildMember>"
     },
     {
      "name": "name",
@@ -2153,8 +2221,9 @@
     {
      "name": "roles",
      "kind": "property",
-     "type": "Collection<Snowflake, InviteRole | Role>",
-     "optional": true
+     "type": "Collection<InviteRole>",
+     "optional": true,
+     "class": "Collection<InviteRole>"
     },
     {
      "name": "targetApplication",
@@ -2215,7 +2284,8 @@
     {
      "name": "answers",
      "kind": "property",
-     "type": "Collection<number, PollAnswer | Partial…"
+     "type": "Collection<PollAnswer>",
+     "class": "Collection<PollAnswer>"
     },
     {
      "name": "channel",
@@ -2305,7 +2375,22 @@
      "type": "Text"
     },
     {
+     "name": "createdAt",
+     "kind": "getter",
+     "type": "Date"
+    },
+    {
+     "name": "createdTimestamp",
+     "kind": "getter",
+     "type": "Number"
+    },
+    {
      "name": "guildId",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "id",
      "kind": "property",
      "type": "Text"
     },
@@ -2359,6 +2444,11 @@
      "name": "type",
      "kind": "property",
      "type": "Type"
+    },
+    {
+     "name": "url",
+     "kind": "getter",
+     "type": "Text"
     }
    ]
   },
@@ -2506,12 +2596,12 @@
     {
      "name": "serialize",
      "kind": "method",
-     "type": "Record<Flags, boolean>"
+     "type": "Record<UserFlagsString, boolean>"
     },
     {
      "name": "toArray",
      "kind": "method",
-     "type": "Flags[]"
+     "type": "UserFlagsString[]"
     }
    ]
   },
@@ -2553,12 +2643,12 @@
     {
      "name": "serialize",
      "kind": "method",
-     "type": "Record<Flags, boolean>"
+     "type": "Record<GuildMemberFlagsString, boolean>"
     },
     {
      "name": "toArray",
      "kind": "method",
-     "type": "Flags[]"
+     "type": "GuildMemberFlagsString[]"
     }
    ]
   },
@@ -2567,7 +2657,7 @@
     {
      "name": "bitfield",
      "kind": "property",
-     "type": "Type"
+     "type": "Number"
     },
     {
      "name": "serialize",
@@ -2640,7 +2730,8 @@
     {
      "name": "cache",
      "kind": "getter",
-     "type": "Collection<Key, Holds>"
+     "type": "Collection<Role>",
+     "class": "Collection<Role>"
     },
     {
      "name": "color",
@@ -2671,7 +2762,7 @@
     {
      "name": "holds",
      "kind": "property",
-     "type": "Constructable<Holds>"
+     "type": "Constructable<Role>"
     },
     {
      "name": "icon",
@@ -2809,6 +2900,93 @@
     }
    ]
   },
+  "Attachment": {
+   "members": [
+    {
+     "name": "contentType",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "description",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "duration",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "ephemeral",
+     "kind": "property",
+     "type": "Yes/no"
+    },
+    {
+     "name": "flags",
+     "kind": "property",
+     "type": "AttachmentFlagsBitField",
+     "class": "AttachmentFlagsBitField"
+    },
+    {
+     "name": "height",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "id",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "name",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "proxyURL",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "size",
+     "kind": "property",
+     "type": "Number"
+    },
+    {
+     "name": "spoiler",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "title",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "url",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "waveform",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "width",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    }
+   ]
+  },
   "MessageCall": {
    "members": [
     {
@@ -2840,12 +3018,12 @@
     {
      "name": "serialize",
      "kind": "method",
-     "type": "Record<Flags, boolean>"
+     "type": "Record<MessageFlagsString, boolean>"
     },
     {
      "name": "toArray",
      "kind": "method",
-     "type": "Flags[]"
+     "type": "MessageFlagsString[]"
     }
    ]
   },
@@ -3129,12 +3307,14 @@
     {
      "name": "channels",
      "kind": "getter",
-     "type": "Collection<Snowflake, Channel>"
+     "type": "Collection<Channel>",
+     "class": "Collection<Channel>"
     },
     {
      "name": "crosspostedChannels",
      "kind": "property",
-     "type": "Collection<Snowflake, CrosspostedChanne…"
+     "type": "Collection<CrosspostedChannel>",
+     "class": "Collection<CrosspostedChannel>"
     },
     {
      "name": "everyone",
@@ -3154,7 +3334,8 @@
     {
      "name": "parsedUsers",
      "kind": "getter",
-     "type": "Collection<Snowflake, User>"
+     "type": "Collection<User>",
+     "class": "Collection<User>"
     },
     {
      "name": "repliedUser",
@@ -3166,26 +3347,32 @@
     {
      "name": "roles",
      "kind": "property",
-     "type": "Collection<Snowflake, Role>"
+     "type": "Collection<Role>",
+     "class": "Collection<Role>"
     },
     {
      "name": "users",
      "kind": "property",
-     "type": "Collection<Snowflake, User>"
+     "type": "Collection<User>",
+     "class": "Collection<User>"
     }
    ]
+  },
+  "MessageSnapshot": {
+   "members": []
   },
   "ReactionManager": {
    "members": [
     {
      "name": "cache",
      "kind": "getter",
-     "type": "Collection<Key, Holds>"
+     "type": "Collection<MessageReaction>",
+     "class": "Collection<MessageReaction>"
     },
     {
      "name": "holds",
      "kind": "property",
-     "type": "Constructable<Holds>"
+     "type": "Constructable<MessageReaction>"
     },
     {
      "name": "message",
@@ -3224,9 +3411,40 @@
   "CommandInteractionResolvedData": {
    "members": [
     {
+     "name": "attachments",
+     "kind": "property",
+     "type": "Collection<Attachment>",
+     "class": "Collection<Attachment>"
+    },
+    {
+     "name": "channels",
+     "kind": "property",
+     "type": "Collection<Channel>",
+     "class": "Collection<Channel>"
+    },
+    {
+     "name": "members",
+     "kind": "property",
+     "type": "Collection<GuildMember>",
+     "class": "Collection<GuildMember>"
+    },
+    {
      "name": "messages",
      "kind": "property",
-     "type": "ReadonlyCollection<Snowflake, CacheType…"
+     "type": "Collection<Message>",
+     "class": "Collection<Message>"
+    },
+    {
+     "name": "roles",
+     "kind": "property",
+     "type": "Collection<Role>",
+     "class": "Collection<Role>"
+    },
+    {
+     "name": "users",
+     "kind": "property",
+     "type": "Collection<User>",
+     "class": "Collection<User>"
     }
    ]
   },
@@ -3279,12 +3497,335 @@
     }
    ]
   },
+  "Sticker": {
+   "members": [
+    {
+     "name": "available",
+     "kind": "property",
+     "type": "Yes/no",
+     "optional": true
+    },
+    {
+     "name": "createdAt",
+     "kind": "getter",
+     "type": "Date"
+    },
+    {
+     "name": "createdTimestamp",
+     "kind": "getter",
+     "type": "Number"
+    },
+    {
+     "name": "description",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "format",
+     "kind": "property",
+     "type": "StickerFormatType"
+    },
+    {
+     "name": "guild",
+     "kind": "getter",
+     "type": "Guild",
+     "optional": true,
+     "class": "Guild"
+    },
+    {
+     "name": "guildId",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "id",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "name",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "packId",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "partial",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "sortValue",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "tags",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "type",
+     "kind": "property",
+     "type": "StickerType",
+     "optional": true
+    },
+    {
+     "name": "url",
+     "kind": "getter",
+     "type": "Text"
+    },
+    {
+     "name": "user",
+     "kind": "property",
+     "type": "User",
+     "optional": true,
+     "class": "User"
+    }
+   ]
+  },
   "PublicThreadChannel": {
    "members": [
+    {
+     "name": "appliedTags",
+     "kind": "property",
+     "type": "Snowflake[]"
+    },
+    {
+     "name": "appPermissions",
+     "kind": "property",
+     "type": "PermissionsBitField",
+     "optional": true,
+     "class": "PermissionsBitField"
+    },
+    {
+     "name": "archived",
+     "kind": "property",
+     "type": "Yes/no",
+     "optional": true
+    },
+    {
+     "name": "archivedAt",
+     "kind": "getter",
+     "type": "Date",
+     "optional": true
+    },
+    {
+     "name": "archiveTimestamp",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "autoArchiveDuration",
+     "kind": "property",
+     "type": "ThreadAutoArchiveDuration",
+     "optional": true
+    },
+    {
+     "name": "createdAt",
+     "kind": "getter",
+     "type": "Date",
+     "optional": true
+    },
+    {
+     "name": "createdTimestamp",
+     "kind": "getter",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "editable",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "flags",
+     "kind": "property",
+     "type": "ChannelFlagsBitField",
+     "class": "ChannelFlagsBitField"
+    },
+    {
+     "name": "guild",
+     "kind": "property",
+     "type": "Guild",
+     "class": "Guild"
+    },
+    {
+     "name": "guildId",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "guildMembers",
+     "kind": "getter",
+     "type": "Collection<GuildMember>",
+     "class": "Collection<GuildMember>"
+    },
+    {
+     "name": "id",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "invitable",
+     "kind": "property",
+     "type": "Yes/no",
+     "optional": true
+    },
+    {
+     "name": "isDMBased",
+     "kind": "method",
+     "type": "Yes/no",
+     "class": "DMChannel"
+    },
+    {
+     "name": "isSendable",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isTextBased",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isThread",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isThreadOnly",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isVoiceBased",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "joinable",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "joined",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "locked",
+     "kind": "property",
+     "type": "Yes/no",
+     "optional": true
+    },
+    {
+     "name": "manageable",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "memberCount",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "members",
+     "kind": "property",
+     "type": "ThreadMemberManager",
+     "class": "ThreadMemberManager"
+    },
+    {
+     "name": "messageCount",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "name",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "ownerId",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "parent",
+     "kind": "getter",
+     "type": "If<Forum, ForumChannel | MediaChannel, …",
+     "optional": true
+    },
+    {
+     "name": "parentId",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "partial",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "permissions",
+     "kind": "property",
+     "type": "PermissionsBitField",
+     "optional": true,
+     "class": "PermissionsBitField"
+    },
+    {
+     "name": "rateLimitPerUser",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "sendable",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "toString",
+     "kind": "method",
+     "type": "Text"
+    },
+    {
+     "name": "totalMessageSent",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
     {
      "name": "type",
      "kind": "property",
      "type": "ChannelType.PublicThread | ChannelType.…"
+    },
+    {
+     "name": "unarchivable",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "url",
+     "kind": "getter",
+     "type": "Text"
+    },
+    {
+     "name": "viewable",
+     "kind": "getter",
+     "type": "Yes/no"
     }
    ]
   },
@@ -3298,12 +3839,12 @@
     {
      "name": "serialize",
      "kind": "method",
-     "type": "Record<Flags, boolean>"
+     "type": "Record<ChannelFlagsString, boolean>"
     },
     {
      "name": "toArray",
      "kind": "method",
-     "type": "Flags[]"
+     "type": "ChannelFlagsString[]"
     }
    ]
   },
@@ -3398,7 +3939,8 @@
     {
      "name": "members",
      "kind": "getter",
-     "type": "Collection<Snowflake, GuildMember>"
+     "type": "Collection<GuildMember>",
+     "class": "Collection<GuildMember>"
     },
     {
      "name": "name",
@@ -3478,21 +4020,33 @@
     {
      "name": "cache",
      "kind": "getter",
-     "type": "Collection<Key, Holds>"
+     "type": "Collection<PermissionOverwrites>",
+     "class": "Collection<PermissionOverwrites>"
     },
     {
      "name": "holds",
      "kind": "property",
-     "type": "Constructable<Holds>"
+     "type": "Constructable<PermissionOverwrites>"
     }
    ]
   },
   "GuildTextThreadManager": {
    "members": [
     {
+     "name": "cache",
+     "kind": "getter",
+     "type": "Collection<PublicThreadChannel>",
+     "class": "Collection<PublicThreadChannel>"
+    },
+    {
      "name": "channel",
      "kind": "property",
-     "type": "If<ThreadOnly, ForumChannel | MediaChan…"
+     "type": "If<false, ForumChannel | MediaChannel, …"
+    },
+    {
+     "name": "holds",
+     "kind": "property",
+     "type": "Constructable<If<false, ForumThreadChan…"
     }
    ]
   },
@@ -3501,7 +4055,8 @@
     {
      "name": "cache",
      "kind": "getter",
-     "type": "Collection<Key, Holds>"
+     "type": "Collection<AutoModerationRule>",
+     "class": "Collection<AutoModerationRule>"
     },
     {
      "name": "guild",
@@ -3512,7 +4067,7 @@
     {
      "name": "holds",
      "kind": "property",
-     "type": "Constructable<Holds>"
+     "type": "Constructable<AutoModerationRule>"
     }
    ]
   },
@@ -3521,7 +4076,8 @@
     {
      "name": "cache",
      "kind": "getter",
-     "type": "Collection<Key, Holds>"
+     "type": "Collection<GuildBan>",
+     "class": "Collection<GuildBan>"
     },
     {
      "name": "guild",
@@ -3532,7 +4088,7 @@
     {
      "name": "holds",
      "kind": "property",
-     "type": "Constructable<Holds>"
+     "type": "Constructable<GuildBan>"
     }
    ]
   },
@@ -3541,7 +4097,8 @@
     {
      "name": "cache",
      "kind": "getter",
-     "type": "Collection<Key, Holds>"
+     "type": "Collection<GuildBasedChannel>",
+     "class": "Collection<GuildBasedChannel>"
     },
     {
      "name": "channelCountWithoutThreads",
@@ -3557,7 +4114,7 @@
     {
      "name": "holds",
      "kind": "property",
-     "type": "Constructable<Holds>"
+     "type": "Constructable<GuildBasedChannel>"
     }
    ]
   },
@@ -3576,7 +4133,8 @@
     {
      "name": "cache",
      "kind": "getter",
-     "type": "Collection<Key, Holds>"
+     "type": "Collection<GuildEmoji>",
+     "class": "Collection<GuildEmoji>"
     },
     {
      "name": "guild",
@@ -3587,7 +4145,7 @@
     {
      "name": "holds",
      "kind": "property",
-     "type": "Constructable<Holds>"
+     "type": "Constructable<GuildEmoji>"
     }
    ]
   },
@@ -3624,7 +4182,8 @@
     {
      "name": "cache",
      "kind": "getter",
-     "type": "Collection<Key, Holds>"
+     "type": "Collection<Invite>",
+     "class": "Collection<Invite>"
     },
     {
      "name": "guild",
@@ -3635,7 +4194,7 @@
     {
      "name": "holds",
      "kind": "property",
-     "type": "Constructable<Holds>"
+     "type": "Constructable<Invite>"
     }
    ]
   },
@@ -3644,7 +4203,8 @@
     {
      "name": "cache",
      "kind": "getter",
-     "type": "Collection<Key, Holds>"
+     "type": "Collection<GuildMember>",
+     "class": "Collection<GuildMember>"
     },
     {
      "name": "guild",
@@ -3655,7 +4215,7 @@
     {
      "name": "holds",
      "kind": "property",
-     "type": "Constructable<Holds>"
+     "type": "Constructable<GuildMember>"
     },
     {
      "name": "me",
@@ -3671,12 +4231,13 @@
     {
      "name": "cache",
      "kind": "getter",
-     "type": "Collection<Key, Holds>"
+     "type": "Collection<Presence>",
+     "class": "Collection<Presence>"
     },
     {
      "name": "holds",
      "kind": "property",
-     "type": "Constructable<Holds>"
+     "type": "Constructable<Presence>"
     }
    ]
   },
@@ -3685,7 +4246,8 @@
     {
      "name": "cache",
      "kind": "getter",
-     "type": "Collection<Key, Holds>"
+     "type": "Collection<Role>",
+     "class": "Collection<Role>"
     },
     {
      "name": "everyone",
@@ -3708,7 +4270,7 @@
     {
      "name": "holds",
      "kind": "property",
-     "type": "Constructable<Holds>"
+     "type": "Constructable<Role>"
     },
     {
      "name": "premiumSubscriberRole",
@@ -3724,7 +4286,8 @@
     {
      "name": "cache",
      "kind": "getter",
-     "type": "Collection<Key, Holds>"
+     "type": "Collection<GuildScheduledEvent>",
+     "class": "Collection<GuildScheduledEvent>"
     },
     {
      "name": "guild",
@@ -3735,7 +4298,7 @@
     {
      "name": "holds",
      "kind": "property",
-     "type": "Constructable<Holds>"
+     "type": "Constructable<GuildScheduledEvent>"
     }
    ]
   },
@@ -3774,7 +4337,8 @@
     {
      "name": "cache",
      "kind": "getter",
-     "type": "Collection<Key, Holds>"
+     "type": "Collection<SoundboardSound>",
+     "class": "Collection<SoundboardSound>"
     },
     {
      "name": "guild",
@@ -3785,7 +4349,7 @@
     {
      "name": "holds",
      "kind": "property",
-     "type": "Constructable<Holds>"
+     "type": "Constructable<SoundboardSound>"
     }
    ]
   },
@@ -3794,7 +4358,8 @@
     {
      "name": "cache",
      "kind": "getter",
-     "type": "Collection<Key, Holds>"
+     "type": "Collection<StageInstance>",
+     "class": "Collection<StageInstance>"
     },
     {
      "name": "guild",
@@ -3805,7 +4370,7 @@
     {
      "name": "holds",
      "kind": "property",
-     "type": "Constructable<Holds>"
+     "type": "Constructable<StageInstance>"
     }
    ]
   },
@@ -3814,7 +4379,8 @@
     {
      "name": "cache",
      "kind": "getter",
-     "type": "Collection<Key, Holds>"
+     "type": "Collection<Sticker>",
+     "class": "Collection<Sticker>"
     },
     {
      "name": "guild",
@@ -3825,7 +4391,7 @@
     {
      "name": "holds",
      "kind": "property",
-     "type": "Constructable<Holds>"
+     "type": "Constructable<Sticker>"
     }
    ]
   },
@@ -3839,12 +4405,12 @@
     {
      "name": "serialize",
      "kind": "method",
-     "type": "Record<Flags, boolean>"
+     "type": "Record<SystemChannelFlagsString, boolea…"
     },
     {
      "name": "toArray",
      "kind": "method",
-     "type": "Flags[]"
+     "type": "SystemChannelFlagsString[]"
     }
    ]
   },
@@ -3853,7 +4419,8 @@
     {
      "name": "cache",
      "kind": "getter",
-     "type": "Collection<Key, Holds>"
+     "type": "Collection<VoiceState>",
+     "class": "Collection<VoiceState>"
     },
     {
      "name": "guild",
@@ -3864,7 +4431,7 @@
     {
      "name": "holds",
      "kind": "property",
-     "type": "Constructable<Holds>"
+     "type": "Constructable<VoiceState>"
     }
    ]
   },
@@ -3899,12 +4466,12 @@
     {
      "name": "serialize",
      "kind": "method",
-     "type": "Record<Flags, boolean>"
+     "type": "Record<RoleFlagsString, boolean>"
     },
     {
      "name": "toArray",
      "kind": "method",
-     "type": "Flags[]"
+     "type": "RoleFlagsString[]"
     }
    ]
   },
@@ -3972,17 +4539,114 @@
     }
    ]
   },
+  "Entitlement": {
+   "members": [
+    {
+     "name": "applicationId",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "consumed",
+     "kind": "property",
+     "type": "Yes/no"
+    },
+    {
+     "name": "deleted",
+     "kind": "property",
+     "type": "Yes/no"
+    },
+    {
+     "name": "endsAt",
+     "kind": "getter",
+     "type": "Date",
+     "optional": true
+    },
+    {
+     "name": "endsTimestamp",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "guild",
+     "kind": "getter",
+     "type": "Guild",
+     "optional": true,
+     "class": "Guild"
+    },
+    {
+     "name": "guildId",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "id",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "isActive",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isGuildSubscription",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isTest",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isUserSubscription",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "skuId",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "startsAt",
+     "kind": "getter",
+     "type": "Date",
+     "optional": true
+    },
+    {
+     "name": "startsTimestamp",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "type",
+     "kind": "property",
+     "type": "EntitlementType"
+    },
+    {
+     "name": "userId",
+     "kind": "property",
+     "type": "Text"
+    }
+   ]
+  },
   "ThreadMemberManager": {
    "members": [
     {
      "name": "cache",
      "kind": "getter",
-     "type": "Collection<Key, Holds>"
+     "type": "Collection<ThreadMember>",
+     "class": "Collection<ThreadMember>"
     },
     {
      "name": "holds",
      "kind": "property",
-     "type": "Constructable<Holds>"
+     "type": "Constructable<ThreadMember>"
     },
     {
      "name": "me",
@@ -4130,12 +4794,12 @@
     {
      "name": "serialize",
      "kind": "method",
-     "type": "Record<Flags, boolean>"
+     "type": "Record<InviteFlagsString, boolean>"
     },
     {
      "name": "toArray",
      "kind": "method",
-     "type": "Flags[]"
+     "type": "InviteFlagsString[]"
     }
    ]
   },
@@ -4433,6 +5097,69 @@
     }
    ]
   },
+  "InviteRole": {
+   "members": [
+    {
+     "name": "colors",
+     "kind": "property",
+     "type": "RoleColors",
+     "class": "RoleColors"
+    },
+    {
+     "name": "createdAt",
+     "kind": "getter",
+     "type": "Date"
+    },
+    {
+     "name": "createdTimestamp",
+     "kind": "getter",
+     "type": "Number"
+    },
+    {
+     "name": "hexColor",
+     "kind": "getter",
+     "type": "Text"
+    },
+    {
+     "name": "icon",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "iconURL",
+     "kind": "method",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "id",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "name",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "rawPosition",
+     "kind": "property",
+     "type": "Number"
+    },
+    {
+     "name": "toString",
+     "kind": "method",
+     "type": "Text"
+    },
+    {
+     "name": "unicodeEmoji",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    }
+   ]
+  },
   "IntegrationApplication": {
    "members": [
     {
@@ -4530,6 +5257,50 @@
     }
    ]
   },
+  "PollAnswer": {
+   "members": [
+    {
+     "name": "emoji",
+     "kind": "getter",
+     "type": "GuildEmoji",
+     "optional": true,
+     "class": "GuildEmoji"
+    },
+    {
+     "name": "id",
+     "kind": "property",
+     "type": "Number"
+    },
+    {
+     "name": "partial",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "poll",
+     "kind": "property",
+     "type": "Poll",
+     "class": "Poll"
+    },
+    {
+     "name": "text",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "voteCount",
+     "kind": "property",
+     "type": "Number"
+    },
+    {
+     "name": "voters",
+     "kind": "property",
+     "type": "PollAnswerVoterManager",
+     "class": "PollAnswerVoterManager"
+    }
+   ]
+  },
   "PollQuestionMedia": {
    "members": [
     {
@@ -4583,6 +5354,25 @@
     }
    ]
   },
+  "AttachmentFlagsBitField": {
+   "members": [
+    {
+     "name": "bitfield",
+     "kind": "property",
+     "type": "Type"
+    },
+    {
+     "name": "serialize",
+     "kind": "method",
+     "type": "Record<AttachmentFlagsString, boolean>"
+    },
+    {
+     "name": "toArray",
+     "kind": "method",
+     "type": "AttachmentFlagsString[]"
+    }
+   ]
+  },
   "ApplicationCommandManager": {
    "members": []
   },
@@ -4597,12 +5387,13 @@
     {
      "name": "cache",
      "kind": "getter",
-     "type": "Collection<Key, Holds>"
+     "type": "Collection<ApplicationEmoji>",
+     "class": "Collection<ApplicationEmoji>"
     },
     {
      "name": "holds",
      "kind": "property",
-     "type": "Constructable<Holds>"
+     "type": "Constructable<ApplicationEmoji>"
     }
    ]
   },
@@ -4611,12 +5402,13 @@
     {
      "name": "cache",
      "kind": "getter",
-     "type": "Collection<Key, Holds>"
+     "type": "Collection<Entitlement>",
+     "class": "Collection<Entitlement>"
     },
     {
      "name": "holds",
      "kind": "property",
-     "type": "Constructable<Holds>"
+     "type": "Constructable<Entitlement>"
     }
    ]
   },
@@ -4630,12 +5422,12 @@
     {
      "name": "serialize",
      "kind": "method",
-     "type": "Record<Flags, boolean>"
+     "type": "Record<ApplicationFlagsString, boolean>"
     },
     {
      "name": "toArray",
      "kind": "method",
-     "type": "Flags[]"
+     "type": "ApplicationFlagsString[]"
     }
    ]
   },
@@ -4659,12 +5451,91 @@
     {
      "name": "cache",
      "kind": "getter",
-     "type": "Collection<Key, Holds>"
+     "type": "Collection<Subscription>",
+     "class": "Collection<Subscription>"
     },
     {
      "name": "holds",
      "kind": "property",
-     "type": "Constructable<Holds>"
+     "type": "Constructable<Subscription>"
+    }
+   ]
+  },
+  "CrosspostedChannel": {
+   "members": [
+    {
+     "name": "channelId",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "guildId",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "name",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "type",
+     "kind": "property",
+     "type": "ChannelType"
+    }
+   ]
+  },
+  "MessageReaction": {
+   "members": [
+    {
+     "name": "burstColors",
+     "kind": "property",
+     "type": "string[]",
+     "optional": true
+    },
+    {
+     "name": "count",
+     "kind": "property",
+     "type": "Number"
+    },
+    {
+     "name": "countDetails",
+     "kind": "property",
+     "type": "ReactionCountDetailsData",
+     "class": "ReactionCountDetailsData"
+    },
+    {
+     "name": "emoji",
+     "kind": "getter",
+     "type": "GuildEmoji",
+     "class": "GuildEmoji"
+    },
+    {
+     "name": "me",
+     "kind": "property",
+     "type": "Yes/no"
+    },
+    {
+     "name": "meBurst",
+     "kind": "property",
+     "type": "Yes/no"
+    },
+    {
+     "name": "message",
+     "kind": "property",
+     "type": "Message",
+     "class": "Message"
+    },
+    {
+     "name": "partial",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "users",
+     "kind": "property",
+     "type": "ReactionUserManager",
+     "class": "ReactionUserManager"
     }
    ]
   },
@@ -4673,7 +5544,8 @@
     {
      "name": "cache",
      "kind": "getter",
-     "type": "Collection<Key, Holds>"
+     "type": "Collection<CategoryChildChannel>",
+     "class": "Collection<CategoryChildChannel>"
     },
     {
      "name": "channel",
@@ -4690,7 +5562,218 @@
     {
      "name": "holds",
      "kind": "property",
-     "type": "Constructable<Holds>"
+     "type": "Constructable<CategoryChildChannel>"
+    }
+   ]
+  },
+  "PermissionOverwrites": {
+   "members": [
+    {
+     "name": "allow",
+     "kind": "property",
+     "type": "PermissionsBitField",
+     "class": "PermissionsBitField"
+    },
+    {
+     "name": "channel",
+     "kind": "property",
+     "type": "NonThreadGuildBasedChannel"
+    },
+    {
+     "name": "deny",
+     "kind": "property",
+     "type": "PermissionsBitField",
+     "class": "PermissionsBitField"
+    },
+    {
+     "name": "id",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "type",
+     "kind": "property",
+     "type": "OverwriteType"
+    }
+   ]
+  },
+  "AutoModerationRule": {
+   "members": [
+    {
+     "name": "actions",
+     "kind": "property",
+     "type": "AutoModerationAction[]"
+    },
+    {
+     "name": "creatorId",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "enabled",
+     "kind": "property",
+     "type": "Yes/no"
+    },
+    {
+     "name": "eventType",
+     "kind": "property",
+     "type": "AutoModerationRuleEventType"
+    },
+    {
+     "name": "exemptChannels",
+     "kind": "property",
+     "type": "Collection<GuildBasedChannel>",
+     "class": "Collection<GuildBasedChannel>"
+    },
+    {
+     "name": "exemptRoles",
+     "kind": "property",
+     "type": "Collection<Role>",
+     "class": "Collection<Role>"
+    },
+    {
+     "name": "guild",
+     "kind": "property",
+     "type": "Guild",
+     "class": "Guild"
+    },
+    {
+     "name": "id",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "name",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "triggerMetadata",
+     "kind": "property",
+     "type": "AutoModerationTriggerMetadata",
+     "class": "AutoModerationTriggerMetadata"
+    },
+    {
+     "name": "triggerType",
+     "kind": "property",
+     "type": "AutoModerationRuleTriggerType"
+    }
+   ]
+  },
+  "GuildBan": {
+   "members": [
+    {
+     "name": "guild",
+     "kind": "property",
+     "type": "Guild",
+     "class": "Guild"
+    },
+    {
+     "name": "partial",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "reason",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "user",
+     "kind": "property",
+     "type": "User",
+     "class": "User"
+    }
+   ]
+  },
+  "GuildEmoji": {
+   "members": [
+    {
+     "name": "animated",
+     "kind": "property",
+     "type": "Yes/no"
+    },
+    {
+     "name": "author",
+     "kind": "property",
+     "type": "User",
+     "optional": true,
+     "class": "User"
+    },
+    {
+     "name": "available",
+     "kind": "property",
+     "type": "Yes/no",
+     "optional": true
+    },
+    {
+     "name": "createdAt",
+     "kind": "getter",
+     "type": "Date"
+    },
+    {
+     "name": "createdTimestamp",
+     "kind": "getter",
+     "type": "Number"
+    },
+    {
+     "name": "deletable",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "guild",
+     "kind": "property",
+     "type": "Guild",
+     "class": "Guild"
+    },
+    {
+     "name": "id",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "identifier",
+     "kind": "getter",
+     "type": "Text"
+    },
+    {
+     "name": "imageURL",
+     "kind": "method",
+     "type": "Text"
+    },
+    {
+     "name": "managed",
+     "kind": "property",
+     "type": "Yes/no"
+    },
+    {
+     "name": "name",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "requiresColons",
+     "kind": "property",
+     "type": "Yes/no",
+     "optional": true
+    },
+    {
+     "name": "roles",
+     "kind": "getter",
+     "type": "GuildEmojiRoleManager",
+     "class": "GuildEmojiRoleManager"
+    },
+    {
+     "name": "toString",
+     "kind": "method",
+     "type": "Text"
+    },
+    {
+     "name": "url",
+     "kind": "getter",
+     "type": "Text"
     }
    ]
   },
@@ -4710,12 +5793,144 @@
     {
      "name": "shards",
      "kind": "property",
-     "type": "Collection<number, WebSocketShard>"
+     "type": "Collection<WebSocketShard>",
+     "class": "Collection<WebSocketShard>"
     },
     {
      "name": "status",
      "kind": "property",
      "type": "Status"
+    }
+   ]
+  },
+  "SoundboardSound": {
+   "members": [
+    {
+     "name": "available",
+     "kind": "property",
+     "type": "Yes/no"
+    },
+    {
+     "name": "createdAt",
+     "kind": "getter",
+     "type": "Date"
+    },
+    {
+     "name": "createdTimestamp",
+     "kind": "getter",
+     "type": "Number"
+    },
+    {
+     "name": "emoji",
+     "kind": "getter",
+     "type": "Emoji",
+     "optional": true,
+     "class": "Emoji"
+    },
+    {
+     "name": "guild",
+     "kind": "getter",
+     "type": "Guild",
+     "optional": true,
+     "class": "Guild"
+    },
+    {
+     "name": "guildId",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "name",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "soundId",
+     "kind": "property",
+     "type": "Snowflake | string"
+    },
+    {
+     "name": "url",
+     "kind": "getter",
+     "type": "Text"
+    },
+    {
+     "name": "user",
+     "kind": "property",
+     "type": "User",
+     "optional": true,
+     "class": "User"
+    },
+    {
+     "name": "volume",
+     "kind": "property",
+     "type": "Number"
+    }
+   ]
+  },
+  "StageInstance": {
+   "members": [
+    {
+     "name": "channel",
+     "kind": "getter",
+     "type": "StageChannel",
+     "optional": true,
+     "class": "StageChannel"
+    },
+    {
+     "name": "channelId",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "createdAt",
+     "kind": "getter",
+     "type": "Date"
+    },
+    {
+     "name": "createdTimestamp",
+     "kind": "getter",
+     "type": "Number"
+    },
+    {
+     "name": "guild",
+     "kind": "getter",
+     "type": "Guild",
+     "optional": true,
+     "class": "Guild"
+    },
+    {
+     "name": "guildId",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "guildScheduledEvent",
+     "kind": "getter",
+     "type": "GuildScheduledEvent",
+     "optional": true,
+     "class": "GuildScheduledEvent"
+    },
+    {
+     "name": "guildScheduledEventId",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "id",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "privacyLevel",
+     "kind": "property",
+     "type": "StageInstancePrivacyLevel"
+    },
+    {
+     "name": "topic",
+     "kind": "property",
+     "type": "Text"
     }
    ]
   },
@@ -4797,7 +6012,8 @@
     {
      "name": "welcomeChannels",
      "kind": "property",
-     "type": "Collection<Snowflake, WelcomeChannel>"
+     "type": "Collection<WelcomeChannel>",
+     "class": "Collection<WelcomeChannel>"
     }
    ]
   },
@@ -4883,6 +6099,535 @@
     }
    ]
   },
+  "PollAnswerVoterManager": {
+   "members": [
+    {
+     "name": "answer",
+     "kind": "property",
+     "type": "PollAnswer",
+     "class": "PollAnswer"
+    },
+    {
+     "name": "cache",
+     "kind": "getter",
+     "type": "Collection<User>",
+     "class": "Collection<User>"
+    },
+    {
+     "name": "holds",
+     "kind": "property",
+     "type": "Constructable<User>"
+    }
+   ]
+  },
+  "ApplicationEmoji": {
+   "members": [
+    {
+     "name": "animated",
+     "kind": "property",
+     "type": "Yes/no"
+    },
+    {
+     "name": "application",
+     "kind": "property",
+     "type": "ClientApplication"
+    },
+    {
+     "name": "author",
+     "kind": "property",
+     "type": "User"
+    },
+    {
+     "name": "available",
+     "kind": "property",
+     "type": "Yes/no"
+    },
+    {
+     "name": "createdAt",
+     "kind": "getter",
+     "type": "Date"
+    },
+    {
+     "name": "createdTimestamp",
+     "kind": "getter",
+     "type": "Number"
+    },
+    {
+     "name": "id",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "identifier",
+     "kind": "getter",
+     "type": "Text"
+    },
+    {
+     "name": "imageURL",
+     "kind": "method",
+     "type": "Text"
+    },
+    {
+     "name": "managed",
+     "kind": "property",
+     "type": "Yes/no"
+    },
+    {
+     "name": "name",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "requiresColons",
+     "kind": "property",
+     "type": "Yes/no"
+    },
+    {
+     "name": "toString",
+     "kind": "method",
+     "type": "Text"
+    },
+    {
+     "name": "url",
+     "kind": "getter",
+     "type": "Text",
+     "optional": true
+    }
+   ]
+  },
+  "Subscription": {
+   "members": [
+    {
+     "name": "canceledAt",
+     "kind": "getter",
+     "type": "Date",
+     "optional": true
+    },
+    {
+     "name": "canceledTimestamp",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "country",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "currentPeriodEndAt",
+     "kind": "getter",
+     "type": "Date"
+    },
+    {
+     "name": "currentPeriodEndTimestamp",
+     "kind": "property",
+     "type": "Number"
+    },
+    {
+     "name": "currentPeriodStartAt",
+     "kind": "getter",
+     "type": "Date"
+    },
+    {
+     "name": "currentPeriodStartTimestamp",
+     "kind": "property",
+     "type": "Number"
+    },
+    {
+     "name": "entitlementIds",
+     "kind": "property",
+     "type": "Snowflake[]"
+    },
+    {
+     "name": "id",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "renewalSkuIds",
+     "kind": "property",
+     "type": "Snowflake[]",
+     "optional": true
+    },
+    {
+     "name": "skuIds",
+     "kind": "property",
+     "type": "Snowflake[]"
+    },
+    {
+     "name": "status",
+     "kind": "property",
+     "type": "SubscriptionStatus"
+    },
+    {
+     "name": "userId",
+     "kind": "property",
+     "type": "Text"
+    }
+   ]
+  },
+  "ReactionCountDetailsData": {
+   "members": [
+    {
+     "name": "burst",
+     "kind": "property",
+     "type": "Number"
+    },
+    {
+     "name": "normal",
+     "kind": "property",
+     "type": "Number"
+    }
+   ]
+  },
+  "ReactionUserManager": {
+   "members": [
+    {
+     "name": "cache",
+     "kind": "getter",
+     "type": "Collection<User>",
+     "class": "Collection<User>"
+    },
+    {
+     "name": "holds",
+     "kind": "property",
+     "type": "Constructable<User>"
+    },
+    {
+     "name": "reaction",
+     "kind": "property",
+     "type": "MessageReaction"
+    }
+   ]
+  },
+  "AutoModerationTriggerMetadata": {
+   "members": [
+    {
+     "name": "allowList",
+     "kind": "property",
+     "type": "readonly string[]"
+    },
+    {
+     "name": "keywordFilter",
+     "kind": "property",
+     "type": "readonly string[]"
+    },
+    {
+     "name": "mentionRaidProtectionEnabled",
+     "kind": "property",
+     "type": "Yes/no"
+    },
+    {
+     "name": "mentionTotalLimit",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "presets",
+     "kind": "property",
+     "type": "readonly AutoModerationRuleKeywordPrese…"
+    },
+    {
+     "name": "regexPatterns",
+     "kind": "property",
+     "type": "readonly string[]"
+    }
+   ]
+  },
+  "GuildEmojiRoleManager": {
+   "members": [
+    {
+     "name": "cache",
+     "kind": "getter",
+     "type": "Collection<Role>",
+     "class": "Collection<Role>"
+    },
+    {
+     "name": "emoji",
+     "kind": "property",
+     "type": "GuildEmoji"
+    },
+    {
+     "name": "guild",
+     "kind": "property",
+     "type": "Guild"
+    },
+    {
+     "name": "holds",
+     "kind": "property",
+     "type": "Constructable<Role>"
+    }
+   ]
+  },
+  "Emoji": {
+   "members": [
+    {
+     "name": "animated",
+     "kind": "property",
+     "type": "Yes/no",
+     "optional": true
+    },
+    {
+     "name": "createdAt",
+     "kind": "getter",
+     "type": "Date",
+     "optional": true
+    },
+    {
+     "name": "createdTimestamp",
+     "kind": "getter",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "id",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "identifier",
+     "kind": "getter",
+     "type": "Text"
+    },
+    {
+     "name": "imageURL",
+     "kind": "method",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "name",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "toString",
+     "kind": "method",
+     "type": "Text"
+    },
+    {
+     "name": "url",
+     "kind": "getter",
+     "type": "Text",
+     "optional": true
+    }
+   ]
+  },
+  "StageChannel": {
+   "members": [
+    {
+     "name": "appPermissions",
+     "kind": "property",
+     "type": "PermissionsBitField",
+     "optional": true
+    },
+    {
+     "name": "bitrate",
+     "kind": "property",
+     "type": "Number"
+    },
+    {
+     "name": "createdAt",
+     "kind": "getter",
+     "type": "Date"
+    },
+    {
+     "name": "createdTimestamp",
+     "kind": "getter",
+     "type": "Number"
+    },
+    {
+     "name": "deletable",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "flags",
+     "kind": "property",
+     "type": "ChannelFlagsBitField"
+    },
+    {
+     "name": "full",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "guild",
+     "kind": "property",
+     "type": "Guild"
+    },
+    {
+     "name": "guildId",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "id",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "isDMBased",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isSendable",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isTextBased",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isThread",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isThreadOnly",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "isVoiceBased",
+     "kind": "method",
+     "type": "Yes/no"
+    },
+    {
+     "name": "joinable",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "manageable",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "members",
+     "kind": "getter",
+     "type": "Collection<GuildMember>",
+     "class": "Collection<GuildMember>"
+    },
+    {
+     "name": "name",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "nsfw",
+     "kind": "property",
+     "type": "Yes/no"
+    },
+    {
+     "name": "parent",
+     "kind": "getter",
+     "type": "CategoryChannel",
+     "optional": true
+    },
+    {
+     "name": "parentId",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "partial",
+     "kind": "getter",
+     "type": "Yes/no"
+    },
+    {
+     "name": "permissionOverwrites",
+     "kind": "property",
+     "type": "PermissionOverwriteManager"
+    },
+    {
+     "name": "permissions",
+     "kind": "property",
+     "type": "PermissionsBitField",
+     "optional": true
+    },
+    {
+     "name": "permissionsLocked",
+     "kind": "getter",
+     "type": "Yes/no",
+     "optional": true
+    },
+    {
+     "name": "position",
+     "kind": "getter",
+     "type": "Number"
+    },
+    {
+     "name": "rateLimitPerUser",
+     "kind": "property",
+     "type": "Number",
+     "optional": true
+    },
+    {
+     "name": "rawPosition",
+     "kind": "property",
+     "type": "Number"
+    },
+    {
+     "name": "rtcRegion",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "stageInstance",
+     "kind": "getter",
+     "type": "StageInstance",
+     "optional": true
+    },
+    {
+     "name": "topic",
+     "kind": "property",
+     "type": "Text",
+     "optional": true
+    },
+    {
+     "name": "toString",
+     "kind": "method",
+     "type": "Text"
+    },
+    {
+     "name": "type",
+     "kind": "property",
+     "type": "ChannelType.GuildStageVoice"
+    },
+    {
+     "name": "url",
+     "kind": "getter",
+     "type": "Text"
+    },
+    {
+     "name": "userLimit",
+     "kind": "property",
+     "type": "Number"
+    },
+    {
+     "name": "videoQualityMode",
+     "kind": "property",
+     "type": "VideoQualityMode",
+     "optional": true
+    },
+    {
+     "name": "viewable",
+     "kind": "getter",
+     "type": "Yes/no"
+    }
+   ]
+  },
   "ThreadMemberFlagsBitField": {
    "members": [
     {
@@ -4893,12 +6638,179 @@
     {
      "name": "serialize",
      "kind": "method",
-     "type": "Record<Flags, boolean>"
+     "type": "Record<ThreadMemberFlagsString, boolean>"
     },
     {
      "name": "toArray",
      "kind": "method",
-     "type": "Flags[]"
+     "type": "ThreadMemberFlagsString[]"
+    }
+   ]
+  },
+  "WelcomeChannel": {
+   "members": [
+    {
+     "name": "channel",
+     "kind": "getter",
+     "type": "TextChannel",
+     "optional": true
+    },
+    {
+     "name": "channelId",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "description",
+     "kind": "property",
+     "type": "Text"
+    },
+    {
+     "name": "emoji",
+     "kind": "getter",
+     "type": "GuildEmoji"
+    },
+    {
+     "name": "guild",
+     "kind": "property",
+     "type": "Guild"
+    }
+   ]
+  },
+  "Collection": {
+   "members": [
+    {
+     "name": "at",
+     "kind": "method",
+     "type": "$T",
+     "class": "$T",
+     "doc": "The one at this place: at(0) is the first, at(-1) the last."
+    },
+    {
+     "name": "every",
+     "kind": "method",
+     "type": "Yes/no",
+     "doc": "Whether a test is true for all: every(m => !m.user.bot)."
+    },
+    {
+     "name": "filter",
+     "kind": "method",
+     "type": "Collection<$T>",
+     "class": "Collection<$T>",
+     "doc": "Only those a test picks: filter(m => !m.user.bot)."
+    },
+    {
+     "name": "find",
+     "kind": "method",
+     "type": "$T",
+     "class": "$T",
+     "doc": "The first one a test picks: find(m => m.displayName === \"Ada\")."
+    },
+    {
+     "name": "first",
+     "kind": "method",
+     "type": "$T",
+     "class": "$T",
+     "doc": "The first one (first(3): the first three, as a list)."
+    },
+    {
+     "name": "firstKey",
+     "kind": "method",
+     "type": "Text",
+     "doc": "The first one's key (its id)."
+    },
+    {
+     "name": "get",
+     "kind": "method",
+     "type": "$T",
+     "class": "$T",
+     "doc": "The one with this key (an id): get(\"123456789012345678\")."
+    },
+    {
+     "name": "has",
+     "kind": "method",
+     "type": "Yes/no",
+     "doc": "Whether it holds one with this key (an id): has(\"123…\")."
+    },
+    {
+     "name": "last",
+     "kind": "method",
+     "type": "$T",
+     "class": "$T",
+     "doc": "The last one."
+    },
+    {
+     "name": "lastKey",
+     "kind": "method",
+     "type": "Text",
+     "doc": "The last one's key (its id)."
+    },
+    {
+     "name": "map",
+     "kind": "method",
+     "type": "List",
+     "doc": "Something from each, as a list: map(m => m.displayName)."
+    },
+    {
+     "name": "random",
+     "kind": "method",
+     "type": "$T",
+     "class": "$T",
+     "doc": "One picked at random."
+    },
+    {
+     "name": "size",
+     "kind": "property",
+     "type": "Number",
+     "doc": "How many it holds."
+    },
+    {
+     "name": "some",
+     "kind": "method",
+     "type": "Yes/no",
+     "doc": "Whether a test is true for any: some(m => m.user.bot)."
+    },
+    {
+     "name": "sort",
+     "kind": "method",
+     "type": "Collection<$T>",
+     "class": "Collection<$T>",
+     "doc": "Sorted by a comparison: sort((a, b) => a.joinedTimestamp - b.joinedTimestamp)."
+    }
+   ]
+  },
+  "Map": {
+   "members": [
+    {
+     "name": "get",
+     "kind": "method",
+     "type": "$T",
+     "class": "$T",
+     "doc": "The one with this key: get(\"key\")."
+    },
+    {
+     "name": "has",
+     "kind": "method",
+     "type": "Yes/no",
+     "doc": "Whether it holds one with this key."
+    },
+    {
+     "name": "keys",
+     "kind": "method",
+     "type": "List",
+     "doc": "Its keys, one after another ([...x.keys()] for a list)."
+    },
+    {
+     "name": "size",
+     "kind": "property",
+     "type": "Number",
+     "doc": "How many it holds."
+    },
+    {
+     "name": "values",
+     "kind": "method",
+     "type": "List",
+     "doc": "What it holds, one after another ([...x.values()] for a list)."
     }
    ]
   }

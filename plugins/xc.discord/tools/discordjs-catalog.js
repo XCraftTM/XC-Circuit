@@ -61,10 +61,23 @@ function splitTop(text, sep) {
   return out.map((s) => s.trim()).filter(Boolean);
 }
 
-/** The bases in an `extends A<X>, B` clause, by name. */
-const bases = (clause) => (clause ? splitTop(clause, ",").map((b) => b.replace(/<.*$/s, "").trim()) : []);
+/** The type arguments in `<A, B<C>>` at the start of `text` (empty without). */
+function typeArgs(text) {
+  const t = text.trimStart();
+  if (!t.startsWith("<")) return [];
+  return splitTop(t.slice(1, matching(t, 0, "<", ">")), ",");
+}
 
-const classes = new Map(); // name → { bases: [], members: Map }
+/** The bases in an `extends A<X>, B` clause: their names and type arguments. */
+const bases = (clause) =>
+  clause
+    ? splitTop(clause, ",").map((b) => {
+        const name = b.replace(/<.*$/s, "").trim();
+        return { name, args: typeArgs(b.slice(name.length)) };
+      })
+    : [];
+
+const classes = new Map(); // name → { bases: [{ name, args }], params: [], members: Map }
 const aliases = new Map(); // type alias → its text
 const lines = source.split("\n");
 let i = 0;
@@ -87,8 +100,14 @@ while (i < lines.length) {
   let head = decl[3];
   while (!head.includes("{") && i + 1 < lines.length) head += " " + lines[++i].trim();
   const ext = head.match(/\bextends\s+(.*?)(?:\bimplements\b|\{)/s);
-  const entry = classes.get(decl[2]) || { bases: [], members: new Map() };
-  entry.bases.push(...bases(ext && ext[1]));
+  const entry = classes.get(decl[2]) || { bases: [], params: [], members: new Map() };
+  // Its type parameters (`<Key, Holds = Thing>`: Key, Holds), for its bases' members.
+  if (!entry.params.length) entry.params = typeArgs(head).map((p) => p.split(/[\s=]/)[0]);
+  // The bases (only the part before the class's own `extends`: type
+  // parameters can have `extends` of their own).
+  const own = head.trimStart().startsWith("<") ? head.slice(head.indexOf(">", matching(head.trimStart(), 0, "<", ">")) + 1) : head;
+  const ownExt = own.match(/\bextends\s+(.*?)(?:\bimplements\b|\{)/s) || ext;
+  entry.bases.push(...bases(ownExt && ownExt[1]));
   classes.set(decl[2], entry);
   if (head.trimEnd().endsWith("{}")) {
     i++;
@@ -204,16 +223,78 @@ function shown(type) {
   return classOf(t) || (t.length > 40 ? t.slice(0, 39) + "…" : t);
 }
 
-/** Every member of a class, its bases' first, then its own (own ones win). */
-function flatten(name, seen = new Set()) {
+/** `text` with type parameters put in: `Collection<Key, Holds>` → `Collection<Snowflake, GuildMember>`. */
+const fill = (text, subst) => (subst.size ? text.replace(/\b[A-Za-z_]\w*\b/g, (w) => (subst.has(w) ? subst.get(w) : w)) : text);
+
+/**
+ * Every member of a class, its bases' first, then its own (own ones win).
+ * `subst` gives its type parameters: a manager's `cache` is then the
+ * Collection of what that manager holds (GuildMemberManager: GuildMember).
+ */
+function flatten(name, subst = new Map(), seen = new Set()) {
   const out = new Map();
   if (seen.has(name) || !classes.has(name)) return out;
   seen.add(name);
   const c = classes.get(name);
-  for (const b of c.bases) for (const [k, v] of flatten(b, seen)) out.set(k, v);
-  for (const [k, v] of c.members) out.set(k, v);
+  for (const b of c.bases) {
+    const base = classes.get(b.name);
+    const sub = new Map();
+    if (base) base.params.forEach((p, k) => b.args[k] !== undefined && sub.set(p, fill(b.args[k], subst)));
+    for (const [k, v] of flatten(b.name, sub, seen)) out.set(k, v);
+  }
+  for (const [k, v] of c.members) out.set(k, { ...v, type: fill(v.type, subst) });
   return out;
 }
+
+/** A Collection or Map type: which, and the type of what it holds (its values). */
+function collectionOf(type) {
+  const t = clean(type).text.replace(/^Readonly<(.*)>$/s, "$1");
+  const m = t.match(/^(?:Readonly)?(Collection|Map)<(.*)>$/s);
+  if (!m) return null;
+  const args = splitTop(m[2], ",");
+  return { kind: m[1], item: unwrap(args[args.length - 1]) };
+}
+
+/** discord.js's helper types around a class: CacheTypeReducer<State, Class, …> and If<Test, Class, Other>. */
+function unwrap(type) {
+  const t = type.trim();
+  const m = t.match(/^(CacheTypeReducer|If)<(.*)>$/s);
+  if (!m) return t;
+  const args = splitTop(m[2], ",");
+  // The class, or the first part that is one.
+  const pick = args.slice(1).map(unwrap).find((a) => classOf(a)) || args[1] || t;
+  return unwrap(pick);
+}
+
+// What a Collection (discord.js's Map with more) and a Map have, for any item:
+// `$T` is the item's class or type, filled in by the editor (Collection<GuildMember>).
+const ITEM = { type: "$T", class: "$T" };
+const TEMPLATES = {
+  Collection: [
+    { name: "at", kind: "method", ...ITEM, doc: "The one at this place: at(0) is the first, at(-1) the last." },
+    { name: "every", kind: "method", type: "Yes/no", doc: "Whether a test is true for all: every(m => !m.user.bot)." },
+    { name: "filter", kind: "method", type: "Collection<$T>", class: "Collection<$T>", doc: "Only those a test picks: filter(m => !m.user.bot)." },
+    { name: "find", kind: "method", ...ITEM, doc: "The first one a test picks: find(m => m.displayName === \"Ada\")." },
+    { name: "first", kind: "method", ...ITEM, doc: "The first one (first(3): the first three, as a list)." },
+    { name: "firstKey", kind: "method", type: "Text", doc: "The first one's key (its id)." },
+    { name: "get", kind: "method", ...ITEM, doc: "The one with this key (an id): get(\"123456789012345678\")." },
+    { name: "has", kind: "method", type: "Yes/no", doc: "Whether it holds one with this key (an id): has(\"123…\")." },
+    { name: "last", kind: "method", ...ITEM, doc: "The last one." },
+    { name: "lastKey", kind: "method", type: "Text", doc: "The last one's key (its id)." },
+    { name: "map", kind: "method", type: "List", doc: "Something from each, as a list: map(m => m.displayName)." },
+    { name: "random", kind: "method", ...ITEM, doc: "One picked at random." },
+    { name: "size", kind: "property", type: "Number", doc: "How many it holds." },
+    { name: "some", kind: "method", type: "Yes/no", doc: "Whether a test is true for any: some(m => m.user.bot)." },
+    { name: "sort", kind: "method", type: "Collection<$T>", class: "Collection<$T>", doc: "Sorted by a comparison: sort((a, b) => a.joinedTimestamp - b.joinedTimestamp)." },
+  ],
+  Map: [
+    { name: "get", kind: "method", ...ITEM, doc: "The one with this key: get(\"key\")." },
+    { name: "has", kind: "method", type: "Yes/no", doc: "Whether it holds one with this key." },
+    { name: "keys", kind: "method", type: "List", doc: "Its keys, one after another ([...x.keys()] for a list)." },
+    { name: "size", kind: "property", type: "Number", doc: "How many it holds." },
+    { name: "values", kind: "method", type: "List", doc: "What it holds, one after another ([...x.values()] for a list)." },
+  ],
+};
 
 // ---- The catalog -----------------------------------------------------------------
 
@@ -226,10 +307,18 @@ while (queue.length) {
   const members = [];
   for (const m of [...flatten(name).values()].sort((a, b) => a.name.localeCompare(b.name))) {
     if (SKIP.has(m.name) || m.name.startsWith("_")) continue;
-    const target = classOf(m.type);
+    const coll = collectionOf(m.type);
+    const target = coll ? null : classOf(m.type);
     const entry = { name: m.name, kind: m.kind, type: shown(m.type) };
     if (clean(m.type).optional) entry.optional = true;
-    if (target && depth + 1 < DEPTH) {
+    if (coll) {
+      // A Collection (or Map) of something: its own members, then the item's.
+      const item = classOf(coll.item);
+      const itemShown = item || shown(coll.item);
+      entry.type = `${coll.kind}<${itemShown}>`;
+      entry.class = `${coll.kind}<${itemShown}>`;
+      if (item && depth + 1 < DEPTH) queue.push([item, depth + 1]);
+    } else if (target && depth + 1 < DEPTH) {
       entry.class = target;
       queue.push([target, depth + 1]);
     }
@@ -239,8 +328,10 @@ while (queue.length) {
   }
   catalog[name] = { members };
 }
-// A member pointing at a class past the depth limit leads nowhere.
-for (const c of Object.values(catalog)) for (const m of c.members) if (m.class && !catalog[m.class]) delete m.class;
+// A member pointing at a class past the depth limit leads nowhere (a
+// Collection of one still has its own members: size, first() …).
+for (const c of Object.values(catalog)) for (const m of c.members) if (m.class && !catalog[m.class] && !/^(Collection|Map)</.test(m.class)) delete m.class;
+for (const [name, members] of Object.entries(TEMPLATES)) catalog[name] = { members };
 
 const out = path.join(__dirname, "..", "types", "discordjs.classes.json");
 const file = { source: `discord.js ${version}`, roots: ROOTS, classes: catalog };

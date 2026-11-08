@@ -13,6 +13,7 @@
 //! members, or after a dot the members of what is before it. Builders list
 //! the values too. A value picked or clicked goes where the text cursor was.
 
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -184,8 +185,28 @@ pub struct Scope {
 }
 
 impl Scope {
-    fn members(&self, class: &str) -> &[Member] {
-        self.classes.get(class).map(|c| c.members.as_slice()).unwrap_or_default()
+    /// A class's members. `Collection<GuildMember>` (or `Map<…>`) is the
+    /// Collection's own members (size, first(), get() …), with what they give
+    /// back being a GuildMember, so its members follow.
+    fn members(&self, class: &str) -> Cow<'_, [Member]> {
+        if let Some(c) = self.classes.get(class) {
+            return Cow::Borrowed(c.members.as_slice());
+        }
+        let Some((base, item)) = class.split_once('<').and_then(|(b, rest)| Some((b, rest.strip_suffix('>')?))) else { return Cow::Borrowed(&[]) };
+        let Some(template) = self.classes.get(base) else { return Cow::Borrowed(&[]) };
+        let known = self.classes.contains_key(item);
+        Cow::Owned(
+            template
+                .members
+                .iter()
+                .map(|m| {
+                    let mut m = m.clone();
+                    m.ty = m.ty.replace("$T", item);
+                    m.class = m.class.as_deref().and_then(|c| if c == "$T" { known.then(|| item.to_string()) } else { Some(c.replace("$T", item)) });
+                    m
+                })
+                .collect(),
+        )
     }
 
     fn values(&self) -> impl Iterator<Item = &Avail> {
@@ -322,7 +343,7 @@ fn member_menu(ui: &mut Ui, scope: &Scope, class: &str, token: &str, label: &str
     }
     ui.separator();
     egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
-        for m in scope.members(class) {
+        for m in scope.members(class).iter() {
             let path = format!("{token}.{}", m.name);
             let text = format!("{}   {}", m.name, kind_text(m));
             match &m.class {
@@ -523,6 +544,29 @@ enum Mode {
     Search(String),
 }
 
+/// `members.cache.get("1.2").user` split at its dots, but not at dots inside
+/// a call's parentheses or quotes.
+fn path_parts(text: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let (mut depth, mut quote, mut start) = (0i32, None::<char>, 0);
+    for (i, c) in text.char_indices() {
+        match (quote, c) {
+            (Some(q), c) if c == q => quote = None,
+            (Some(_), _) => {}
+            (None, '"' | '\'' | '`') => quote = Some(c),
+            (None, '(' | '[' | '{') => depth += 1,
+            (None, ')' | ']' | '}') => depth -= 1,
+            (None, '.') if depth == 0 => {
+                out.push(&text[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    out.push(&text[start..]);
+    out
+}
+
 /// What the text after the brace means: a value (by its token, or an event
 /// output by its own name) and then members, with what is typed after the last dot.
 fn mode(scope: &Scope, typed: &str) -> Mode {
@@ -541,13 +585,16 @@ fn mode(scope: &Scope, typed: &str) -> Mode {
     let mut class = v.class.clone().unwrap();
     let mut prefix = v.token.clone();
     let rest = &typed[name.len() + 1..];
-    let mut parts: Vec<&str> = rest.split('.').collect();
+    let mut parts = path_parts(rest);
     let last = parts.pop().unwrap_or_default().to_lowercase();
     for part in parts {
-        let Some(m) = scope.members(&class).iter().find(|m| m.name.eq_ignore_ascii_case(part)) else { return Mode::Search(lower) };
-        let Some(next) = &m.class else { return Mode::Search(lower) };
-        prefix = format!("{prefix}.{}", m.name);
-        class = next.clone();
+        // A call as typed (first(), get("123")) is the member it calls.
+        let name = part.split('(').next().unwrap_or(part).trim();
+        let members = scope.members(&class);
+        let Some(m) = members.iter().find(|m| m.name.eq_ignore_ascii_case(name)) else { return Mode::Search(lower) };
+        let Some(next) = m.class.clone() else { return Mode::Search(lower) };
+        prefix = if part.contains('(') { format!("{prefix}.{}", part.trim()) } else { format!("{prefix}.{}", m.name) };
+        class = next;
     }
     Mode::Members { class, prefix, typed: last }
 }
@@ -624,8 +671,8 @@ pub fn after(ui: &mut Ui, resp: &egui::Response, text: &mut String) -> bool {
     let rows: Vec<Row> = match &mode {
         Mode::Browse => rows_at(&scope, &nav.steps[..nav.level]),
         Mode::Members { class, prefix, typed } => {
-            let mut list: Vec<(u8, &Member)> = scope
-                .members(class)
+            let all = scope.members(class);
+            let mut list: Vec<(u8, &Member)> = all
                 .iter()
                 .filter_map(|m| {
                     let name = m.name.to_lowercase();
@@ -971,5 +1018,24 @@ mod tests {
         assert_eq!(members("member.roles.hi"), ("GuildMemberRoleManager".into(), "#1.member.roles".into(), "hi".into()));
         assert!(matches!(mode(&scope, ""), Mode::Browse));
         assert!(matches!(mode(&scope, "us"), Mode::Search(_)));
+
+        // A Collection (a manager's cache, a member's roles): its own members,
+        // and through first(), get(…), find(…) what it holds.
+        let (class, prefix, _) = members("member.guild.members.cache.");
+        assert_eq!((class.as_str(), prefix.as_str()), ("Collection<GuildMember>", "#1.member.guild.members.cache"));
+        let listed = scope.members(&class);
+        let first = listed.iter().find(|m| m.name == "first").expect("first()");
+        assert_eq!((first.ty.as_str(), first.class.as_deref()), ("GuildMember", Some("GuildMember")));
+        assert!(listed.iter().any(|m| m.name == "size" && m.ty == "Number"));
+        let filtered = listed.iter().find(|m| m.name == "filter").unwrap();
+        assert_eq!(filtered.class.as_deref(), Some("Collection<GuildMember>"), "filter keeps a Collection of the same");
+        assert_eq!(members("member.guild.members.cache.first().disp"), ("GuildMember".into(), "#1.member.guild.members.cache.first()".into(), "disp".into()));
+        // A call's argument may have dots of its own.
+        assert_eq!(members("member.guild.members.cache.get(user.id).user.na"), ("User".into(), "#1.member.guild.members.cache.get(user.id).user".into(), "na".into()));
+        assert_eq!(members("member.roles.cache.find(r => r.name === \"a.b\").na").0, "Role");
+        // Map gets its own: size, get, has …
+        assert!(scope.members("Map<Role>").iter().any(|m| m.name == "get" && m.class.as_deref() == Some("Role")));
+        assert!(scope.members("Collection<Text>").iter().any(|m| m.name == "first" && m.ty == "Text" && m.class.is_none()), "items without members");
+        assert_eq!(path_parts("a.get(\"1.2\").b"), ["a", "get(\"1.2\")", "b"]);
     }
 }

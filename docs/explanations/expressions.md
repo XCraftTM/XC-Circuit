@@ -27,7 +27,7 @@ A name none of these give gets an **input of its own** under the text, so you ca
 
 ## Members of values
 
-Values are real objects: a Discord *User* is a discord.js `User`, a *Member* a `GuildMember`. Their properties and reading methods work: `${user.username}`, `${member.roles.highest.name}`, `${user.displayAvatarURL()}`. Typing a `.` after a value inside `${…}` lists its members with their types, like a code editor.
+Values are real objects: a Discord *User* is a discord.js `User`, a *Member* a `GuildMember`. Their properties and reading methods work: `${user.username}`, `${member.roles.highest.name}`, `${user.displayAvatarURL()}`. Typing a `.` after a value inside `${…}` lists its members with their types, like a code editor. Collections (a server's `members.cache`, a member's `roles.cache`) list their own: `size`, `first()`, `get(id)`, `find(…)`, `filter(…)` …, and after one that gives back an item, the item's: `${server.members.cache.get(user.id).displayName}`, `${member.roles.cache.first().name}`. A Map lists `size`, `get(…)` and `has(…)`.
 
 ## Mentions
 
