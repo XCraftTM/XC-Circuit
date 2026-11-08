@@ -203,6 +203,54 @@ assert.deepStrictEqual(
   channels[50] = { id: "50", name: "Info" };
   await assert.rejects(send("50"), /Channel "Info": messages can't be sent to it/);
   await assert.rejects(send(null), /Connect the channel/);
+  // Delete after: answers to an interaction are deleted through it (that
+  // works for private replies too), follow-ups by their id; channel messages
+  // as messages. Defer, then delete thinks and takes it away, and a later
+  // reply comes as a new message.
+  {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const calls = [];
+    const fake = () => ({
+      deferred: false,
+      replied: false,
+      async reply(p) {
+        this.replied = true;
+        calls.push(`reply${p.flags ? " private" : ""}`);
+        return { resource: { message: { id: "r", delete: async () => calls.push("message.delete r") } } };
+      },
+      async followUp() {
+        calls.push("followUp");
+        return { id: "f", delete: async () => calls.push("message.delete f") };
+      },
+      async deferReply() {
+        this.deferred = true;
+        calls.push("deferReply");
+      },
+      async editReply() {
+        calls.push("editReply");
+        return { id: "e", delete: async () => {} };
+      },
+      async deleteReply(m) {
+        calls.push(`deleteReply ${m ? m.id : "@original"}`);
+      },
+    });
+    const sendWith = (fields) => all["discord.send_message"].run({ fields: { ...defaults("discord.send_message"), text: "hi", ...fields }, ctx: { log: { warn: (t) => calls.push(`warn ${t}`) } } });
+    await sendWith({ mode: "reply", private: true, deleteAfter: 0.01, interaction: fake() });
+    await wait(60);
+    assert.deepStrictEqual(calls.splice(0), ["reply private", "deleteReply @original"], "a private reply goes through the interaction");
+    await sendWith({ mode: "followup", deleteAfter: 0.01, interaction: fake() });
+    await wait(60);
+    assert.deepStrictEqual(calls.splice(0), ["followUp", "deleteReply f"]);
+    const thinking = fake();
+    await sendWith({ mode: "deferDelete", deleteAfter: 0, interaction: thinking });
+    assert.deepStrictEqual(calls.splice(0), ["deferReply", "deleteReply @original"], "thinks, then it's gone");
+    await sendWith({ mode: "reply", interaction: thinking });
+    assert.deepStrictEqual(calls.splice(0), ["followUp"], "after it, a reply is a new message");
+    const sentHere = { id: "c", delete: async () => calls.push("message.delete c") };
+    await sendWith({ mode: "send", deleteAfter: 0.01, channel: { id: "9", send: async () => sentHere } });
+    await wait(60);
+    assert.deepStrictEqual(calls.splice(0), ["message.delete c"]);
+  }
   console.log(`${Object.keys(all).length} Discord blocks checked\ndiscord blocks test passed`);
 })().catch((e) => {
   console.error(e);

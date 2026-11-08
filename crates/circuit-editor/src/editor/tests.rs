@@ -79,6 +79,17 @@ fn every_block_defines_cleanly() {
         }
     }
     assert!(failures.is_empty(), "define() failed:\n{}", failures.join("\n"));
+
+    // Send Message's Defer, then delete: no text of its own, and how long it
+    // thinks (Delete after) on the block instead of under Advanced.
+    let send = ed.reg.block("discord.send_message").unwrap();
+    let mut values: Map<String, Value> = send.fields.iter().filter_map(|(k, f)| f.default.clone().map(|d| (k.clone(), d))).collect();
+    values.insert("mode".into(), "deferDelete".into());
+    let d = ed.engine.define(&ed.reg.engine_keys[&send.id], &values, &Map::new(), &project).unwrap();
+    let shape = circuit_core::BlockShape::build(send, &values, Some(&d));
+    let shown: Vec<&str> = shape.visible_fields().map(|(k, _)| k.as_str()).collect();
+    assert!(shown.contains(&"deleteAfter") && shown.contains(&"interaction") && !shown.contains(&"text"), "{shown:?}");
+    assert!(!shape.field("deleteAfter").unwrap().advanced);
 }
 
 /// Upgrades the bundled example, starters and plugin starters to the

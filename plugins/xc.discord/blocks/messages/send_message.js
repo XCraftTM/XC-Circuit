@@ -1,9 +1,20 @@
 const MODES = {
-  Interaction: { reply: "Reply", edit: "Edit reply", followup: "Follow-up", defer: "Defer (think…)", update: "Update the message (button or menu)" },
+  Interaction: {
+    reply: "Reply",
+    edit: "Edit reply",
+    followup: "Follow-up",
+    defer: "Defer (think…)",
+    deferDelete: "Defer, then delete (think…, then take it away)",
+    update: "Update the message (button or menu)",
+  },
   Message: { send: "Send to channel", msgReply: "Reply to message", msgEdit: "Edit message" },
   User: { dm: "Direct message" },
 };
-const INTERACTION_MODES = ["reply", "edit", "followup", "defer", "update"];
+const INTERACTION_MODES = ["reply", "edit", "followup", "defer", "deferDelete", "update"];
+/** Modes that only answer "thinking…": no text of their own. */
+const DEFERS = ["defer", "deferDelete"];
+/** Discord lets a bot change its answer to an interaction for 15 minutes. */
+const TOKEN_MS = 15 * 60 * 1000;
 const FORMATS = { text: "Text and embeds", layout: "Layout (Components V2)" };
 const MENTIONS = { all: "Everyone mentioned", users: "Only users", usersRoles: "Users and roles (not @everyone)", none: "Nobody" };
 
@@ -36,7 +47,7 @@ module.exports = {
     name: "Send Message",
     description: "Replies to a command or button, or sends, replies to and edits messages in channels.",
     author: "XC Team",
-    version: "3.5.1",
+    version: "3.6.0",
   },
   search: {
     category: "send",
@@ -75,7 +86,7 @@ module.exports = {
       default: false,
       label: "Private reply",
       description: "Only the person who used the command sees it.",
-      show: { mode: ["reply", "followup", "defer"] },
+      show: { mode: ["reply", "followup", "defer", "deferDelete"] },
     },
     split: { type: "boolean", default: false, advanced: true, label: "Split long text", description: "Send text over 2000 characters as several messages." },
     files: { type: "list<any>", pin: "only", multi: true, description: "Files to send: a picture from Build Canvas, a file path (Read, Write or Download File), a web address or attachments of other messages." },
@@ -85,7 +96,14 @@ module.exports = {
     noEmbeds: { type: "boolean", default: false, advanced: true, label: "No link previews", description: "Don't show previews of links in the text." },
     tts: { type: "boolean", default: false, advanced: true, label: "Read aloud", description: "Text to speech, for people who have it on." },
     stickers: { type: "text", default: "", advanced: true, description: "Sticker ids to send, comma separated (up to 3)." },
-    deleteAfter: { type: "number", default: 0, min: 0, advanced: true, label: "Delete after (s)", description: "Delete the sent message after this many seconds. 0 keeps it." },
+    deleteAfter: {
+      type: "number",
+      default: 0,
+      min: 0,
+      advanced: true,
+      label: "Delete after (s)",
+      description: "Delete the sent message after this many seconds (replies too, also private ones). 0 keeps it.",
+    },
   },
   outputs: {
     message: { type: "discord.message", description: "The message that was sent." },
@@ -102,16 +120,21 @@ module.exports = {
     } else {
       add.message = { type: "discord.message", pin: "only", required: true, description: "The message to reply to or edit." };
     }
-    const hide = mode === "defer" ? ["text", "embeds", "components", "split", "files"] : [];
-    if (mode !== "defer" && values.format === "layout") {
+    const hide = DEFERS.includes(mode) ? ["text", "embeds", "components", "split", "files"] : [];
+    const set = {};
+    if (mode === "deferDelete") {
+      // How long the "thinking…" shows: this mode's own setting, on the block.
+      set.deleteAfter = { advanced: false, label: "Delete after (s)", description: "How long it shows thinking… before it's taken away. 0: as soon as it shows." };
+    }
+    if (!DEFERS.includes(mode) && values.format === "layout") {
       // A Components V2 message has no text or embeds of its own: they are in the layout.
       add.layout = { type: "discord.layout", pin: "only", required: true, description: "The message from Build Layout." };
       hide.push("text", "embeds", "split", "tts", "noEmbeds");
     }
-    return { add, hide };
+    return { add, hide, set };
   },
   async run({ fields, ctx }) {
-    const layout = fields.format === "layout" && fields.mode !== "defer" ? fields.layout || { components: [] } : null;
+    const layout = fields.format === "layout" && !DEFERS.includes(fields.mode) ? fields.layout || { components: [] } : null;
     const flagList = [fields.private && "Ephemeral", fields.silent && "SuppressNotifications", !layout && fields.noEmbeds && "SuppressEmbeds", layout && "IsComponentsV2"].filter(
       Boolean,
     );
@@ -163,12 +186,19 @@ module.exports = {
     // "update" after a button or menu, "reply" ("thinking…") after a command or form.
     const auto = interaction ? interaction.xcAutoDeferred : undefined;
     if (interaction) interaction.xcAnswering = true;
+    // Sent as a follow-up (a message of its own), not the interaction's answer.
+    let followedUp = false;
+    const followUp = () => {
+      followedUp = true;
+      return target.followUp(payload);
+    };
     const reply = async () => {
-      if (auto === "update") return target.followUp(payload);
+      // The answer was taken away (Defer, then delete): a new message instead.
+      if (auto === "update" || target.xcReplyGone) return followUp();
       if (!target.deferred) return target.reply({ ...payload, withResponse: true });
       // "thinking…" can't turn private: answer privately and take it away.
       if (auto === "reply" && fields.private) {
-        const sent = await target.followUp(payload);
+        const sent = await followUp();
         await target.deleteReply().catch(() => {});
         return sent;
       }
@@ -176,9 +206,18 @@ module.exports = {
     };
     const send = {
       reply,
-      edit: () => target.editReply(payload),
-      followup: () => target.followUp(payload),
+      edit: () => (target.xcReplyGone ? followUp() : target.editReply(payload)),
+      followup: followUp,
       defer: () => (target.deferred || target.replied ? null : target.deferReply({ flags })),
+      // "thinking…", then taken away: answered, with nothing left to see.
+      deferDelete: async () => {
+        if (!target.deferred && !target.replied) await target.deferReply({ flags });
+        target.xcReplyGone = true;
+        const gone = () => target.deleteReply().catch((e) => ctx.log?.warn?.(`Couldn't take the thinking… away: ${e.message}`));
+        if (fields.deleteAfter > 0) setTimeout(gone, Math.min(fields.deleteAfter * 1000, TOKEN_MS - 5000));
+        else await gone();
+        return null;
+      },
       update: () =>
         auto === "update"
           ? target.editReply({ ...payload, flags: layout ? ["IsComponentsV2"] : undefined })
@@ -190,7 +229,18 @@ module.exports = {
     }[mode];
     const result = await send();
     const message = result?.resource?.message ?? (typeof result?.delete === "function" ? result : null);
-    if (message && fields.deleteAfter > 0) setTimeout(() => message.delete().catch(() => {}), fields.deleteAfter * 1000);
+    if (fields.deleteAfter > 0 && mode !== "deferDelete" && (message || interaction)) {
+      const ms = fields.deleteAfter * 1000;
+      // An answer to an interaction goes through the interaction: that works
+      // for private replies and where the bot can't see the channel, but only
+      // for 15 minutes. Later, or for other messages, the message itself.
+      const viaInteraction = interaction && ms < TOKEN_MS - 5000;
+      const remove = () => {
+        if (!viaInteraction) return message ? message.delete() : Promise.resolve();
+        return followedUp && message ? interaction.deleteReply(message) : interaction.deleteReply();
+      };
+      setTimeout(() => remove().catch((e) => ctx.log?.warn?.(`Couldn't delete the message after ${fields.deleteAfter} s: ${e.message}`)), ms);
+    }
     return { message };
   },
 };

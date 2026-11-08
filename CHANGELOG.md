@@ -2,6 +2,14 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
+## Unreleased
+
+### Added
+- **Defer, then delete**: a Send Message mode that answers a command, button or form with *thinking…* and takes it away again (after Delete after seconds, or as soon as it shows), so it counts as answered and nothing stays. A reply after it comes as a new message.
+
+### Fixed
+- **Delete after works for replies**: Send Message deleted its message as a channel message, which Discord refuses for private replies and where the bot can't see the channel, and said nothing. Replies and follow-ups are now deleted through the interaction (for 15 minutes; later as messages), and a delete that fails says why in the Console.
+
 ## 0.2.2
 
 ### Added

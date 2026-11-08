@@ -1510,6 +1510,8 @@ The bot runs as its own process: if a block crashes Node.js, the editor is unaff
 
 Discord waits 3 seconds for an answer to a slash command, button, select menu or form, and then shows *This interaction failed*. When the blocks after one take longer (creating a channel, a transcript, a web request), the bot answers for them after 2.5 seconds: a button or menu quietly (its message stays as it is, and Send Message's reply comes as a new message), a command or form with *thinking…*, which Send Message's reply then fills in (a private reply comes privately, and *thinking…* goes away). So **Defer** is only needed to show *thinking…* at once. A form (Show Modal) can't come after that: put it before slow blocks.
 
+**Defer, then delete** answers with *thinking…* and takes it away again (after **Delete after** seconds; 0 as soon as it shows): the command or button counts as answered, and nothing stays. A reply after it comes as a new message. Send Message's **Delete after** (under Advanced) also deletes replies, private ones too, through the interaction; Discord allows that for 15 minutes, later only messages the bot can see in their channel.
+
 ## What Export does
 
 **Bot › Export…** writes a folder that runs on its own, without XC Circuit:
