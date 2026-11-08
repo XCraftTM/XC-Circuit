@@ -2,7 +2,7 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## Unreleased
+## 0.2.5
 
 ### Added
 - **Action Row**: a block for one row of a message's buttons (up to 5) or a select menu, so you choose which buttons share a row: connect them to it, and it to Send Message's Components. Buttons without one still fill rows of five in order.
