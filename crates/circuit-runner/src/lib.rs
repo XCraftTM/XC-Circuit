@@ -5,6 +5,7 @@
 pub mod bundle;
 pub mod database;
 pub mod export;
+pub mod hosting;
 pub mod node;
 pub mod node_setup;
 pub mod protocol;
