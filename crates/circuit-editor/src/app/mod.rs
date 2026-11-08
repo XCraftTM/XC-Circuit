@@ -432,8 +432,20 @@ impl eframe::App for CircuitApp {
         if let Some(Err(e)) = self.ed.bot_profile.poll() {
             self.ed.log(crate::editor::Level::Warn, tf!("Couldn't load the bot's name and picture: {error}", error = e));
         }
-        if self.ed.bot_profile.busy() {
+        if self.ed.bot_profile.busy() || self.ed.servers.busy() {
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
+        }
+        // The servers' channels and roles, for id fields' pick buttons.
+        if crate::ui::widgets::servers_wanted_again(ui.ctx())
+            && let Some(p) = &self.ed.project
+        {
+            self.ed.servers.fetch(&p.root, &p.meta.mode);
+            let s = &self.ed.servers;
+            crate::ui::widgets::share_servers(ui.ctx(), crate::ui::widgets::ServersView { list: s.shown.clone(), busy: s.busy(), no_token: s.no_token, error: s.error.clone() });
+        }
+        if self.ed.servers.poll() || !crate::ui::widgets::servers_shared(ui.ctx()) {
+            let s = &self.ed.servers;
+            crate::ui::widgets::share_servers(ui.ctx(), crate::ui::widgets::ServersView { list: s.shown.clone(), busy: s.busy(), no_token: s.no_token, error: s.error.clone() });
         }
         self.run_plugins(&ctx);
         if self.watcher.poll() {

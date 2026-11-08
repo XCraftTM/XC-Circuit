@@ -104,6 +104,11 @@ pub struct FieldDef {
     /// "select", "form"), for those suggestions and the checks in Problems.
     #[serde(rename = "customIdOf", skip_serializing_if = "Option::is_none")]
     pub custom_id_of: Option<String>,
+    /// A text field for an id or name that can be picked from the bot's
+    /// servers: "channel", "voice", "category" or "role". Channel id fields
+    /// get it from their pin type.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pick: Option<String>,
     #[serde(skip)]
     pub ty: PinType,
     /// Its pin type can be looked up from an id (`fromId`): instead of

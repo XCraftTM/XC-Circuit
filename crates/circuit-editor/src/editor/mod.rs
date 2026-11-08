@@ -149,6 +149,8 @@ pub struct Editor {
     pub canvas_edit: Option<crate::builders::canvas::CanvasEdit>,
     /// The bot's name and picture, for message previews.
     pub bot_profile: crate::bot::profile::Profile,
+    /// The bot's servers, channels and roles, for picking ids.
+    pub servers: crate::bot::servers::Servers,
     pub slash_edit: Option<crate::builders::slash::SlashEdit>,
     /// The Export Workspaces and Import Workspaces tabs.
     pub ws_export: Option<crate::editor::exchange::ExportDraft>,
@@ -204,6 +206,7 @@ impl Editor {
             ask_delete_workspaces: None,
             canvas_edit: None,
             bot_profile: Default::default(),
+            servers: Default::default(),
             slash_edit: None,
             ws_export: None,
             ws_import: None,
@@ -519,6 +522,7 @@ impl Editor {
     pub fn fetch_bot_profile(&mut self) {
         if let Some(p) = &self.project {
             self.bot_profile.fetch(&p.root, &p.meta.mode);
+            self.servers.fetch(&p.root, &p.meta.mode);
         }
     }
 

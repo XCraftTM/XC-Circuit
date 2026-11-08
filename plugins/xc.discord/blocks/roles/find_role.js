@@ -18,7 +18,7 @@ module.exports = {
   flows: ["next", "missing"],
   fields: {
     server: { type: "discord.guild", pin: "only", required: true, description: "The server the role is in." },
-    role: { type: "text", required: true, default: "", label: "Id or name", description: "A role id, a name such as Moderator, or a mention." },
+    role: { type: "text", required: true, default: "", pick: "role", label: "Id or name", description: "A role id, a name such as Moderator, or a mention." },
   },
   outputs: {
     role: { type: "discord.role", description: "The role. When it isn't found, Missing runs instead (or, with nothing connected to Missing, the block fails)." },

@@ -20,7 +20,7 @@ module.exports = {
   },
   fields: {
     member: { type: "discord.member", pin: "only", required: true, description: "The member who gets the role." },
-    roleId: { type: "text", required: true, default: "", label: "Role id", description: "The role to give (right-click a role › Copy Role ID)." },
+    roleId: { type: "text", required: true, default: "", pick: "role", label: "Role id", description: "The role to give (right-click a role › Copy Role ID)." },
     reason: { type: "text", advanced: true, default: "", description: "Shown in the server's audit log next to the role change." },
   },
   outputs: {

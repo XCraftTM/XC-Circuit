@@ -1,6 +1,7 @@
 //! Running the bot from the editor, its Settings dialog and Export.
 
 pub mod profile;
+pub mod servers;
 pub(crate) mod databases;
 mod settings;
 

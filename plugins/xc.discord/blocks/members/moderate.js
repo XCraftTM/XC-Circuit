@@ -46,7 +46,7 @@ module.exports = {
     server: { type: "discord.guild", pin: "only", description: "The server to ban or unban in.", show: { action: ["unban", "banId"] } },
     userId: { type: "text", default: "", label: "User id", show: { action: ["unban", "banId"] }, description: "The user's id (banned people aren't members)." },
     minutes: { type: "number", default: 10, min: 1, description: "How long the time out lasts.", show: { action: ["timeout"] } },
-    roleId: { type: "text", default: "", label: "Role id", show: { action: ["removeRole"] }, description: "The id of the role to take away." },
+    roleId: { type: "text", default: "", pick: "role", label: "Role id", show: { action: ["removeRole"] }, description: "The id of the role to take away." },
     nickname: { type: "text", template: true, default: "", description: "Empty resets it.", show: { action: ["nickname"] } },
     deleteDays: { type: "number", default: 0, min: 0, max: 7, label: "Delete messages (days)", show: { action: ["ban", "banId"] }, description: "Also delete their messages from this many past days (0 to 7)." },
     reason: { type: "text", template: true, default: "", description: "Shown in the audit log." },

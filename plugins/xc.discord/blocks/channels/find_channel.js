@@ -17,7 +17,7 @@ module.exports = {
   },
   flows: ["next", "missing"],
   fields: {
-    channel: { type: "text", required: true, default: "", label: "Id or name", description: "A channel id, or a name such as welcome." },
+    channel: { type: "text", required: true, default: "", pick: "channel", label: "Id or name", description: "A channel id, or a name such as welcome." },
     server: { type: "discord.guild?", pin: true, description: "Needed when looking up by name." },
   },
   outputs: {

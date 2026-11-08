@@ -23,6 +23,12 @@ export interface FieldDef {
   placeholder?: string;
   /** With `choices`: the list ends in Custom…, which shows a text box for any other value. */
   custom?: boolean;
+  /** An event's custom id field: offers the project's ids of this kind. */
+  suggest?: "button" | "select" | "form";
+  /** This field gives a button, menu or form its custom id. */
+  customIdOf?: "button" | "select" | "form";
+  /** An id or name that can be picked from the bot's servers. Channel id fields get it from their type. */
+  pick?: "channel" | "voice" | "category" | "role";
 }
 
 export interface OutputDef {

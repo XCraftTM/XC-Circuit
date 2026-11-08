@@ -17,7 +17,7 @@ module.exports = {
   },
   fields: {
     member: { type: "discord.member", pin: "only", required: true, description: "The member whose roles are checked." },
-    role: { type: "text", required: true, default: "", description: "A role id or exact role name." },
+    role: { type: "text", required: true, default: "", pick: "role", description: "A role id or exact role name." },
   },
   outputs: {
     result: { type: "boolean", description: "True when the member has the role." },

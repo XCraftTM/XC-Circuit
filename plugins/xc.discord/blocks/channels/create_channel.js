@@ -24,7 +24,7 @@ module.exports = {
     server: { type: "discord.guild", pin: "only", required: true, description: "Where to create it." },
     type: { type: "select", pin: false, default: "text", choices: TYPES, description: "What kind of channel." },
     name: { type: "text", required: true, default: "new-channel", description: "The channel's name." },
-    category: { type: "discord.channel?", pin: "only", description: "The category to put it in. Empty = none." },
+    category: { type: "discord.channel?", pin: "only", pick: "category", description: "The category to put it in. Empty = none." },
     topic: { type: "text", default: "", show: { type: ["text", "announcement", "forum"] }, description: "The description at the top." },
     private: { type: "boolean", default: false, description: "Hidden from @everyone (give access with Set Channel Permissions)." },
     nsfw: { type: "boolean", default: false, advanced: true, label: "Age-restricted", show: { type: ["text", "announcement", "forum", "voice"] }, description: "Marks it NSFW." },

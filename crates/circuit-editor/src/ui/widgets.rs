@@ -19,7 +19,125 @@ pub fn is_inline_editable(field: &FieldDef) -> bool {
 
 /// Whether a field is edited as free text (and so can be expanded on the canvas).
 pub fn is_plain_text(field: &FieldDef) -> bool {
-    !field.is_select() && !field.is_multiselect() && !field.by_id && field.suggest.is_none() && field.type_name != "color" && is_inline_editable(field) && !matches!(field.ty.required(), PinType::Boolean | PinType::Number)
+    !field.is_select() && !field.is_multiselect() && !field.by_id && field.suggest.is_none() && field.pick.is_none() && field.type_name != "color" && is_inline_editable(field) && !matches!(field.ty.required(), PinType::Boolean | PinType::Number)
+}
+
+/// The bot's servers as id fields' pick buttons see them.
+#[derive(Clone, Default)]
+pub struct ServersView {
+    pub list: Option<std::sync::Arc<Vec<crate::bot::servers::Server>>>,
+    pub busy: bool,
+    pub no_token: bool,
+    pub error: Option<String>,
+}
+
+const SERVERS: &str = "picker-servers";
+/// Set when someone asked to read the servers again (taken by `servers_wanted_again`).
+const SERVERS_AGAIN: &str = "picker-servers-again";
+
+/// Whether someone asked for the servers again since the last time (and forgets it).
+pub fn servers_wanted_again(ctx: &egui::Context) -> bool {
+    ctx.data_mut(|d| d.remove_temp::<bool>(egui::Id::unique(SERVERS_AGAIN))).unwrap_or(false)
+}
+
+/// Puts the bot's servers where pick buttons find them.
+pub fn share_servers(ctx: &egui::Context, view: ServersView) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::unique(SERVERS), std::sync::Arc::new(view)));
+}
+
+pub fn servers_shared(ctx: &egui::Context) -> bool {
+    ctx.data(|d| d.get_temp::<std::sync::Arc<ServersView>>(egui::Id::unique(SERVERS)).is_some())
+}
+
+/// The pick button after an id box: the bot's servers' channels (of the
+/// field's kind) or roles; picking one puts its id in. True when it did.
+fn pick_button(ui: &mut Ui, id: egui::Id, pick: crate::bot::servers::Pick, value: &mut Value) -> bool {
+    use crate::bot::servers::Pick;
+    let view: Option<std::sync::Arc<ServersView>> = ui.ctx().data(|d| d.get_temp(egui::Id::unique(SERVERS)));
+    let view = view.unwrap_or_default();
+    let current = value.as_str().unwrap_or_default().trim().to_string();
+    // What the id is, for the button's tooltip.
+    let known = view.list.as_ref().and_then(|l| {
+        l.iter().find_map(|s| {
+            s.channels.iter().find(|c| c.id == current).map(|c| format!("#{} · {}", c.name, s.name)).or_else(|| s.roles.iter().find(|r| r.id == current).map(|r| format!("@{} · {}", r.name, s.name)))
+        })
+    });
+    let tip = match &known {
+        Some(k) => tf!("{what} · pick another from your servers", what = k),
+        None => t!("Pick from your servers").to_string(),
+    };
+    // A small button with a drawn arrow (the fonts have no ▾).
+    let h = ui.spacing().interact_size.y;
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(22.0, h), egui::Sense::click());
+    let visuals = ui.style().interact(&resp);
+    ui.painter().rect(rect, 4.0, visuals.weak_bg_fill, visuals.bg_stroke, egui::StrokeKind::Inside);
+    let c = rect.center();
+    ui.painter().add(egui::Shape::convex_polygon(vec![c + egui::vec2(-4.0, -2.0), c + egui::vec2(4.0, -2.0), c + egui::vec2(0.0, 3.0)], visuals.fg_stroke.color, egui::Stroke::NONE));
+    kit::describe(&resp, egui::Role::Button, t!("Pick from your servers"));
+    let resp = resp.on_hover_text(tip);
+    let mut picked = None;
+    egui::Popup::menu(&resp).id(id.with("pick-list")).show(|ui| {
+        ui.set_min_width(240.0);
+        let search_id = id.with("pick-search");
+        let mut search: String = ui.data(|d| d.get_temp(search_id)).unwrap_or_default();
+        match &view.list {
+            None if view.no_token => {
+                ui.label(egui::RichText::new(t!("Save the bot token in Bot settings to pick from your servers.")).weak());
+            }
+            None if view.busy => {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label(egui::RichText::new(t!("Asking Discord…")).weak());
+                });
+            }
+            None => {
+                let why = view.error.clone().unwrap_or_else(|| t!("not read yet").to_string());
+                ui.label(egui::RichText::new(tf!("Couldn't read your servers: {error}", error = why)).weak());
+            }
+            Some(list) if list.is_empty() => {
+                ui.label(egui::RichText::new(t!("The bot isn't in any server yet: invite it (Bot settings › Invite your bot).")).weak());
+            }
+            Some(list) => {
+                ui.add(kit::TextLine::new(&mut search).hint(t!("Search…")).compact());
+                let wanted = search.trim().to_lowercase();
+                egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
+                    for s in list.iter() {
+                        let items: Vec<(String, String)> = if pick == Pick::Role {
+                            s.roles.iter().filter(|r| !r.managed).map(|r| (r.id.clone(), format!("@{}", r.name))).collect()
+                        } else {
+                            s.channels.iter().filter(|c| pick.takes(c)).map(|c| (c.id.clone(), if c.kind == 4 { c.name.clone() } else { format!("#{}", c.name) })).collect()
+                        };
+                        let items: Vec<_> = items.into_iter().filter(|(_, l)| wanted.is_empty() || l.to_lowercase().contains(&wanted)).collect();
+                        if items.is_empty() {
+                            continue;
+                        }
+                        ui.label(egui::RichText::new(s.name.to_uppercase()).small().weak());
+                        for (item_id, label) in items {
+                            if kit::option(ui, item_id == current, &label).clicked() {
+                                picked = Some(item_id);
+                            }
+                        }
+                        ui.add_space(4.0);
+                    }
+                });
+            }
+        }
+        ui.data_mut(|d| d.insert_temp(search_id, search));
+        // The bot joined a server, or a channel was made: ask Discord again.
+        if !view.no_token && !view.busy {
+            ui.separator();
+            if ui.link(t!("Read again")).clicked() {
+                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique(SERVERS_AGAIN), true));
+            }
+        }
+    });
+    match picked {
+        Some(p) if p != current => {
+            *value = Value::String(p);
+            true
+        }
+        _ => false,
+    }
 }
 
 /// Where the project's custom ids are kept for this frame (see `share_suggestions`).
@@ -111,6 +229,33 @@ fn editor(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width:
                 other => other.to_string(),
             };
             let hint = field.placeholder.clone().unwrap_or_else(|| if field.by_id { id_hint(field) } else { String::new() });
+            // Ids of channels and roles: a pick button from the bot's servers after the box.
+            if let Some(pick) = crate::bot::servers::Pick::of(field.pick.as_deref(), &field.type_name).filter(|_| field.by_id || field.pick.is_some()) {
+                let mut picked = false;
+                // Box first, then the button, whichever way the place it's in runs.
+                let typed = ui
+                    .with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        let w = (width - 26.0).max(40.0);
+                        let typed = if multiline {
+                            ui.add(crate::ui::kit::TextLine::new(&mut s).hint(hint.clone()).width(w).compact()).changed()
+                        } else {
+                            let resp = ui.add(TextEdit::singleline(&mut s).desired_width(w).hint_text(hint.clone()));
+                            kit::named(ui, resp).changed()
+                        };
+                        let mut v = Value::String(s.clone());
+                        if pick_button(ui, id, pick, &mut v) {
+                            s = v.as_str().unwrap_or_default().to_string();
+                            picked = true;
+                        }
+                        typed
+                    })
+                    .inner;
+                if typed || picked {
+                    *value = Value::String(s);
+                }
+                return typed || picked;
+            }
             let changed = if multiline && field.type_name == "textarea" {
                 ui.add(crate::ui::kit::TextArea::new(id, &mut s).hint(hint).rows(3)).changed()
             } else if multiline {

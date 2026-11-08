@@ -34,6 +34,7 @@ fields: {
 | `custom` | boolean | For a field with `choices`: the list ends in **Custom…**, which shows a text box for any other value (and so does a value that isn't one of the choices). The value stays one text, so a `text` field like this can still be connected. Get Property uses it for the properties of the connected value. |
 | `suggest` | `"button"`, `"select"` or `"form"`: a custom id field of an event. It offers the ids of that kind the project gives (in layouts, forms and fields with `customIdOf`), with Custom… for others, and Problems checks the two match. |
 | `customIdOf` | `"button"`, `"select"` or `"form"`: this field gives a button, menu or form its custom id (Button, Select Menu). |
+| `pick` | `"channel"`, `"voice"`, `"category"` or `"role"`: a text field for an id (or name) that gets a button listing the bot's servers' channels or roles; picking one puts its id in. Fields for channels by id get it from their type. |
 
 ## Field editors
 
