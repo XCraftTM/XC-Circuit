@@ -4,9 +4,9 @@
 //! fields offer the ids there are, and Problems says when one side has no
 //! partner: an event waiting for an id nothing uses, or a button nothing handles.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
-use circuit_core::Project;
+use circuit_core::{Project, Workspace};
 use circuit_plugins::Registry;
 use serde_json::Value;
 
@@ -49,13 +49,35 @@ fn kind_of(name: &str) -> Option<&'static str> {
     [BUTTON, SELECT, FORM].into_iter().find(|k| *k == name)
 }
 
-/// Collects them from the workspaces that are on.
+/// Collects them from the open project's workspaces that are on, leaving
+/// out fields a block hides (as it shows itself): Show Modal's older Custom id
+/// is hidden while its form comes from the Modal Builder, and isn't the form's id.
+pub fn collect_for(ed: &mut crate::editor::Editor) -> Ids {
+    let crate::editor::Editor { reg, engine, project, shapes, define_ctx, .. } = ed;
+    let Some(project) = project.as_ref() else { return Ids::default() };
+    shapes.begin();
+    collect_with(project, reg, &mut |ws_key, ws, node_id| crate::editor::node_shape(reg, engine, shapes, ws_key, ws, node_id, define_ctx).map(|s| s.hidden.clone()).unwrap_or_default())
+}
+
+/// Collects them from the workspaces that are on, every field counted.
+#[cfg(test)]
 pub fn collect(project: &Project, reg: &Registry) -> Ids {
+    collect_with(project, reg, &mut |_, _, _| HashSet::new())
+}
+
+/// Collects them, without the fields `hidden` names for a block.
+fn collect_with(project: &Project, reg: &Registry, hidden: &mut dyn FnMut(&str, &Workspace, &str) -> HashSet<String>) -> Ids {
     let mut ids = Ids::default();
     for (ws_key, ws) in project.workspaces.iter().filter(|(_, w)| !w.disabled) {
         for (node_id, node) in &ws.nodes {
             let Some(def) = reg.block(&node.block) else { continue };
-            for (key, f) in &def.fields {
+            // Only blocks with ids to give or wait for are looked at closer.
+            let matters = def.fields.values().any(|f| f.custom_id_of.is_some() || f.suggest.is_some() || matches!(f.type_name.as_str(), "layout" | "modal"));
+            if !matters {
+                continue;
+            }
+            let hidden = hidden(ws_key, ws, node_id);
+            for (key, f) in def.fields.iter().filter(|(k, _)| !hidden.contains(*k)) {
                 let value = node.values.get(key).or(f.default.as_ref());
                 let wired = ws.links_into(node_id, key).next().is_some();
                 let mut give = |kind: &'static str, id: &str| {
@@ -219,6 +241,17 @@ mod tests {
         assert!(about("btn").iter().any(|m| m.contains("nothing handles the button “help”")), "{problems:?}");
         assert!(about("lay").iter().any(|m| m.contains("nothing handles the menu “ticket-open”")), "{problems:?}");
         assert!(!about("lay").iter().any(|m| m.contains("ticket-close")), "handled: {problems:?}");
+
+        // Show Modal's older Custom id ("my-form") is hidden while the form
+        // comes from the Modal Builder: as the editor shows the block, it isn't
+        // a form's id, so nothing says "my-form" needs handling.
+        let mut ed = ed;
+        ed.open_project(&dir);
+        ed.project = Some(project.clone());
+        let shown = collect_for(&mut ed);
+        assert!(!shown.sources.iter().any(|s| s.id == "my-form"), "{:?}", shown.sources);
+        assert!(shown.sources.iter().any(|s| s.kind == FORM && s.id == "apply"));
+        assert!(collect(&project, &ed.reg).sources.iter().any(|s| s.id == "my-form"), "counting every field finds it");
 
         // Without ids made while running, the typo shows.
         project.workspaces.values_mut().next().unwrap().nodes.shift_remove("lay");

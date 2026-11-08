@@ -33,6 +33,7 @@ class Runtime {
     this.blocks = new Map(); // block id -> definition object
     this.conversions = new Map(); // pin type -> ways to turn other types into it
     this.fromIds = new Map(); // pin type -> (id, ctx) => its value with that id
+    this.fromIdChecks = new Map(); // such a pin type -> its check: is this a real one?
     this.typeParents = new Map(); // pin type -> the type it extends
     this.libs = new Map(); // lib id -> api
     this.workspaces = new Map(); // key -> graph
@@ -132,6 +133,16 @@ class Runtime {
     return null;
   }
 
+  /** The check of the type that `fromIdFor` finds values of (is it a real one?), or null. */
+  fromIdCheckFor(type) {
+    let t = String(type || "").replace(/\?$/, "");
+    for (let i = 0; i < 16 && t; i++) {
+      if (this.fromIds.has(t)) return this.fromIdChecks.get(t) ?? null;
+      t = this.typeParents.get(t);
+    }
+    return null;
+  }
+
   convert(value, type) {
     if (value == null || !this.conversions.size) return value;
     const target = String(type || "").replace(/\?$/, "");
@@ -186,6 +197,8 @@ class Runtime {
         const fn = (0, eval)(`(${t.fromId})`);
         if (typeof fn === "function") this.fromIds.set(id, fn);
         else this.log.warn(`Pin type ${id} fromId isn't a function`);
+        const check = t.check ? (0, eval)(`(${t.check})`) : null;
+        if (typeof check === "function") this.fromIdChecks.set(id, check);
       } catch (e) {
         this.log.warn(`Pin type ${id} fromId: ${e.message}`);
       }
@@ -658,13 +671,27 @@ class GraphNode {
   /**
    * An id (typed, or a text wired in) where a value of a type with `fromId`
    * goes (a channel): the value itself. An empty id is nothing, as an
-   * unconnected pin is.
+   * unconnected pin is. So is a value kept as data, such as a channel saved
+   * in a variable or Stored Data, or one Discord sent as plain data: it has
+   * its id but not what makes it one (a channel's send), so it's found again.
    */
   async findById(fields, k, f, run, path) {
-    const value = fields[k];
-    if (typeof value !== "string" && typeof value !== "number") return;
+    let value = fields[k];
     const find = this.graph.rt.fromIdFor(f.type);
     if (!find) return;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const check = this.graph.rt.fromIdCheckFor(f.type);
+      const id = value.id;
+      let real = true;
+      try {
+        real = !check || Boolean(check(value));
+      } catch {
+        real = false;
+      }
+      if (real || (typeof id !== "string" && typeof id !== "number")) return;
+      value = id;
+    }
+    if (typeof value !== "string" && typeof value !== "number") return;
     if (!String(value).trim()) {
       fields[k] = null;
       return;

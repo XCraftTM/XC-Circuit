@@ -376,6 +376,8 @@ pub type ProblemItem = (String, String, Option<(String, String)>);
 /// Plugin problems plus checks of every workspace in the open project.
 pub fn collect_problems(ed: &mut Editor) -> Vec<ProblemItem> {
     let mut items: Vec<ProblemItem> = ed.reg.problems.iter().map(|p| (p.source.clone(), p.message.clone(), None)).collect();
+    // Custom ids: events waiting for an id nothing gives, and buttons nothing handles.
+    let id_problems = crate::editor::custom_ids::collect_for(ed).problems();
     if let Some(project) = &ed.project {
         for (stem, why) in &project.unreadable {
             items.push((format!("workspaces/{stem}.json"), format!("couldn't be read, so it isn't open (the file is kept as it is): {why}"), None));
@@ -409,8 +411,7 @@ pub fn collect_problems(ed: &mut Editor) -> Vec<ProblemItem> {
                 }
             }
         }
-        // Custom ids: events waiting for an id nothing gives, and buttons nothing handles.
-        for (ws_key, node, why) in crate::editor::custom_ids::collect(project, &ed.reg).problems() {
+        for (ws_key, node, why) in id_problems {
             let Some(ws) = project.workspaces.get(&ws_key) else { continue };
             let name = ws.nodes.get(&node).and_then(|n| ed.reg.block(&n.block)).map(|d| d.name.clone()).unwrap_or_default();
             items.push((format!("{} › {name}", ws.name), why, Some((ws_key, node))));

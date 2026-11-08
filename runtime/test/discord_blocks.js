@@ -191,6 +191,18 @@ assert.deepStrictEqual(
   assert.deepStrictEqual(sent, ["hi", "hi", "hi"]);
   await assert.rejects(send("999"), /no channel with the id "999"/);
   await assert.rejects(send("general"), /no channel with the id "general"/);
+  // Send to channel uses the channel even with an interaction still wired
+  // from when it replied (that interaction has no send).
+  const stale = { reply: async () => assert.fail("replied instead of sending"), isRepliable: () => true };
+  await all["discord.send_message"].run({ fields: { ...defaults("discord.send_message"), mode: "send", text: "hi", channel: channels[42], interaction: stale }, ctx });
+  assert.ok(!stale.xcAnswering, "the interaction is left to be answered");
+  // A channel kept as data (a variable, Stored Data): found again by its id.
+  await send({ id: "42", name: "general" });
+  assert.deepStrictEqual(sent, ["hi", "hi", "hi", "hi", "hi"]);
+  // One that takes no messages says so.
+  channels[50] = { id: "50", name: "Info" };
+  await assert.rejects(send("50"), /Channel "Info": messages can't be sent to it/);
+  await assert.rejects(send(null), /Connect the channel/);
   console.log(`${Object.keys(all).length} Discord blocks checked\ndiscord blocks test passed`);
 })().catch((e) => {
   console.error(e);

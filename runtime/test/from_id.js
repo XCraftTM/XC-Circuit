@@ -3,7 +3,9 @@
 // mention (<#id>); the runtime looks it up before the block runs. Types that
 // extend it (a thread) look it up the same way, and an unknown id stops the
 // block with a clear message. Inputs a block adds in define() (Send
-// Message's channel) take an id as well.
+// Message's channel) take an id as well. A channel kept as data (saved in a
+// variable or Stored Data: its id and name, but not what makes it one) is
+// found again by its id.
 // Usage: node runtime/test/from_id.js
 "use strict";
 
@@ -31,14 +33,19 @@ const bundle = {
       file: "text.js",
       source: blockSource(`{ id: "t.text", kind: "value", info: { name: "Text" }, outputs: { text: { type: "text" } }, run() { return { text: "<#7>" }; } }`),
     },
+    "t.saved": {
+      file: "saved.js",
+      source: blockSource(`{ id: "t.saved", kind: "value", info: { name: "Saved" }, outputs: { data: { type: "any" } }, run() { return { data: { id: "7", name: "general" } }; } }`),
+    },
     "t.show": {
       file: "show.js",
-      source: blockSource(`{ id: "t.show", kind: "action", info: { name: "Show" }, fields: { channel: { type: "t.channel" }, thread: { type: "t.thread?" }, wired: { type: "t.channel" }, none: { type: "t.channel?" } },
+      source: blockSource(`{ id: "t.show", kind: "action", info: { name: "Show" }, fields: { channel: { type: "t.channel" }, thread: { type: "t.thread?" }, wired: { type: "t.channel" }, none: { type: "t.channel?" }, saved: { type: "t.channel?" } },
         run({ fields, ctx }) {
           ctx.log.info("channel " + fields.channel?.kind + " " + fields.channel?.id + " " + fields.channel?.where);
           ctx.log.info("thread " + fields.thread?.kind + " " + fields.thread?.id);
           ctx.log.info("wired " + fields.wired?.kind + " " + fields.wired?.id);
           ctx.log.info("none " + JSON.stringify(fields.none ?? null));
+          ctx.log.info("saved " + fields.saved?.kind + " " + fields.saved?.id);
         } }`),
     },
     "t.added": {
@@ -60,11 +67,12 @@ const bundle = {
       nodes: {
         s: { block: "t.start@1", at: [0, 0] },
         txt: { block: "t.text@1", at: [0, 0] },
+        sv: { block: "t.saved@1", at: [0, 0] },
         show: { block: "t.show@1", at: [0, 0], values: { channel: " 42 ", thread: 42, none: "" } },
         added: { block: "t.added@1", at: [0, 0], values: { mode: "send", channel: "<#42>" } },
         bad: { block: "t.bad@1", at: [0, 0], values: { channel: "999" } },
       },
-      links: ["s.next > show.in", "show.next > added.in", "added.next > bad.in", "txt.text > show.wired"],
+      links: ["s.next > show.in", "show.next > added.in", "added.next > bad.in", "txt.text > show.wired", "sv.data > show.saved"],
     },
   },
 };
@@ -83,7 +91,7 @@ const events = () =>
     .filter((l) => l.startsWith("@@xc "))
     .map((l) => JSON.parse(l.slice(5)));
 const logs = () => events().filter((e) => e.t === "log").map((e) => `${e.level}: ${e.text}`);
-const expected = ["info: channel channel 42 main:show", "info: thread channel 42", "info: wired channel 7", "info: none null", "info: added channel 42"];
+const expected = ["info: channel channel 42 main:show", "info: thread channel 42", "info: wired channel 7", "info: none null", "info: saved channel 7", "info: added channel 42"];
 const failed = () => JSON.stringify(events().filter((e) => e.t !== "log" || e.level === "error"));
 // Waits until every expected line is there (a slow machine takes longer); gives up after 20 s.
 const started = Date.now();

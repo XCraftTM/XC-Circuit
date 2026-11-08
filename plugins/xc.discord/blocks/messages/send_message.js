@@ -13,7 +13,14 @@ const MENTIONS = { all: "Everyone mentioned", users: "Only users", usersRoles: "
  * runs; this does it for those that don't.
  */
 async function channelOf(value, ctx) {
-  if (value == null || typeof value === "object") return value ?? undefined;
+  if (value == null) return undefined;
+  if (Array.isArray(value)) return channelOf(value[0], ctx);
+  if (typeof value === "object") {
+    // A channel kept as data (in a variable or Stored Data), or as Discord
+    // sent it: its id, but no send. Found again by its id.
+    if (typeof value.send === "function" || value.id == null) return value;
+    value = value.id;
+  }
   const given = String(value).trim();
   if (!given) return undefined;
   const id = given.replace(/^<#|>$/g, "");
@@ -29,7 +36,7 @@ module.exports = {
     name: "Send Message",
     description: "Replies to a command or button, or sends, replies to and edits messages in channels.",
     author: "XC Team",
-    version: "3.5.0",
+    version: "3.5.1",
   },
   search: {
     category: "send",
@@ -138,11 +145,24 @@ module.exports = {
       const all = [...(layout.files || []), ...(payload.files || [])];
       payload.files = all.length ? all : undefined;
     }
-    const target = fields.interaction ?? (await channelOf(fields.channel, ctx)) ?? fields.message ?? (fields.user?.user ?? fields.user);
+    // What the mode sends with, and nothing else: a wire left from another
+    // mode (an interaction from when it replied) is not used.
+    const mode = fields.mode || "reply";
+    const answers = INTERACTION_MODES.includes(mode);
+    const interaction = answers ? fields.interaction : undefined;
+    const target = answers ? interaction : mode === "send" ? await channelOf(fields.channel, ctx) : mode === "dm" ? (fields.user?.user ?? fields.user) : fields.message;
+    if (!target) {
+      throw new Error({ send: "Connect the channel to send to", dm: "Connect the user to send the message to" }[mode] ?? (answers ? "Connect the interaction to answer" : "Connect the message"));
+    }
+    // A channel that takes no messages (a category, a forum: messages go in its posts).
+    if ((mode === "send" || mode === "dm") && typeof target.send !== "function") {
+      const name = target.name ? ` "${target.name}"` : "";
+      throw new Error(mode === "dm" ? `User${name}: can't send a DM to this` : `Channel${name}: messages can't be sent to it (a category or forum channel takes none; for a forum, send to one of its posts)`);
+    }
     // Answered for us because the run took long (see the Discord runtime's autoDefer):
     // "update" after a button or menu, "reply" ("thinking…") after a command or form.
-    const auto = fields.interaction ? fields.interaction.xcAutoDeferred : undefined;
-    if (fields.interaction) fields.interaction.xcAnswering = true;
+    const auto = interaction ? interaction.xcAutoDeferred : undefined;
+    if (interaction) interaction.xcAnswering = true;
     const reply = async () => {
       if (auto === "update") return target.followUp(payload);
       if (!target.deferred) return target.reply({ ...payload, withResponse: true });
@@ -167,7 +187,7 @@ module.exports = {
       send: () => target.send(payload),
       msgReply: () => target.reply(payload),
       msgEdit: () => target.edit(payload),
-    }[fields.mode];
+    }[mode];
     const result = await send();
     const message = result?.resource?.message ?? (typeof result?.delete === "function" ? result : null);
     if (message && fields.deleteAfter > 0) setTimeout(() => message.delete().catch(() => {}), fields.deleteAfter * 1000);
