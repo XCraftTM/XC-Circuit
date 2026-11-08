@@ -259,12 +259,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
                     ui.allocate_ui_with_layout(vec2(600.0, h), egui::Layout::top_down(egui::Align::Min), |ui| form(ui, &theme, edit, None));
                     ui.add_space(16.0);
                     ui.vertical(|ui| {
-                        kit::section(ui, &theme, t!("Preview"));
-                        let h = (dialog::remaining_height(ui, 300.0) * 0.6).max(220.0);
-                        ScrollArea::vertical().id_salt("modal-preview").max_height(h).auto_shrink([false, true]).show(ui, |ui| preview(ui, &edit.draft, ui.available_width().min(460.0)));
-                        ui.add_space(10.0);
-                        kit::section(ui, &theme, t!("Values from earlier blocks"));
-                        ScrollArea::vertical().id_salt("modal-values").max_height(dialog::remaining_height(ui, 140.0)).auto_shrink([false, true]).show(ui, |ui| crate::editor::values::list(ui, &theme, &values));
+                        dialog::preview_and_values(ui, &theme, "modal-preview", |ui| preview(ui, &edit.draft, ui.available_width().min(460.0)), |ui| crate::editor::values::list(ui, &theme, &values));
                     });
                 });
             }
@@ -344,8 +339,9 @@ fn form(ui: &mut Ui, theme: &Theme, edit: &mut ModalEdit, values: Option<&crate:
             }
             if let Some(values) = values {
                 ui.add_space(12.0);
-                kit::section(ui, theme, t!("Values from earlier blocks"));
-                crate::editor::values::list(ui, theme, values);
+                if dialog::values_heading(ui, theme) {
+                    crate::editor::values::list(ui, theme, values);
+                }
             }
         });
     });

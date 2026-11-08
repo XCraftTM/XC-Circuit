@@ -373,11 +373,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
                     ui.allocate_ui_with_layout(vec2(FORM_W, h), egui::Layout::top_down(egui::Align::Min), |ui| form_column(ui, &theme, edit, None));
                     ui.add_space(14.0);
                     ui.vertical(|ui| {
-                        kit::section(ui, &theme, t!("Preview"));
-                        preview_message(ui, &theme, &edit.draft, bot.as_ref());
-                        ui.add_space(10.0);
-                        kit::section(ui, &theme, t!("Values from earlier blocks"));
-                        ScrollArea::vertical().id_salt("embed-values").max_height(dialog::remaining_height(ui, 140.0)).auto_shrink([false, true]).show(ui, |ui| crate::editor::values::list(ui, &theme, &values));
+                        dialog::preview_and_values(ui, &theme, "embed-preview", |ui| preview_message(ui, &theme, &edit.draft, bot.as_ref()), |ui| crate::editor::values::list(ui, &theme, &values));
                     });
                 });
             }
@@ -443,8 +439,9 @@ fn form_column(ui: &mut Ui, theme: &Theme, edit: &mut EmbedEdit, values: Option<
         form(ui, theme, &mut edit.draft);
         if let Some(values) = values {
             ui.add_space(12.0);
-            kit::section(ui, theme, t!("Values from earlier blocks"));
-            crate::editor::values::list(ui, theme, values);
+            if dialog::values_heading(ui, theme) {
+                crate::editor::values::list(ui, theme, values);
+            }
         }
     });
 }

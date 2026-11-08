@@ -63,6 +63,66 @@ pub fn preview_on_top(ui: &mut Ui, id: &str, share: f32, add: impl FnOnce(&mut U
     ui.add_space(12.0);
 }
 
+/// Whether the builders show the values from earlier blocks (kept between runs).
+const VALUES_SHOWN: &str = "builder-values-shown";
+/// The most room a builder's preview takes above the values, as a share of
+/// what's left of its column (kept between runs; the line between them sets it).
+const PREVIEW_SHARE: &str = "builder-preview-share";
+
+fn values_shown(ctx: &egui::Context) -> bool {
+    ctx.data_mut(|d| *d.get_persisted_mut_or(Id::unique(VALUES_SHOWN), true))
+}
+
+/// The heading of a builder's values from earlier blocks, with a button to
+/// hide them (or show them again). True while they're shown.
+pub fn values_heading(ui: &mut Ui, theme: &Theme) -> bool {
+    let mut shown = values_shown(ui.ctx());
+    ui.horizontal(|ui| {
+        crate::ui::kit::section(ui, theme, t!("Values from earlier blocks"));
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            let (label, help) = if shown { (t!("Hide"), t!("Hide the values, so the preview gets their room")) } else { (t!("Show"), t!("Show the values you can use in ${…}")) };
+            let b = ui.add(egui::Button::new(RichText::new(label).size(11.5).color(theme.accent)).frame(false)).on_hover_text(help).on_hover_cursor(egui::CursorIcon::PointingHand);
+            if b.clicked() {
+                shown = !shown;
+                ui.ctx().data_mut(|d| d.insert_persisted(Id::unique(VALUES_SHOWN), shown));
+            }
+        });
+    });
+    shown
+}
+
+/// A builder's column with the preview on top and the values from earlier
+/// blocks under it. The values can be hidden, so the preview gets the whole
+/// column, and the line between the two dragged up or down to share it
+/// differently; both are kept for every builder.
+pub fn preview_and_values(ui: &mut Ui, theme: &Theme, id: &str, preview: impl FnOnce(&mut Ui), values: impl FnOnce(&mut Ui)) {
+    crate::ui::kit::section(ui, theme, t!("Preview"));
+    let room = remaining_height(ui, 300.0);
+    let shown = values_shown(ui.ctx());
+    let share_id = Id::unique(PREVIEW_SHARE);
+    let share = ui.ctx().data_mut(|d| *d.get_persisted_mut_or(share_id, 0.6f32));
+    // The values' heading and the line between take about 44 px.
+    let max = if shown { ((room - 44.0) * share).max(120.0) } else { (room - 30.0).max(120.0) };
+    let drawn = egui::ScrollArea::vertical().id_salt(id).max_height(max).auto_shrink([false, true]).show(ui, preview).inner_rect;
+    if shown {
+        let (line, _) = ui.allocate_exact_size(vec2(ui.available_width(), 12.0), Sense::hover());
+        let grip = ui.interact(line, Id::unique(("builder-split", id)), Sense::drag()).on_hover_cursor(egui::CursorIcon::ResizeVertical);
+        let active = grip.hovered() || grip.dragged();
+        ui.painter().hline(line.x_range(), line.center().y, Stroke::new(1.0, if active { theme.accent } else { theme.line }));
+        ui.painter().rect_filled(egui::Rect::from_center_size(line.center(), vec2(36.0, 4.0)), 2.0, if active { theme.accent } else { with_alpha(theme.text_muted, 140) });
+        if grip.dragged() && grip.drag_delta().y != 0.0 {
+            // From where the preview ends now (it may be shorter than its most).
+            let new = ((drawn.height() + grip.drag_delta().y) / (room - 44.0).max(1.0)).clamp(0.1, 0.92);
+            ui.ctx().data_mut(|d| d.insert_persisted(share_id, new));
+        }
+    } else {
+        ui.add_space(10.0);
+    }
+    if values_heading(ui, theme) {
+        egui::ScrollArea::vertical().id_salt((id, "values")).max_height(remaining_height(ui, 100.0)).auto_shrink([false, true]).show(ui, values);
+    }
+}
+
 pub fn tab(ui: &mut Ui, theme: &Theme, spec: Spec, mut content: impl FnMut(&mut Ui, Part)) {
     let id = Id::unique(("dialog-tab", spec.id));
     egui::Panel::bottom(id.with("footer"))
@@ -190,3 +250,63 @@ fn close_button(ui: &mut Ui, theme: &Theme) -> Response {
     resp.on_hover_text(t!("Close (Esc)"))
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One frame of a builder column with a tall preview: where the preview's
+    /// visible part was drawn, and whether the values were.
+    fn column(ctx: &egui::Context, events: Vec<egui::Event>) -> (egui::Rect, bool) {
+        let theme = Theme::fallback();
+        let (mut preview, mut values) = (egui::Rect::NOTHING, false);
+        let input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(600.0, 900.0))), events, ..Default::default() };
+        let mut out = ctx.run_ui(input, |ui| {
+            egui::CentralPanel::default().show(ui, |ui| {
+                ui.ctx().data_mut(|d| d.insert_temp(Id::unique(BODY_BOTTOM), 880.0f32));
+                preview_and_values(
+                    ui,
+                    &theme,
+                    "test-preview",
+                    |ui| {
+                        preview = ui.clip_rect();
+                        ui.add_space(2000.0);
+                    },
+                    |ui| {
+                        values = true;
+                        ui.add_space(400.0);
+                    },
+                );
+            });
+        });
+        out.textures_delta.clear();
+        (preview, values)
+    }
+
+    #[test]
+    fn the_values_hide_and_the_preview_takes_their_room() {
+        let ctx = egui::Context::default();
+        let press = |pos, pressed| egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+        column(&ctx, vec![]);
+        let (first, values) = column(&ctx, vec![]);
+        assert!(values, "the values show at first");
+
+        // Dragging the line under the preview down gives the preview more room.
+        let line = egui::pos2(300.0, first.bottom() + 8.0);
+        column(&ctx, vec![egui::Event::PointerMoved(line)]);
+        column(&ctx, vec![press(line, true)]);
+        for step in 1..=6 {
+            column(&ctx, vec![egui::Event::PointerMoved(line + vec2(0.0, 10.0 * step as f32))]);
+        }
+        column(&ctx, vec![press(line + vec2(0.0, 60.0), false)]);
+        let (dragged, values) = column(&ctx, vec![]);
+        assert!((dragged.height() - first.height() - 60.0).abs() < 3.0, "grew {} px", dragged.height() - first.height());
+        assert!(values);
+
+        // Hiding the values gives the preview the whole column.
+        ctx.data_mut(|d| d.insert_persisted(Id::unique(VALUES_SHOWN), false));
+        let (hidden, values) = column(&ctx, vec![]);
+        assert!(!values, "the values are hidden");
+        assert!(hidden.height() > dragged.height() + 100.0, "{} vs {}", hidden.height(), dragged.height());
+    }
+}

@@ -341,12 +341,7 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
                     ui.allocate_ui_with_layout(vec2(620.0, h), egui::Layout::top_down(egui::Align::Min), |ui| form(ui, &theme, edit, None));
                     ui.add_space(16.0);
                     ui.vertical(|ui| {
-                        kit::section(ui, &theme, t!("Preview"));
-                        let h = (dialog::remaining_height(ui, 300.0) * 0.55).max(200.0);
-                        ScrollArea::vertical().id_salt("layout-preview").max_height(h).auto_shrink([false, true]).show(ui, |ui| preview(ui, &theme, &edit.draft, bot.as_ref()));
-                        ui.add_space(10.0);
-                        kit::section(ui, &theme, t!("Values from earlier blocks"));
-                        ScrollArea::vertical().id_salt("layout-values").max_height(dialog::remaining_height(ui, 140.0)).auto_shrink([false, true]).show(ui, |ui| crate::editor::values::list(ui, &theme, &values));
+                        dialog::preview_and_values(ui, &theme, "layout-preview", |ui| preview(ui, &theme, &edit.draft, bot.as_ref()), |ui| crate::editor::values::list(ui, &theme, &values));
                     });
                 });
             }
@@ -422,8 +417,9 @@ fn form(ui: &mut Ui, theme: &Theme, edit: &mut LayoutEdit, values: Option<&crate
             list_editor(ui, theme, list_mut(&mut edit.draft, "components"), true, next);
             if let Some(values) = values {
                 ui.add_space(12.0);
-                kit::section(ui, theme, t!("Values from earlier blocks"));
-                crate::editor::values::list(ui, theme, values);
+                if dialog::values_heading(ui, theme) {
+                    crate::editor::values::list(ui, theme, values);
+                }
             }
         });
     });
