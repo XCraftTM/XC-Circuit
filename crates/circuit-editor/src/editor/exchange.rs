@@ -143,12 +143,34 @@ pub fn open_export(ed: &mut Editor, preselect: Preselect) {
     ed.ws_export = Some(ExportDraft { chosen, skipped_commands: HashSet::new() });
 }
 
-/// The slash command entries the chosen workspaces use: (first word, entry).
-fn used_commands(project: &Project, draft: &ExportDraft) -> Vec<(String, Value)> {
+/// The slash commands the chosen workspaces use: each first word with all
+/// its entries (`ticket`, `ticket open`, `ticket close` …).
+fn used_commands(project: &Project, draft: &ExportDraft) -> Vec<(String, Vec<Value>)> {
     let used: HashSet<String> = draft.chosen.iter().filter(|(_, on)| **on).filter_map(|(k, _)| project.workspaces.get(k)).flat_map(commands_used).collect();
-    let mut out: Vec<(String, Value)> = slash_commands(project).into_iter().map(|c| (command_root(&c), c)).filter(|(root, _)| used.contains(root)).collect();
+    let mut out = group_commands(slash_commands(project));
+    out.retain(|(root, _)| used.contains(root));
     out.sort_by(|a, b| a.0.cmp(&b.0));
     out
+}
+
+/// Command entries grouped by first word, in the order the words first come.
+fn group_commands(entries: impl IntoIterator<Item = Value>) -> Vec<(String, Vec<Value>)> {
+    let mut out: Vec<(String, Vec<Value>)> = Vec::new();
+    for c in entries {
+        let root = command_root(&c);
+        match out.iter_mut().find(|(r, _)| *r == root) {
+            Some((_, list)) => list.push(c),
+            None => out.push((root, vec![c])),
+        }
+    }
+    out
+}
+
+/// A command as the lists show it: `/ticket` and, when it has them, its
+/// subcommands (`open, close`).
+fn command_label(root: &str, entries: &[Value]) -> (String, Option<String>) {
+    let subs: Vec<&str> = entries.iter().filter_map(|c| c.get("name").and_then(Value::as_str)).filter_map(|n| n.split_once(' ').map(|(_, rest)| rest)).collect();
+    (format!("/{root}"), (!subs.is_empty()).then(|| subs.join(", ")))
 }
 
 pub fn export_tab(ui: &mut Ui, ed: &mut Editor) {
@@ -183,16 +205,21 @@ pub fn export_tab(ui: &mut Ui, ed: &mut Editor) {
                 if !commands.is_empty() {
                     kit::section(ui, &theme, t!("Slash commands"));
                     kit::hint(ui, &theme, t!("The chosen workspaces use these. They come along, so the commands work in the other project too."));
-                    for (root, entry) in &commands {
+                    for (root, entries) in &commands {
                         let mut on = !draft.skipped_commands.contains(root);
-                        let text = format!("/{}", entry.get("name").and_then(Value::as_str).unwrap_or(root));
-                        if kit::checkbox(ui, &theme, &mut on, RichText::new(text).monospace()).changed() {
-                            if on {
-                                draft.skipped_commands.remove(root);
-                            } else {
-                                draft.skipped_commands.insert(root.clone());
+                        let (text, subs) = command_label(root, entries);
+                        ui.horizontal(|ui| {
+                            if kit::checkbox(ui, &theme, &mut on, RichText::new(text).monospace()).changed() {
+                                if on {
+                                    draft.skipped_commands.remove(root);
+                                } else {
+                                    draft.skipped_commands.insert(root.clone());
+                                }
                             }
-                        }
+                            if let Some(subs) = subs {
+                                kit::hint(ui, &theme, &subs);
+                            }
+                        });
                     }
                 }
 
@@ -354,7 +381,10 @@ pub struct ImportItem {
 }
 
 pub struct ImportCommand {
-    pub entry: Value,
+    /// Its first word, and every entry with it (the command, its groups and
+    /// subcommands: `ticket`, `ticket open` …).
+    pub root: String,
+    pub entries: Vec<Value>,
     /// The project has a command with this first word, which is kept.
     pub exists: bool,
     pub chosen: bool,
@@ -384,13 +414,13 @@ pub fn open_import(ed: &mut Editor, files: Vec<(PathBuf, WorkspacesFile)>) {
     let mut missing_plugins: Vec<(String, String)> = Vec::new();
     for (i, (_, f)) in files.iter().enumerate() {
         items.extend((0..f.workspaces.len()).map(|index| ImportItem { file: i, index, chosen: true }));
-        for c in &f.slash_commands {
-            let root = command_root(c);
-            if commands.iter().any(|x| command_root(&x.entry) == root) {
+        // A command comes whole, from the first file that has it.
+        for (root, entries) in group_commands(f.slash_commands.iter().cloned()) {
+            if commands.iter().any(|x| x.root == root) {
                 continue;
             }
             let exists = existing.contains(&root);
-            commands.push(ImportCommand { entry: c.clone(), exists, chosen: !exists });
+            commands.push(ImportCommand { root, entries, exists, chosen: !exists });
         }
         for (id, version) in &f.plugins {
             if !ed.reg.plugins.iter().any(|p| p.manifest.id == *id) && !missing_plugins.iter().any(|(m, _)| m == id) {
@@ -444,7 +474,7 @@ pub fn apply_import(project: &mut Project, draft: &ImportDraft) -> Vec<String> {
         project.workspaces.insert(key.clone(), ws);
         added.push(key);
     }
-    let new_commands: Vec<Value> = draft.commands.iter().filter(|c| c.chosen && !c.exists).map(|c| c.entry.clone()).collect();
+    let new_commands: Vec<Value> = draft.commands.iter().filter(|c| c.chosen && !c.exists).flat_map(|c| c.entries.iter().cloned()).collect();
     if !new_commands.is_empty() {
         let list = project.meta.data.entry(crate::builders::slash::DATA_KEY).or_insert_with(|| Value::Array(Vec::new()));
         if let Value::Array(items) = list {
@@ -498,15 +528,20 @@ pub fn import_tab(ui: &mut Ui, ed: &mut Editor) {
                 if !draft.commands.is_empty() {
                     kit::section(ui, &theme, t!("Slash commands"));
                     for c in &mut draft.commands {
-                        let text = format!("/{}", c.entry.get("name").and_then(Value::as_str).unwrap_or(""));
-                        if c.exists {
-                            ui.horizontal(|ui| {
+                        let (text, subs) = command_label(&c.root, &c.entries);
+                        ui.horizontal(|ui| {
+                            if c.exists {
                                 ui.add_enabled_ui(false, |ui| kit::checkbox(ui, &theme, &mut true, RichText::new(&text).monospace()));
+                            } else {
+                                kit::checkbox(ui, &theme, &mut c.chosen, RichText::new(&text).monospace());
+                            }
+                            if let Some(subs) = &subs {
+                                kit::hint(ui, &theme, subs);
+                            }
+                            if c.exists {
                                 kit::hint(ui, &theme, t!("already in this project, kept as it is"));
-                            });
-                        } else {
-                            kit::checkbox(ui, &theme, &mut c.chosen, RichText::new(&text).monospace());
-                        }
+                            }
+                        });
                     }
                 }
 
@@ -628,6 +663,45 @@ mod tests {
         let names: Vec<&str> = added.iter().map(|k| project.workspaces[k].name.as_str()).collect();
         assert_eq!(names, ["Rank command (2)", "Welcome (2)"]);
         assert_eq!(slash_commands(project).len(), 1, "the existing /rank is kept, not doubled");
+        let _ = std::fs::remove_dir_all(dir);
+        let _ = std::fs::remove_dir_all(other_dir);
+    }
+
+    /// A command with subcommands (/ticket open, /ticket close) goes out
+    /// and comes in whole: the command and every subcommand, not only the first.
+    #[test]
+    fn commands_with_subcommands_come_along_whole() {
+        let (mut ed, dir) = demo();
+        let ticket = [
+            serde_json::json!({ "name": "ticket", "description": "Tickets", "options": [] }),
+            serde_json::json!({ "name": "ticket open", "description": "Open a ticket", "options": [] }),
+            serde_json::json!({ "name": "ticket close", "description": "Close it", "options": [] }),
+        ];
+        let project = ed.project.as_mut().unwrap();
+        if let Some(Value::Array(list)) = project.meta.data.get_mut(crate::builders::slash::DATA_KEY) {
+            list.extend(ticket.iter().cloned());
+        }
+        let mut ws = Workspace::new("Tickets");
+        let mut node: circuit_core::graph::Node = serde_json::from_value(serde_json::json!({ "block": "discord.on_slash_command@2", "at": [0.0, 0.0] })).unwrap();
+        node.values.insert("command".into(), "ticket open".into());
+        ws.nodes.insert("1".into(), node);
+        project.workspaces.insert("tickets".into(), ws);
+        let draft = ExportDraft { chosen: [("tickets".to_string(), true)].into_iter().collect(), skipped_commands: HashSet::new() };
+        let used = used_commands(project, &draft);
+        assert_eq!(used.len(), 1);
+        assert_eq!(command_label(&used[0].0, &used[0].1), ("/ticket".to_string(), Some("open, close".to_string())));
+        let file = build_file(project, &ed.reg, &["tickets".to_string()], &["ticket".to_string()].into());
+        assert_eq!(file.slash_commands.len(), 3, "the command and both subcommands");
+
+        let (mut other, other_dir) = demo();
+        open_import(&mut other, vec![(PathBuf::from("t.xcws.json"), file)]);
+        let draft = other.ws_import.take().unwrap();
+        assert_eq!(draft.commands.len(), 1, "one row for /ticket");
+        assert!(draft.commands[0].chosen && !draft.commands[0].exists);
+        let project = other.project.as_mut().unwrap();
+        apply_import(project, &draft);
+        let names: Vec<String> = slash_commands(project).iter().filter(|c| command_root(c) == "ticket").filter_map(|c| c["name"].as_str().map(str::to_string)).collect();
+        assert_eq!(names, ["ticket", "ticket open", "ticket close"]);
         let _ = std::fs::remove_dir_all(dir);
         let _ = std::fs::remove_dir_all(other_dir);
     }
