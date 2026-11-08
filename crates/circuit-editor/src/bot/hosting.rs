@@ -732,8 +732,12 @@ impl ConsoleView {
                 // Only the lines in view are laid out, so a long console stays quick.
                 let row_h = ui.fonts_mut(|f| f.row_height(&font));
                 let dark = ui.visuals().dark_mode;
+                // No gap between lines: show_rows works out the whole height
+                // from this (rows × (height + gap)) before any is drawn, so
+                // with a gap there it'd count space the lines never take, and
+                // that showed as empty room under the last line.
+                ui.spacing_mut().item_spacing.y = 0.0;
                 egui::ScrollArea::both().id_salt("server-console").max_height(h).auto_shrink([false, false]).stick_to_bottom(true).show_rows(ui, row_h, self.lines.len(), |ui, rows| {
-                    ui.spacing_mut().item_spacing.y = 0.0;
                     for line in self.lines.range(rows) {
                         let mut job = egui::text::LayoutJob::default();
                         for piece in line {
