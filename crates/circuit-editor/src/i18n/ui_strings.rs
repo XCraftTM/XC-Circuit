@@ -726,6 +726,7 @@ pub const UI_STRINGS: &[&str] = &[
     "A box takes up to 4000 characters.",
     "A box's placeholder has up to 100 characters.",
     "A box's filled-in text has up to 4000 characters.",
+    "A box's filled-in text must fit its least and most number of characters.",
     "A box's least number of characters is above its most.",
     "A file upload takes 1 to 10 files.",
     "A file upload's least number of files is above its most.",

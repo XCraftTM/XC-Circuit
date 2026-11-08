@@ -5,10 +5,13 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 ## Unreleased
 
 ### Added
+- **Collections and Maps in ${…}**: after a dot, a Collection (a server's members.cache, a member's roles.cache, a message's attachments …) lists size, first(), last(), get(id), find(…), filter(…), random() and more, and after one that gives back an item, that item's members: ${server.members.cache.get(user.id).displayName}. Managers' caches now know what they hold. A Map lists size, get and has.
+- **Builder windows keep their place**: the Embed, Layout, Modal and Canvas Builders, Slash Commands, Bot settings and the other editors open where they were the last time and as big (moved inside the window if it got smaller). A new window no longer turns up where an old one was in an earlier run.
 - **AI agents see much more**: new MCP tools list every block type (`list_block_types`), show a block's source code (`get_block_source`) and the plugins (`list_plugins`), read the app's settings and read or change Bot › Settings (`get_app_settings`, `get_bot_settings`, `set_bot_settings`; never the token), and see and work the bot's server (`get_server`, `server_action`: upload, start, restart, stop, kill; `set_run_target`). `run_bot` and `stop_bot` act on the server when Run does, and `get_project` tells about the server. Plugins get the same through `xc.server()`, `xc.botSettings()`, `xc.blockSource()` and more.
 - **Defer, then delete**: a Send Message mode that answers a command, button or form with *thinking…* and takes it away again (after Delete after seconds, or as soon as it shows), so it counts as answered and nothing stays. A reply after it comes as a new message.
 
 ### Fixed
+- **A form with a too short text in a box**: Discord refused the whole form ("Must be 7 or more in length") when a box's filled-in text was empty or shorter than the box's least characters, such as a ${…} that came out short. Show Modal now leaves that text out (the box starts empty, and the Console says so) and cuts one that is too long, and the Modal Builder warns about a typed text that doesn't fit.
 - **The note editor**: the title and description boxes have room around their text and grow by the grip in their corner, Delete note has room around its text, and Other color picks any colour with the color picker (the presets stay).
 - **Delete after works for replies**: Send Message deleted its message as a channel message, which Discord refuses for private replies and where the bot can't see the channel, and said nothing. Replies and follow-ups are now deleted through the interaction (for 15 minutes; later as messages), and a delete that fails says why in the Console.
 
