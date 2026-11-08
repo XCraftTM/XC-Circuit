@@ -175,6 +175,18 @@ impl CircuitApp {
         {
             self.updater.show = true;
         }
+        // Uploading to the bot's server: under way, or how the last one went.
+        if has_project && crate::bot::hosting::HostingUi::configured(&self.ed) {
+            let (dot, text, tip) = match (self.bot.hosting.busy(), &self.bot.hosting.outcome) {
+                (Some(what), _) => (Some(t.accent), tf!("{what} …", what = what), t!("Bot › Server…").to_string()),
+                (None, Some(o)) if o.ok => (None, tf!("Uploaded {ago}", ago = crate::bot::ago(o.at.elapsed())), o.text.clone()),
+                (None, Some(o)) => (Some(t.error), t!("Upload failed").to_string(), o.text.clone()),
+                (None, None) => (None, t!("Upload to the server").to_string(), t!("Bot › Server…").to_string()),
+            };
+            if status_item(&mut right, &t, dot, &text).on_hover_text(tip).clicked() {
+                self.bot.hosting.open(&self.ed);
+            }
+        }
         let saved = if self.ed.unsaved() { t!("Unsaved changes") } else { t!("Saved") };
         if status_item(&mut right, &t, None, saved).on_hover_text(t!("Save (Ctrl+S)")).clicked() && has_project {
             self.ed.save();
@@ -232,6 +244,8 @@ impl CircuitApp {
             (Tab::SlashCommands, self.ed.slash_edit.is_some(), egui::vec2(1320.0, 720.0)),
             (Tab::BotSettings, self.bot.settings.is_some(), egui::vec2(820.0, 620.0)),
             (Tab::Export, self.bot.export.is_some(), egui::vec2(560.0, 620.0)),
+            (Tab::Hosting, self.bot.hosting.draft.is_some(), egui::vec2(680.0, 760.0)),
+            (Tab::ServerConsole, self.bot.hosting.console.is_some(), egui::vec2(900.0, 560.0)),
             (Tab::WorkspaceExport, self.ed.ws_export.is_some(), egui::vec2(660.0, 680.0)),
             (Tab::WorkspaceImport, self.ed.ws_import.is_some(), egui::vec2(660.0, 680.0)),
         ];

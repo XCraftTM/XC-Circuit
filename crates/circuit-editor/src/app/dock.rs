@@ -54,6 +54,8 @@ impl Tab {
             Tab::SlashCommands => "slash",
             Tab::BotSettings => "bolt",
             Tab::Export | Tab::WorkspaceExport => "package",
+            Tab::Hosting => "server",
+            Tab::ServerConsole => "terminal",
             Tab::WorkspaceImport => "folder-plus",
             Tab::Start => "block",
             Tab::Side(view) => view.icon(),
@@ -96,6 +98,11 @@ impl DockViewer<Tab> for Viewer<'_> {
             Tab::SlashCommands => t!("Slash Commands").into(),
             Tab::BotSettings => t!("Bot settings").into(),
             Tab::Export => t!("Export bot").into(),
+            Tab::Hosting => t!("Server").into(),
+            Tab::ServerConsole => match &self.bot.hosting.console {
+                Some(c) => tf!("Console of {server}", server = c.name),
+                None => t!("Server console").into(),
+            },
             Tab::Plugins => t!("Plugins").into(),
             // With a project open it holds the place of its workspaces.
             Tab::Start if self.ed.project.is_some() => t!("No workspace").into(),
@@ -138,6 +145,8 @@ impl DockViewer<Tab> for Viewer<'_> {
             Tab::SlashCommands => self.ed.slash_edit = None,
             Tab::BotSettings => self.bot.settings = None,
             Tab::Export => self.bot.export = None,
+            Tab::Hosting => self.bot.hosting.draft = None,
+            Tab::ServerConsole => self.bot.hosting.console = None,
             Tab::WorkspaceExport => self.ed.ws_export = None,
             Tab::WorkspaceImport => self.ed.ws_import = None,
             Tab::Side(view) => self.closed_side.push(*view),
@@ -190,6 +199,12 @@ impl DockViewer<Tab> for Viewer<'_> {
             Tab::SlashCommands => at_least(ui, tab.min_width(), |ui| crate::builders::slash::tab(ui, self.ed)),
             Tab::BotSettings => self.bot.settings_tab(ui, self.ed),
             Tab::Export => self.bot.export_tab(ui, self.ed),
+            Tab::Hosting => self.bot.hosting.tab(ui, self.ed),
+            Tab::ServerConsole => {
+                if let Some(c) = &mut self.bot.hosting.console {
+                    c.tab(ui, self.ed);
+                }
+            }
             Tab::WorkspaceExport => crate::editor::exchange::export_tab(ui, self.ed),
             Tab::WorkspaceImport => crate::editor::exchange::import_tab(ui, self.ed),
             // Only in layouts saved when plugins had a tab of their own: closed on load.

@@ -87,6 +87,7 @@ export default defineConfig({
             { text: "Try Zones and errors", link: "/explanations/errors" },
             { text: "Plugins", link: "/explanations/plugins" },
             { text: "Running and exporting", link: "/explanations/running" },
+            { text: "Putting your bot on a server", link: "/explanations/hosting" },
             { text: "AI agents (MCP)", link: "/explanations/ai-agents" },
             { text: "Tokens and safety", link: "/explanations/safety" },
             { text: "Everything the editor does", link: "/explanations/editor-reference" },

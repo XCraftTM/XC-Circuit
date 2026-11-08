@@ -1,0 +1,739 @@
+//! Putting the bot on its server: Bot › Server… sets where it goes (SFTP,
+//! FTP or a Calagopus panel) and uploads it, by hand or after every save.
+//! For a Calagopus server there's also Bot › Server console: its state,
+//! Start / Restart / Stop, and its live console.
+//!
+//! The settings are kept in the project (`data.hosting`); passwords and API
+//! keys in the credential store, like the bot token.
+
+use std::collections::VecDeque;
+use std::path::PathBuf;
+use std::sync::mpsc::{Receiver, TryRecvError, channel};
+use std::thread;
+use std::time::Instant;
+
+use circuit_runner::hosting::{self, Hosting, Kind, Secrets, calagopus};
+use circuit_runner::{build_bundle, secrets};
+use eframe::egui::{self, RichText};
+
+use crate::editor::{Editor, Level};
+use crate::ui::dialog::{self, Part};
+use crate::ui::kit;
+
+const DATA_KEY: &str = "hosting";
+
+/// A project's hosting settings (the defaults when it has none).
+pub fn settings_of(ed: &Editor) -> Hosting {
+    ed.project.as_ref().and_then(|p| p.meta.data.get(DATA_KEY)).and_then(|v| serde_json::from_value(v.clone()).ok()).unwrap_or_default()
+}
+
+fn secrets_of(ed: &Editor) -> Secrets {
+    let Some(p) = &ed.project else { return Secrets::default() };
+    Secrets { password: secrets::get(&p.root, hosting::PASSWORD), api_key: secrets::get(&p.root, hosting::API_KEY) }
+}
+
+/// Where SFTP servers' keys are kept, for all projects.
+fn known_hosts() -> PathBuf {
+    super::app_data_dir().join("known_hosts.json")
+}
+
+/// What a running upload (or test) sends back.
+enum JobMsg {
+    Log(String),
+    Done(Result<String, String>),
+}
+
+/// The last upload's result, for the status bar.
+pub struct Outcome {
+    pub at: Instant,
+    pub ok: bool,
+    pub text: String,
+}
+
+/// The Server tab's edits, applied with Save (and before uploading).
+pub struct Draft {
+    h: Hosting,
+    /// Typed passwords and keys; empty keeps the saved one.
+    password: String,
+    password_saved: bool,
+    api_key: String,
+    key_saved: bool,
+    servers: Vec<calagopus::Server>,
+    servers_problem: Option<String>,
+}
+
+pub struct HostingUi {
+    pub draft: Option<Draft>,
+    /// An upload or test running: what it is, and its messages.
+    job: Option<(&'static str, Receiver<JobMsg>)>,
+    /// What the last upload or test said, line by line.
+    log: VecDeque<String>,
+    pub outcome: Option<Outcome>,
+    /// The number of saves seen, to upload after a new one.
+    seen_saves: Option<u64>,
+    /// An upload asked for while one runs: it follows.
+    again: bool,
+    sign_in: Option<calagopus::SignIn>,
+    servers: Option<Receiver<Result<Vec<calagopus::Server>, String>>>,
+    pub console: Option<ConsoleView>,
+}
+
+impl HostingUi {
+    pub fn new() -> Self {
+        HostingUi { draft: None, job: None, log: VecDeque::new(), outcome: None, seen_saves: None, again: false, sign_in: None, servers: None, console: None }
+    }
+
+    /// Bot › Server…: the tab with the project's settings.
+    pub fn open(&mut self, ed: &Editor) {
+        if ed.project.is_none() {
+            return;
+        }
+        let h = settings_of(ed);
+        let s = secrets_of(ed);
+        self.draft = Some(Draft {
+            h,
+            password: String::new(),
+            password_saved: s.password.is_some(),
+            api_key: String::new(),
+            key_saved: s.api_key.is_some(),
+            servers: Vec::new(),
+            servers_problem: None,
+        });
+        if self.draft.as_ref().is_some_and(|d| d.h.kind == Kind::Calagopus && d.key_saved) {
+            self.read_servers(ed);
+        }
+    }
+
+    pub fn busy(&self) -> Option<&'static str> {
+        self.job.as_ref().map(|(what, _)| *what)
+    }
+
+    /// Whether the project has somewhere to upload to.
+    pub fn configured(ed: &Editor) -> bool {
+        settings_of(ed).kind != Kind::None
+    }
+
+    /// Every frame: messages from a running upload, sign-in and server list,
+    /// and an upload after a save when that's turned on.
+    pub fn poll(&mut self, ed: &mut Editor, ctx: &egui::Context) {
+        let mut messages = Vec::new();
+        let mut gone = false;
+        if let Some((_, rx)) = &self.job {
+            loop {
+                match rx.try_recv() {
+                    Ok(m) => messages.push(m),
+                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Disconnected) => {
+                        gone = true;
+                        break;
+                    }
+                }
+            }
+        }
+        let what = self.busy().unwrap_or_default();
+        let mut done = false;
+        for m in messages {
+            match m {
+                JobMsg::Log(line) => self.push_log(line),
+                JobMsg::Done(result) => {
+                    done = true;
+                    let ok = result.is_ok();
+                    let text = result.unwrap_or_else(|e| e);
+                    ed.log(if ok { Level::Success } else { Level::Error }, if ok { text.clone() } else { tf!("{what} failed: {error}", what = what, error = text) });
+                    self.push_log(text.clone());
+                    self.outcome = Some(Outcome { at: Instant::now(), ok, text });
+                    self.job = None;
+                    if std::mem::take(&mut self.again) {
+                        self.upload(ed);
+                    }
+                }
+            }
+        }
+        // Its thread ended without saying how it went.
+        if gone && !done {
+            self.job = None;
+        }
+        if self.job.is_some() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(200));
+        }
+        // An upload after each save, when turned on.
+        let saves = ed.saves;
+        if self.seen_saves.is_some_and(|s| s != saves) && settings_of(ed).auto_upload && ed.project.is_some() {
+            self.upload(ed);
+        }
+        self.seen_saves = Some(saves);
+
+        if let Some(s) = &self.sign_in {
+            match s.key.try_recv() {
+                Ok(key) => {
+                    self.sign_in = None;
+                    if let Some(p) = &ed.project {
+                        match secrets::set(&p.root, hosting::API_KEY, &key) {
+                            Ok(()) => {
+                                ed.log(Level::Success, t!("Signed in to the panel: the API key is kept in your system's credential store."));
+                                if let Some(d) = &mut self.draft {
+                                    d.key_saved = true;
+                                    d.api_key.clear();
+                                }
+                                self.read_servers(ed);
+                            }
+                            Err(e) => ed.log(Level::Error, format!("{e:#}")),
+                        }
+                    }
+                }
+                Err(TryRecvError::Empty) => ctx.request_repaint_after(std::time::Duration::from_millis(300)),
+                Err(TryRecvError::Disconnected) => {
+                    self.sign_in = None;
+                    ed.log(Level::Warn, t!("Signing in to the panel stopped: no key came back within 15 minutes."));
+                }
+            }
+        }
+        if let Some(rx) = &self.servers {
+            match rx.try_recv() {
+                Ok(result) => {
+                    self.servers = None;
+                    if let Some(d) = &mut self.draft {
+                        match result {
+                            Ok(list) => {
+                                // The only one, picked when none is.
+                                if d.h.server.is_empty() && list.len() == 1 {
+                                    d.h.server = list[0].uuid.clone();
+                                    d.h.server_name = list[0].name.clone();
+                                }
+                                d.servers = list;
+                                d.servers_problem = None;
+                            }
+                            Err(e) => d.servers_problem = Some(e),
+                        }
+                    }
+                }
+                Err(TryRecvError::Empty) => ctx.request_repaint_after(std::time::Duration::from_millis(200)),
+                Err(TryRecvError::Disconnected) => self.servers = None,
+            }
+        }
+        if let Some(c) = &mut self.console {
+            c.poll(ctx);
+        }
+    }
+
+    fn push_log(&mut self, line: String) {
+        self.log.push_back(line);
+        while self.log.len() > 200 {
+            self.log.pop_front();
+        }
+    }
+
+    /// Reads the servers the API key reaches, for the list.
+    fn read_servers(&mut self, ed: &Editor) {
+        let Some(d) = &self.draft else { return };
+        let key = if d.api_key.trim().is_empty() { secrets_of(ed).api_key } else { Some(d.api_key.trim().to_string()) };
+        let (Some(key), false) = (key, d.h.panel.trim().is_empty()) else { return };
+        let panel = calagopus::Panel::new(&d.h.panel, &key);
+        let (tx, rx) = channel();
+        self.servers = Some(rx);
+        thread::spawn(move || {
+            let _ = tx.send(panel.servers().map_err(|e| format!("{e:#}")));
+        });
+    }
+
+    /// Keeps the draft: settings into the project, typed secrets into the credential store.
+    fn save_draft(&mut self, ed: &mut Editor) -> bool {
+        let (Some(d), Some(p)) = (&mut self.draft, &mut ed.project) else { return false };
+        let mut ok = true;
+        for (name, typed, saved) in [(hosting::PASSWORD, &mut d.password, &mut d.password_saved), (hosting::API_KEY, &mut d.api_key, &mut d.key_saved)] {
+            if typed.trim().is_empty() {
+                continue;
+            }
+            match secrets::set(&p.root, name, typed.trim()) {
+                Ok(()) => {
+                    typed.clear();
+                    *saved = true;
+                }
+                Err(e) => {
+                    ed.log(Level::Error, format!("{e:#}"));
+                    ok = false;
+                    break;
+                }
+            }
+        }
+        let Some(p) = &mut ed.project else { return false };
+        let value = serde_json::to_value(&d.h).unwrap_or_default();
+        if p.meta.data.get(DATA_KEY) != Some(&value) {
+            p.meta.data.insert(DATA_KEY.into(), value);
+            ed.edited = true;
+        }
+        ok
+    }
+
+    /// Exports the bot to the project's `.circuit/upload` folder and uploads
+    /// what changed. A second upload asked for meanwhile follows this one.
+    pub fn upload(&mut self, ed: &mut Editor) {
+        if self.job.is_some() {
+            self.again = true;
+            return;
+        }
+        let Some(project) = &ed.project else { return };
+        let h = settings_of(ed);
+        let s = secrets_of(ed);
+        if let Some(what) = h.missing(&s) {
+            ed.log(Level::Warn, tf!("Not uploaded: {what} (Bot › Server…)", what = missing_text(what)));
+            return;
+        }
+        let bundle = match build_bundle(project, &ed.reg, ed.mode()) {
+            Ok(b) => b,
+            Err(e) => return ed.log(Level::Error, format!("Could not prepare the bot: {e:#}")),
+        };
+        let opts = super::export_options(ed, h.include_token, false);
+        let local = project.root.join(".circuit");
+        let (stage, record) = (local.join("upload"), local.join("upload.json"));
+        let (tx, rx) = channel();
+        self.log.clear();
+        self.job = Some((t!("Upload"), rx));
+        let where_to = place_name(&h);
+        thread::spawn(move || {
+            let mut log = |line: String| {
+                let _ = tx.send(JobMsg::Log(line));
+            };
+            let result = (|| {
+                circuit_runner::export(&stage, &bundle, &opts, &mut log)?;
+                let done = hosting::upload(&stage, &h, &s, &record, &known_hosts(), &mut log);
+                // The token stays only on the server, not in a copy here.
+                let _ = std::fs::remove_file(stage.join(".env"));
+                done
+            })();
+            let _ = tx.send(JobMsg::Done(match result {
+                Ok(up) if up.sent.is_empty() => Ok(tf!("Nothing new to upload to {place}: it has this version already.", place = where_to)),
+                Ok(up) => Ok(tf!("Uploaded to {place}: {files}.", place = where_to, files = up.sent.join(", "))),
+                Err(e) => Err(format!("{e:#}")),
+            }));
+        });
+    }
+
+    /// Logs in with the draft's settings (saved first) and out again.
+    fn test(&mut self, ed: &mut Editor) {
+        if self.job.is_some() || !self.save_draft(ed) {
+            return;
+        }
+        let h = settings_of(ed);
+        let s = secrets_of(ed);
+        let (tx, rx) = channel();
+        self.log.clear();
+        self.job = Some((t!("Connection test"), rx));
+        thread::spawn(move || {
+            let mut log = |line: String| {
+                let _ = tx.send(JobMsg::Log(line));
+            };
+            let result = hosting::test(&h, &s, &known_hosts(), &mut log).map(|()| t!("The connection works.").to_string()).map_err(|e| format!("{e:#}"));
+            let _ = tx.send(JobMsg::Done(result));
+        });
+    }
+
+    /// Bot › Server console, for a Calagopus server.
+    pub fn open_console(&mut self, ed: &mut Editor) {
+        let h = settings_of(ed);
+        let Some(key) = secrets_of(ed).api_key.filter(|_| h.kind == Kind::Calagopus && !h.server.is_empty()) else {
+            ed.log(Level::Warn, t!("The server console is for a Calagopus server: choose one in Bot › Server… first."));
+            self.open(ed);
+            return;
+        };
+        if self.console.as_ref().is_some_and(|c| c.server == h.server) {
+            return;
+        }
+        let panel = calagopus::Panel::new(&h.panel, &key);
+        let name = if h.server_name.is_empty() { h.server.clone() } else { h.server_name.clone() };
+        self.console = Some(ConsoleView::new(panel, h.server.clone(), name));
+    }
+
+    /// The Server tab.
+    pub fn tab(&mut self, ui: &mut egui::Ui, ed: &mut Editor) {
+        if self.draft.is_none() {
+            return;
+        }
+        let theme = ed.theme.clone();
+        let icon = ed.reg.icons.get("server").cloned();
+        let busy = self.busy();
+        let (mut save, mut upload, mut test, mut close, mut sign_in, mut sign_out, mut reload) = (false, false, false, false, false, false, false);
+        let token_env = ed.mode().map(|m| m.token_env().to_string()).unwrap_or_else(|| "DISCORD_TOKEN".into());
+        let log: Vec<String> = self.log.iter().cloned().collect();
+        let waiting = self.sign_in.is_some();
+        let reading = self.servers.is_some();
+        let d = self.draft.as_mut().unwrap();
+        dialog::tab(
+            ui,
+            &theme,
+            dialog::Spec { id: "hosting", title: t!("Server"), subtitle: Some(t!("Upload the bot to the server it runs on, by hand or after every save")), icon: icon.as_deref(), width: 640.0 },
+            |ui, part| match part {
+                Part::Body => {
+                    kit::section(ui, &theme, t!("How it gets there"));
+                    ui.horizontal_wrapped(|ui| {
+                        for (kind, label) in [(Kind::Sftp, t!("SFTP")), (Kind::Ftp, t!("FTP")), (Kind::Calagopus, t!("Calagopus panel")), (Kind::None, t!("Nowhere"))] {
+                            if kit::radio(ui, &theme, d.h.kind == kind, label).clicked() {
+                                d.h.kind = kind;
+                            }
+                            ui.add_space(8.0);
+                        }
+                    });
+                    ui.add_space(8.0);
+                    match d.h.kind {
+                        Kind::Sftp | Kind::Ftp => {
+                            let sftp = d.h.kind == Kind::Sftp;
+                            kit::field(ui, &theme, t!("Server address"), Some(t!("Its name or IP address, such as node1.example.com.")), |ui| kit::text_input(ui, &mut d.h.host, "example.com", false));
+                            kit::field(ui, &theme, t!("Port"), Some(if sftp { t!("Usually 22 (game panels often use 2022).") } else { t!("Usually 21.") }), |ui| {
+                                let mut port = if d.h.port == 0 { String::new() } else { d.h.port.to_string() };
+                                if kit::text_input(ui, &mut port, if sftp { "22" } else { "21" }, false).changed() {
+                                    d.h.port = port.trim().parse().unwrap_or(0);
+                                }
+                            });
+                            kit::field(ui, &theme, t!("User name"), None, |ui| kit::text_input(ui, &mut d.h.user, "", false));
+                            let saved_hint = if d.password_saved { t!("Saved: type to change it") } else { "" };
+                            let password_label = if sftp && !d.h.key_file.trim().is_empty() { t!("Key file password") } else { t!("Password") };
+                            kit::field(ui, &theme, password_label, Some(t!("Kept in your system's credential store, never in the project.")), |ui| kit::text_input(ui, &mut d.password, saved_hint, true));
+                            if sftp {
+                                kit::field(ui, &theme, t!("Key file (optional)"), Some(t!("A private key to log in with instead of the password, such as id_ed25519.")), |ui| {
+                                    let w = ui.available_width();
+                                    kit::path(ui, &theme, &mut d.h.key_file, "", false, w)
+                                });
+                            } else {
+                                kit::toggle_row(ui, &theme, &mut d.h.ftps, t!("Encrypted (FTPS)"), t!("Plain FTP sends the password and the bot token as they are. Turn it off only for a server that can't do FTPS."));
+                            }
+                            kit::field(ui, &theme, t!("Folder on the server"), Some(t!("Where the bot's files go, made when missing. Empty: the folder you start in after logging in.")), |ui| kit::text_input(ui, &mut d.h.folder, "bots/my-bot", false));
+                        }
+                        Kind::Calagopus => {
+                            kit::field(ui, &theme, t!("Panel address"), Some(t!("The address you open the panel at.")), |ui| kit::text_input(ui, &mut d.h.panel, "https://panel.example.com", false));
+                            kit::field(ui, &theme, t!("Sign in"), Some(t!("Opens the panel in your browser to make an API key for XC Circuit; approve it there and it comes back here. Or paste a key you made yourself.")), |ui| {
+                                ui.horizontal(|ui| {
+                                    if waiting {
+                                        ui.spinner();
+                                        ui.label(RichText::new(t!("Waiting for you to approve in the browser…")).color(theme.text_muted));
+                                        if kit::secondary_button(ui, &theme, t!("Cancel")).clicked() {
+                                            sign_out = true;
+                                        }
+                                    } else {
+                                        let label = if d.key_saved { t!("Sign in again") } else { t!("Sign in with the panel") };
+                                        ui.add_enabled_ui(!d.h.panel.trim().is_empty(), |ui| {
+                                            if kit::primary_button(ui, &theme, label).clicked() {
+                                                sign_in = true;
+                                            }
+                                        });
+                                        if d.key_saved {
+                                            kit::done_label(ui, t!("Signed in"), theme.action);
+                                        }
+                                    }
+                                });
+                            });
+                            let hint = if d.key_saved { t!("Saved: paste to change it") } else { "c7sp_…" };
+                            kit::field(ui, &theme, t!("API key"), None, |ui| kit::text_input(ui, &mut d.api_key, hint, true));
+                            kit::field(ui, &theme, t!("Server"), d.servers_problem.as_deref(), |ui| {
+                                ui.horizontal(|ui| {
+                                    let shown = if d.h.server_name.is_empty() { t!("Choose a server").to_string() } else { d.h.server_name.clone() };
+                                    kit::dropdown(ui, egui::Id::unique("hosting-server"), 300.0, shown, |ui| {
+                                        if d.servers.is_empty() {
+                                            ui.label(RichText::new(t!("Sign in, then Read again.")).color(theme.text_muted));
+                                        }
+                                        for s in &d.servers {
+                                            if kit::option(ui, d.h.server == s.uuid, format!("{}  ·  {}", s.name, s.short)).clicked() {
+                                                d.h.server = s.uuid.clone();
+                                                d.h.server_name = s.name.clone();
+                                            }
+                                        }
+                                    });
+                                    if reading {
+                                        ui.spinner();
+                                    } else if kit::secondary_button(ui, &theme, t!("Read again")).clicked() {
+                                        reload = true;
+                                    }
+                                });
+                            });
+                            kit::field(ui, &theme, t!("Folder on the server (optional)"), Some(t!("Empty: the server's own folder, where its start command looks.")), |ui| kit::text_input(ui, &mut d.h.folder, "", false));
+                            kit::toggle_row(ui, &theme, &mut d.h.restart, t!("Restart the server after uploading"), t!("So the new version of the bot runs right away."));
+                        }
+                        Kind::None => {
+                            ui.label(RichText::new(t!("Choose how the bot gets to the server it runs on. Export (Bot › Export…) makes a folder to copy there by hand.")).color(theme.text_muted));
+                        }
+                    }
+                    if d.h.kind != Kind::None {
+                        kit::section(ui, &theme, t!("When"));
+                        kit::toggle_row(ui, &theme, &mut d.h.auto_upload, t!("Upload after every save"), t!("Ctrl+S also puts the new version on the server. Only files that changed are sent."));
+                        kit::toggle_row(
+                            ui,
+                            &theme,
+                            &mut d.h.include_token,
+                            t!("Send the bot token"),
+                            &tf!("Uploads .env with {variable} and the other secrets, so the bot can log in there. Turn it off to fill in .env on the server yourself.", variable = token_env),
+                        );
+                        kit::hint(ui, &theme, t!("The server needs Node.js 22 or newer and runs npm install itself (game panels' Node.js servers do that when they start). Its data/ folder is never touched."));
+                    }
+                    if busy.is_some() || !log.is_empty() {
+                        kit::section(ui, &theme, t!("What happened"));
+                        egui::Frame::new().fill(theme.field).corner_radius(8).inner_margin(egui::Margin::symmetric(12, 8)).show(ui, |ui| {
+                            ui.set_width(ui.available_width());
+                            for line in log.iter().rev().take(12).rev() {
+                                ui.label(RichText::new(line).size(12.0).color(theme.text));
+                            }
+                            if let Some(what) = busy {
+                                ui.horizontal(|ui| {
+                                    ui.spinner();
+                                    ui.label(RichText::new(tf!("{what} …", what = what)).size(12.0).color(theme.text_muted));
+                                });
+                            }
+                        });
+                    }
+                }
+                Part::Footer => {
+                    ui.add_enabled_ui(busy.is_none() && d.h.kind != Kind::None, |ui| {
+                        upload = kit::primary_button(ui, &theme, t!("Save and upload")).clicked();
+                        test = kit::secondary_button(ui, &theme, t!("Test connection")).clicked();
+                    });
+                    save = kit::secondary_button(ui, &theme, t!("Save")).clicked();
+                    close = kit::secondary_button(ui, &theme, t!("Close")).clicked();
+                }
+            },
+        );
+        if sign_in {
+            let panel = self.draft.as_ref().map(|d| d.h.panel.clone()).unwrap_or_default();
+            match calagopus::sign_in(&panel, "XC Circuit") {
+                Ok(s) => {
+                    if let Err(e) = open::that(&s.url) {
+                        ed.log(Level::Warn, tf!("Couldn't open the browser ({error}). Open this address: {url}", error = e, url = s.url));
+                    }
+                    self.sign_in = Some(s);
+                }
+                Err(e) => ed.log(Level::Error, format!("{e:#}")),
+            }
+        }
+        if sign_out {
+            self.sign_in = None;
+        }
+        if reload {
+            self.save_draft(ed);
+            self.read_servers(ed);
+        }
+        if save {
+            self.save_draft(ed);
+        }
+        if test {
+            self.test(ed);
+        }
+        if upload && self.save_draft(ed) {
+            self.upload(ed);
+        }
+        if close {
+            self.draft = None;
+            self.sign_in = None;
+        }
+    }
+}
+
+/// What [`Hosting::missing`] says, in the interface's language.
+fn missing_text(english: &str) -> &'static str {
+    match english {
+        "Choose how the bot gets to its server." => t!("Choose how the bot gets to its server."),
+        "Fill in the server's address." => t!("Fill in the server's address."),
+        "Fill in the user name." => t!("Fill in the user name."),
+        "Fill in the password, or choose a key file." => t!("Fill in the password, or choose a key file."),
+        "Fill in the password." => t!("Fill in the password."),
+        "Fill in the panel's address." => t!("Fill in the panel's address."),
+        "Sign in to the panel, or paste an API key." => t!("Sign in to the panel, or paste an API key."),
+        "Choose the server." => t!("Choose the server."),
+        _ => t!("Something is missing in the server settings."),
+    }
+}
+
+/// Where uploads go, in a few words.
+fn place_name(h: &Hosting) -> String {
+    match h.kind {
+        Kind::Calagopus => if h.server_name.is_empty() { h.server.clone() } else { h.server_name.clone() },
+        _ => h.host.trim().to_string(),
+    }
+}
+
+/// A Calagopus server's console tab: state, power buttons, live output.
+pub struct ConsoleView {
+    console: calagopus::Console,
+    panel: calagopus::Panel,
+    pub server: String,
+    pub name: String,
+    lines: VecDeque<String>,
+    state: String,
+    stats: Option<(u64, u64, f64)>,
+    connected: bool,
+    problem: Option<String>,
+    input: String,
+    /// A power action under way, and its answer.
+    action: Option<(String, Receiver<Result<(), String>>)>,
+}
+
+impl ConsoleView {
+    fn new(panel: calagopus::Panel, server: String, name: String) -> ConsoleView {
+        let console = calagopus::Console::open(panel.clone(), server.clone());
+        ConsoleView { console, panel, server, name, lines: VecDeque::new(), state: String::new(), stats: None, connected: false, problem: None, input: String::new(), action: None }
+    }
+
+    fn poll(&mut self, ctx: &egui::Context) {
+        let mut any = false;
+        while let Ok(e) = self.console.events.try_recv() {
+            any = true;
+            match e {
+                calagopus::ConsoleEvent::Connected => {
+                    self.connected = true;
+                    self.problem = None;
+                    // The panel sends the recent lines again.
+                    self.lines.clear();
+                }
+                calagopus::ConsoleEvent::Output(line) => {
+                    self.lines.push_back(line);
+                    while self.lines.len() > 3000 {
+                        self.lines.pop_front();
+                    }
+                }
+                calagopus::ConsoleEvent::Status(s) => self.state = s,
+                calagopus::ConsoleEvent::Stats { memory, memory_limit, cpu } => self.stats = Some((memory, memory_limit, cpu)),
+                calagopus::ConsoleEvent::Problem(p) => {
+                    self.connected = false;
+                    self.problem = Some(p);
+                }
+            }
+        }
+        if let Some((_, rx)) = &self.action
+            && let Ok(result) = rx.try_recv()
+        {
+            if let Err(e) = result {
+                self.problem = Some(e);
+            }
+            self.action = None;
+        }
+        if any {
+            ctx.request_repaint();
+        }
+        // The thread sends as things happen; look again soon.
+        ctx.request_repaint_after(std::time::Duration::from_millis(250));
+    }
+
+    fn power(&mut self, action: &str) {
+        let (panel, server, a) = (self.panel.clone(), self.server.clone(), action.to_string());
+        let (tx, rx) = channel();
+        self.action = Some((action.to_string(), rx));
+        thread::spawn(move || {
+            let _ = tx.send(panel.power(&server, &a).map_err(|e| format!("{e:#}")));
+        });
+    }
+
+    /// The console tab.
+    pub fn tab(&mut self, ui: &mut egui::Ui, ed: &Editor) {
+        let theme = ed.theme.clone();
+        egui::Frame::new().fill(theme.panel).inner_margin(egui::Margin::symmetric(12, 10)).show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(&self.name).size(14.0).strong().color(theme.text));
+                let (label, color) = match self.state.as_str() {
+                    "running" => (t!("running"), theme.action),
+                    "starting" => (t!("starting"), theme.warning),
+                    "stopping" => (t!("stopping"), theme.warning),
+                    "offline" => (t!("offline"), theme.text_muted),
+                    _ => (t!("…"), theme.text_muted),
+                };
+                kit::pill(ui, label, color);
+                if let Some((memory, limit, cpu)) = self.stats {
+                    let mb = |b: u64| b as f64 / 1_048_576.0;
+                    let memory = if limit > 0 { format!("{:.0} / {:.0} MB", mb(memory), mb(limit)) } else { format!("{:.0} MB", mb(memory)) };
+                    ui.label(RichText::new(tf!("CPU {cpu}% · RAM {memory}", cpu = format!("{cpu:.0}"), memory = memory)).size(12.0).color(theme.text_muted));
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let busy = self.action.is_some();
+                    let offline = matches!(self.state.as_str(), "offline" | "");
+                    ui.add_enabled_ui(!busy, |ui| {
+                        if kit::danger_button(ui, &theme, t!("Kill")).on_hover_text(t!("Ends it at once, without letting it save")).clicked() {
+                            self.power("kill");
+                        }
+                        if kit::secondary_button(ui, &theme, t!("Stop")).clicked() {
+                            self.power("stop");
+                        }
+                        if kit::secondary_button(ui, &theme, t!("Restart")).clicked() {
+                            self.power("restart");
+                        }
+                        ui.add_enabled_ui(offline, |ui| {
+                            if kit::primary_button(ui, &theme, t!("Start")).clicked() {
+                                self.power("start");
+                            }
+                        });
+                    });
+                    if busy {
+                        ui.spinner();
+                    }
+                });
+            });
+            if let Some(p) = &self.problem {
+                ui.label(RichText::new(p).size(12.0).color(theme.warning));
+            } else if !self.connected {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label(RichText::new(t!("Connecting to the console…")).size(12.0).color(theme.text_muted));
+                });
+            }
+            ui.add_space(6.0);
+            let font = crate::ui::fonts::console(ui.ctx(), 12.5);
+            let input_h = 34.0;
+            let h = (ui.available_height() - input_h - 8.0).max(80.0);
+            egui::Frame::new().fill(theme.field).corner_radius(6).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
+                egui::ScrollArea::both().id_salt("server-console").max_height(h).auto_shrink([false, false]).stick_to_bottom(true).show(ui, |ui| {
+                    for line in &self.lines {
+                        ui.label(RichText::new(line).font(font.clone()).color(theme.text));
+                    }
+                });
+            });
+            ui.add_space(6.0);
+            let r = ui.add(egui::TextEdit::singleline(&mut self.input).hint_text(t!("Type a command and press Enter")).desired_width(f32::INFINITY).font(font));
+            if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                let command = std::mem::take(&mut self.input);
+                if !command.trim().is_empty() {
+                    self.console.send(command.trim());
+                }
+                r.request_focus();
+            }
+        });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// With "Upload after every save" on, a save starts an upload; here it
+    /// stops at once, as no password is saved, and says so.
+    #[test]
+    fn a_save_uploads_when_that_is_turned_on() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let dir = std::env::temp_dir().join(format!("xc-hosting-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        copy_dir(&root.join("examples/DemoBot"), &dir);
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&dir);
+        let ctx = egui::Context::default();
+        let mut ui = HostingUi::new();
+        ui.poll(&mut ed, &ctx);
+        let h = Hosting { kind: Kind::Ftp, host: "ftp.example.com".into(), user: "bot".into(), auto_upload: false, ..Default::default() };
+        ed.project.as_mut().unwrap().meta.data.insert(DATA_KEY.into(), serde_json::to_value(&h).unwrap());
+        assert_eq!(settings_of(&ed), h, "kept in the project");
+        let said = |ed: &Editor| ed.log.iter().any(|l| l.text.starts_with("Not uploaded: Fill in the password."));
+        ed.save();
+        ui.poll(&mut ed, &ctx);
+        assert!(!said(&ed), "not without Upload after every save");
+        let h = Hosting { auto_upload: true, ..h };
+        ed.project.as_mut().unwrap().meta.data.insert(DATA_KEY.into(), serde_json::to_value(&h).unwrap());
+        ed.save();
+        ui.poll(&mut ed, &ctx);
+        assert!(said(&ed), "{:?}", ed.log.iter().map(|l| &l.text).collect::<Vec<_>>());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn copy_dir(from: &std::path::Path, to: &std::path::Path) {
+        std::fs::create_dir_all(to).unwrap();
+        for e in std::fs::read_dir(from).unwrap().flatten() {
+            let target = to.join(e.file_name());
+            if e.path().is_dir() {
+                copy_dir(&e.path(), &target);
+            } else {
+                std::fs::copy(e.path(), target).unwrap();
+            }
+        }
+    }
+}

@@ -60,6 +60,10 @@ pub enum Tab {
     SlashCommands,
     BotSettings,
     Export,
+    /// Bot › Server…: where the bot is uploaded to.
+    Hosting,
+    /// A Calagopus server's state, power buttons and live console.
+    ServerConsole,
     Plugins,
     WorkspaceExport,
     WorkspaceImport,
@@ -429,6 +433,7 @@ impl eframe::App for CircuitApp {
             }
         }
         self.bot.poll(&mut self.ed, &ctx);
+        self.bot.hosting.poll(&mut self.ed, &ctx);
         if let Some(Err(e)) = self.ed.bot_profile.poll() {
             self.ed.log(crate::editor::Level::Warn, tf!("Couldn't load the bot's name and picture: {error}", error = e));
         }

@@ -22,6 +22,13 @@ impl CircuitApp {
             }
             items.push(Item::new(t!("Bot"), t!("Bot Settings…"), Cmd::Settings));
             items.push(Item::new(t!("Bot"), "Export…", Cmd::Export));
+            items.push(Item::new(t!("Bot"), t!("Server…"), Cmd::Hosting));
+            if crate::bot::hosting::HostingUi::configured(&self.ed) {
+                items.push(Item::new(t!("Bot"), t!("Upload to the server"), Cmd::Upload));
+            }
+            if crate::bot::hosting::settings_of(&self.ed).kind == circuit_runner::hosting::Kind::Calagopus {
+                items.push(Item::new(t!("Bot"), t!("Server console"), Cmd::ServerConsole));
+            }
             items.push(Item::new(t!("File"), "Save", Cmd::Save).shortcut(self.key_label(Hotkey::Save)));
             items.push(Item::new(t!("File"), t!("Import workspaces…"), Cmd::ImportWorkspaces));
             items.push(Item::new(t!("File"), t!("Export workspaces…"), Cmd::ExportWorkspaces));
@@ -133,6 +140,9 @@ impl CircuitApp {
             Cmd::SlashCommands => crate::builders::slash::open(&mut self.ed),
             Cmd::Settings => self.bot.open_settings(&mut self.ed),
             Cmd::Export => self.bot.open_export(&self.ed),
+            Cmd::Hosting => self.bot.hosting.open(&self.ed),
+            Cmd::Upload => self.bot.hosting.upload(&mut self.ed),
+            Cmd::ServerConsole => self.bot.hosting.open_console(&mut self.ed),
             Cmd::ImportWorkspaces => crate::editor::exchange::pick_import(&mut self.ed),
             Cmd::ExportWorkspaces => crate::editor::exchange::open_export(&mut self.ed, crate::editor::exchange::Preselect::All),
             Cmd::About => self.show_about = true,

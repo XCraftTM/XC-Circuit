@@ -38,4 +38,6 @@ node index.js
 
 The token is read from `.env` (`DISCORD_TOKEN=…` for Discord bots, `FLUXER_BOT_TOKEN=…` for Fluxer bots). Stored data goes into `data/`. Exporting again into the same folder keeps what you filled into `.env`.
 
+To put it on a server and keep it up to date there without copying files by hand, see [Putting your bot on a server](./hosting).
+
 Exported bots are yours: you may run, share and sell them. See the [licence](https://github.com/XCraftTM/XC-Circuit/blob/main/LICENSE).

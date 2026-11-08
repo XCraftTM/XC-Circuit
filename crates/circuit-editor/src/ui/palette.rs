@@ -28,6 +28,10 @@ pub enum Cmd {
     SlashCommands,
     Settings,
     Export,
+    /// Bot › Server…, uploading to it, and a Calagopus server's console.
+    Hosting,
+    Upload,
+    ServerConsole,
     ImportWorkspaces,
     ExportWorkspaces,
     About,

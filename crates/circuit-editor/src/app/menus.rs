@@ -194,6 +194,18 @@ impl CircuitApp {
                 if kit::menu_item(ui, t!("Export…"), None, has_project).clicked() {
                     self.bot.open_export(&self.ed);
                 }
+                ui.separator();
+                if kit::menu_item(ui, t!("Server…"), None, has_project).clicked() {
+                    self.bot.hosting.open(&self.ed);
+                }
+                let configured = has_project && crate::bot::hosting::HostingUi::configured(&self.ed);
+                if kit::menu_item(ui, t!("Upload to the server"), None, configured && self.bot.hosting.busy().is_none()).clicked() {
+                    self.bot.hosting.upload(&mut self.ed);
+                }
+                let calagopus = has_project && crate::bot::hosting::settings_of(&self.ed).kind == circuit_runner::hosting::Kind::Calagopus;
+                if calagopus && kit::menu_item(ui, t!("Server console"), None, true).clicked() {
+                    self.bot.hosting.open_console(&mut self.ed);
+                }
             }).response);
             tops.push(ui.menu_button(t!("Plugins"), |ui| {
                 let mut any = false;

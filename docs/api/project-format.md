@@ -36,7 +36,7 @@ My Bot/
 | `mode` | The [build mode](./build-modes) id. |
 | `plugins` | Plugins the project uses, with the versions it was saved with. |
 | `settings` | Bot › Settings values, without secrets. |
-| `data` | Project-wide data: `slashCommands` (the Slash Command Builder's, in the side bar's order; an entry's `folder` and `disabled` are its side bar folder and whether it's turned off), `slashFolders` (those folders in order), and anything [editor plugins](./editor#changing-the-project) keep. |
+| `data` | Project-wide data: `hosting` (where Bot › Server… uploads the bot: `kind`, `host`, `port`, `user`, `folder`, `panel`, `server` …; no passwords or keys), `slashCommands` (the Slash Command Builder's, in the side bar's order; an entry's `folder` and `disabled` are its side bar folder and whether it's turned off), `slashFolders` (those folders in order), and anything [editor plugins](./editor#changing-the-project) keep. |
 | `folders` | Workspace folders in the order of the Workspaces panel. A folder in a folder is its path with `/`, such as `Tickets/Archive`. |
 
 ## Workspaces

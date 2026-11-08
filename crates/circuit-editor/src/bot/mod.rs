@@ -3,6 +3,7 @@
 pub mod profile;
 pub mod servers;
 pub(crate) mod databases;
+pub mod hosting;
 mod settings;
 
 pub use settings::SettingsDraft;
@@ -106,11 +107,13 @@ pub struct BotUi {
     pub events: Vec<crate::plugins::api::BotEvent>,
     /// A question from the bot, waiting for an answer.
     question: Option<(String, String, Vec<circuit_runner::protocol::Choice>)>,
+    /// Uploading to the bot's server, and a Calagopus server's console.
+    pub hosting: hosting::HostingUi,
 }
 
 impl BotUi {
     pub fn new() -> Self {
-        BotUi { state: BotState::Stopped, session: None, old: None, restart: None, settings: None, export: None, jobs: Vec::new(), events: Vec::new(), question: None }
+        BotUi { state: BotState::Stopped, session: None, old: None, restart: None, settings: None, export: None, jobs: Vec::new(), events: Vec::new(), question: None, hosting: hosting::HostingUi::new() }
     }
 
     /// Starts the bot, or restarts it: a running bot is stopped first, and the
@@ -376,19 +379,7 @@ impl BotUi {
             Ok(b) => b,
             Err(e) => return ed.log(Level::Error, format!("Export failed: {e:#}")),
         };
-        let token = if draft.include_token { secrets::get(&project.root, "token") } else { None };
-        // The mode's other secrets, as lines in .env: with their values when the token goes too.
-        let secrets_out = settings::secret_keys(ed)
-            .into_iter()
-            .filter(|(key, _)| key != "token")
-            .map(|(key, label)| ExportSecret {
-                env: format!("XC_SECRET_{}", key.to_uppercase()),
-                value: if draft.include_token { secrets::get(&project.root, &key) } else { None },
-                label,
-            })
-            .collect();
-        let token_env = ed.mode().map(|m| m.token_env().to_string()).unwrap_or_else(|| "DISCORD_TOKEN".into());
-        let opts = ExportOptions { name: project.meta.name.clone(), token, token_env, secrets: secrets_out, install: draft.install };
+        let opts = export_options(ed, draft.include_token, draft.install);
         let dir = draft.dir.clone();
         let (tx, rx) = channel();
         self.jobs.push(rx);
@@ -407,6 +398,25 @@ impl BotUi {
             }
         });
     }
+}
+
+/// What Export writes for the open project: `.env` with the token and the
+/// mode's other secrets (their values only with `include_secrets`).
+pub(crate) fn export_options(ed: &Editor, include_secrets: bool, install: bool) -> ExportOptions {
+    let project = ed.project.as_ref().expect("a project is open");
+    let token = if include_secrets { secrets::get(&project.root, "token") } else { None };
+    // The mode's other secrets, as lines in .env: with their values when the token goes too.
+    let secrets_out = settings::secret_keys(ed)
+        .into_iter()
+        .filter(|(key, _)| key != "token")
+        .map(|(key, label)| ExportSecret {
+            env: format!("XC_SECRET_{}", key.to_uppercase()),
+            value: if include_secrets { secrets::get(&project.root, &key) } else { None },
+            label,
+        })
+        .collect();
+    let token_env = ed.mode().map(|m| m.token_env().to_string()).unwrap_or_else(|| "DISCORD_TOKEN".into());
+    ExportOptions { name: project.meta.name.clone(), token, token_env, secrets: secrets_out, install }
 }
 
 /// The bot's events in the shape plugins' scripts get them.
