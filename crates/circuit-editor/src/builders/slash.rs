@@ -119,6 +119,11 @@ pub struct Choice {
 }
 
 /// Discord's permissions: the discord.js flag name, its name in Discord and its bit.
+/// A permission by Discord's flag name: what to call it, and its bit.
+pub(crate) fn permission(name: &str) -> Option<(&'static str, u32)> {
+    PERMISSIONS.iter().find(|p| p.0 == name).map(|p| (crate::i18n::t(p.1), p.2))
+}
+
 const PERMISSIONS: [(&str, &str, u32); 50] = [
     ("Administrator", n("Administrator"), 3),
     ("ManageGuild", n("Manage Server"), 5),

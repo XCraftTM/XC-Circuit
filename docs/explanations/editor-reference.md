@@ -57,7 +57,7 @@
 | Plugins | The Plugins view of the side bar: every plugin and how it runs, Install…, Reload, Open folder. A switch turns a plugin off or on; the trash can removes it (after asking). The plugins that come with the app can't be turned off or removed |
 | Bot settings | Bot › Settings: pages on the left (Connection, Slash commands, Messages, Music, Privileged intents, and pages plugins add), the page on the right, Save at the bottom. A page with something required but unset shows a count in the list, one with a value that doesn't fit shows it in red |
 | Bot token | Bot › Settings › Connection (kept in Windows Credential Manager / Linux Secret Service). The eye button shows what you typed, Copy copies the saved token without showing it, and values are checked as you type (a build mode's settings can set `pattern`, a regular expression, and `patternHint`; `sensitive = true` hides a text setting behind the eye button) |
-| Invite your bot | Under the bot token, once one is typed or saved: pick the permissions (common bot permissions, Administrator or none), then **Open invite page** opens Discord's page for adding the bot to a server, or **Copy link** copies the link |
+| Invite your bot | Under the bot token, once one is typed or saved: pick the permissions (**What your blocks need**, made from the project's blocks and listed under it, or common bot permissions, Administrator or none), then **Open invite page** opens Discord's page for adding the bot to a server, or **Copy link** copies the link |
 | Run / Stop | F5 / Shift+F5, or Run in the title bar. Running blocks glow; failures show on the block |
 | Export | Bot › Export… writes a folder that runs with `node index.js` |
 

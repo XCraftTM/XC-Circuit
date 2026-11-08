@@ -5,6 +5,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 ## Unreleased
 
 ### Added
+- **The invite link asks for what your blocks need**: Invite your bot now offers, first, the permissions the project's blocks need (Create Channel needs Manage Channels, Moderate's ban needs Ban Members …), and lists them, so the bot doesn't fail later for a missing permission.
 - **Find Role, Find Channel and Find Member have a Missing path**: when what you look for isn't there, connect Missing to handle it (tell the user, use a default) instead of the whole flow stopping with an error. With nothing on Missing they fail as before. They also take mentions such as <@&id>, <#id> and <@id>.
 - **Mentions made easy**: the values listed after `${` say which ones ping (users, members, roles) or link (channels), and hovering shows how: `${user}` in a text pings them, `${user.username}` is just the name. The Mention block takes typed ids and lists of people, and does @everyone and @here.
 - **Split Text**: takes a text apart at spaces, commas or any separator and gives the first part, the last, one by number (-1 is the last), everything after the first, and how many there are: no more list blocks to get one argument of a command.

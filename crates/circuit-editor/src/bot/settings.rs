@@ -253,6 +253,9 @@ struct Invite {
     url: String,
     /// The permissions to choose from: number, and what to call them.
     permissions: Vec<(String, String)>,
+    /// What the first choice, the permissions the project's blocks need, asks
+    /// for (by name), shown under the choice; empty without that choice.
+    needed: Vec<String>,
     /// The number picked.
     picked: String,
     /// The saved token's application id.
@@ -387,12 +390,19 @@ impl BotUi {
         // Reopening (after Save, or Undo) stays on the page shown.
         let page = self.settings.as_ref().map(|d| d.page.clone()).filter(|p| pages.iter().any(|x| x.id == *p)).or_else(|| pages.first().map(|p| p.id.clone())).unwrap_or_default();
         let databases = DatabasesDraft::load(&project.meta.settings, &project.root);
+        let needed = needed_permissions(project, &ed.reg);
         let invite = mode.invite_url.as_ref().map(|url| {
-            let permissions: Vec<(String, String)> = mode.invite_permissions.iter().map(|(name, n)| (n.clone(), tr(name))).collect();
+            let mut permissions: Vec<(String, String)> = mode.invite_permissions.iter().map(|(name, n)| (n.clone(), tr(name))).collect();
+            // First: what the project's blocks need (and seeing and writing messages).
+            let bits: u64 = needed.iter().filter_map(|p| crate::builders::slash::permission(p)).fold(0, |b, (_, bit)| b | 1u64 << bit);
+            if bits != 0 {
+                permissions.insert(0, (bits.to_string(), tf!("What your blocks need ({count})", count = needed.len())));
+            }
+            let needed: Vec<String> = if bits != 0 { needed.iter().map(|p| crate::builders::slash::permission(p).map(|(label, _)| label.to_string()).unwrap_or_else(|| p.clone())).collect() } else { Vec::new() };
             // Reopening keeps the choice.
             let before = self.settings.as_ref().and_then(|d| d.invite.as_ref()).map(|i| i.picked.clone());
             let picked = before.filter(|p| permissions.iter().any(|(n, _)| n == p)).or_else(|| permissions.first().map(|(n, _)| n.clone())).unwrap_or_else(|| "0".into());
-            Invite { url: url.clone(), permissions, picked, saved_app_id: app_id.clone(), copied: None }
+            Invite { url: url.clone(), permissions, needed, picked, saved_app_id: app_id.clone(), copied: None }
         });
         self.settings = Some(SettingsDraft { fields, pages, page, project_name: project.meta.name.clone(), intents, intents_page, databases, invite });
         for line in warnings {
@@ -644,7 +654,57 @@ fn invite_card(ui: &mut Ui, theme: &Theme, invite: &mut Invite, app_id: &str) {
                 ui.ctx().request_repaint_after(COPIED_FOR);
             }
         });
+        if !invite.needed.is_empty() && invite.permissions.first().is_some_and(|(n, _)| *n == invite.picked) {
+            kit::hint(ui, theme, tf!("Asks for: {permissions}", permissions = invite.needed.join(", ")));
+        }
     });
+}
+
+/// The permissions the project's blocks need, by Discord's flag names, in the
+/// order they are first needed: each block's `requires.permissions` (a list, or
+/// one per value of a field such as Moderate's action), plus seeing channels and
+/// sending messages, which every bot does. Turned-off workspaces count too: they
+/// may be turned on later.
+pub(super) fn needed_permissions(project: &circuit_core::Project, reg: &circuit_plugins::Registry) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut add = |names: &serde_json::Value| {
+        for n in names.as_array().into_iter().flatten().filter_map(Value::as_str) {
+            if !out.iter().any(|o| o == n) {
+                out.push(n.to_string());
+            }
+        }
+    };
+    let mut any = false;
+    for ws in project.workspaces.values() {
+        for node in ws.nodes.values() {
+            let Some(def) = reg.block(&node.block) else { continue };
+            match &def.permissions {
+                Value::Array(_) => {
+                    any = true;
+                    add(&def.permissions);
+                }
+                // One list per value of a field: { action: { kick: ["KickMembers"], ban: [...] } }.
+                Value::Object(by_field) => {
+                    for (field, lists) in by_field {
+                        let value = node.values.get(field).or_else(|| def.fields.get(field).and_then(|f| f.default.as_ref()));
+                        if let Some(list) = value.and_then(Value::as_str).and_then(|v| lists.get(v)) {
+                            any = true;
+                            add(list);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    if any {
+        for basic in ["SendMessages", "ViewChannel"] {
+            if !out.iter().any(|o| o == basic) {
+                out.insert(0, basic.to_string());
+            }
+        }
+    }
+    out
 }
 
 /// The page of privileged intents: which ones the blocks need, and where to turn them on.
@@ -802,6 +862,29 @@ fn secret_input(ui: &mut Ui, ed: &Editor, theme: &Theme, f: &mut SettingField, r
 
 #[cfg(test)]
 mod tests {
+    /// The invite link's "What your blocks need": each block's permissions, by
+    /// its settings where they depend on one, plus seeing and sending messages.
+    #[test]
+    fn invite_asks_for_what_the_blocks_need() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let ed = crate::editor::Editor::new(vec![root.join("plugins")], None).unwrap();
+        let reg = &ed.reg;
+        let dir = std::env::temp_dir().join(format!("xc-invite-perms-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut project = circuit_core::Project::create(&dir, "Perms", "discord-bot").unwrap();
+        assert!(needed_permissions(&project, reg).is_empty(), "no blocks, no list");
+        let node = |block: &str, values: serde_json::Value| circuit_core::Node { block: block.into(), values: values.as_object().cloned().unwrap_or_default(), ..Default::default() };
+        let ws = project.workspaces.values_mut().next().unwrap();
+        ws.nodes.insert("1".into(), node("discord.create_channel@1", serde_json::json!({})));
+        ws.nodes.insert("2".into(), node("discord.channel_tools@1", serde_json::json!({ "action": "sync" })));
+        ws.nodes.insert("3".into(), node("discord.channel_tools@1", serde_json::json!({ "action": "list" })));
+        let needed = needed_permissions(&project, reg);
+        assert_eq!(needed, ["ViewChannel", "SendMessages", "ManageChannels", "ManageRoles"], "Channel Tools set to sync needs Manage Roles too; list needs nothing");
+        let bits: u64 = needed.iter().filter_map(|p| crate::builders::slash::permission(p)).fold(0, |b, (_, bit)| b | 1u64 << bit);
+        assert_eq!(bits, (1 << 10) | (1 << 11) | (1 << 4) | (1 << 28), "the bits Discord uses");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     use super::*;
     use std::path::Path;
 
