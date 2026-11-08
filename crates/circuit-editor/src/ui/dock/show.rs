@@ -98,6 +98,48 @@ pub fn paint_drop<T>(ctx: &egui::Context, theme: &Theme, drop: &Drop<T>) {
     }
 }
 
+/// How much bigger a window is than the size egui is asked to give it (its outline).
+const WINDOW_EDGES: egui::Vec2 = vec2(2.0, 2.0);
+
+/// The left and top edges of a window (`inside` its outline, which is at
+/// `now`), and their corner: dragged, where the window goes and how big it
+/// gets, no smaller than `least`. `drag` keeps where the drag started.
+fn edge_handles(ui: &mut Ui, inside: Rect, id: u64, now: Rect, least: egui::Vec2, drag: &mut Option<(Rect, Pos2)>) -> Option<Rect> {
+    let grab = 5.0;
+    let left = Rect::from_min_max(inside.left_top(), pos2(inside.left() + grab, inside.bottom()));
+    let top = Rect::from_min_max(inside.left_top(), pos2(inside.right(), inside.top() + grab));
+    let corner = Rect::from_min_size(inside.left_top(), vec2(grab * 2.0, grab * 2.0));
+    let edge = |ui: &mut Ui, r: Rect, salt: u8, cursor: egui::CursorIcon| ui.interact(r, Id::unique(("dock-window-edge", id, salt)), Sense::drag()).on_hover_cursor(cursor);
+    let edges = [
+        (edge(ui, left, 0, egui::CursorIcon::ResizeHorizontal), true, false),
+        (edge(ui, top, 1, egui::CursorIcon::ResizeVertical), false, true),
+        (edge(ui, corner, 2, egui::CursorIcon::ResizeNorthWest), true, true),
+    ];
+    let pointer = ui.ctx().pointer_interact_pos()?;
+    for (resp, sideways, up) in edges {
+        if resp.drag_started() {
+            *drag = Some((now, pointer));
+        }
+        if resp.dragged()
+            && let Some((start, from)) = *drag
+        {
+            let by = pointer - from;
+            let mut min = start.min;
+            if sideways {
+                min.x = (start.left() + by.x).min(start.right() - least.x);
+            }
+            if up {
+                min.y = (start.top() + by.y).min(start.bottom() - least.y).max(0.0);
+            }
+            return Some(Rect::from_min_max(min, start.max));
+        }
+        if resp.drag_stopped() {
+            *drag = None;
+        }
+    }
+    None
+}
+
 impl<T: Clone + PartialEq + Hash + std::fmt::Debug> Dock<T> {
     /// Draws the main area in what's left of `ui`, the windows over it, and
     /// handles the pointer: tabs clicked, closed, dragged and dropped.
@@ -135,12 +177,23 @@ impl<T: Clone + PartialEq + Hash + std::fmt::Debug> Dock<T> {
             if let Some(to) = w.move_to.take() {
                 window = window.current_pos(to);
             }
+            if let Some(r) = w.resize_to.take() {
+                // Held to that size for a frame, egui keeps it after.
+                let size = (r.size() - WINDOW_EDGES).max(need);
+                window = window.current_pos(r.min).min_size(size).max_size(size);
+                ctx.request_repaint();
+            }
             let id = w.id;
+            let (pos, size) = (w.pos, w.size);
             let node = &mut w.node;
+            let (edge_drag, resize_to) = (&mut w.edge_drag, &mut w.resize_to);
             let shown = window.show(&ctx, |ui| {
                 let inside = ui.available_rect_before_wrap();
                 node_ui(ui, node, inside, &mut p, viewer, Some(id), &mut Vec::new());
                 ui.allocate_rect(inside, Sense::hover());
+                // egui's own handles do the right and bottom edges; these the
+                // left and top ones (and their corner), on top of the content.
+                *resize_to = edge_handles(ui, inside, id, Rect::from_min_size(pos, size), need + WINDOW_EDGES, edge_drag);
             });
             if let Some(shown) = shown {
                 w.pos = shown.response.rect.min;

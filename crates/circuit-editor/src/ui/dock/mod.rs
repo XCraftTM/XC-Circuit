@@ -86,6 +86,11 @@ pub struct Window<T> {
     pub size: egui::Vec2,
     /// Where to move it next frame (it was dragged by its tab bar).
     move_to: Option<Pos2>,
+    /// Where it goes and how big it gets next frame (its top or left edge
+    /// is being dragged; egui resizes windows it moves itself only).
+    resize_to: Option<Rect>,
+    /// While its top or left edge is dragged: where it was, and where the drag started.
+    edge_drag: Option<(Rect, Pos2)>,
     /// Its layer, to tell which window is on top.
     layer: Option<egui::LayerId>,
 }
@@ -416,7 +421,7 @@ impl<T: Clone + PartialEq> Dock<T> {
     pub fn add_window(&mut self, tabs: Vec<T>, rect: Rect) {
         let id = self.next_window;
         self.next_window += 1;
-        self.windows.push(Window { id, node: Node::leaf(tabs), pos: rect.min, size: rect.size(), move_to: None, layer: None });
+        self.windows.push(Window { id, node: Node::leaf(tabs), pos: rect.min, size: rect.size(), move_to: None, resize_to: None, edge_drag: None, layer: None });
     }
 
     /// Where something let go of at `pos` would go (`dragged`: a tab of the
@@ -621,6 +626,55 @@ mod tests {
 
     fn areas(dock: &Dock<&'static str>) -> Vec<Vec<&'static str>> {
         dock.main.iter().flat_map(|m| m.leaves()).map(|l| l.tabs.clone()).collect()
+    }
+
+    /// A window's left and top edges resize it too; its right and bottom edges stay.
+    #[test]
+    fn windows_resize_at_their_left_and_top_edges() {
+        struct Viewer;
+        impl DockViewer<&'static str> for Viewer {
+            fn title(&mut self, tab: &&'static str) -> String {
+                tab.to_string()
+            }
+            fn icon(&self, _: &&'static str) -> Option<std::path::PathBuf> {
+                None
+            }
+            fn ui(&mut self, _: &mut egui::Ui, _: &&'static str) {}
+        }
+        let mut dock = Dock::new(vec!["canvas"]);
+        dock.add_window(vec!["layout"], Rect::from_min_size(egui::pos2(300.0, 200.0), egui::vec2(500.0, 400.0)));
+        let ctx = egui::Context::default();
+        let theme = crate::ui::theme::Theme::fallback();
+        let mut frame = |dock: &mut Dock<&'static str>, events: Vec<egui::Event>| {
+            let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1400.0, 900.0))), events, ..Default::default() };
+            let mut out = ctx.run_ui(raw, |ui| dock.show(ui, &theme, &mut Viewer));
+            out.textures_delta.clear();
+        };
+        for _ in 0..3 {
+            frame(&mut dock, vec![]);
+        }
+        let rect = |dock: &Dock<&'static str>| Rect::from_min_size(dock.windows[0].pos, dock.windows[0].size);
+        let before = rect(&dock);
+        let drag = |frame: &mut dyn FnMut(&mut Dock<&'static str>, Vec<egui::Event>), dock: &mut Dock<&'static str>, from: egui::Pos2, by: egui::Vec2| {
+            let press = |pos, pressed| egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+            frame(dock, vec![egui::Event::PointerMoved(from)]);
+            frame(dock, vec![press(from, true)]);
+            for i in 1..=6 {
+                frame(dock, vec![egui::Event::PointerMoved(from + by * (i as f32 / 6.0))]);
+            }
+            frame(dock, vec![press(from + by, false)]);
+            for _ in 0..3 {
+                frame(dock, vec![]);
+            }
+        };
+        // The left edge, 60 px further left.
+        drag(&mut frame, &mut dock, egui::pos2(before.left() + 3.0, before.center().y), egui::vec2(-60.0, 0.0));
+        let after = rect(&dock);
+        assert!((after.left() - (before.left() - 60.0)).abs() < 3.0 && (after.right() - before.right()).abs() < 3.0, "{before:?} to {after:?}");
+        // The top edge, 40 px down.
+        drag(&mut frame, &mut dock, egui::pos2(after.center().x, after.top() + 3.0), egui::vec2(0.0, 40.0));
+        let last = rect(&dock);
+        assert!((last.top() - (after.top() + 40.0)).abs() < 3.0 && (last.bottom() - after.bottom()).abs() < 3.0, "{after:?} to {last:?}");
     }
 
     #[test]
