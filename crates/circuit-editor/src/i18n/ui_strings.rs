@@ -123,6 +123,7 @@ pub const UI_STRINGS: &[&str] = &[
     "Newer than the published {version}",
     "Updated: {plugins}",
     "Couldn't update the blocks: {error}",
+    "{from} to {to}",
     "XC™ Circuit {version} is available",
     "You have {version}.",
     "{plugins} plugins · {blocks} blocks · {themes} themes loaded",

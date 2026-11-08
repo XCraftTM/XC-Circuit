@@ -294,7 +294,8 @@ impl CircuitApp {
                     for o in &offers {
                         ui.horizontal(|ui| {
                             ui.label(RichText::new(&o.entry.name).strong().color(theme.text));
-                            ui.label(RichText::new(format!("{} → {}", o.current, o.entry.version)).color(theme.text_muted));
+                            // In words: egui's fonts have no arrow.
+                            ui.label(RichText::new(tf!("{from} to {to}", from = o.current, to = o.entry.version)).color(theme.text_muted));
                         });
                     }
                     ui.add_space(6.0);
