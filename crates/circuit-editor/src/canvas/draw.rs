@@ -2,21 +2,57 @@
 
 use super::*;
 
+/// The dotted background: one picture of a single dot, repeated over the
+/// visible part (a few triangles, where a circle per dot was thousands). Its
+/// dots sit where they always did, on the grid, and look the same.
 pub(super) fn draw_grid(painter: &egui::Painter, visible: Rect, theme: &Theme, zoom: f32) {
     let step = if zoom < 0.5 { GRID * 2.0 } else { GRID };
-    let x0 = (visible.left() / step).floor() as i32;
-    let y0 = (visible.top() / step).floor() as i32;
-    let cols = (visible.width() / step).ceil() as i32 + 1;
-    let rows = (visible.height() / step).ceil() as i32 + 1;
-    if cols * rows > 40_000 {
-        return;
-    }
+    // A dot's radius in the scene, as before: 1.3 px on screen down to 50%.
     let r = 1.3 / zoom.max(0.5);
-    for i in 0..cols {
-        for j in 0..rows {
-            painter.circle_filled(pos2((x0 + i) as f32 * step, (y0 + j) as f32 * step), r, theme.canvas_dots);
+    let ppp = painter.ctx().pixels_per_point();
+    // The picture: one grid cell as many pixels as it takes on the screen,
+    // with the dot in its middle.
+    let cell = (step * zoom * ppp).round().clamp(4.0, 256.0) as usize;
+    let dot = (r * zoom * ppp).max(0.5);
+    let texture = grid_texture(painter.ctx(), cell, dot);
+    // The cell's middle at each grid point: (x / step + 0.5) cells along.
+    let uv = |p: Pos2| pos2(p.x / step + 0.5, p.y / step + 0.5);
+    let mut mesh = egui::Mesh::with_texture(texture);
+    mesh.add_rect_with_uv(visible, Rect::from_min_max(uv(visible.min), uv(visible.max)), theme.canvas_dots);
+    painter.add(egui::Shape::mesh(mesh));
+}
+
+/// A white dot of `dot` pixels' radius in the middle of a `cell`-pixel
+/// square, edges smoothed, repeating; made once per size and kept.
+fn grid_texture(ctx: &egui::Context, cell: usize, dot: f32) -> egui::TextureId {
+    type Kept = std::collections::HashMap<(usize, u32), egui::TextureHandle>;
+    let key = (cell, (dot * 10.0).round() as u32);
+    let id = egui::Id::unique("canvas-grid-dots");
+    if let Some(t) = ctx.data(|d| d.get_temp::<std::sync::Arc<std::sync::Mutex<Kept>>>(id)).and_then(|k| k.lock().ok().and_then(|k| k.get(&key).map(|t| t.id()))) {
+        return t;
+    }
+    let center = cell as f32 / 2.0;
+    let mut pixels = Vec::with_capacity(cell * cell);
+    for y in 0..cell {
+        for x in 0..cell {
+            let d = ((x as f32 + 0.5 - center).powi(2) + (y as f32 + 0.5 - center).powi(2)).sqrt();
+            // The soft edge egui gave its circles.
+            let a = (dot + 0.65 - d).clamp(0.0, 1.0);
+            pixels.push(egui::Color32::from_white_alpha((a * 255.0).round() as u8));
         }
     }
+    let image = egui::ColorImage::new([cell, cell], pixels);
+    let handle = ctx.load_texture(format!("canvas-grid-{cell}-{}", key.1), image, egui::TextureOptions::LINEAR_REPEAT);
+    let tid = handle.id();
+    let kept = ctx.data_mut(|d| d.get_temp_mut_or_default::<std::sync::Arc<std::sync::Mutex<Kept>>>(id).clone());
+    if let Ok(mut k) = kept.lock() {
+        // Zooming makes new sizes; old ones go after a while.
+        if k.len() > 48 {
+            k.clear();
+        }
+        k.insert(key, handle);
+    }
+    tid
 }
 
 /// A framed button for the canvas toolbars: an icon and a label.
