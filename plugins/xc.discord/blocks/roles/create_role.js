@@ -50,6 +50,16 @@ function permissionList(given) {
   });
 }
 
+/** A colour as a number: hex such as #FF5CA8 or FF5CA8 (#F5A, F5A), or a number. Empty: undefined. */
+function hexColor(v) {
+  if (typeof v === "number" && Number.isFinite(v)) return v & 0xffffff;
+  const s = String(v ?? "").trim().replace(/^#/, "");
+  if (!s) return undefined;
+  if (/^[0-9a-f]{6}$/i.test(s)) return parseInt(s, 16);
+  if (/^[0-9a-f]{3}$/i.test(s)) return parseInt(s.replace(/./g, "$&$&"), 16);
+  throw new Error(`"${String(v).trim()}" isn't a hex color: use one such as #FF5CA8 or FF5CA8`);
+}
+
 module.exports = {
   id: "discord.create_role",
   kind: "action",
@@ -57,7 +67,7 @@ module.exports = {
     name: "Create Role",
     description: "Makes a new role in a server. The bot needs Manage Roles.",
     author: "XC Team",
-    version: "1.1.1",
+    version: "1.1.2",
   },
   search: {
     category: "roles",
@@ -73,7 +83,7 @@ module.exports = {
   fields: {
     server: { type: "discord.guild", pin: "only", required: true, description: "Where to create it." },
     name: { type: "text", required: true, default: "New role", description: "The role's name." },
-    color: { type: "color", default: "#99AAB5", description: "The name color in the member list." },
+    color: { type: "color", default: "#99AAB5", description: "The name color in the member list: picked, or a hex color (#FF5CA8 or FF5CA8) from an input or ${…}." },
     hoist: { type: "boolean", default: false, label: "Show separately", description: "List its members in their own group." },
     mentionable: { type: "boolean", default: false, description: "Anyone can @mention it." },
     permissions: { type: "multiselect", default: [], choices: PERMISSIONS, description: "What the role may do. None picked: nothing beyond @everyone." },
@@ -87,7 +97,7 @@ module.exports = {
   async run({ fields: f }) {
     const role = await f.server.roles.create({
       name: String(f.name || "New role").slice(0, 100),
-      color: f.color || undefined,
+      color: hexColor(f.color),
       hoist: Boolean(f.hoist),
       mentionable: Boolean(f.mentionable),
       permissions: permissionList(f.permissions),

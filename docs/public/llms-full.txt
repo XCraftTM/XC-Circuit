@@ -1710,7 +1710,7 @@ Blocks run in your bot, which is a normal Node.js program. A block can read file
 | Long text | Text fields on blocks are boxes of a few lines; drag a box's corner down to make it taller or shorter and sideways to make the whole block wider or narrower (the block saves both in the project), double-click the corner to reset them |
 | Emoji | Emoji show in colour, as in Discord, with the computer's own emoji font (Segoe UI Emoji on Windows, Noto Color Emoji on Linux); symbols the editor uses as marks (▶ ⚠ ✔ ™ arrows) stay plain. Without an emoji font they're black and white |
 | Wider blocks | Blocks that show a message, embed or form (Build Layout, Build Embed, Show Modal …) get as wide as it is in Discord by themselves: a row of buttons fits on one line, and long text stops at Discord's widest and wraps. A block with a big text box gets wider when you drag that box's corner sideways |
-| Colors | Click a color swatch for the picker: square and hue bar, hex and RGB, Discord colors and your recent ones |
+| Colors | Click a color swatch for the picker: square and hue bar, hex and RGB, Discord colors and your recent ones. The `${}` button next to it takes a color from the bot instead, such as `${role.hexColor}` or `${color}`: hex, with or without `#` (FF5CA8 works too). Block color fields (Create Role's) can also be a pin to connect a value to; the Embed, Layout and Canvas Builders' colors take `${…}`, each name getting an input on the block |
 | Field as pin | Click a field's faint pin, or "pin" in the Inspector |
 | Select several | Shift-drag a box on empty canvas, or Ctrl+click blocks; Ctrl+A selects all |
 | Block actions | Select a block: Duplicate, Try Zone, Note and Delete are buttons above it (Delete key works too), in two rows when the block is narrow. The block's source file opens from the Inspector (Block source) |
@@ -2343,7 +2343,7 @@ fields: {
 | `advanced` | boolean | Not shown on the block; the Inspector lists it under *Advanced*. Once it's a pin (with the **pin** chip there, also for `pin: "only"` fields, or by connecting it), it shows on the block too. |
 | `show` | object | Shown only when other fields have one of these values: `{ mode: ["send", "edit"] }`. |
 | `choices` | object | For `select`: value → label. A nested object makes a group: `{ "Text": { plain: "Plain", bold: "Bold" } }`. |
-| `template` | boolean | Whether `${…}` in the text is filled in. Default: yes for text fields. |
+| `template` | boolean | Whether `${…}` in the text is filled in. Default: yes for text fields and colours. |
 | `templateParts` | boolean | Instead of filling `${…}` in, give the block `{ strings, values }`: the text around them and their values, as a JavaScript tagged template gets them. SQL Query uses it to send the values as parameters. |
 | `min`, `max`, `step` | number | For numbers. |
 | `placeholder` | text | Grey hint in an empty text box. |
@@ -2364,7 +2364,7 @@ Besides the [type strings](#type-strings), a field's `type` can name an editor:
 | `boolean` | switch | `true` / `false` |
 | `select` | drop-down of `choices` | the chosen value |
 | `multiselect` | drop-down of `choices` with a checkbox each (and a search when there are many) | a list of the chosen keys; text with commas from older projects is read too |
-| `color` | swatch with a colour picker | `"#RRGGBB"` |
+| `color` | swatch with a colour picker, or (with its `${}` button) `${…}` text for a colour from the bot; like other fields it can also be a pin | `"#RRGGBB"`; from a pin or `${…}`, any hex colour with or without `#` (`#FF5CA8`, `FF5CA8`, `#F5A`), which the block reads as a colour |
 | `embed` | the Embed Builder (Discord) | embed object |
 | `layout` | the Layout Builder, and the message on the block (Discord) | Components V2: `{ components: [ … ] }` |
 | `modal` | the Modal Builder, and the form on the block (Discord) | Discord's modal JSON: `{ title, custom_id, components: [ … ] }`, with questions (type 18 around a text input, select menu or file upload) and texts (type 10) |

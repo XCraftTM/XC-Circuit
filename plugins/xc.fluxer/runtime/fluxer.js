@@ -161,7 +161,9 @@ function embed(design, fill = (s) => s) {
   if (e.title) out.title = t(e.title).slice(0, 256);
   if (e.url) out.url = t(e.url);
   if (e.color) {
-    const n = typeof e.color === "number" ? e.color : parseInt(String(e.color).replace(/^#/, ""), 16);
+    const text = typeof e.color === "string" ? String(fill(e.color)).trim().replace(/^#/, "") : "";
+    const n = typeof e.color === "number" ? e.color : /^[0-9a-f]{6}$/i.test(text) ? parseInt(text, 16) : /^[0-9a-f]{3}$/i.test(text) ? parseInt(text.replace(/./g, "$&$&"), 16) : NaN;
+    if (text && !Number.isFinite(n)) throw new Error(`"${text}" isn't a hex color: use one such as #FF5CA8 or FF5CA8`);
     if (Number.isFinite(n)) out.color = n;
   }
   if (e.author?.name) out.author = { name: t(e.author.name), icon_url: e.author.icon ? t(e.author.icon) : undefined, url: e.author.url ? t(e.author.url) : undefined };

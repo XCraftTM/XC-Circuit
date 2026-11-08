@@ -1,11 +1,11 @@
 //! Inline editors for field values, shared by blocks on the canvas and the inspector.
 
 use circuit_core::{FieldDef, PinType};
-use eframe::egui::{self, Color32, ComboBox, DragValue, TextEdit, Ui};
+use eframe::egui::{self, ComboBox, DragValue, TextEdit, Ui};
 use serde_json::{Number, Value};
 
 use crate::ui::kit;
-use crate::ui::theme::{Theme, hex_color};
+use crate::ui::theme::Theme;
 
 /// Whether a field can be edited inline at all (lists, objects and plugin types must be connected).
 pub fn is_inline_editable(field: &FieldDef) -> bool {
@@ -505,11 +505,13 @@ fn multiselect(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, w
     changed
 }
 
+/// A colour field: picked, or `${…}` text for a colour from the bot (hex,
+/// with or without #). Connecting its pin is the other way to give it one.
 fn color(ui: &mut Ui, id: egui::Id, value: &mut Value, width: f32, theme: &Theme) -> bool {
-    let mut c = value.as_str().and_then(hex_color).unwrap_or(Color32::WHITE);
-    let changed = crate::builders::color::color_button(ui, id, &mut c, theme, Some(width.clamp(96.0, 180.0)));
+    let mut text = value.as_str().unwrap_or_default().to_string();
+    let changed = ui.horizontal(|ui| crate::builders::color::color_or_text(ui, theme, id, &mut text, (width - 28.0).clamp(96.0, 180.0))).inner;
     if changed {
-        *value = Value::String(crate::builders::color::to_hex(c));
+        *value = Value::String(text);
     }
     changed
 }

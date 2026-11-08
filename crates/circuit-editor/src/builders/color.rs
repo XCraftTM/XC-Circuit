@@ -25,6 +25,29 @@ const PRESETS: [(&str, &str); 9] = [
     ("Black", "#23272A"),
 ];
 
+/// A colour to pick, or a `${…}` text for one the bot works out when it
+/// runs (a role's colour, a variable): hex such as #FF5CA8 or FF5CA8. The
+/// small button beside it switches between the two. True when it changed.
+pub fn color_or_text(ui: &mut Ui, theme: &Theme, id: Id, value: &mut String, width: f32) -> bool {
+    let mut changed = false;
+    let expression = value.contains("${");
+    if expression {
+        changed |= ui.add(crate::ui::kit::TextLine::new(value).hint("${role.hexColor}").width(width)).changed();
+    } else {
+        let mut c = parse_hex(value).unwrap_or(Color32::WHITE);
+        if color_button(ui, id, &mut c, theme, Some(width.min(130.0))) {
+            *value = to_hex(c);
+            changed = true;
+        }
+    }
+    let tip = if expression { t!("Pick a colour instead") } else { t!("A colour from the bot or an input: ${…} with a hex colour, such as ${role.hexColor} or ${color}") };
+    if crate::builders::canvas::tiny(ui, theme, None, if expression { "#" } else { "${}" }, tip, true) {
+        *value = if expression { "#FFFFFF".into() } else { "${}".into() };
+        changed = true;
+    }
+    changed
+}
+
 /// `#RRGGBB` for a color.
 pub fn to_hex(c: Color32) -> String {
     format!("#{:02X}{:02X}{:02X}", c.r(), c.g(), c.b())

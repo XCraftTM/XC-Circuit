@@ -8,7 +8,7 @@ module.exports = {
     name: "Create, Change or Delete Role",
     description: "Makes a new role, changes a role's name, color, permissions and display, or deletes it. The bot's role must be above the role it changes.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.0.1",
   },
   search: {
     category: "roles",
@@ -25,7 +25,7 @@ module.exports = {
     server: { type: "fluxer.server", pin: "only", required: true, show: { action: ["create"] }, description: "The server to make it in." },
     role: { type: "fluxer.role", pin: "only", required: true, show: { action: ["edit", "delete"] }, description: "The role." },
     name: { type: "text", default: "", show: { action: ["create", "edit"] }, description: "Its name. For changes: empty keeps it." },
-    color: { type: "text", default: "", show: { action: ["create", "edit"] }, description: "#RRGGBB, such as #5865F2. Empty keeps it (or none for a new role)." },
+    color: { type: "text", default: "", show: { action: ["create", "edit"] }, description: "A hex color, such as #5865F2 or 5865F2. Empty keeps it (or none for a new role)." },
     hoist: { type: "select", pin: false, default: "keep", choices: SWITCH, label: "Show separately", show: { action: ["create", "edit"] }, description: "List its members apart in the member list." },
     mentionable: { type: "select", pin: false, default: "keep", choices: SWITCH, show: { action: ["create", "edit"] }, description: "Whether everyone may @mention it." },
     permissions: {
@@ -50,11 +50,11 @@ module.exports = {
     const options = {};
     const name = String(f.name ?? "").trim();
     if (name) options.name = name.slice(0, 100);
-    const color = String(f.color ?? "").trim();
+    // Hex, with or without its #: #5865F2, 5865F2 (or #58F, 58F).
+    const color = String(f.color ?? "").trim().replace(/^#/, "");
     if (color) {
-      const n = parseInt(color.replace(/^#/, ""), 16);
-      if (!Number.isFinite(n)) throw new Error(`${color} isn't a color: use #RRGGBB`);
-      options.color = n;
+      if (!/^([0-9a-f]{3}|[0-9a-f]{6})$/i.test(color)) throw new Error(`"${color}" isn't a hex color: use one such as #5865F2 or 5865F2`);
+      options.color = parseInt(color.length === 3 ? color.replace(/./g, "$&$&") : color, 16);
     }
     if (f.hoist !== "keep") options.hoist = f.hoist === "on";
     if (f.mentionable !== "keep") options.mentionable = f.mentionable === "on";

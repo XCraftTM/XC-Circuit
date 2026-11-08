@@ -129,9 +129,10 @@ impl FieldDef {
 
     /// Whether `${…}` in this field's text is filled in, each name it uses
     /// with an input of its own: plain text fields and fields for any value
-    /// (typed in as text), unless the block sets `template: false`.
+    /// (typed in as text), and colours (`${…}` for one from the bot), unless
+    /// the block sets `template: false`.
     pub fn templated(&self) -> bool {
-        self.template.unwrap_or_else(|| matches!(self.type_name.trim_end_matches('?'), "text" | "textarea" | "string" | "any") && self.choices.is_none())
+        self.template.unwrap_or_else(|| matches!(self.type_name.trim_end_matches('?'), "text" | "textarea" | "string" | "any" | "color") && self.choices.is_none())
     }
 
     /// Choices of a `select` field as `(group, id, label)`.
@@ -584,6 +585,9 @@ mod tests {
         assert_eq!(name.pin, PinMode::Only);
         assert_eq!(name.label("name"), "${name}");
         assert!(!shape.field("code").unwrap().templated() && !shape.field("mode").unwrap().templated());
+        // A colour field takes ${…} too (a colour from the bot or an input).
+        let color: FieldDef = serde_json::from_value(json!({ "type": "color" })).unwrap();
+        assert!(color.templated());
     }
 
     use super::*;

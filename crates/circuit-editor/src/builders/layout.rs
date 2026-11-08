@@ -544,11 +544,20 @@ fn body(ui: &mut Ui, theme: &Theme, c: &mut Value, next: usize) {
                         m.remove("accent_color");
                     }
                 }
-                if let Some(n) = c.get("accent_color").and_then(Value::as_u64) {
-                    let mut color = Color32::from_rgb((n >> 16) as u8, (n >> 8) as u8, n as u8);
-                    if crate::builders::color::color_button(ui, ui.scope_id().with("accent"), &mut color, theme, None) {
-                        c["accent_color"] = json!(((color.r() as u32) << 16) | ((color.g() as u32) << 8) | color.b() as u32);
-                    }
+                // A number, as Discord has it; or ${…} text for a colour from
+                // the bot or an input, turned into one when it runs.
+                let accent = match c.get("accent_color") {
+                    Some(Value::Number(n)) => n.as_u64().map(|n| format!("#{:06X}", n & 0xFF_FFFF)),
+                    Some(Value::String(s)) => Some(s.clone()),
+                    _ => None,
+                };
+                if let Some(mut text) = accent
+                    && crate::builders::color::color_or_text(ui, theme, ui.scope_id().with("accent"), &mut text, 200.0)
+                {
+                    c["accent_color"] = match crate::builders::color::parse_hex(&text) {
+                        Some(color) if !text.contains("${") => json!(((color.r() as u32) << 16) | ((color.g() as u32) << 8) | color.b() as u32),
+                        _ => json!(text),
+                    };
                 }
                 ui.add_space(12.0);
                 flag(ui, theme, c, "spoiler", t!("Spoiler"));

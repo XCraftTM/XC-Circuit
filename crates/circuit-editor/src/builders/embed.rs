@@ -449,10 +449,12 @@ fn form_column(ui: &mut Ui, theme: &Theme, edit: &mut EmbedEdit, values: Option<
 fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
     let heading = kit::section(ui, theme, t!("Color")).id;
     ui.horizontal(|ui| {
-        let mut c = hex_color(&e.color).unwrap_or(Color32::from_rgb(0, 0xD8, 0xF0));
-        if kit::labelled(ui, heading, |ui| crate::builders::color::color_button(ui, ui.scope_id().with("embed-color"), &mut c, theme, None)) {
-            e.color = crate::builders::color::to_hex(c);
+        // A colour, or ${…} for one from the bot or an input.
+        if e.color.trim().is_empty() {
+            e.color = "#00D8F0".into();
         }
+        let id = ui.scope_id().with("embed-color");
+        kit::labelled(ui, heading, |ui| crate::builders::color::color_or_text(ui, theme, id, &mut e.color, 200.0));
         for preset in ["#00D8F0", "#3DFF6E", "#5865F2", "#FEE75C", "#ED4245", "#EB459E"] {
             let col = hex_color(preset).unwrap();
             let (r, resp) = ui.allocate_exact_size(vec2(20.0, 20.0), egui::Sense::click());

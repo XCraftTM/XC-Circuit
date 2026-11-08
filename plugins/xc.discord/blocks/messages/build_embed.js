@@ -1,3 +1,13 @@
+/** A colour as a number: hex such as #FF5CA8 or FF5CA8 (#F5A, F5A), or a number. Empty: undefined. */
+function hexColor(v) {
+  if (typeof v === "number" && Number.isFinite(v)) return v & 0xffffff;
+  const s = String(v ?? "").trim().replace(/^#/, "");
+  if (!s) return undefined;
+  if (/^[0-9a-f]{6}$/i.test(s)) return parseInt(s, 16);
+  if (/^[0-9a-f]{3}$/i.test(s)) return parseInt(s.replace(/./g, "$&$&"), 16);
+  throw new Error(`"${String(v).trim()}" isn't a hex color: use one such as #FF5CA8 or FF5CA8`);
+}
+
 module.exports = {
   id: "discord.build_embed",
   kind: "action",
@@ -5,7 +15,7 @@ module.exports = {
     name: "Build Embed",
     description: "Creates a rich embed. Design it in the Embed Builder; ${…} in its texts holds JavaScript.",
     author: "XC Team",
-    version: "2.0.0",
+    version: "2.0.1",
   },
   search: {
     category: "design",
@@ -53,7 +63,9 @@ module.exports = {
     const e = fields.embed || {};
     const fill = (s) => ctx.fill(s, fields);
     const embed = new EmbedBuilder();
-    if (e.color) embed.setColor(e.color);
+    // A picked colour, or ${…} with a hex colour from the bot or an input.
+    const color = hexColor(typeof e.color === "string" ? fill(e.color) : e.color);
+    if (color !== undefined) embed.setColor(color);
     if (e.title) embed.setTitle(fill(e.title).slice(0, 256));
     if (e.url) embed.setURL(fill(e.url));
     if (e.description) embed.setDescription(fill(e.description).slice(0, 4096));

@@ -21,6 +21,29 @@ function eachMedia(list, fn) {
   }
 }
 
+/** A colour as a number: hex such as #FF5CA8 or FF5CA8 (#F5A, F5A), or a number. Empty: undefined. */
+function hexColor(v) {
+  if (typeof v === "number" && Number.isFinite(v)) return v & 0xffffff;
+  const s = String(v ?? "").trim().replace(/^#/, "");
+  if (!s) return undefined;
+  if (/^[0-9a-f]{6}$/i.test(s)) return parseInt(s, 16);
+  if (/^[0-9a-f]{3}$/i.test(s)) return parseInt(s.replace(/./g, "$&$&"), 16);
+  throw new Error(`"${String(v).trim()}" isn't a hex color: use one such as #FF5CA8 or FF5CA8`);
+}
+
+/** Turns containers' accent colours given as text into numbers (none when empty). */
+function accentColors(list) {
+  for (const c of Array.isArray(list) ? list : []) {
+    if (!c || typeof c !== "object") continue;
+    if (typeof c.accent_color === "string") {
+      const n = hexColor(c.accent_color);
+      if (n === undefined) delete c.accent_color;
+      else c.accent_color = n;
+    }
+    accentColors(c.components);
+  }
+}
+
 module.exports = {
   id: "discord.build_layout",
   description:
@@ -29,7 +52,7 @@ module.exports = {
   info: {
     name: "Build Layout",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.0.1",
   },
   search: {
     category: "design",
@@ -69,6 +92,8 @@ module.exports = {
   run({ fields, ctx }) {
     const path = require("path");
     const components = mapStrings((fields.layout && fields.layout.components) || [], (s) => ctx.fill(s, fields));
+    // An accent colour given as ${…} text is hex by now: Discord wants a number.
+    accentColors(components);
     // Pictures and files that are not on the web (file paths, or a user's avatar
     // given as a file) are attached and pointed at with attachment://.
     const files = [];

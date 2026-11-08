@@ -642,7 +642,7 @@ impl Icons {
 }
 
 /// A small framed button with an icon (or text), for the layer list.
-fn tiny(ui: &mut Ui, theme: &Theme, icon: Option<&std::path::Path>, text: &str, tip: &str, enabled: bool) -> bool {
+pub(crate) fn tiny(ui: &mut Ui, theme: &Theme, icon: Option<&std::path::Path>, text: &str, tip: &str, enabled: bool) -> bool {
     let (rect, resp) = ui.allocate_exact_size(vec2(22.0, 22.0), if enabled { Sense::click() } else { Sense::hover() });
     kit::describe(&resp, egui::Role::Button, tip);
     let ink = if enabled { if resp.hovered() { theme.text } else { theme.text_muted } } else { crate::ui::theme::with_alpha(theme.text_muted, 70) };
@@ -914,18 +914,7 @@ fn samples(ui: &mut Ui, theme: &Theme, d: &mut CanvasData) {
 /// A colour: a swatch with the picker, or (for a colour from the bot, such
 /// as a role's) a `${…}` text. The small button switches between them.
 fn colour_edit(ui: &mut Ui, theme: &Theme, id: Id, value: &mut String) {
-    crate::ui::kit::line(ui, |ui| {
-        let expression = value.contains("${");
-        if expression {
-            ui.add(crate::ui::kit::TextLine::new(value).hint("${role.hexColor}").width(200.0));
-        } else {
-            kit::color(ui, theme, id, value);
-        }
-        let tip = if expression { t!("Pick a colour instead") } else { t!("A colour from the bot: ${…}, such as ${role.hexColor}") };
-        if tiny(ui, theme, None, if expression { "#" } else { "${}" }, tip, true) {
-            *value = if expression { "#FFFFFF".into() } else { "${}".into() };
-        }
-    });
+    crate::ui::kit::line(ui, |ui| crate::builders::color::color_or_text(ui, theme, id, value, 200.0));
 }
 
 /// A caption; it names the controls drawn with it (see [`labelled`]).

@@ -4,6 +4,9 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 
 ## Unreleased
 
+### Added
+- **Colors from an input or a variable**: every color picker on blocks and in the Embed and Layout Builders (as already in the Canvas Builder) has a `${}` button beside it, for a color the bot works out, such as `${role.hexColor}` or `${color}`; each name gets an input on the block. Create Role's color can also be a pin to connect. Hex colors work with or without the `#` (#FF5CA8, FF5CA8, and short ones such as #F5A), and anything else stops the block with a clear message. Edit Role and Fluxer's Manage Role take colors without `#` too.
+
 ### Fixed
 - **Importing workspaces brings whole commands**: a command with subcommands (such as /ticket open and /ticket close) came in as /ticket alone, so its subcommands were missing. Now the command and all its subcommands come along, and the export and import lists show them (/ticket: open, close).
 - **Signing in to a Calagopus panel again works**: the panel takes each API key name once, so a second sign-in was refused as "name already taken". The key is now named after the bot, with a short tag of its own (such as XC Circuit · Test Bot #a1b2).

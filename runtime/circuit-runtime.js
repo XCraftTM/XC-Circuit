@@ -719,10 +719,10 @@ function isContextType(type) {
   return CONTEXT_TYPES.includes(String(type || "").replace(/\?$/, ""));
 }
 
-/** Whether ${…} in a field is filled in: text fields and fields for any value, unless `template: false`. */
+/** Whether ${…} in a field is filled in: text fields, fields for any value and colours, unless `template: false`. */
 function templated(f) {
   if (typeof f.template === "boolean") return f.template;
-  return ["text", "textarea", "string", "any"].includes(String(f.type || "").replace(/\?$/, "")) && !f.choices;
+  return ["text", "textarea", "string", "any", "color"].includes(String(f.type || "").replace(/\?$/, "")) && !f.choices;
 }
 
 /** A field that takes any kind of value (Check's Value, Set Variable's value). */

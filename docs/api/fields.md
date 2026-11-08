@@ -27,7 +27,7 @@ fields: {
 | `advanced` | boolean | Not shown on the block; the Inspector lists it under *Advanced*. Once it's a pin (with the **pin** chip there, also for `pin: "only"` fields, or by connecting it), it shows on the block too. |
 | `show` | object | Shown only when other fields have one of these values: `{ mode: ["send", "edit"] }`. |
 | `choices` | object | For `select`: value → label. A nested object makes a group: `{ "Text": { plain: "Plain", bold: "Bold" } }`. |
-| `template` | boolean | Whether `${…}` in the text is filled in. Default: yes for text fields. |
+| `template` | boolean | Whether `${…}` in the text is filled in. Default: yes for text fields and colours. |
 | `templateParts` | boolean | Instead of filling `${…}` in, give the block `{ strings, values }`: the text around them and their values, as a JavaScript tagged template gets them. SQL Query uses it to send the values as parameters. |
 | `min`, `max`, `step` | number | For numbers. |
 | `placeholder` | text | Grey hint in an empty text box. |
@@ -48,7 +48,7 @@ Besides the [type strings](#type-strings), a field's `type` can name an editor:
 | `boolean` | switch | `true` / `false` |
 | `select` | drop-down of `choices` | the chosen value |
 | `multiselect` | drop-down of `choices` with a checkbox each (and a search when there are many) | a list of the chosen keys; text with commas from older projects is read too |
-| `color` | swatch with a colour picker | `"#RRGGBB"` |
+| `color` | swatch with a colour picker, or (with its `${}` button) `${…}` text for a colour from the bot; like other fields it can also be a pin | `"#RRGGBB"`; from a pin or `${…}`, any hex colour with or without `#` (`#FF5CA8`, `FF5CA8`, `#F5A`), which the block reads as a colour |
 | `embed` | the Embed Builder (Discord) | embed object |
 | `layout` | the Layout Builder, and the message on the block (Discord) | Components V2: `{ components: [ … ] }` |
 | `modal` | the Modal Builder, and the form on the block (Discord) | Discord's modal JSON: `{ title, custom_id, components: [ … ] }`, with questions (type 18 around a text input, select menu or file upload) and texts (type 10) |

@@ -52,6 +52,16 @@ function permissionList(given) {
 const KEEP = { keep: "Keep as is", on: "On", off: "Off" };
 const tri = (v) => (v === "on" ? true : v === "off" ? false : undefined);
 
+/** A colour as a number: hex such as #FF5CA8 or FF5CA8 (#F5A, F5A), or a number. Empty: undefined. */
+function hexColor(v) {
+  if (typeof v === "number" && Number.isFinite(v)) return v & 0xffffff;
+  const s = String(v ?? "").trim().replace(/^#/, "");
+  if (!s) return undefined;
+  if (/^[0-9a-f]{6}$/i.test(s)) return parseInt(s, 16);
+  if (/^[0-9a-f]{3}$/i.test(s)) return parseInt(s.replace(/./g, "$&$&"), 16);
+  throw new Error(`"${String(v).trim()}" isn't a hex color: use one such as #FF5CA8 or FF5CA8`);
+}
+
 module.exports = {
   id: "discord.edit_role",
   kind: "action",
@@ -59,7 +69,7 @@ module.exports = {
     name: "Edit Role",
     description: "Changes a role's name, color, permissions and more. Empty fields stay as they are.",
     author: "XC Team",
-    version: "1.1.1",
+    version: "1.1.2",
   },
   search: {
     category: "roles",
@@ -75,7 +85,7 @@ module.exports = {
   fields: {
     role: { type: "discord.role", pin: "only", required: true, description: "The role to change." },
     name: { type: "text", default: "", description: "New name. Empty keeps it." },
-    color: { type: "text", default: "", description: "New color such as #FF5CA8. Empty keeps it." },
+    color: { type: "text", default: "", description: "New color in hex, such as #FF5CA8 or FF5CA8. Empty keeps it." },
     hoist: { type: "select", pin: false, default: "keep", choices: KEEP, label: "Show separately", description: "List its members in their own group." },
     mentionable: { type: "select", pin: false, default: "keep", choices: KEEP, description: "Anyone can @mention it." },
     permissions: { type: "multiselect", default: [], choices: PERMISSIONS, description: "Replaces all its permissions. None picked keeps them." },
@@ -89,7 +99,7 @@ module.exports = {
   async run({ fields: f }) {
     const edit = { reason: f.reason || undefined };
     if (f.name) edit.name = String(f.name).slice(0, 100);
-    if (f.color) edit.color = f.color;
+    if (hexColor(f.color) !== undefined) edit.color = hexColor(f.color);
     if (tri(f.hoist) !== undefined) edit.hoist = tri(f.hoist);
     if (tri(f.mentionable) !== undefined) edit.mentionable = tri(f.mentionable);
     if (permissionList(f.permissions).length) edit.permissions = permissionList(f.permissions);

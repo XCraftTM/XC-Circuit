@@ -82,7 +82,12 @@ const listen = (id, fields = {}) => {
   let o = await run("fluxer.manage_role", { action: "create", server, name: "Mods", color: "#ff0000", hoist: "on", permissions: "ManageMessages, KickMembers" });
   assert.deepStrictEqual([o.role.name, o.role.color, o.role.permissions, o.role.hoist, o.role.edited], ["Mods", 0xff0000, ["ManageMessages", "KickMembers"], true, true]);
   await assert.rejects(run("fluxer.manage_role", { action: "create", server }), /name/);
-  await assert.rejects(run("fluxer.manage_role", { action: "edit", role: role("1"), color: "red" }), /isn't a color/);
+  await assert.rejects(run("fluxer.manage_role", { action: "edit", role: role("1"), color: "red" }), /isn't a hex color/);
+  // Hex without its #, and the short form.
+  o = await run("fluxer.manage_role", { action: "create", server, name: "Blue", color: "5865F2" });
+  assert.strictEqual(o.role.color, 0x5865f2);
+  o = await run("fluxer.manage_role", { action: "create", server, name: "Pink", color: "#F5A" });
+  assert.strictEqual(o.role.color, 0xff55aa);
   o = await run("fluxer.manage_role", { action: "delete", role: role("1"), reason: "old" });
   assert.deepStrictEqual(calls.pop(), ["delete role 1", "old"]);
   o = await run("fluxer.list_roles", { server });

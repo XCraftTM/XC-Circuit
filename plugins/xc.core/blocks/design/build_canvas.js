@@ -26,6 +26,8 @@ function colour(v, fallback = "#000000") {
   if (typeof v === "number") return `#${(v & 0xffffff).toString(16).padStart(6, "0")}`;
   const s = String(v ?? "").trim();
   if (!s) return fallback;
+  // Hex, with or without its # (FF5CA8 from a variable or an input).
+  if (/^#?([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(s)) return s.startsWith("#") ? s : `#${s}`;
   if (/^\d+$/.test(s)) return `#${(Number(s) & 0xffffff).toString(16).padStart(6, "0")}`;
   return s;
 }
@@ -239,7 +241,7 @@ module.exports = {
     name: "Build Canvas",
     description: "Draws a picture, such as a welcome or rank card, from a design made in the Canvas Builder. ${…} in its texts and pictures holds JavaScript. Send it with Send Message's Files.",
     author: "XC Team",
-    version: "1.1.0",
+    version: "1.1.1",
   },
   search: {
     category: "design",

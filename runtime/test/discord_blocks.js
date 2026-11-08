@@ -133,6 +133,51 @@ assert.deepStrictEqual(
   ["ping"],
 );
 
+// Colours: hex with or without its #, picked or from an input or ${…}.
+{
+  const fill = (s, f) => s.replace(/\$\{(\w+)\}/g, (w, k) => (k in f ? String(f[k]) : w));
+  // Build Embed needs discord.js (there when it's installed next to the tests).
+  let discordJs = true;
+  try {
+    require.resolve("discord.js");
+  } catch {
+    discordJs = false;
+  }
+  if (discordJs) {
+    const embedColor = (color, extra = {}) => all["discord.build_embed"].run({ fields: { embed: { color, title: "x" }, ...extra }, ctx: { fill } }).embed.data.color;
+    assert.strictEqual(embedColor("#FF5CA8"), 0xff5ca8);
+    assert.strictEqual(embedColor("ff5ca8"), 0xff5ca8);
+    assert.strictEqual(embedColor("#F5A"), 0xff55aa);
+    assert.strictEqual(embedColor("${c}", { c: "00D8F0" }), 0x00d8f0);
+    assert.strictEqual(embedColor("${c}", { c: "#00D8F0" }), 0x00d8f0);
+    assert.strictEqual(embedColor(""), undefined, "no colour");
+    assert.throws(() => embedColor("${c}", { c: "red" }), /"red" isn't a hex color/);
+  }
+
+  const layoutAccent = (accent, extra = {}) => all["discord.build_layout"].run({ fields: { layout: { components: [{ type: 17, accent_color: accent, components: [] }] }, ...extra }, ctx: { fill } }).layout.components[0].accent_color;
+  assert.strictEqual(layoutAccent(0x123456), 0x123456, "a picked one stays a number");
+  assert.strictEqual(layoutAccent("${c}", { c: "FF5CA8" }), 0xff5ca8);
+  assert.strictEqual(layoutAccent("${c}", { c: "" }), undefined, "empty: none");
+
+  (async () => {
+    let made, edited;
+    const server = { roles: { create: async (o) => (made = o) } };
+    for (const [given, want] of [["#99AAB5", 0x99aab5], ["99AAB5", 0x99aab5], [0x112233, 0x112233], ["", undefined]]) {
+      await all["discord.create_role"].run({ fields: { ...defaults("discord.create_role"), server, name: "r", color: given } });
+      assert.strictEqual(made.color, want, `Create Role with ${given}`);
+    }
+    await assert.rejects(all["discord.create_role"].run({ fields: { ...defaults("discord.create_role"), server, name: "r", color: "#GG0000" } }), /isn't a hex color/);
+    const role = { edit: async (o) => (edited = o) };
+    await all["discord.edit_role"].run({ fields: { ...defaults("discord.edit_role"), role, color: "5865f2" } });
+    assert.strictEqual(edited.color, 0x5865f2);
+    await all["discord.edit_role"].run({ fields: { ...defaults("discord.edit_role"), role, color: "" } });
+    assert.ok(!("color" in edited), "empty keeps it");
+  })().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}
+
 // Send Message to a channel given by its id (typed in, or <#id>), also where
 // the app doesn't look ids up before the block runs.
 (async () => {
