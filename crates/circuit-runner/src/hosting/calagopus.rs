@@ -315,6 +315,34 @@ fn answer(mut stream: TcpStream, state: &str) -> Option<String> {
     key.map(|k| k.trim().to_string())
 }
 
+/// A name for the API key the panel makes at sign-in: with the bot's name,
+/// and a short tag, as a panel takes each name once per account (signing in
+/// again, or for a second bot, would be refused). At most 31 characters,
+/// Calagopus's limit.
+pub fn key_name(bot: &str) -> String {
+    key_name_with(bot, &random_hex(2).unwrap_or_else(|_| "0000".into()))
+}
+
+const KEY_NAME_MAX: usize = 31;
+
+fn key_name_with(bot: &str, tag: &str) -> String {
+    let bot = bot.split_whitespace().collect::<Vec<_>>().join(" ");
+    if bot.is_empty() {
+        return format!("XC Circuit #{tag}");
+    }
+    for prefix in ["XC Circuit · ", "XCC · "] {
+        let name = format!("{prefix}{bot} #{tag}");
+        if name.chars().count() <= KEY_NAME_MAX {
+            return name;
+        }
+    }
+    // Still too long: the bot's name shortened.
+    let end = format!("… #{tag}");
+    let room = KEY_NAME_MAX - "XCC · ".chars().count() - end.chars().count();
+    let short: String = bot.chars().take(room).collect();
+    format!("XCC · {}{end}", short.trim_end())
+}
+
 fn random_hex(bytes: usize) -> Result<String> {
     let mut buf = vec![0u8; bytes];
     rustls::crypto::ring::default_provider().secure_random.fill(&mut buf).map_err(|_| anyhow!("no random numbers"))?;
@@ -640,6 +668,20 @@ fn color_256(n: u8) -> Color {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The key's name carries the bot's name, a tag to keep it apart from
+    /// earlier ones, and fits the panel's 31 characters.
+    #[test]
+    fn key_names_fit_the_panel() {
+        assert_eq!(key_name_with("Test Bot", "a1b2"), "XC Circuit · Test Bot #a1b2");
+        assert_eq!(key_name_with("Test XCC Bot", "a1b2"), "XC Circuit · Test XCC Bot #a1b2");
+        assert_eq!(key_name_with("My Moderation Bot", "a1b2"), "XCC · My Moderation Bot #a1b2");
+        assert_eq!(key_name_with("  ", "a1b2"), "XC Circuit #a1b2");
+        let long = key_name_with("The Most Amazing Ticket Bot Ever Made", "a1b2");
+        assert_eq!(long.chars().count(), 31, "{long}");
+        assert!(long.starts_with("XCC · The Most") && long.ends_with("… #a1b2"), "{long}");
+        assert_ne!(key_name("Bot"), key_name("Bot"), "a new tag each time");
+    }
     use std::sync::Mutex;
 
     #[test]

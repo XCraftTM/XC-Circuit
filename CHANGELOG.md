@@ -2,6 +2,13 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
+## Unreleased
+
+### Fixed
+- **Importing workspaces brings whole commands**: a command with subcommands (such as /ticket open and /ticket close) came in as /ticket alone, so its subcommands were missing. Now the command and all its subcommands come along, and the export and import lists show them (/ticket: open, close).
+- **Signing in to a Calagopus panel again works**: the panel takes each API key name once, so a second sign-in was refused as "name already taken". The key is now named after the bot, with a short tag of its own (such as XC Circuit · Test Bot #a1b2).
+- **A pasted Calagopus API key lists the servers**: they're read as soon as you stop typing, without Read again, and the server list says what's missing (the address, a key) or what went wrong instead of always "Sign in".
+
 ## 0.2.1
 
 ### Changed

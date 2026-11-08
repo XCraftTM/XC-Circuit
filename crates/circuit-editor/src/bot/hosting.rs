@@ -60,6 +60,11 @@ pub struct Draft {
     key_saved: bool,
     servers: Vec<calagopus::Server>,
     servers_problem: Option<String>,
+    /// When the key or the panel's address was last typed in: the servers
+    /// are read again once that's a moment ago.
+    typed_at: Option<std::time::Instant>,
+    /// The servers have been read (for these key and address), even if none came.
+    servers_read: bool,
 }
 
 pub struct HostingUi {
@@ -98,6 +103,8 @@ impl HostingUi {
             key_saved: s.api_key.is_some(),
             servers: Vec::new(),
             servers_problem: None,
+            typed_at: None,
+            servers_read: false,
         });
         if self.draft.as_ref().is_some_and(|d| d.h.kind == Kind::Calagopus && d.key_saved) {
             self.read_servers(ed);
@@ -203,12 +210,30 @@ impl HostingUi {
                                 d.servers = list;
                                 d.servers_problem = None;
                             }
-                            Err(e) => d.servers_problem = Some(e),
+                            Err(e) => {
+                                d.servers.clear();
+                                d.servers_problem = Some(e);
+                            }
                         }
                     }
                 }
                 Err(TryRecvError::Empty) => ctx.request_repaint_after(std::time::Duration::from_millis(200)),
                 Err(TryRecvError::Disconnected) => self.servers = None,
+            }
+        }
+        // A key pasted (or the address changed): the list is read without
+        // waiting for Read again, once the typing has stopped.
+        if let Some(d) = &mut self.draft
+            && let Some(at) = d.typed_at
+        {
+            let pause = std::time::Duration::from_millis(700);
+            if at.elapsed() >= pause {
+                d.typed_at = None;
+                if d.h.kind == Kind::Calagopus && self.servers.is_none() {
+                    self.read_servers(ed);
+                }
+            } else {
+                ctx.request_repaint_after(pause - at.elapsed());
             }
         }
         // The console is the open project's server's: another project (or
@@ -236,9 +261,12 @@ impl HostingUi {
         let Some(d) = &self.draft else { return };
         let key = if d.api_key.trim().is_empty() { secrets_of(ed).api_key } else { Some(d.api_key.trim().to_string()) };
         let (Some(key), false) = (key, d.h.panel.trim().is_empty()) else { return };
-        let panel = calagopus::Panel::new(&d.h.panel, &key);
+        let panel = calagopus::Panel::new(d.h.panel.trim(), &key);
         let (tx, rx) = channel();
         self.servers = Some(rx);
+        if let Some(d) = &mut self.draft {
+            d.servers_read = true;
+        }
         thread::spawn(move || {
             let _ = tx.send(panel.servers().map_err(|e| format!("{e:#}")));
         });
@@ -414,7 +442,9 @@ impl HostingUi {
                             kit::field(ui, &theme, t!("Folder on the server"), Some(t!("Where the bot's files go, made when missing. Empty: the folder you start in after logging in.")), |ui| kit::text_input(ui, &mut d.h.folder, "bots/my-bot", false));
                         }
                         Kind::Calagopus => {
-                            kit::field(ui, &theme, t!("Panel address"), Some(t!("The address you open the panel at.")), |ui| kit::text_input(ui, &mut d.h.panel, "https://panel.example.com", false));
+                            if kit::field(ui, &theme, t!("Panel address"), Some(t!("The address you open the panel at.")), |ui| kit::text_input(ui, &mut d.h.panel, "https://panel.example.com", false)).changed() {
+                                d.typed_at = Some(std::time::Instant::now());
+                            }
                             kit::field(ui, &theme, t!("Sign in"), Some(t!("Opens the panel in your browser to make an API key for XC Circuit; approve it there and it comes back here. Or paste a key you made yourself.")), |ui| {
                                 ui.horizontal(|ui| {
                                     if waiting {
@@ -437,13 +467,29 @@ impl HostingUi {
                                 });
                             });
                             let hint = if d.key_saved { t!("Saved: paste to change it") } else { "c7sp_…" };
-                            kit::field(ui, &theme, t!("API key"), None, |ui| kit::text_input(ui, &mut d.api_key, hint, true));
+                            if kit::field(ui, &theme, t!("API key"), None, |ui| kit::text_input(ui, &mut d.api_key, hint, true)).changed() {
+                                d.typed_at = Some(std::time::Instant::now());
+                            }
                             kit::field(ui, &theme, t!("Server"), d.servers_problem.as_deref(), |ui| {
                                 ui.horizontal(|ui| {
                                     let shown = if d.h.server_name.is_empty() { t!("Choose a server").to_string() } else { d.h.server_name.clone() };
                                     kit::dropdown(ui, egui::Id::unique("hosting-server"), 300.0, shown, |ui| {
                                         if d.servers.is_empty() {
-                                            ui.label(RichText::new(t!("Sign in, then Read again.")).color(theme.text_muted));
+                                            let has_key = d.key_saved || !d.api_key.trim().is_empty();
+                                            let text = if reading {
+                                                t!("Reading the servers…")
+                                            } else if d.h.panel.trim().is_empty() {
+                                                t!("Fill in the panel's address first.")
+                                            } else if !has_key {
+                                                t!("Sign in, or paste an API key, first.")
+                                            } else if d.servers_problem.is_some() {
+                                                t!("Couldn't read the servers: see under the list.")
+                                            } else if d.servers_read {
+                                                t!("This API key reaches no servers.")
+                                            } else {
+                                                t!("Press Read again to list them.")
+                                            };
+                                            ui.label(RichText::new(text).color(theme.text_muted));
                                         }
                                         for s in &d.servers {
                                             if kit::option(ui, d.h.server == s.uuid, format!("{}  ·  {}", s.name, s.short)).clicked() {
@@ -506,7 +552,8 @@ impl HostingUi {
         );
         if sign_in {
             let panel = self.draft.as_ref().map(|d| d.h.panel.clone()).unwrap_or_default();
-            match calagopus::sign_in(&panel, "XC Circuit") {
+            let bot = ed.project.as_ref().map(|p| p.meta.name.clone()).unwrap_or_default();
+            match calagopus::sign_in(&panel, &calagopus::key_name(&bot)) {
                 Ok(s) => {
                     if let Err(e) = open::that(&s.url) {
                         ed.log(Level::Warn, tf!("Couldn't open the browser ({error}). Open this address: {url}", error = e, url = s.url));
@@ -894,6 +941,27 @@ mod tests {
         };
         let (wide, narrow) = (tall(2400.0), tall(300.0));
         assert!(narrow > wide * 3.0, "wide {wide}, narrow {narrow}");
+    }
+
+    /// A pasted API key lists the servers by itself once the typing stops,
+    /// without Read again.
+    #[test]
+    fn a_pasted_key_reads_the_servers() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&root.join("examples/DemoBot"));
+        let ctx = egui::Context::default();
+        let mut ui = HostingUi::new();
+        ui.open(&ed);
+        let d = ui.draft.as_mut().unwrap();
+        d.h = Hosting { kind: Kind::Calagopus, panel: "http://127.0.0.1:9".into(), ..Default::default() };
+        d.api_key = "c7sp_pasted".into();
+        d.typed_at = Some(std::time::Instant::now());
+        ui.poll(&mut ed, &ctx);
+        assert!(ui.servers.is_none(), "not while still typing");
+        ui.draft.as_mut().unwrap().typed_at = Some(std::time::Instant::now() - std::time::Duration::from_secs(1));
+        ui.poll(&mut ed, &ctx);
+        assert!(ui.servers.is_some() && ui.draft.as_ref().unwrap().servers_read, "read once the typing stopped");
     }
 
     /// The console belongs to the project's server: it stays while that's
