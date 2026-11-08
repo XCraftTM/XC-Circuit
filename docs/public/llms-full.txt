@@ -1584,6 +1584,16 @@ The first time XC Circuit connects to an SFTP server, it keeps the server's key 
 
 **Bot › Server console** shows the chosen server: its state, CPU and memory, **Start**, **Restart**, **Stop** and **Kill** (ends it at once, without letting it save), and its live console, in the colours the server prints (as in the panel). Like the Console, it can be a tab anywhere or an icon in the activity bar, shown in the side bar (drag its tab there). Left open when you close XC Circuit, the console tab comes back, connected, the next time it starts with that project.
 
+### Running the bot on the server
+
+With a Calagopus server chosen and signed in, a **Local | Server** switch shows beside **Run** at the top right. Pick **Server**, and Run, Restart and Stop (the buttons, F5 and Shift+F5, the Bot menu and the status bar) act on the server instead of this computer:
+
+- **Run** uploads what changed, then starts the server, so it runs the version you see. When it runs already, the button says **Restart**: it uploads, then restarts it.
+- **Stop** stops the server.
+- The status bar shows the server's state (*Server running*, *starting*, *stopping*, *stopped*), read every few seconds; hover it for the server's name, CPU and memory.
+
+Picking Server stops the bot running here, so the two don't both answer. The switch is kept per project; **Local** puts Run back on this computer (the server keeps running).
+
 
 ---
 

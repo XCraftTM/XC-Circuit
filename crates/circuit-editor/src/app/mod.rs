@@ -421,10 +421,10 @@ impl eframe::App for CircuitApp {
                 self.bot.restart_if_running(&mut self.ed, &ctx);
             }
             if hit(Hotkey::Run) && self.ed.project.is_some() {
-                self.bot.start(&mut self.ed, &ctx);
+                self.bot.run_pressed(&mut self.ed, &ctx);
             }
             if hit(Hotkey::Stop) {
-                self.bot.stop(&mut self.ed);
+                self.bot.stop_pressed(&mut self.ed);
             }
             if hit(Hotkey::Settings) {
                 self.open_settings();

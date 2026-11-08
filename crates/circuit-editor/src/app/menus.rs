@@ -177,12 +177,12 @@ impl CircuitApp {
             }).response);
             let has_project = self.ed.project.is_some();
             tops.push(ui.menu_button(t!("Bot"), |ui| {
-                let running = self.bot.state != BotState::Stopped;
+                let running = self.bot.shown_state() != BotState::Stopped;
                 if kit::menu_item(ui, if running { t!("Restart") } else { t!("Run") }, Some(self.key_label(Hotkey::Run)), has_project).clicked() {
-                    self.bot.start(&mut self.ed, ui.ctx());
+                    self.bot.run_pressed(&mut self.ed, ui.ctx());
                 }
                 if kit::menu_item(ui, t!("Stop"), Some(self.key_label(Hotkey::Stop)), running).clicked() {
-                    self.bot.stop(&mut self.ed);
+                    self.bot.stop_pressed(&mut self.ed);
                 }
                 ui.separator();
                 if self.ed.has_slash_commands() && kit::menu_item(ui, t!("Slash Commands…"), None, has_project).clicked() {
@@ -304,20 +304,48 @@ impl CircuitApp {
             ui.spacing_mut().item_spacing.x = 8.0;
             ui.add_space(10.0);
         }
-        let running = self.bot.state != BotState::Stopped;
-        if running && kit::menu_item(ui, t!("Stop"), None, true).on_hover_text(t!("Stop the bot (Shift+F5)")).clicked() {
-            self.bot.stop(&mut self.ed);
+        let state = self.bot.shown_state();
+        let remote = self.bot.hosting.remote;
+        let running = state != BotState::Stopped;
+        let stop_tip = if remote { t!("Stop the bot on its server (Shift+F5)") } else { t!("Stop the bot (Shift+F5)") };
+        if running && kit::menu_item(ui, t!("Stop"), None, true).on_hover_text(stop_tip).clicked() {
+            self.bot.stop_pressed(&mut self.ed);
         }
-        let label = match self.bot.state {
+        let stopping = remote && self.bot.hosting.watch.as_ref().is_some_and(|w| w.state() == "stopping");
+        let label = match state {
             BotState::Stopped => t!("Run"),
+            BotState::Starting if stopping => t!("Stopping…"),
             BotState::Starting => t!("Starting…"),
             BotState::Running => t!("Restart"),
         };
         let run = egui::Button::new(RichText::new(label).strong().color(egui::Color32::from_rgb(4, 33, 13)));
         let run = ui.add_enabled_ui(self.ed.project.is_some(), |ui| crate::ui::kit::styled_button(ui, &theme, run, theme.action, egui::Stroke::NONE)).inner;
         self.ed.ui_rects.insert("run".into(), run.rect);
-        if run.on_hover_text(t!("Run the bot (F5)")).clicked() {
-            self.bot.start(&mut self.ed, ui.ctx());
+        let run_tip = if remote { t!("Upload what changed and start the bot on its server (F5)") } else { t!("Run the bot (F5)") };
+        if run.on_hover_text(run_tip).clicked() {
+            self.bot.run_pressed(&mut self.ed, ui.ctx());
+        }
+        // Local | Server, when the project has a server that can be run from here.
+        if self.ed.project.is_some() && self.bot.hosting.can_control(&self.ed) {
+            ui.add_space(6.0);
+            if let Some(server) = crate::bot::remote::switch(ui, &theme, remote) {
+                self.pick_remote(server);
+            }
+        }
+    }
+
+    /// Local or Server beside Run: which bot Run, Restart and Stop (and the
+    /// status bar) are about, kept per project. Picking Server stops the bot
+    /// running here, so the two don't both answer.
+    pub(super) fn pick_remote(&mut self, server: bool) {
+        let Some(root) = self.ed.project.as_ref().map(|p| p.root.display().to_string()) else { return };
+        self.ed.prefs.remote_bots.retain(|r| *r != root);
+        if server {
+            self.ed.prefs.remote_bots.push(root);
+            if self.bot.state != BotState::Stopped {
+                self.bot.stop(&mut self.ed);
+                self.ed.log(Level::Info, t!("Stopped the bot here: Run, Restart and Stop now act on its server."));
+            }
         }
     }
 }

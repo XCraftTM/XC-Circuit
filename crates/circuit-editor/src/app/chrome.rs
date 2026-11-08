@@ -117,17 +117,32 @@ impl CircuitApp {
         let ctx = ui.ctx().clone();
         ui.spacing_mut().item_spacing.x = 2.0;
         let bar = ui.max_rect();
-        let (dot, state) = match self.bot.state {
-            BotState::Stopped => (t.status_text.gamma_multiply(0.45), t!("Bot stopped")),
-            BotState::Starting => (egui::Color32::from_rgb(0xFF, 0xB4, 0x54), t!("Bot starting")),
-            BotState::Running => (t.action, t!("Bot running")),
+        let shown = self.bot.shown_state();
+        // With Server picked beside Run: the server's state (red when it can't be reached).
+        let remote = self.bot.hosting.watch.as_ref().filter(|_| self.bot.hosting.remote).map(|w| (w.label(), w.tip(), w.problem.is_some() && w.last.is_none()));
+        let dot = match (shown, &remote) {
+            (_, Some((_, _, true))) => t.error,
+            (BotState::Stopped, _) => t.status_text.gamma_multiply(0.45),
+            (BotState::Starting, _) => egui::Color32::from_rgb(0xFF, 0xB4, 0x54),
+            (BotState::Running, _) => t.action,
+        };
+        let state = match (shown, &remote) {
+            (_, Some((label, _, _))) => *label,
+            (BotState::Stopped, None) => t!("Bot stopped"),
+            (BotState::Starting, None) => t!("Bot starting"),
+            (BotState::Running, None) => t!("Bot running"),
         };
         let has_project = self.ed.project.is_some();
         let mut left = ui.new_child(egui::UiBuilder::new().max_rect(bar).layout(egui::Layout::left_to_right(egui::Align::Center)));
-        let running = self.bot.state != BotState::Stopped;
-        let tip = if running { t!("Stop the bot (Shift+F5)") } else { t!("Run the bot (F5)") };
+        let running = shown != BotState::Stopped;
+        let tip = match (&remote, running) {
+            (Some((_, tip, _)), true) => format!("{tip}\n{}", t!("Click to stop it (Shift+F5)")),
+            (Some((_, tip, _)), false) => format!("{tip}\n{}", t!("Click to upload and start it (F5)")),
+            (None, true) => t!("Stop the bot (Shift+F5)").to_string(),
+            (None, false) => t!("Run the bot (F5)").to_string(),
+        };
         if status_item(&mut left, &t, Some(dot), state).on_hover_text(tip).clicked() && has_project {
-            if running { self.bot.stop(&mut self.ed) } else { self.bot.start(&mut self.ed, &ctx) }
+            if running { self.bot.stop_pressed(&mut self.ed) } else { self.bot.run_pressed(&mut self.ed, &ctx) }
         }
         match self.ed.project.as_ref().map(|p| (p.meta.name.clone(), p.meta.mode.clone())) {
             Some((name, mode_id)) => {

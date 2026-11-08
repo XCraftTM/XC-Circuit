@@ -41,3 +41,13 @@ The first time XC Circuit connects to an SFTP server, it keeps the server's key 
 **Sign in with the panel** opens the panel's page for making an API key in your browser, with the permissions XC Circuit needs: reading your servers, their console, Start, Stop and Restart, and writing files. Approve it there, and the panel hands the key back to XC Circuit (on a one-time address on your computer). The key is named after the bot, such as *XC Circuit · Test Bot #a1b2* (the tag keeps it apart from earlier keys, as a panel takes each name once). You can also make a key yourself in the panel (Account › API Keys) and paste it: it needs the servers.read permission, and the servers are listed as soon as it's in. Then choose the server in the list.
 
 **Bot › Server console** shows the chosen server: its state, CPU and memory, **Start**, **Restart**, **Stop** and **Kill** (ends it at once, without letting it save), and its live console, in the colours the server prints (as in the panel). Like the Console, it can be a tab anywhere or an icon in the activity bar, shown in the side bar (drag its tab there). Left open when you close XC Circuit, the console tab comes back, connected, the next time it starts with that project.
+
+### Running the bot on the server
+
+With a Calagopus server chosen and signed in, a **Local | Server** switch shows beside **Run** at the top right. Pick **Server**, and Run, Restart and Stop (the buttons, F5 and Shift+F5, the Bot menu and the status bar) act on the server instead of this computer:
+
+- **Run** uploads what changed, then starts the server, so it runs the version you see. When it runs already, the button says **Restart**: it uploads, then restarts it.
+- **Stop** stops the server.
+- The status bar shows the server's state (*Server running*, *starting*, *stopping*, *stopped*), read every few seconds; hover it for the server's name, CPU and memory.
+
+Picking Server stops the bot running here, so the two don't both answer. The switch is kept per project; **Local** puts Run back on this computer (the server keeps running).

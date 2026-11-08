@@ -135,8 +135,8 @@ impl CircuitApp {
                 self.ed.theme.apply(ctx);
             }
             Cmd::ResetLayout => self.reset_layout(),
-            Cmd::Run => self.bot.start(&mut self.ed, ctx),
-            Cmd::Stop => self.bot.stop(&mut self.ed),
+            Cmd::Run => self.bot.run_pressed(&mut self.ed, ctx),
+            Cmd::Stop => self.bot.stop_pressed(&mut self.ed),
             Cmd::SlashCommands => crate::builders::slash::open(&mut self.ed),
             Cmd::Settings => self.bot.open_settings(&mut self.ed),
             Cmd::Export => self.bot.open_export(&self.ed),

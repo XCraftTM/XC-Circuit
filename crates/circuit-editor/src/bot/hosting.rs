@@ -81,11 +81,20 @@ pub struct HostingUi {
     sign_in: Option<calagopus::SignIn>,
     servers: Option<Receiver<Result<Vec<calagopus::Server>, String>>>,
     pub console: Option<ConsoleView>,
+    /// Server is picked beside Run: Run, Restart and Stop act on the server.
+    pub remote: bool,
+    /// The server's state while `remote`.
+    pub watch: Option<super::remote::Watch>,
+    /// Whether the project's server can be run from here (a Calagopus server
+    /// with a saved key), with what it was worked out for.
+    controllable: Option<(String, bool)>,
+    /// Stop on the server, under way.
+    power: Option<Receiver<Result<(), String>>>,
 }
 
 impl HostingUi {
     pub fn new() -> Self {
-        HostingUi { draft: None, job: None, log: VecDeque::new(), outcome: None, seen_saves: None, again: false, sign_in: None, servers: None, console: None }
+        HostingUi { draft: None, job: None, log: VecDeque::new(), outcome: None, seen_saves: None, again: false, sign_in: None, servers: None, console: None, remote: false, watch: None, controllable: None, power: None }
     }
 
     /// Bot › Server…: the tab with the project's settings.
@@ -148,6 +157,9 @@ impl HostingUi {
                     let text = result.unwrap_or_else(|e| e);
                     ed.log(if ok { Level::Success } else { Level::Error }, if ok { text.clone() } else { tf!("{what} failed: {error}", what = what, error = text) });
                     self.push_log(text.clone());
+                    if !ok && let Some(w) = &mut self.watch {
+                        w.forget_expect();
+                    }
                     self.outcome = Some(Outcome { at: Instant::now(), ok, text });
                     self.job = None;
                     if std::mem::take(&mut self.again) {
@@ -178,6 +190,7 @@ impl HostingUi {
                         match secrets::set(&p.root, hosting::API_KEY, &key) {
                             Ok(()) => {
                                 ed.log(Level::Success, t!("Signed in to the panel: the API key is kept in your system's credential store."));
+                                self.controllable = None;
                                 if let Some(d) = &mut self.draft {
                                     d.key_saved = true;
                                     d.api_key.clear();
@@ -247,6 +260,87 @@ impl HostingUi {
         if let Some(c) = &mut self.console {
             c.poll(ctx);
         }
+        self.poll_remote(ed, ctx);
+    }
+
+    /// Whether the project's server can be run from here: a Calagopus server
+    /// chosen, with its API key saved. Worked out again when the settings change.
+    pub fn can_control(&mut self, ed: &Editor) -> bool {
+        let Some(p) = &ed.project else { return false };
+        let h = settings_of(ed);
+        let key = format!("{}|{}", p.root.display(), serde_json::to_string(&h).unwrap_or_default());
+        if let Some((k, yes)) = &self.controllable
+            && *k == key
+        {
+            return *yes;
+        }
+        let yes = h.kind == Kind::Calagopus && !h.server.is_empty() && !h.panel.trim().is_empty() && secrets::get(&p.root, hosting::API_KEY).is_some();
+        self.controllable = Some((key, yes));
+        yes
+    }
+
+    /// Server picked (and possible) or not; the server's state read while it is.
+    fn poll_remote(&mut self, ed: &mut Editor, ctx: &egui::Context) {
+        let picked = ed.project.as_ref().is_some_and(|p| ed.prefs.remote_bots.contains(&p.root.display().to_string()));
+        self.remote = picked && self.can_control(ed);
+        if !self.remote {
+            self.watch = None;
+        } else {
+            let h = settings_of(ed);
+            if self.watch.as_ref().is_none_or(|w| w.server != h.server)
+                && let Some(key) = secrets_of(ed).api_key
+            {
+                let name = if h.server_name.is_empty() { h.server.clone() } else { h.server_name.clone() };
+                self.watch = Some(super::remote::Watch::new(calagopus::Panel::new(&h.panel, &key), h.server.clone(), name));
+            }
+        }
+        if let Some(w) = &mut self.watch {
+            w.poll(ctx);
+        }
+        if let Some(rx) = &self.power
+            && let Ok(result) = rx.try_recv()
+        {
+            self.power = None;
+            if let Err(e) = result {
+                if let Some(w) = &mut self.watch {
+                    w.forget_expect();
+                }
+                ed.log(Level::Error, tf!("The server didn't stop: {error}", error = e));
+            }
+        }
+    }
+
+    /// Run on the server: what changed is uploaded, then the server starts
+    /// (or restarts, when it runs), so it runs this version.
+    pub fn run_remote(&mut self, ed: &mut Editor) {
+        if self.job.is_some() {
+            ed.log(Level::Warn, t!("An upload is under way: press Run again once it's done."));
+            return;
+        }
+        let action = match self.watch.as_ref().map(|w| w.state()) {
+            Some("running" | "starting") => "restart",
+            _ => "start",
+        };
+        if let Some(w) = &mut self.watch {
+            w.expect(action);
+        }
+        self.start_upload(ed, Some(action));
+    }
+
+    /// Stop on the server.
+    pub fn stop_remote(&mut self, ed: &mut Editor) {
+        let h = settings_of(ed);
+        let Some(key) = secrets_of(ed).api_key else { return };
+        if let Some(w) = &mut self.watch {
+            w.expect("stop");
+        }
+        ed.log(Level::Info, tf!("Stopping the bot on {server}.", server = place_name(&h)));
+        let panel = calagopus::Panel::new(&h.panel, &key);
+        let (tx, rx) = channel();
+        self.power = Some(rx);
+        thread::spawn(move || {
+            let _ = tx.send(panel.power(&h.server, "stop").map_err(|e| format!("{e:#}")));
+        });
     }
 
     fn push_log(&mut self, line: String) {
@@ -274,6 +368,7 @@ impl HostingUi {
 
     /// Keeps the draft: settings into the project, typed secrets into the credential store.
     fn save_draft(&mut self, ed: &mut Editor) -> bool {
+        self.controllable = None;
         let (Some(d), Some(p)) = (&mut self.draft, &mut ed.project) else { return false };
         let mut ok = true;
         for (name, typed, saved) in [(hosting::PASSWORD, &mut d.password, &mut d.password_saved), (hosting::API_KEY, &mut d.api_key, &mut d.key_saved)] {
@@ -304,6 +399,12 @@ impl HostingUi {
     /// Exports the bot to the project's `.circuit/upload` folder and uploads
     /// what changed. A second upload asked for meanwhile follows this one.
     pub fn upload(&mut self, ed: &mut Editor) {
+        self.start_upload(ed, None);
+    }
+
+    /// Uploads what changed; `then`, a power action for the Calagopus server
+    /// afterwards (start, restart), in place of the restart after uploading.
+    fn start_upload(&mut self, ed: &mut Editor, then: Option<&'static str>) {
         if self.job.is_some() {
             self.again = true;
             return;
@@ -320,6 +421,8 @@ impl HostingUi {
             Err(e) => return ed.log(Level::Error, format!("Could not prepare the bot: {e:#}")),
         };
         let opts = super::export_options(ed, h.include_token, false);
+        // Run on the server starts (or restarts) it itself, after uploading.
+        let h = Hosting { restart: h.restart && then.is_none(), ..h };
         let local = project.root.join(".circuit");
         let (stage, record) = (local.join("upload"), local.join("upload.json"));
         let (tx, rx) = channel();
@@ -337,11 +440,24 @@ impl HostingUi {
                 let _ = std::fs::remove_file(stage.join(".env"));
                 done
             })();
-            let _ = tx.send(JobMsg::Done(match result {
+            let said = match result {
                 Ok(up) if up.sent.is_empty() => Ok(tf!("Nothing new to upload to {place}: it has this version already.", place = where_to)),
                 Ok(up) => Ok(tf!("Uploaded to {place}: {files}.", place = where_to, files = up.sent.join(", "))),
                 Err(e) => Err(format!("{e:#}")),
-            }));
+            };
+            // Then started (or restarted) on the server, for Run.
+            let said = match (said, then) {
+                (Ok(text), Some(action)) => {
+                    let panel = calagopus::Panel::new(&h.panel, s.api_key.as_deref().unwrap_or_default());
+                    match panel.power(&h.server, action) {
+                        Ok(()) if action == "restart" => Ok(format!("{text} {}", t!("Restarting the bot on the server."))),
+                        Ok(()) => Ok(format!("{text} {}", t!("Starting the bot on the server."))),
+                        Err(e) => Err(tf!("Uploaded, but the server didn't start: {error}", error = format!("{e:#}"))),
+                    }
+                }
+                (said, _) => said,
+            };
+            let _ = tx.send(JobMsg::Done(said));
         });
     }
 
@@ -962,6 +1078,30 @@ mod tests {
         ui.draft.as_mut().unwrap().typed_at = Some(std::time::Instant::now() - std::time::Duration::from_secs(1));
         ui.poll(&mut ed, &ctx);
         assert!(ui.servers.is_some() && ui.draft.as_ref().unwrap().servers_read, "read once the typing stopped");
+    }
+
+    /// Server picked beside Run counts only for a server that can be run
+    /// from here (Calagopus, with a server and a saved key): otherwise Run
+    /// stays local and nothing is read from a panel.
+    #[test]
+    fn server_is_only_used_when_it_can_be_run_from_here() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&root.join("examples/DemoBot"));
+        let ctx = egui::Context::default();
+        let mut ui = HostingUi::new();
+        let here = ed.project.as_ref().unwrap().root.display().to_string();
+        ed.prefs.remote_bots.push(here);
+        // FTP can't be started or stopped from here.
+        let h = Hosting { kind: Kind::Ftp, host: "ftp.example.com".into(), user: "bot".into(), ..Default::default() };
+        ed.project.as_mut().unwrap().meta.data.insert(DATA_KEY.into(), serde_json::to_value(&h).unwrap());
+        ui.poll(&mut ed, &ctx);
+        assert!(!ui.remote && ui.watch.is_none() && !ui.can_control(&ed));
+        // A Calagopus server, but no key saved for DemoBot: still local.
+        let h = Hosting { kind: Kind::Calagopus, panel: "http://127.0.0.1:9".into(), server: "u-1".into(), ..Default::default() };
+        ed.project.as_mut().unwrap().meta.data.insert(DATA_KEY.into(), serde_json::to_value(&h).unwrap());
+        ui.poll(&mut ed, &ctx);
+        assert!(!ui.remote && ui.watch.is_none(), "no key: Run stays local");
     }
 
     /// The console belongs to the project's server: it stays while that's

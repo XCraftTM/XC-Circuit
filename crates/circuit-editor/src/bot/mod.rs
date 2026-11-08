@@ -4,6 +4,7 @@ pub mod profile;
 pub mod servers;
 pub(crate) mod databases;
 pub mod hosting;
+pub mod remote;
 mod settings;
 
 pub use settings::SettingsDraft;
@@ -180,6 +181,33 @@ impl BotUi {
 
     /// Restarts a running bot, used after saving.
     /// After a save: restarts a running bot, unless that is turned off in Settings.
+    /// Run (or Restart), as the Run button does it: here, or with Server
+    /// picked beside it, on the bot's server.
+    pub fn run_pressed(&mut self, ed: &mut Editor, ctx: &egui::Context) {
+        if self.hosting.remote {
+            self.hosting.run_remote(ed);
+        } else {
+            self.start(ed, ctx);
+        }
+    }
+
+    /// Stop, as the Stop button does it (see [`BotUi::run_pressed`]).
+    pub fn stop_pressed(&mut self, ed: &mut Editor) {
+        if self.hosting.remote {
+            self.hosting.stop_remote(ed);
+        } else {
+            self.stop(ed);
+        }
+    }
+
+    /// The state Run and the status bar show: the server's with Server picked.
+    pub fn shown_state(&self) -> BotState {
+        match (&self.hosting.watch, self.hosting.remote) {
+            (Some(w), true) => w.bot_state(),
+            _ => self.state,
+        }
+    }
+
     pub fn restart_if_running(&mut self, ed: &mut Editor, ctx: &egui::Context) {
         if self.state != BotState::Stopped && ed.prefs.auto_restart {
             self.start(ed, ctx);
