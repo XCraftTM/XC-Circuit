@@ -251,7 +251,7 @@ tool({
 tool({
   name: "create_workspace",
   description: "Makes a new, empty workspace (in a sidebar folder, when given) and opens it. Returns its key.",
-  input: schema({ name: str, folder: { type: "string", description: "A sidebar folder to put it in." } }, ["name"]),
+  input: schema({ name: str, folder: { type: "string", description: "A sidebar folder to put it in; a folder in a folder is written with /, such as \"Tickets/Archive\"." } }, ["name"]),
   run({ name, folder }) {
     needProject();
     const key = xc.addWorkspace(name, { folder });

@@ -583,7 +583,8 @@ impl api::Host for EditorHost<'_> {
         }
         let project = self.ed.project.as_mut().ok_or("no project is open")?;
         let key = project.new_workspace_key(name);
-        let folder = folder.map(str::trim).filter(|f| !f.is_empty()).map(str::to_string);
+        // A folder in a folder is a path: "Tickets/Archive" (spaces around a / don't count).
+        let folder = folder.map(|f| f.split(crate::editor::folders::SEP).map(str::trim).filter(|n| !n.is_empty()).collect::<Vec<_>>().join("/")).filter(|f| !f.is_empty());
         if let Some(f) = &folder
             && !project.meta.folders.contains(f)
         {
@@ -875,6 +876,9 @@ mod tests {
         let made = host.call_tool(&mut ed, "create_workspace", &serde_json::json!({ "name": "Moderation", "folder": "Events" }), false).unwrap().unwrap();
         let moderation = made["key"].as_str().unwrap().to_string();
         assert!(ed.workspace(&moderation).is_some());
+        // A folder in a folder, as a path.
+        let nested = host.call_tool(&mut ed, "create_workspace", &serde_json::json!({ "name": "Archive", "folder": "Events / Old " }), false).unwrap().unwrap();
+        assert_eq!(ed.workspace(nested["key"].as_str().unwrap()).unwrap().folder.as_deref(), Some("Events/Old"));
 
         // Many things in one call: a flow built and wired by a script.
         let code = format!(

@@ -1,8 +1,10 @@
-//! The Workspaces panel: the project's workspaces as a tree with folders, and
-//! its slash commands. Drag a workspace onto a folder to move it there, or
-//! above or below another workspace to put it there (a line shows where);
-//! drag folders to order them too. Double-click a name to rename it. Each workspace shows its problems,
-//! whether its blocks just ran (or failed), and whether it's turned off.
+//! The Workspaces panel: the project's workspaces as a tree with folders (in
+//! folders), and its slash commands. Drag a workspace onto a folder to move it
+//! there, or above or below another workspace to put it there (a line shows
+//! where); drag a folder onto the middle of another to put it in there, or
+//! onto its top or bottom edge to put it above or below. Double-click a name
+//! to rename it. Each workspace shows its problems, whether its blocks just
+//! ran (or failed), and whether it's turned off.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -11,6 +13,7 @@ use circuit_core::Workspace;
 use eframe::egui::{self, Align2, Color32, CursorIcon, FontId, Id, Key, Rect, Response, RichText, ScrollArea, Sense, Stroke, Ui, pos2, vec2};
 
 use crate::ui::kit;
+use crate::editor::folders;
 use crate::editor::{Action, Editor, file_uri};
 use crate::ui::theme::{Theme, with_alpha};
 
@@ -49,6 +52,8 @@ enum Do {
     Place(String, Option<String>, String, bool),
     /// A folder dropped before (true) or after another folder.
     PlaceFolder(String, String, bool),
+    /// A folder dropped into another one (or onto the project: to the top).
+    NestFolder(String, Option<String>),
     /// Turns a workspace on (true) or off.
     SetEnabled(String, bool),
     DeleteWorkspace(String),
@@ -58,7 +63,8 @@ enum Do {
     Select(String, Pick),
     Duplicate(String),
     NewWorkspace(Option<String>),
-    NewFolder,
+    /// A new folder, in a folder or at the top.
+    NewFolder(Option<String>),
     DeleteFolder(String),
     Toggle(String),
     SlashCommands,
@@ -69,10 +75,12 @@ enum Do {
     SlashPlace(String, Option<String>, Option<(String, bool)>),
     /// Turns a command on (true) or off.
     SlashEnable(String, bool),
-    SlashNewFolder,
+    SlashNewFolder(Option<String>),
     SlashDeleteFolder(String),
     /// A command folder dropped before (true) or after another.
     SlashPlaceFolder(String, String, bool),
+    /// A command folder dropped into another one (or onto Slash commands: to the top).
+    SlashNestFolder(String, Option<String>),
     Export(crate::editor::exchange::Preselect),
     Import,
 }
@@ -105,6 +113,77 @@ fn insertion_line(ui: &Ui, theme: &Theme, rect: Rect, before: bool) {
     let left = rect.left() + 8.0;
     ui.painter().hline(left..=rect.right() - 8.0, y, Stroke::new(2.0, theme.accent));
     ui.painter().circle_filled(pos2(left, y), 3.5, theme.accent);
+}
+
+/// Where a folder dropped on another folder's row goes.
+#[derive(Clone, Copy, PartialEq)]
+enum Zone {
+    Before,
+    Into,
+    After,
+}
+
+/// Where a folder dropped on folder row `rect` goes: above it (the row's top
+/// third), below it (its bottom third), or into it.
+fn folder_zone(ui: &Ui, rect: Rect) -> Zone {
+    let y = ui.ctx().pointer_hover_pos().map_or(rect.center().y, |p| p.y);
+    let third = rect.height() / 3.0;
+    if y < rect.top() + third {
+        Zone::Before
+    } else if y > rect.bottom() - third {
+        Zone::After
+    } else {
+        Zone::Into
+    }
+}
+
+/// A folder (dragged as `D`, which `path_of` gives the path of) over folder
+/// row `resp` (at `path`): shows where it would land, and on release says
+/// which folder and where. Not into itself or a folder inside it.
+fn folder_drop<D: Send + Sync + 'static>(ui: &Ui, theme: &Theme, resp: &Response, path: &str, path_of: impl Fn(&D) -> &str) -> Option<(String, Zone)> {
+    if let Some(dragged) = resp.dnd_hover_payload::<D>()
+        && !folders::within(path, path_of(&dragged))
+    {
+        match folder_zone(ui, resp.rect) {
+            Zone::Into => {
+                ui.painter().rect_filled(resp.rect, 0.0, with_alpha(theme.accent, 60));
+            }
+            zone => insertion_line(ui, theme, resp.rect, zone == Zone::Before),
+        }
+    }
+    if egui::DragAndDrop::has_payload_of_type::<D>(ui.ctx())
+        && let Some(dragged) = resp.dnd_release_payload::<D>()
+        && !folders::within(path, path_of(&dragged))
+    {
+        return Some((path_of(&dragged).to_string(), folder_zone(ui, resp.rect)));
+    }
+    None
+}
+
+/// The tree below the project: each folder, then the folders in it, then
+/// its workspaces (or commands).
+enum Entry {
+    Folder(String),
+    Inside(String),
+}
+
+fn tree(all: &[String], parent: Option<&str>, out: &mut Vec<Entry>) {
+    for f in folders::children(all, parent) {
+        out.push(Entry::Folder(f.clone()));
+        tree(all, Some(f), out);
+        out.push(Entry::Inside(f.clone()));
+    }
+}
+
+/// The folders `path` is in (and itself, with `inclusive`), outermost first.
+fn around(path: &str, inclusive: bool) -> impl Iterator<Item = &str> {
+    let ends = path.match_indices(folders::SEP).map(|(i, _)| i);
+    ends.chain(inclusive.then_some(path.len())).map(move |i| &path[..i])
+}
+
+/// The project's workspace folders, every one, in the tree's order.
+fn ws_folders(project: &circuit_core::Project) -> Vec<String> {
+    folders::ordered(&project.meta.folders, project.workspaces.values().filter_map(|w| w.folder.as_deref()))
 }
 
 /// Icon files by name, looked up before the project is borrowed.
@@ -348,15 +427,8 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
     let order = std::cell::RefCell::new(Vec::<String>::new());
     let list_area = ui.max_rect();
 
-    // Folders in their saved order, plus any a workspace names that the list lacks.
-    let mut folders = project.meta.folders.clone();
-    for ws in project.workspaces.values() {
-        if let Some(f) = &ws.folder
-            && !folders.contains(f)
-        {
-            folders.push(f.clone());
-        }
-    }
+    // Folders in the tree's order, with any a workspace names that the list lacks.
+    let all_folders = ws_folders(project);
     let active = ed.active_workspace.clone();
     // What the running bot did lately, per workspace: when its blocks last ran, and whether one failed lately.
     let mut ran: HashMap<&str, (std::time::Instant, bool, Option<&str>)> = HashMap::new();
@@ -384,7 +456,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
         let (resp, _) = row(ui, &theme, &icons, Id::unique("sidebar-project"), 0, Some(is_open(PROJECT_ROW)), None, &project.meta.name, false, true, 54.0, false);
         let buttons = resp.rect;
         if row_button(ui, &theme, &icons, Rect::from_center_size(pos2(buttons.right() - 16.0, buttons.center().y), vec2(22.0, 22.0)), Id::unique("sidebar-new-folder"), "folder-plus", t!("New folder")).clicked() {
-            todo.push(Do::NewFolder);
+            todo.push(Do::NewFolder(None));
         } else if row_button(ui, &theme, &icons, Rect::from_center_size(pos2(buttons.right() - 40.0, buttons.center().y), vec2(22.0, 22.0)), Id::unique("sidebar-new-ws"), "plus", t!("New workspace")).clicked() {
             todo.push(Do::NewWorkspace(None));
         } else if resp.clicked() {
@@ -395,6 +467,12 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
         {
             todo.push(Do::Move((*key).clone(), None));
         }
+        // A folder dropped here goes to the top.
+        if egui::DragAndDrop::has_payload_of_type::<FolderDrag>(ui.ctx())
+            && let Some(dragged) = resp.dnd_release_payload::<FolderDrag>()
+        {
+            todo.push(Do::NestFolder(dragged.0.clone(), None));
+        }
         resp.context_menu(|ui| {
             ui.set_min_width(200.0);
             if item(ui, &theme, &icons, "plus", t!("New workspace"), false).clicked() {
@@ -402,7 +480,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                 ui.close();
             }
             if item(ui, &theme, &icons, "folder-plus", t!("New folder"), false).clicked() {
-                todo.push(Do::NewFolder);
+                todo.push(Do::NewFolder(None));
                 ui.close();
             }
             ui.separator();
@@ -528,13 +606,13 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                             todo.push(Do::Move(key.clone(), None));
                             ui.close();
                         }
-                        for f in &folders {
-                            if ws.folder.as_ref() != Some(f) && kit::menu_item(ui, f, None, true).clicked() {
+                        for f in &all_folders {
+                            if ws.folder.as_ref() != Some(f) && kit::menu_item(ui, folders::shown(f), None, true).clicked() {
                                 todo.push(Do::Move(key.clone(), Some(f.clone())));
                                 ui.close();
                             }
                         }
-                        if folders.iter().all(|f| ws.folder.as_ref() == Some(f)) && ws.folder.is_none() {
+                        if all_folders.is_empty() {
                             ui.label(RichText::new(t!("No folders yet")).color(theme.text_muted));
                         }
                     };
@@ -565,13 +643,33 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                 egui::Popup::menu(&more).show(|ui| menu(ui));
             };
 
-            for folder in &folders {
+            let mut entries = Vec::new();
+            tree(&all_folders, None, &mut entries);
+            for entry in &entries {
+                let folder = match entry {
+                    // A folder's workspaces, after the folders in it: hidden in a closed one.
+                    Entry::Inside(folder) => {
+                        if around(folder, true).all(&is_open) {
+                            let depth = folders::depth(folder) + 2;
+                            for (key, ws) in project.workspaces.iter().filter(|(_, w)| w.folder.as_ref() == Some(folder)) {
+                                workspace_row(ui, key, ws, depth, &mut todo, &mut renaming);
+                            }
+                        }
+                        continue;
+                    }
+                    Entry::Folder(folder) => folder,
+                };
+                if !around(folder, false).all(&is_open) {
+                    continue;
+                }
                 let target = Target::Folder(folder.clone());
                 let editing = renaming.as_ref().is_some_and(|r| r.target == target);
                 let open = is_open(folder);
-                let inside: Vec<&String> = project.workspaces.iter().filter(|(_, w)| w.folder.as_ref() == Some(folder)).map(|(k, _)| k).collect();
+                // Every workspace in it, also in the folders inside.
+                let inside: Vec<&String> = project.workspaces.iter().filter(|(_, w)| w.folder.as_deref().is_some_and(|f| folders::within(f, folder))).map(|(k, _)| k).collect();
                 let folder_problems: usize = inside.iter().map(|k| problems.get(*k).copied().unwrap_or(0)).sum();
-                let (resp, label_area) = row(ui, &theme, &icons, Id::unique(("sidebar-folder", folder)), 1, Some(open), Some("folder"), if editing { "" } else { folder }, false, false, 60.0, false);
+                let own = folders::name(folder);
+                let (resp, label_area) = row(ui, &theme, &icons, Id::unique(("sidebar-folder", folder)), folders::depth(folder) + 1, Some(open), Some("folder"), if editing { "" } else { own }, false, false, 60.0, false);
                 if !editing {
                     // How many workspaces it holds, and (closed) their problems.
                     let y = resp.rect.center().y;
@@ -590,7 +688,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                 } else {
                     let more = more_button(ui, &theme, &icons, resp.rect, Id::unique(("sidebar-folder-more", folder)));
                     if resp.double_clicked() {
-                        todo.push(Do::StartRename(target.clone(), folder.clone()));
+                        todo.push(Do::StartRename(target.clone(), own.to_string()));
                     } else if resp.clicked() {
                         todo.push(Do::Toggle(folder.clone()));
                     }
@@ -601,18 +699,13 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                     {
                         todo.push(Do::Move((*key).clone(), Some(folder.clone())));
                     }
-                    // Folders are ordered by dragging one above or below another.
+                    // Another folder dropped on its middle goes in it; on its top
+                    // or bottom edge, above or below it.
                     resp.dnd_set_drag_payload(FolderDrag(folder.clone()));
-                    if let Some(dragged) = resp.dnd_hover_payload::<FolderDrag>()
-                        && dragged.0 != *folder
-                    {
-                        insertion_line(ui, &theme, resp.rect, drops_before(ui, resp.rect));
-                    }
-                    if egui::DragAndDrop::has_payload_of_type::<FolderDrag>(ui.ctx())
-                        && let Some(dragged) = resp.dnd_release_payload::<FolderDrag>()
-                        && dragged.0 != *folder
-                    {
-                        todo.push(Do::PlaceFolder(dragged.0.clone(), folder.clone(), drops_before(ui, resp.rect)));
+                    match folder_drop::<FolderDrag>(ui, &theme, &resp, folder, |d| &d.0) {
+                        Some((dragged, Zone::Into)) => todo.push(Do::NestFolder(dragged, Some(folder.clone()))),
+                        Some((dragged, zone)) => todo.push(Do::PlaceFolder(dragged, folder.clone(), zone == Zone::Before)),
+                        None => {}
                     }
                     let mut menu = |ui: &mut Ui| {
                         ui.set_min_width(200.0);
@@ -620,8 +713,12 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                             todo.push(Do::NewWorkspace(Some(folder.clone())));
                             ui.close();
                         }
+                        if item(ui, &theme, &icons, "folder-plus", t!("New folder here"), false).clicked() {
+                            todo.push(Do::NewFolder(Some(folder.clone())));
+                            ui.close();
+                        }
                         if item(ui, &theme, &icons, "pencil", t!("Rename"), false).on_hover_text(t!("Or double-click its name")).clicked() {
-                            todo.push(Do::StartRename(target.clone(), folder.clone()));
+                            todo.push(Do::StartRename(target.clone(), own.to_string()));
                             ui.close();
                         }
                         let filled = !inside.is_empty();
@@ -630,18 +727,13 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                             ui.close();
                         }
                         ui.separator();
-                        if item(ui, &theme, &icons, "trash", RichText::new(t!("Delete folder")).color(theme.error), true).on_hover_text(t!("Its workspaces move out of it; none are deleted")).clicked() {
+                        if item(ui, &theme, &icons, "trash", RichText::new(t!("Delete folder")).color(theme.error), true).on_hover_text(t!("What's in it moves up a level; no workspace is deleted")).clicked() {
                             todo.push(Do::DeleteFolder(folder.clone()));
                             ui.close();
                         }
                     };
                     resp.context_menu(|ui| menu(ui));
                     egui::Popup::menu(&more).show(|ui| menu(ui));
-                }
-                if open {
-                    for (key, ws) in project.workspaces.iter().filter(|(_, w)| w.folder.as_ref() == Some(folder)) {
-                        workspace_row(ui, key, ws, 2, &mut todo, &mut renaming);
-                    }
                 }
             }
             for (key, ws) in project.workspaces.iter().filter(|(_, w)| w.folder.is_none()) {
@@ -670,7 +762,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
             let (resp, _) = row(ui, &theme, &icons, Id::unique("sidebar-slash"), 0, Some(open), None, t!("Slash commands"), false, true, 54.0, false);
             ui.painter().text(pos2(resp.rect.right() - 34.0, resp.rect.center().y), Align2::RIGHT_CENTER, roots.len().to_string(), FontId::proportional(11.5), theme.text_muted);
             if row_button(ui, &theme, &icons, Rect::from_center_size(pos2(resp.rect.right() - 16.0, resp.rect.center().y), vec2(22.0, 22.0)), Id::unique("sidebar-slash-folder"), "folder-plus", t!("New folder")).clicked() {
-                todo.push(Do::SlashNewFolder);
+                todo.push(Do::SlashNewFolder(None));
             } else if resp.clicked() {
                 todo.push(Do::Toggle(SLASH_ROW.into()));
             }
@@ -680,10 +772,16 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
             {
                 todo.push(Do::SlashPlace(dragged.0.clone(), None, None));
             }
+            // A folder dropped here goes to the top.
+            if egui::DragAndDrop::has_payload_of_type::<SlashFolderDrag>(ui.ctx())
+                && let Some(dragged) = resp.dnd_release_payload::<SlashFolderDrag>()
+            {
+                todo.push(Do::SlashNestFolder(dragged.0.clone(), None));
+            }
             resp.context_menu(|ui| {
                 ui.set_min_width(200.0);
                 if item(ui, &theme, &icons, "folder-plus", t!("New folder"), false).clicked() {
-                    todo.push(Do::SlashNewFolder);
+                    todo.push(Do::SlashNewFolder(None));
                     ui.close();
                 }
                 if item(ui, &theme, &icons, "slash", t!("Edit commands…"), false).clicked() {
@@ -745,7 +843,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                             ui.close();
                         }
                         for f in &slash_folders {
-                            if folder.as_ref() != Some(f) && kit::menu_item(ui, f, None, true).clicked() {
+                            if folder.as_ref() != Some(f) && kit::menu_item(ui, folders::shown(f), None, true).clicked() {
                                 todo.push(Do::SlashPlace(root.clone(), Some(f.clone()), None));
                                 ui.close();
                             }
@@ -761,15 +859,34 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
             };
 
             if open {
-                for folder in &slash_folders {
+                let in_folder = |root: &String, f: &str| first_of(root).is_some_and(|c| c.folder.as_deref().is_some_and(|cf| folders::within(cf, f)));
+                let mut entries = Vec::new();
+                tree(&slash_folders, None, &mut entries);
+                for entry in &entries {
+                    let folder = match entry {
+                        Entry::Inside(folder) => {
+                            if around(folder, true).all(|f| is_open(&slash_folder_key(f))) {
+                                let depth = folders::depth(folder) + 2;
+                                for root in roots.iter().filter(|r| first_of(r).is_some_and(|c| c.folder.as_ref() == Some(folder))) {
+                                    command_row(ui, root, depth, &mut todo);
+                                }
+                            }
+                            continue;
+                        }
+                        Entry::Folder(folder) => folder,
+                    };
+                    if !around(folder, false).all(|f| is_open(&slash_folder_key(f))) {
+                        continue;
+                    }
                     let target = Target::SlashFolder(folder.clone());
                     let editing = renaming.as_ref().is_some_and(|r| r.target == target);
                     let key = slash_folder_key(folder);
                     let folder_open = is_open(&key);
-                    let inside: Vec<&String> = roots.iter().filter(|r| first_of(r).is_some_and(|c| c.folder.as_ref() == Some(folder))).collect();
-                    let (resp, label_area) = row(ui, &theme, &icons, Id::unique(("sidebar-slash-folder", folder)), 1, Some(folder_open), Some("folder"), if editing { "" } else { folder }, false, false, 60.0, false);
+                    let inside = roots.iter().filter(|r| in_folder(r, folder)).count();
+                    let own = folders::name(folder);
+                    let (resp, label_area) = row(ui, &theme, &icons, Id::unique(("sidebar-slash-folder", folder)), folders::depth(folder) + 1, Some(folder_open), Some("folder"), if editing { "" } else { own }, false, false, 60.0, false);
                     if !editing {
-                        ui.painter().text(pos2(resp.rect.right() - 34.0, resp.rect.center().y), Align2::RIGHT_CENTER, inside.len().to_string(), FontId::proportional(11.0), theme.text_muted);
+                        ui.painter().text(pos2(resp.rect.right() - 34.0, resp.rect.center().y), Align2::RIGHT_CENTER, inside.to_string(), FontId::proportional(11.0), theme.text_muted);
                     }
                     if editing && let Some(r) = renaming.as_mut() {
                         match rename_box(ui, label_area, r) {
@@ -780,7 +897,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                     } else {
                         let more = more_button(ui, &theme, &icons, resp.rect, Id::unique(("sidebar-slash-folder-more", folder)));
                         if resp.double_clicked() {
-                            todo.push(Do::StartRename(target.clone(), folder.clone()));
+                            todo.push(Do::StartRename(target.clone(), own.to_string()));
                         } else if resp.clicked() {
                             todo.push(Do::Toggle(key.clone()));
                         }
@@ -790,36 +907,29 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                             todo.push(Do::SlashPlace(dragged.0.clone(), Some(folder.clone()), None));
                         }
                         resp.dnd_set_drag_payload(SlashFolderDrag(folder.clone()));
-                        if let Some(dragged) = resp.dnd_hover_payload::<SlashFolderDrag>()
-                            && dragged.0 != *folder
-                        {
-                            insertion_line(ui, &theme, resp.rect, drops_before(ui, resp.rect));
-                        }
-                        if egui::DragAndDrop::has_payload_of_type::<SlashFolderDrag>(ui.ctx())
-                            && let Some(dragged) = resp.dnd_release_payload::<SlashFolderDrag>()
-                            && dragged.0 != *folder
-                        {
-                            todo.push(Do::SlashPlaceFolder(dragged.0.clone(), folder.clone(), drops_before(ui, resp.rect)));
+                        match folder_drop::<SlashFolderDrag>(ui, &theme, &resp, folder, |d| &d.0) {
+                            Some((dragged, Zone::Into)) => todo.push(Do::SlashNestFolder(dragged, Some(folder.clone()))),
+                            Some((dragged, zone)) => todo.push(Do::SlashPlaceFolder(dragged, folder.clone(), zone == Zone::Before)),
+                            None => {}
                         }
                         let mut menu = |ui: &mut Ui| {
                             ui.set_min_width(200.0);
+                            if item(ui, &theme, &icons, "folder-plus", t!("New folder here"), false).clicked() {
+                                todo.push(Do::SlashNewFolder(Some(folder.clone())));
+                                ui.close();
+                            }
                             if item(ui, &theme, &icons, "pencil", t!("Rename"), false).on_hover_text(t!("Or double-click its name")).clicked() {
-                                todo.push(Do::StartRename(target.clone(), folder.clone()));
+                                todo.push(Do::StartRename(target.clone(), own.to_string()));
                                 ui.close();
                             }
                             ui.separator();
-                            if item(ui, &theme, &icons, "trash", RichText::new(t!("Delete folder")).color(theme.error), true).on_hover_text(t!("Its commands move out of it; none are deleted")).clicked() {
+                            if item(ui, &theme, &icons, "trash", RichText::new(t!("Delete folder")).color(theme.error), true).on_hover_text(t!("What's in it moves up a level; no command is deleted")).clicked() {
                                 todo.push(Do::SlashDeleteFolder(folder.clone()));
                                 ui.close();
                             }
                         };
                         resp.context_menu(|ui| menu(ui));
                         egui::Popup::menu(&more).show(|ui| menu(ui));
-                    }
-                    if folder_open {
-                        for root in &inside {
-                            command_row(ui, root, 2, &mut todo);
-                        }
                     }
                 }
                 for root in roots.iter().filter(|r| first_of(r).is_some_and(|c| c.folder.is_none())) {
@@ -875,32 +985,23 @@ fn apply(ed: &mut Editor, ctx: &egui::Context, todo: Vec<Do>, renaming: &mut Opt
                             ed.edited = true;
                         }
                     }
-                    Target::Folder(old) if old != name => {
-                        for ws in project.workspaces.values_mut().filter(|w| w.folder.as_ref() == Some(&old)) {
-                            ws.folder = Some(name.clone());
+                    Target::Folder(old) => {
+                        // The name typed is the folder's own; it stays where it is.
+                        let new = folders::child(folders::parent(&old), &name);
+                        let mut list = ws_folders(project);
+                        if folders::move_folder(&mut list, project.workspaces.values_mut().map(|w| &mut w.folder), &old, &new) {
+                            project.meta.folders = list;
+                            ed.edited = true;
                         }
-                        project.meta.folders.retain(|f| *f != name);
-                        match project.meta.folders.iter().position(|f| *f == old) {
-                            Some(i) => project.meta.folders[i] = name,
-                            None => project.meta.folders.push(name),
-                        }
-                        ed.edited = true;
                     }
-                    Target::Folder(_) => {}
-                    Target::SlashFolder(old) if old != name => {
+                    Target::SlashFolder(old) => {
+                        let new = folders::child(folders::parent(&old), &name);
                         let mut commands = crate::builders::slash::commands_of(project);
-                        let mut folders = crate::builders::slash::folders_of(project, &commands);
-                        for c in commands.iter_mut().filter(|c| c.folder.as_ref() == Some(&old)) {
-                            c.folder = Some(name.clone());
+                        let mut list = crate::builders::slash::folders_of(project, &commands);
+                        if folders::move_folder(&mut list, commands.iter_mut().map(|c| &mut c.folder), &old, &new) {
+                            ed.edited |= crate::builders::slash::save_to(project, &commands, &list);
                         }
-                        folders.retain(|f| *f != name);
-                        match folders.iter().position(|f| *f == old) {
-                            Some(i) => folders[i] = name,
-                            None => folders.push(name),
-                        }
-                        ed.edited |= crate::builders::slash::save_to(project, &commands, &folders);
                     }
-                    Target::SlashFolder(_) => {}
                 }
             }
             Do::Move(key, folder) => {
@@ -934,21 +1035,22 @@ fn apply(ed: &mut Editor, ctx: &egui::Context, todo: Vec<Do>, renaming: &mut Opt
                 }
             }
             Do::PlaceFolder(name, next_to, before) => {
-                // The list may lack folders only a workspace names: complete it first.
-                for ws in project.workspaces.values() {
-                    if let Some(f) = &ws.folder
-                        && !project.meta.folders.contains(f)
-                    {
-                        project.meta.folders.push(f.clone());
+                let mut list = ws_folders(project);
+                if let Some(now) = folders::place_folder(&mut list, project.workspaces.values_mut().map(|w| &mut w.folder), &name, &next_to, before) {
+                    project.meta.folders = list;
+                    if let Some(p) = folders::parent(&now) {
+                        uncollapse(ctx, p);
                     }
+                    ed.edited = true;
                 }
-                let folders = &mut project.meta.folders;
-                if name != next_to
-                    && let Some(i) = folders.iter().position(|f| *f == name)
-                {
-                    folders.remove(i);
-                    let at = folders.iter().position(|f| *f == next_to).map_or(folders.len(), |j| if before { j } else { j + 1 });
-                    folders.insert(at, name);
+            }
+            Do::NestFolder(name, into) => {
+                let mut list = ws_folders(project);
+                if folders::nest_folder(&mut list, project.workspaces.values_mut().map(|w| &mut w.folder), &name, into.as_deref()).is_some() {
+                    project.meta.folders = list;
+                    if let Some(f) = &into {
+                        uncollapse(ctx, f);
+                    }
                     ed.edited = true;
                 }
             }
@@ -1016,18 +1118,23 @@ fn apply(ed: &mut Editor, ctx: &egui::Context, todo: Vec<Do>, renaming: &mut Opt
                 *renaming = Some(Renaming { target: Target::Workspace(key), text: name, fresh: true });
                 ed.edited = true;
             }
-            Do::NewFolder => {
-                let name = unique(t!("New folder"), |n| project.meta.folders.iter().any(|f| f == n));
-                project.meta.folders.push(name.clone());
+            Do::NewFolder(parent) => {
+                let mut list = ws_folders(project);
+                let name = folders::free_name(&list, parent.as_deref(), t!("New folder"));
+                let path = folders::child(parent.as_deref(), &name);
+                list.push(path.clone());
+                project.meta.folders = list;
                 uncollapse(ctx, PROJECT_ROW);
-                *renaming = Some(Renaming { target: Target::Folder(name.clone()), text: name, fresh: true });
+                if let Some(p) = &parent {
+                    uncollapse(ctx, p);
+                }
+                *renaming = Some(Renaming { target: Target::Folder(path), text: name, fresh: true });
                 ed.edited = true;
             }
             Do::DeleteFolder(name) => {
-                project.meta.folders.retain(|f| *f != name);
-                for ws in project.workspaces.values_mut().filter(|w| w.folder.as_ref() == Some(&name)) {
-                    ws.folder = None;
-                }
+                let mut list = ws_folders(project);
+                folders::delete_folder(&mut list, project.workspaces.values_mut().map(|w| &mut w.folder), &name);
+                project.meta.folders = list;
                 ed.edited = true;
             }
             Do::Toggle(key) => ctx.data_mut(|d| {
@@ -1060,32 +1167,43 @@ fn apply(ed: &mut Editor, ctx: &egui::Context, todo: Vec<Do>, renaming: &mut Opt
                 }
                 ed.edited |= crate::builders::slash::save_to(project, &commands, &folders);
             }
-            Do::SlashNewFolder => {
+            Do::SlashNewFolder(parent) => {
                 let commands = crate::builders::slash::commands_of(project);
-                let mut folders = crate::builders::slash::folders_of(project, &commands);
-                let name = unique(t!("New folder"), |n| folders.iter().any(|f| f == n));
-                folders.push(name.clone());
-                ed.edited |= crate::builders::slash::save_to(project, &commands, &folders);
+                let mut list = crate::builders::slash::folders_of(project, &commands);
+                let name = folders::free_name(&list, parent.as_deref(), t!("New folder"));
+                let path = folders::child(parent.as_deref(), &name);
+                list.push(path.clone());
+                ed.edited |= crate::builders::slash::save_to(project, &commands, &list);
                 uncollapse(ctx, SLASH_ROW);
-                *renaming = Some(Renaming { target: Target::SlashFolder(name.clone()), text: name, fresh: true });
+                if let Some(p) = &parent {
+                    uncollapse(ctx, &slash_folder_key(p));
+                }
+                *renaming = Some(Renaming { target: Target::SlashFolder(path), text: name, fresh: true });
             }
             Do::SlashDeleteFolder(name) => {
                 let mut commands = crate::builders::slash::commands_of(project);
-                let mut folders = crate::builders::slash::folders_of(project, &commands);
-                for c in commands.iter_mut().filter(|c| c.folder.as_ref() == Some(&name)) {
-                    c.folder = None;
-                }
-                folders.retain(|f| *f != name);
-                ed.edited |= crate::builders::slash::save_to(project, &commands, &folders);
+                let mut list = crate::builders::slash::folders_of(project, &commands);
+                folders::delete_folder(&mut list, commands.iter_mut().map(|c| &mut c.folder), &name);
+                ed.edited |= crate::builders::slash::save_to(project, &commands, &list);
             }
             Do::SlashPlaceFolder(name, next_to, before) => {
-                let commands = crate::builders::slash::commands_of(project);
-                let mut folders = crate::builders::slash::folders_of(project, &commands);
-                if name != next_to && folders.contains(&name) {
-                    folders.retain(|f| *f != name);
-                    let at = folders.iter().position(|f| *f == next_to).map(|i| if before { i } else { i + 1 }).unwrap_or(folders.len());
-                    folders.insert(at, name);
-                    ed.edited |= crate::builders::slash::save_to(project, &commands, &folders);
+                let mut commands = crate::builders::slash::commands_of(project);
+                let mut list = crate::builders::slash::folders_of(project, &commands);
+                if let Some(now) = folders::place_folder(&mut list, commands.iter_mut().map(|c| &mut c.folder), &name, &next_to, before) {
+                    ed.edited |= crate::builders::slash::save_to(project, &commands, &list);
+                    if let Some(p) = folders::parent(&now) {
+                        uncollapse(ctx, &slash_folder_key(p));
+                    }
+                }
+            }
+            Do::SlashNestFolder(name, into) => {
+                let mut commands = crate::builders::slash::commands_of(project);
+                let mut list = crate::builders::slash::folders_of(project, &commands);
+                if folders::nest_folder(&mut list, commands.iter_mut().map(|c| &mut c.folder), &name, into.as_deref()).is_some() {
+                    ed.edited |= crate::builders::slash::save_to(project, &commands, &list);
+                    if let Some(f) = &into {
+                        uncollapse(ctx, &slash_folder_key(f));
+                    }
                 }
             }
             Do::Export(preselect) => crate::editor::exchange::open_export(ed, preselect),
@@ -1222,9 +1340,9 @@ mod tests {
         out.textures_delta.clear();
     }
 
-    /// The middle of tree row `i` (0 is the project).
+    /// The middle of tree row `i` (0 is the project; the list starts 4 px down).
     fn row_at(i: usize) -> Pos2 {
-        pos2(120.0, 8.0 + 4.0 + ROW_H * i as f32 + ROW_H / 2.0)
+        pos2(120.0, 4.0 + ROW_H * i as f32 + ROW_H / 2.0)
     }
 
     fn press(p: Pos2, down: bool) -> Event {
@@ -1280,6 +1398,66 @@ mod tests {
         click(&ctx, &mut ed, pos2(260.0 - 16.0, row_at(0).y));
         assert_eq!(ed.project.as_ref().unwrap().meta.folders, ["Commands", "Events", "New folder"]);
         assert!(ed.unsaved_now());
+    }
+
+    /// A folder dragged onto the middle of another goes in it, with its
+    /// workspaces; onto the project, back to the top. Slash command folders
+    /// nest the same way.
+    #[test]
+    fn folders_go_into_folders() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&root.join("examples/DemoBot"));
+        let ctx = egui::Context::default();
+        frame(&ctx, &mut ed, vec![]);
+        frame(&ctx, &mut ed, vec![]);
+        let drag = |ctx: &egui::Context, ed: &mut Editor, from: Pos2, to: Pos2| {
+            frame(ctx, ed, vec![Event::PointerMoved(from)]);
+            frame(ctx, ed, vec![press(from, true)]);
+            for i in 1..=8 {
+                frame(ctx, ed, vec![Event::PointerMoved(from + (to - from) * (i as f32 / 8.0))]);
+            }
+            frame(ctx, ed, vec![press(to, false)]);
+            frame(ctx, ed, vec![]);
+        };
+        let folder = |ed: &Editor, key: &str| ed.project.as_ref().unwrap().workspaces[key].folder.clone();
+
+        // Rows: DemoBot, Commands, Rank command, Events, Startup, Welcome. Events onto the middle of Commands.
+        drag(&ctx, &mut ed, row_at(3), row_at(1));
+        assert_eq!(folder(&ed, "welcome").as_deref(), Some("Commands/Events"), "its workspaces go along");
+        assert_eq!(ws_folders(ed.project.as_ref().unwrap()), ["Commands", "Commands/Events"]);
+
+        // A folder in it, made in place; deleting Commands lifts what's in it up a level.
+        apply(&mut ed, &ctx, vec![Do::NewFolder(Some("Commands/Events".into()))], &mut None);
+        assert!(ed.project.as_ref().unwrap().meta.folders.contains(&"Commands/Events/New folder".to_string()));
+        apply(&mut ed, &ctx, vec![Do::Rename(Target::Folder("Commands/Events/New folder".into()), "Old/ones".into())], &mut None);
+        assert!(ed.project.as_ref().unwrap().meta.folders.contains(&"Commands/Events/Old-ones".to_string()), "a / in a name doesn't make a folder");
+        apply(&mut ed, &ctx, vec![Do::DeleteFolder("Commands".into())], &mut None);
+        assert_eq!(ws_folders(ed.project.as_ref().unwrap()), ["Events", "Events/Old-ones"]);
+        assert_eq!(folder(&ed, "welcome").as_deref(), Some("Events"));
+        assert_eq!(folder(&ed, "rank-command"), None, "Commands' own workspace goes to the top");
+
+        // Rows now: DemoBot, Events, Old-ones, Startup, Welcome, Rank command. Old-ones onto the project: to the top.
+        frame(&ctx, &mut ed, vec![]);
+        drag(&ctx, &mut ed, row_at(2), row_at(0));
+        assert_eq!(ws_folders(ed.project.as_ref().unwrap()), ["Events", "Old-ones"]);
+
+        // Slash command folders in folders.
+        let commands = |ed: &Editor| crate::builders::slash::commands_of(ed.project.as_ref().unwrap());
+        let first = crate::builders::slash::roots(&commands(&ed))[0].clone();
+        apply(&mut ed, &ctx, vec![Do::SlashNewFolder(None)], &mut None);
+        apply(&mut ed, &ctx, vec![Do::SlashNewFolder(Some("New folder".into()))], &mut None);
+        apply(&mut ed, &ctx, vec![Do::SlashPlace(first.clone(), Some("New folder/New folder".into()), None)], &mut None);
+        let folder_of = |ed: &Editor| commands(ed).iter().find(|c| c.name.split_whitespace().next() == Some(first.as_str())).and_then(|c| c.folder.clone());
+        assert_eq!(folder_of(&ed).as_deref(), Some("New folder/New folder"));
+        frame(&ctx, &mut ed, vec![]);
+        apply(&mut ed, &ctx, vec![Do::SlashNestFolder("New folder/New folder".into(), None)], &mut None);
+        assert_eq!(folder_of(&ed).as_deref(), Some("New folder 2"), "to the top, next to one of the same name");
+        apply(&mut ed, &ctx, vec![Do::SlashDeleteFolder("New folder 2".into())], &mut None);
+        assert_eq!(folder_of(&ed), None);
+        // Drawing the nested lists doesn't fail.
+        apply(&mut ed, &ctx, vec![Do::SlashNewFolder(Some("New folder".into()))], &mut None);
+        frame(&ctx, &mut ed, vec![]);
     }
 
     /// Duplicate makes a copy with every block, turned off, and opens it;

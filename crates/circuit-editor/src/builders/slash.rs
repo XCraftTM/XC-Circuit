@@ -267,15 +267,11 @@ pub fn commands_of(project: &circuit_core::Project) -> Vec<SlashCommand> {
     list
 }
 
-/// The side bar's folders: the saved ones, then any a command names that the list lacks.
+/// The side bar's folders (paths, for folders in folders) in the tree's
+/// order: the saved ones, and any a command names that the list lacks.
 pub fn folders_of(project: &circuit_core::Project, commands: &[SlashCommand]) -> Vec<String> {
-    let mut folders: Vec<String> = project.meta.data.get(FOLDERS_KEY).and_then(|v| serde_json::from_value(v.clone()).ok()).unwrap_or_default();
-    for f in commands.iter().filter_map(|c| c.folder.clone()) {
-        if !folders.contains(&f) {
-            folders.push(f);
-        }
-    }
-    folders
+    let saved: Vec<String> = project.meta.data.get(FOLDERS_KEY).and_then(|v| serde_json::from_value(v.clone()).ok()).unwrap_or_default();
+    crate::editor::folders::ordered(&saved, commands.iter().filter_map(|c| c.folder.as_deref()))
 }
 
 /// Saves commands and folders into the project. Returns whether anything changed.

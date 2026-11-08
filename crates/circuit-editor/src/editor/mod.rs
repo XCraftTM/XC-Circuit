@@ -2,6 +2,7 @@
 //! block shapes, selection and the log.
 
 pub mod exchange;
+pub mod folders;
 pub mod history;
 pub mod keymap;
 pub mod prefs;

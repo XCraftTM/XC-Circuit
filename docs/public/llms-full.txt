@@ -1666,7 +1666,7 @@ Blocks run in your bot, which is a normal Node.js program. A block can read file
 | Undo / Redo | Ctrl+Z / Ctrl+Y (per workspace) |
 | Copy / Paste / Duplicate | Ctrl+C / Ctrl+V (at the mouse) / Ctrl+D; works across workspaces and projects |
 | First start | The welcome page sets up Node.js (finds it, or installs it: winget or the official installer on Windows, a private copy on Linux), a theme and an accent; Help › Welcome and setup… opens it again |
-| Workspaces in order | Drag a workspace above or below another (a line shows where), or onto a folder to move it there; drag folders to order them too. The order is saved with the project |
+| Workspaces in order | Drag a workspace above or below another (a line shows where), or onto a folder to move it there. Drag a folder onto the middle of another to put it in there (folders go in folders, as deep as you like), onto its top or bottom edge to put it above or below, or onto the project row to bring it back to the top. A folder's menu has **New folder here**; deleting a folder moves what's in it up a level. The order is saved with the project |
 | Side bar | The activity bar's icon picks what it shows (Workspaces, Stored Data, Plugins to start with); clicking the one shown folds it away. The icons work like tabs: drag one to reorder them, or out onto the main area to make it a tab there. Drag a tab (Workspaces, Inspector, Console, Problems, a plugin's panel) onto the activity bar to make it an icon. Right-click an icon › Move to the main area. View › Side bar and View › Panels tick what's open, as an icon or a tab: untick to take it away, tick to bring it back (Workspaces, Stored Data and Plugins into the activity bar, panels as a tab). Narrow, Settings and Bot settings show their pages as a dropdown |
 | Tour | Help › Take the tour: build a tiny bot on a practice project. What to click next glows (the Add block button, the Math entry, the two pins to wire, the Inspector's fields, Run), the card says what to do right now and what went wrong, and Do it for me does any step. Skip any time; arrow keys move between steps |
 | Backups | Every save keeps a snapshot outside the project (newest 20, plus one a day for 14 days; Settings › Backups). File › Restore from backup… compares them with now and restores the project or one workspace. Unsaved changes are copied every 30 s and offered back after a crash |
@@ -1694,7 +1694,7 @@ Blocks run in your bot, which is a normal Node.js program. A block can read file
 | Custom ids | Button Pressed, Select Menu Used and Modal Submitted offer the custom ids your layouts, forms and Button / Select Menu blocks use (Custom… types any other, such as one made while the bot runs). Problems says when an event waits for an id nothing has (often a typo) and when a button, menu or form has no event to handle it |
 | Components V2 | A Build Layout block designs a whole message from Discord's components: containers with an accent color, text (markdown), sections with a picture or button next to the text, media galleries, files, separators, rows of buttons (every style, emoji, link and premium) and select menus (options, users, roles, channels). Edit layout… opens the Layout Builder with a Discord preview; set Send Message's Format to Layout and connect the block. Pictures and files given as file paths are attached when sending |
 | JSON | The Embed Builder, Layout Builder, Modal Builder and Slash Commands each switch between Builder and JSON. The JSON is Discord's own: edit it or paste JSON from the Discord docs, discord.js `toJSON()` or a message designer, and it applies as soon as it is valid (errors show the line and column) |
-| Slash commands | Bot › Slash Commands…: options with choices (a name and a value each), length and number limits, channel kinds and autocomplete; subcommands and groups; translations of every name and description into Discord's languages; the permissions people need (any number), where the command works (servers, DMs with the bot, other DMs), how the bot is installed (server or account) and age-restricted. Registered when the bot starts, and checked against Discord at every start. In the side bar, under Slash commands: click one to edit it, drag them into order or into folders (the folder button makes one), and turn one off (right-click) so it isn't registered |
+| Slash commands | Bot › Slash Commands…: options with choices (a name and a value each), length and number limits, channel kinds and autocomplete; subcommands and groups; translations of every name and description into Discord's languages; the permissions people need (any number), where the command works (servers, DMs with the bot, other DMs), how the bot is installed (server or account) and age-restricted. Registered when the bot starts, and checked against Discord at every start. In the side bar, under Slash commands: click one to edit it, drag them into order or into folders (the folder button makes one; folders go in folders, as for workspaces), and turn one off (right-click) so it isn't registered |
 | Databases | Bot › Settings › Databases: connections to MariaDB, MySQL, PostgreSQL, SQLite or MongoDB, each with Test connection; the default database; where stored values are kept. The blocks Get Rows, Insert Row, Update Rows, Delete Rows and SQL Query use them ([Databases](./databases)) |
 | Stored data | Stored Data (the database icon in the activity bar) shows what `ctx.store` saved: add, change or delete values (read-only while the bot runs). Pick a database at the top to see its tables as a grid: page through the rows, double-click a cell to change it, Change and Delete in front of each row, Add row |
 | Plugins | The Plugins view of the side bar: every plugin and how it runs, Install…, Reload, Open folder. A switch turns a plugin off or on; the trash can removes it (after asking). The plugins that come with the app can't be turned off or removed |
@@ -3534,7 +3534,7 @@ My Bot/
 | `plugins` | Plugins the project uses, with the versions it was saved with. |
 | `settings` | Bot › Settings values, without secrets. |
 | `data` | Project-wide data: `slashCommands` (the Slash Command Builder's, in the side bar's order; an entry's `folder` and `disabled` are its side bar folder and whether it's turned off), `slashFolders` (those folders in order), and anything [editor plugins](./editor#changing-the-project) keep. |
-| `folders` | Workspace folders in the order of the Workspaces panel. |
+| `folders` | Workspace folders in the order of the Workspaces panel. A folder in a folder is its path with `/`, such as `Tickets/Archive`. |
 
 ## Workspaces
 
@@ -3564,7 +3564,7 @@ Each file in `workspaces/` is one workspace; its file name without `.json` is it
 | Key | Description |
 | --- | --- |
 | `name` | Shown in the Workspaces panel. |
-| `folder` | The folder it's listed in. |
+| `folder` | The folder it's listed in (a path such as `Tickets/Archive` for a folder in a folder). |
 | `nodes` | Blocks by id (the number shown in their title bar). |
 | `links` | Wires. |
 | `zones` | Try Zones by id. |

@@ -134,7 +134,7 @@ pub fn open_export(ed: &mut Editor, preselect: Preselect) {
         .map(|(k, ws)| {
             let on = match &preselect {
                 Preselect::All => true,
-                Preselect::Folder(f) => ws.folder.as_ref() == Some(f),
+                Preselect::Folder(f) => ws.folder.as_deref().is_some_and(|w| crate::editor::folders::within(w, f)),
                 Preselect::Workspace(key) => key == k,
             };
             (k.clone(), on)
