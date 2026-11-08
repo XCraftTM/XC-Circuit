@@ -895,25 +895,6 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             *modal_edit = Some(crate::builders::modal::ModalEdit::new(ws_key, id, &k, &value));
         }
 
-        // The corner grip: drag sideways to make any block wider (a layout's
-        // row of buttons, a long text) or narrower; a double-click puts it back.
-        // Just inside the right edge, clear of the output pins on it.
-        let grip = Rect::from_min_size(layout.rect.right_bottom() - vec2(19.0, 12.0), vec2(12.0, 10.0));
-        let g = cui.interact(grip, cui.scope_id().with(("width-grip", id)), Sense::click_and_drag()).on_hover_cursor(CursorIcon::ResizeHorizontal);
-        let grip_color = if g.hovered() || g.dragged() { theme.accent } else { with_alpha(theme.text_muted, 90) };
-        for i in 1..=2 {
-            let o = i as f32 * 4.0;
-            painter.line_segment([grip.right_bottom() - vec2(o, 1.0), grip.right_bottom() - vec2(1.0, o)], Stroke::new(1.2, grip_color));
-        }
-        if g.double_clicked() {
-            ws.nodes.get_mut(id).unwrap().width = None;
-            *edited = true;
-        } else if g.dragged() && g.drag_delta().x != 0.0 {
-            let node = ws.nodes.get_mut(id).unwrap();
-            node.width = Some((node.width.unwrap_or(layout.rect.width()) + g.drag_delta().x).clamp(NODE_WIDTH_RANGE.0, NODE_WIDTH_RANGE.1));
-            *edited = true;
-        }
-
         // Header interaction: the only place a block can be dragged.
         let head = cui.interact(layout.header, cui.scope_id().with(("head", id)), Sense::click_and_drag());
         // The block, by its name; chosen while selected.

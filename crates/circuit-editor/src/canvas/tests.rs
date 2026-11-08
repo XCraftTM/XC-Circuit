@@ -417,54 +417,6 @@ fn text_fields_keep_focus_and_their_size() {
 }
 
 #[test]
-fn any_block_gets_wider_at_its_corner() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
-    ed.open_project(&root.join("examples/DemoBot"));
-    let ctx = egui::Context::default();
-    let settle = |ed: &mut Editor| {
-        for _ in 0..6 {
-            frame(&ctx, ed, "rank-command", vec![]);
-        }
-    };
-    settle(&mut ed);
-    let press = |pos: Pos2, pressed: bool| egui::Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Default::default() };
-    // Block 1 (the event) on the screen: its canvas rectangle, moved and zoomed as drawn.
-    let on_screen = |ed: &Editor| {
-        let view = &ed.views["rank-command"];
-        let (origin, _) = view.last_origin.unwrap();
-        let rect = view.block_rects().into_iter().find(|(id, _)| id == "1").unwrap().1;
-        view.to_global(origin) * rect
-    };
-    let before = on_screen(&ed);
-    let grip = before.right_bottom() - vec2(13.0, 7.0) * ed.views["rank-command"].zoom;
-    for _ in 0..30 {
-        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerMoved(grip)]);
-    }
-    frame(&ctx, &mut ed, "rank-command", vec![press(grip, true)]);
-    for step in 1..=10 {
-        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerMoved(grip + vec2(8.0 * step as f32, 0.0))]);
-    }
-    frame(&ctx, &mut ed, "rank-command", vec![press(grip + vec2(80.0, 0.0), false)]);
-    settle(&mut ed);
-    let after = on_screen(&ed);
-    assert!((after.width() - before.width() - 80.0).abs() < 3.0, "grew {} px wider", after.width() - before.width());
-    assert!(ed.workspace("rank-command").unwrap().nodes["1"].width.is_some());
-
-    // A double-click on the grip puts the width back.
-    let grip = after.right_bottom() - vec2(13.0, 7.0) * ed.views["rank-command"].zoom;
-    for _ in 0..30 {
-        frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerMoved(grip)]);
-    }
-    for pressed in [true, false, true, false] {
-        frame(&ctx, &mut ed, "rank-command", vec![press(grip, pressed)]);
-    }
-    settle(&mut ed);
-    assert!(ed.workspace("rank-command").unwrap().nodes["1"].width.is_none(), "the width is reset");
-    assert!((on_screen(&ed).width() - before.width()).abs() < 1.0);
-}
-
-#[test]
 fn toolbar_buttons_show_the_pointer() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
@@ -560,5 +512,5 @@ fn preview_blocks_get_as_wide_as_their_message() {
     assert_eq!(width("short"), 300.0, "a short message keeps the usual width");
     assert!(width("buttons") > 300.0 && width("buttons") < 508.0, "room for the buttons side by side: {}", width("buttons"));
     assert_eq!(width("long"), 508.0, "long text stops at Discord's widest");
-    assert_eq!(width("given"), 320.0, "a width set with the grip stays");
+    assert_eq!(width("given"), 320.0, "a width it was given stays");
 }
