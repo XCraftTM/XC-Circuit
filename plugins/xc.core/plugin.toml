@@ -1,6 +1,6 @@
 id          = "xc.core"
 name        = "Circuit Core"
-version     = "1.0.52"
+version     = "1.0.53"
 author      = "XC Team"
 description = "Mode-independent blocks (flow, text, math, logic, stored data, databases, debug), the icon set and the built-in themes."
 icon        = "icons/block.svg"

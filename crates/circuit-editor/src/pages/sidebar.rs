@@ -67,6 +67,8 @@ enum Do {
     NewFolder(Option<String>),
     DeleteFolder(String),
     Toggle(String),
+    /// Opens a closed folder (something dragged was held over it).
+    Expand(String),
     SlashCommands,
     /// Slash Commands, opened on a command (its first word).
     SlashOpen(String),
@@ -107,12 +109,56 @@ fn drops_before(ui: &Ui, rect: Rect) -> bool {
     ui.ctx().pointer_hover_pos().is_some_and(|p| p.y < rect.center().y)
 }
 
-/// The line that shows where a dragged row will land: above or below `rect`.
-fn insertion_line(ui: &Ui, theme: &Theme, rect: Rect, before: bool) {
-    let y = if before { rect.top() } else { rect.bottom() };
-    let left = rect.left() + 8.0;
+/// The line that shows where a dragged row will land: above or below `rect`,
+/// starting where that row's content starts (`depth`), so it's clear which
+/// folder it lands in.
+fn insertion_line(ui: &Ui, theme: &Theme, rect: Rect, before: bool, depth: usize) {
+    let y = if before { rect.top() + 1.0 } else { rect.bottom() - 1.0 };
+    let left = rect.left() + 10.0 + depth as f32 * INDENT;
     ui.painter().hline(left..=rect.right() - 8.0, y, Stroke::new(2.0, theme.accent));
-    ui.painter().circle_filled(pos2(left, y), 3.5, theme.accent);
+    ui.painter().circle_stroke(pos2(left, y), 3.5, Stroke::new(2.0, theme.accent));
+}
+
+/// A row something dragged goes into (a folder, or the project): filled and outlined.
+fn into_target(ui: &Ui, theme: &Theme, rect: Rect) {
+    ui.painter().rect_filled(rect, 4.0, with_alpha(theme.accent, 55));
+    ui.painter().rect_stroke(rect.shrink(1.0), 4.0, Stroke::new(1.5, theme.accent), egui::StrokeKind::Inside);
+}
+
+/// What letting go would do, shown beside the pointer (see `drag_preview`);
+/// `ok` false when it can't go there.
+#[derive(Clone)]
+struct DropHint {
+    text: String,
+    ok: bool,
+}
+
+const HINT_KEY: &str = "sidebar-drop-hint";
+
+fn hint(ui: &Ui, text: impl Into<String>, ok: bool) {
+    ui.ctx().data_mut(|d| d.insert_temp(Id::unique(HINT_KEY), DropHint { text: text.into(), ok }));
+}
+
+/// Whether something has been held over closed folder row `resp` (opened
+/// and closed by `key`) for a moment: then it opens, to drop into a folder inside.
+fn held_over(ui: &Ui, resp: &Response, key: &str, open: bool) -> bool {
+    let id = Id::unique("sidebar-held-over");
+    if open || !egui::DragAndDrop::has_any_payload(ui.ctx()) || !resp.contains_pointer() {
+        if ui.ctx().data(|d| d.get_temp::<(String, f64)>(id)).is_some_and(|(k, _)| k == key) {
+            ui.ctx().data_mut(|d| d.remove::<(String, f64)>(id));
+        }
+        return false;
+    }
+    let now = ui.input(|i| i.time);
+    let since = match ui.ctx().data(|d| d.get_temp::<(String, f64)>(id)) {
+        Some((k, t)) if k == key => t,
+        _ => {
+            ui.ctx().data_mut(|d| d.insert_temp(id, (key.to_string(), now)));
+            now
+        }
+    };
+    ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
+    now - since > 0.7
 }
 
 /// Where a folder dropped on another folder's row goes.
@@ -141,14 +187,25 @@ fn folder_zone(ui: &Ui, rect: Rect) -> Zone {
 /// row `resp` (at `path`): shows where it would land, and on release says
 /// which folder and where. Not into itself or a folder inside it.
 fn folder_drop<D: Send + Sync + 'static>(ui: &Ui, theme: &Theme, resp: &Response, path: &str, path_of: impl Fn(&D) -> &str) -> Option<(String, Zone)> {
-    if let Some(dragged) = resp.dnd_hover_payload::<D>()
-        && !folders::within(path, path_of(&dragged))
-    {
-        match folder_zone(ui, resp.rect) {
-            Zone::Into => {
-                ui.painter().rect_filled(resp.rect, 0.0, with_alpha(theme.accent, 60));
+    if let Some(dragged) = resp.dnd_hover_payload::<D>() {
+        let dragged = path_of(&dragged);
+        let name = folders::name(path);
+        if folders::within(path, dragged) {
+            if path != dragged {
+                hint(ui, t!("Not into a folder inside itself"), false);
             }
-            zone => insertion_line(ui, theme, resp.rect, zone == Zone::Before),
+        } else {
+            match folder_zone(ui, resp.rect) {
+                Zone::Into => {
+                    into_target(ui, theme, resp.rect);
+                    hint(ui, tf!("Into {folder}", folder = name), true);
+                }
+                zone => {
+                    insertion_line(ui, theme, resp.rect, zone == Zone::Before, folders::depth(path) + 1);
+                    let place = if zone == Zone::Before { tf!("Above {name}", name = name) } else { tf!("Below {name}", name = name) };
+                    hint(ui, place, true);
+                }
+            }
         }
     }
     if egui::DragAndDrop::has_payload_of_type::<D>(ui.ctx())
@@ -336,15 +393,11 @@ fn row(ui: &mut Ui, theme: &Theme, icons: &Icons, id: Id, depth: usize, open: Op
         }
         None => crate::ui::kit::describe_selected(&resp, egui::Role::TreeItem, active, label),
     }
-    // A workspace dragged over a folder or the project goes into it (the row
-    // fills); over another workspace it goes next to it (a line shows where).
-    let drop_target = resp.dnd_hover_payload::<String>().is_some() && icon != Some("workspace");
+    let being_dragged = resp.dragged() && egui::DragAndDrop::has_any_payload(ui.ctx());
     if active {
         ui.painter().rect_filled(rect, 0.0, with_alpha(theme.accent, 38));
         ui.painter().rect_filled(Rect::from_min_size(rect.min, vec2(2.0, rect.height())), 0.0, theme.accent);
-    } else if drop_target {
-        ui.painter().rect_filled(rect, 0.0, with_alpha(theme.accent, 60));
-    } else if resp.hovered() {
+    } else if resp.hovered() && !egui::DragAndDrop::has_any_payload(ui.ctx()) {
         ui.painter().rect_filled(rect, 0.0, theme.panel_header);
     }
     let mut x = rect.left() + 10.0 + depth as f32 * INDENT;
@@ -365,6 +418,15 @@ fn row(ui: &mut Ui, theme: &Theme, icons: &Icons, id: Id, depth: usize, open: Op
     // Long names stop before the marks and buttons on the right.
     let clip = Rect::from_min_max(pos2(x, rect.top()), pos2((rect.right() - 4.0 - right).max(x), rect.bottom()));
     ui.painter().with_clip_rect(clip).galley(pos2(x, rect.center().y - galley.size().y / 2.0), galley, color);
+    // The row being dragged stays in its place, faded, with a dashed outline.
+    if being_dragged {
+        ui.painter().rect_filled(rect, 0.0, with_alpha(theme.panel, 170));
+        let r = rect.shrink2(vec2(4.0, 2.0));
+        let dash = Stroke::new(1.0, with_alpha(theme.accent, 160));
+        for (a, b) in [(r.left_top(), r.right_top()), (r.left_bottom(), r.right_bottom()), (r.left_top(), r.left_bottom()), (r.right_top(), r.right_bottom())] {
+            ui.painter().extend(egui::Shape::dashed_line(&[a, b], dash, 4.0, 3.0));
+        }
+    }
     (resp, Rect::from_min_max(pos2(x - 3.0, rect.top() + 2.0), pos2(rect.right() - 6.0, rect.bottom() - 2.0)))
 }
 
@@ -426,6 +488,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
     let selected = ed.ws_selection.clone();
     let order = std::cell::RefCell::new(Vec::<String>::new());
     let list_area = ui.max_rect();
+    ctx.data_mut(|d| d.remove::<DropHint>(Id::unique(HINT_KEY)));
 
     // Folders in the tree's order, with any a workspace names that the list lacks.
     let all_folders = ws_folders(project);
@@ -461,6 +524,13 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
             todo.push(Do::NewWorkspace(None));
         } else if resp.clicked() {
             todo.push(Do::Toggle(PROJECT_ROW.into()));
+        }
+        if resp.dnd_hover_payload::<String>().is_some() {
+            into_target(ui, &theme, resp.rect);
+            hint(ui, t!("Out of its folder, to the top"), true);
+        } else if resp.dnd_hover_payload::<FolderDrag>().is_some() {
+            into_target(ui, &theme, resp.rect);
+            hint(ui, t!("To the top"), true);
         }
         if egui::DragAndDrop::has_payload_of_type::<String>(ui.ctx())
             && let Some(key) = resp.dnd_release_payload::<String>()
@@ -552,7 +622,17 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                 if let Some(dragged) = resp.dnd_hover_payload::<String>()
                     && *dragged != *key
                 {
-                    insertion_line(ui, &theme, resp.rect, drops_before(ui, resp.rect));
+                    let before = drops_before(ui, resp.rect);
+                    insertion_line(ui, &theme, resp.rect, before, depth);
+                    let place = if before { tf!("Above {name}", name = ws.name) } else { tf!("Below {name}", name = ws.name) };
+                    // Said where it lands when that's another folder.
+                    let from = project.workspaces.get(&*dragged).and_then(|w| w.folder.clone());
+                    let text = match &ws.folder {
+                        _ if from == ws.folder => place,
+                        Some(f) => tf!("{place}, in {folder}", place = place, folder = folders::shown(f)),
+                        None => tf!("{place}, out of its folder", place = place),
+                    };
+                    hint(ui, text, true);
                 }
                 if egui::DragAndDrop::has_payload_of_type::<String>(ui.ctx())
                     && let Some(dragged) = resp.dnd_release_payload::<String>()
@@ -692,6 +772,13 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                     } else if resp.clicked() {
                         todo.push(Do::Toggle(folder.clone()));
                     }
+                    if resp.dnd_hover_payload::<String>().is_some() {
+                        into_target(ui, &theme, resp.rect);
+                        hint(ui, tf!("Into {folder}", folder = own), true);
+                    }
+                    if held_over(ui, &resp, folder, open) {
+                        todo.push(Do::Expand(folder.clone()));
+                    }
                     // egui's dnd_release_payload takes whatever is dragged, even of
                     // another type: ask for the one that's there.
                     if egui::DragAndDrop::has_payload_of_type::<String>(ui.ctx())
@@ -766,6 +853,13 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
             } else if resp.clicked() {
                 todo.push(Do::Toggle(SLASH_ROW.into()));
             }
+            if resp.dnd_hover_payload::<SlashDrag>().is_some() {
+                into_target(ui, &theme, resp.rect);
+                hint(ui, t!("Out of its folder, to the top"), true);
+            } else if resp.dnd_hover_payload::<SlashFolderDrag>().is_some() {
+                into_target(ui, &theme, resp.rect);
+                hint(ui, t!("To the top"), true);
+            }
             // A command dropped here leaves its folder.
             if egui::DragAndDrop::has_payload_of_type::<SlashDrag>(ui.ctx())
                 && let Some(dragged) = resp.dnd_release_payload::<SlashDrag>()
@@ -810,7 +904,17 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                 if let Some(dragged) = resp.dnd_hover_payload::<SlashDrag>()
                     && dragged.0 != *root
                 {
-                    insertion_line(ui, &theme, resp.rect, drops_before(ui, resp.rect));
+                    let before = drops_before(ui, resp.rect);
+                    insertion_line(ui, &theme, resp.rect, before, depth);
+                    let name = format!("/{root}");
+                    let place = if before { tf!("Above {name}", name = name) } else { tf!("Below {name}", name = name) };
+                    let from = first_of(&dragged.0).and_then(|c| c.folder.clone());
+                    let text = match &folder {
+                        _ if from == folder => place,
+                        Some(f) => tf!("{place}, in {folder}", place = place, folder = folders::shown(f)),
+                        None => tf!("{place}, out of its folder", place = place),
+                    };
+                    hint(ui, text, true);
                 }
                 if egui::DragAndDrop::has_payload_of_type::<SlashDrag>(ui.ctx())
                     && let Some(dragged) = resp.dnd_release_payload::<SlashDrag>()
@@ -901,6 +1005,13 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                         } else if resp.clicked() {
                             todo.push(Do::Toggle(key.clone()));
                         }
+                        if resp.dnd_hover_payload::<SlashDrag>().is_some() {
+                            into_target(ui, &theme, resp.rect);
+                            hint(ui, tf!("Into {folder}", folder = own), true);
+                        }
+                        if held_over(ui, &resp, &key, folder_open) {
+                            todo.push(Do::Expand(key.clone()));
+                        }
                         if egui::DragAndDrop::has_payload_of_type::<SlashDrag>(ui.ctx())
                             && let Some(dragged) = resp.dnd_release_payload::<SlashDrag>()
                         {
@@ -942,7 +1053,24 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
             }
         }
         ui.add_space(8.0);
+        // Held near the top or bottom edge while dragging, the list scrolls.
+        if egui::DragAndDrop::has_any_payload(ui.ctx())
+            && let Some(p) = ui.ctx().pointer_hover_pos()
+        {
+            let clip = ui.clip_rect();
+            let edge = 30.0;
+            if clip.x_range().contains(p.x) {
+                if (clip.top() - 12.0..clip.top() + edge).contains(&p.y) {
+                    ui.scroll_with_delta(vec2(0.0, 8.0));
+                    ui.ctx().request_repaint();
+                } else if (clip.bottom() - edge..clip.bottom() + 12.0).contains(&p.y) {
+                    ui.scroll_with_delta(vec2(0.0, -8.0));
+                    ui.ctx().request_repaint();
+                }
+            }
+        }
     });
+    drag_preview(&ctx, &theme, &icons, project);
 
     ctx.data_mut(|d| d.insert_temp(Id::unique(ORDER_KEY), order.into_inner()));
     // A click anywhere else, or Escape, ends the selection, so Delete deletes blocks again.
@@ -957,6 +1085,41 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
             d.insert_temp(Id::unique("sidebar-renaming"), r);
         }
         None => d.remove::<Renaming>(Id::unique("sidebar-renaming")),
+    });
+}
+
+/// What's being dragged, beside the pointer: its icon and name, and what
+/// letting go would do (red when it can't go there). The cursor grabs it.
+fn drag_preview(ctx: &egui::Context, theme: &Theme, icons: &Icons, project: &circuit_core::Project) {
+    let dragged: Option<(&str, String)> = if let Some(key) = egui::DragAndDrop::payload::<String>(ctx) {
+        Some(("workspace", project.workspaces.get(&*key).map(|w| w.name.clone()).unwrap_or_else(|| (*key).clone())))
+    } else if let Some(f) = egui::DragAndDrop::payload::<FolderDrag>(ctx) {
+        Some(("folder", folders::name(&f.0).to_string()))
+    } else if let Some(c) = egui::DragAndDrop::payload::<SlashDrag>(ctx) {
+        Some(("slash", format!("/{}", c.0)))
+    } else {
+        egui::DragAndDrop::payload::<SlashFolderDrag>(ctx).map(|f| ("folder", folders::name(&f.0).to_string()))
+    };
+    let (Some((icon, name)), Some(at)) = (dragged, ctx.pointer_hover_pos()) else { return };
+    if !ctx.input(|i| i.pointer.any_down()) {
+        return;
+    }
+    let said: Option<DropHint> = ctx.data(|d| d.get_temp(Id::unique(HINT_KEY)));
+    ctx.set_cursor_icon(if said.as_ref().is_some_and(|h| !h.ok) { CursorIcon::NotAllowed } else { CursorIcon::Grabbing });
+    egui::Area::new(Id::unique("sidebar-drag-preview")).order(egui::Order::Tooltip).fixed_pos(at + vec2(16.0, 10.0)).interactable(false).show(ctx, |ui| {
+        egui::Frame::new().fill(theme.panel_header).stroke(Stroke::new(1.0, theme.accent)).corner_radius(6).inner_margin(egui::Margin::symmetric(10, 6)).shadow(ctx.global_style().visuals.popup_shadow).show(ui, |ui| {
+            ui.spacing_mut().item_spacing.y = 2.0;
+            ui.horizontal(|ui| {
+                let (r, _) = ui.allocate_exact_size(vec2(ICON, ICON), Sense::hover());
+                icons.paint(ui, icon, r.center(), ICON, theme.accent);
+                ui.label(RichText::new(name).size(13.0).strong().color(theme.text));
+            });
+            let (text, color) = match &said {
+                Some(h) => (h.text.clone(), if h.ok { theme.accent } else { theme.error }),
+                None => (t!("Drop it on a folder, or above or below a row").to_string(), theme.text_muted),
+            };
+            ui.label(RichText::new(text).size(11.5).color(color));
+        });
     });
 }
 
@@ -1137,6 +1300,7 @@ fn apply(ed: &mut Editor, ctx: &egui::Context, todo: Vec<Do>, renaming: &mut Opt
                 project.meta.folders = list;
                 ed.edited = true;
             }
+            Do::Expand(key) => uncollapse(ctx, &key),
             Do::Toggle(key) => ctx.data_mut(|d| {
                 let list = d.get_persisted_mut_or_default::<Vec<String>>(Id::unique(COLLAPSED_KEY));
                 match list.iter().position(|c| *c == key) {
@@ -1458,6 +1622,54 @@ mod tests {
         // Drawing the nested lists doesn't fail.
         apply(&mut ed, &ctx, vec![Do::SlashNewFolder(Some("New folder".into()))], &mut None);
         frame(&ctx, &mut ed, vec![]);
+    }
+
+    /// While dragging, the preview says what letting go would do.
+    #[test]
+    fn dragging_says_where_it_goes() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&root.join("examples/DemoBot"));
+        let ctx = egui::Context::default();
+        frame(&ctx, &mut ed, vec![]);
+        frame(&ctx, &mut ed, vec![]);
+        let said = |ctx: &egui::Context| ctx.data(|d| d.get_temp::<DropHint>(Id::unique(HINT_KEY))).map(|h| (h.text, h.ok));
+        // Rows: DemoBot, Commands, Rank command, Events, Startup, Welcome. Welcome held over …
+        let from = row_at(5);
+        frame(&ctx, &mut ed, vec![Event::PointerMoved(from)]);
+        frame(&ctx, &mut ed, vec![press(from, true)]);
+        let mut over = |to: Pos2| {
+            for i in 1..=4 {
+                frame(&ctx, &mut ed, vec![Event::PointerMoved(from + (to - from) * (i as f32 / 4.0))]);
+            }
+            frame(&ctx, &mut ed, vec![]);
+            said(&ctx)
+        };
+        assert_eq!(over(row_at(1)), Some(("Into Commands".to_string(), true)), "a folder");
+        assert_eq!(over(row_at(2) - vec2(0.0, 6.0)), Some(("Above Rank command, in Commands".to_string(), true)), "a workspace in another folder");
+        assert_eq!(over(row_at(0)), Some(("Out of its folder, to the top".to_string(), true)), "the project");
+        frame(&ctx, &mut ed, vec![press(row_at(0), false)]);
+        frame(&ctx, &mut ed, vec![]);
+        assert_eq!(ed.project.as_ref().unwrap().workspaces["welcome"].folder, None);
+        assert_eq!(said(&ctx), None, "nothing said once let go");
+
+        // Held over a closed folder for a moment, it opens.
+        apply(&mut ed, &ctx, vec![Do::Toggle("Events".into())], &mut None);
+        let closed = |ctx: &egui::Context| ctx.data_mut(|d| d.get_persisted::<Vec<String>>(Id::unique(COLLAPSED_KEY)).unwrap_or_default()).contains(&"Events".to_string());
+        assert!(closed(&ctx));
+        // Rows: DemoBot, Commands, Rank command, Events (closed), Welcome.
+        let (from, to) = (row_at(2), row_at(3));
+        frame(&ctx, &mut ed, vec![Event::PointerMoved(from)]);
+        frame(&ctx, &mut ed, vec![press(from, true)]);
+        for i in 1..=4 {
+            frame(&ctx, &mut ed, vec![Event::PointerMoved(from + (to - from) * (i as f32 / 4.0))]);
+        }
+        assert!(closed(&ctx), "not at once");
+        for _ in 0..60 {
+            frame(&ctx, &mut ed, vec![]);
+        }
+        assert!(!closed(&ctx), "open after a moment");
+        frame(&ctx, &mut ed, vec![press(to, false)]);
     }
 
     /// Duplicate makes a copy with every block, turned off, and opens it;
