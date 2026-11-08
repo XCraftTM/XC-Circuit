@@ -37,10 +37,15 @@ const blocks = {
 };
 for (const b of Object.values(blocks)) b.file = "test.js";
 const n = (block, values = {}) => ({ block: block + "@1", at: [0, 0], values });
+// A runtime library that watches runs: told when each starts and ends.
+const watcher = {
+  file: "watch.js",
+  source: `module.exports = { id: "watch", setup(rt) { rt.watchRuns((outputs) => { rt.log.info("run started with " + Object.keys(outputs).sort().join(",")); return () => rt.log.info("run ended"); }); } };`,
+};
 const bundle = {
   project: { name: "Event values", mode: "test", settings: {}, data: {} },
   blocks,
-  libs: [],
+  libs: [watcher],
   workspaces: {
     main: {
       name: "Main",
@@ -65,7 +70,7 @@ const logs = () =>
     .map((e) => e.text);
 const started = Date.now();
 const poll = setInterval(() => {
-  const done = logs().some((l) => l.startsWith("wired:"));
+  const done = logs().includes("run ended");
   if (!done && Date.now() - started < 15000) return;
   clearInterval(poll);
   child.kill();
@@ -73,6 +78,9 @@ const poll = setInterval(() => {
     const lines = logs();
     assert.ok(lines.includes("unwired: server=Home interaction=i1 user=none"), `the event's server and interaction, not its user:\n${out}`);
     assert.ok(lines.includes("wired: server=Wired interaction=i1 user=none"), `a wire wins:\n${out}`);
+    const begun = lines.indexOf("run started with interaction,server,user");
+    assert.ok(begun >= 0 && begun < lines.indexOf("unwired: server=Home interaction=i1 user=none"), `the watcher hears the start first:\n${out}`);
+    assert.ok(lines.indexOf("run ended") > lines.indexOf("wired: server=Wired interaction=i1 user=none"), `and the end last:\n${out}`);
     console.log("event values test passed");
   } catch (e) {
     console.error(e.message);

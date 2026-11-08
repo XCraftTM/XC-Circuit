@@ -39,6 +39,8 @@ class Runtime {
     this.globalVars = new Map();
     this.workspaceVars = new Map();
     this.errorHandlers = [];
+    // Runtime libraries' run watchers: (event outputs) => cleanup when the run ends.
+    this.runWatchers = [];
     this.signalHandlers = new Map();
     /** Call Workspace: name -> handlers that start a run and resolve to its return value. */
     this.callHandlers = new Map();
@@ -341,6 +343,29 @@ class Runtime {
    * On Error blocks, or the log. An error in a run that On Error started is
    * only logged, so a failing On Error path can't set itself off again.
    */
+  /**
+   * Lets a runtime library watch every run an event starts: `fn(outputs)` is
+   * called when it starts and may return what to do when it ends (the Discord
+   * library answers interactions that take long, before Discord gives up).
+   */
+  watchRuns(fn) {
+    this.runWatchers.push(fn);
+  }
+
+  /** Tells the watchers a run started; returns what ends their watch. */
+  runStarted(outputs) {
+    const ends = [];
+    for (const fn of this.runWatchers) {
+      try {
+        const end = fn(outputs);
+        if (typeof end === "function") ends.push(end);
+      } catch (e) {
+        this.log.warn(`A run watcher failed: ${e.message}`);
+      }
+    }
+    return () => ends.forEach((end) => end());
+  }
+
   uncaught(err, node, event) {
     const details = describeError(err, node);
     this.emit("node", { ws: node.graph.key, node: node.id, phase: "error", error: details.message });
@@ -436,13 +461,16 @@ class Graph {
     run.setOutputs(node.id, outputs);
     this.rt.emit("node", { ws: this.key, node: node.id, phase: "enter", run: run.id });
     this.rt.emit("node", { ws: this.key, node: node.id, phase: "exit", run: run.id, ms: 0, outputs: this.rt.debug ? previews(outputs) : undefined });
-    return this.follow(run, node.id, "next").then(
-      () => run.returned,
-      (e) => {
-        this.rt.uncaught(e, e.__xcNode || node, node);
-        return undefined;
-      },
-    );
+    const ended = this.rt.runStarted(outputs);
+    return this.follow(run, node.id, "next")
+      .then(
+        () => run.returned,
+        (e) => {
+          this.rt.uncaught(e, e.__xcNode || node, node);
+          return undefined;
+        },
+      )
+      .finally(ended);
   }
 
   async follow(run, nodeId, flow, path = NO_ZONES) {

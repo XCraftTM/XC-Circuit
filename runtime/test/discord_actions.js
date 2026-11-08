@@ -226,6 +226,56 @@ const log = (name) => (...args) => {
   assert.deepStrictEqual(await finder("members/find_member.js", { server: srv, by: "id", user: "7" }, true), ["missing", { member: null }]);
   await assert.rejects(finder("members/find_member.js", { server: srv, by: "name", name: "zed" }, false), /Nobody named "zed"/);
 
+  // A slow run's interaction is answered in time: a button quietly, a command with "thinking…".
+  const { autoDefer } = require(path.join(blocks, "..", "runtime", "discord.js"));
+  const fake = (kind) => {
+    const i = { kind, deferred: false, replied: false, did: [] };
+    i.isRepliable = () => kind !== "autocomplete";
+    i.isAutocomplete = () => kind === "autocomplete";
+    i.isMessageComponent = () => kind === "button";
+    i.deferUpdate = async () => ((i.deferred = true), i.did.push("deferUpdate"));
+    i.deferReply = async () => ((i.deferred = true), i.did.push("deferReply"));
+    i.reply = async (p) => ((i.replied = true), i.did.push(["reply", p.content]));
+    i.editReply = async (p) => i.did.push(["editReply", p.content]);
+    i.followUp = async (p) => i.did.push(["followUp", p.content, (p.flags || []).includes("Ephemeral")]);
+    i.deleteReply = async () => i.did.push("deleteReply");
+    i.update = async (p) => i.did.push(["update", p.content]);
+    return i;
+  };
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const button = fake("button");
+  autoDefer(button, 20);
+  const command = fake("command");
+  autoDefer(command, 20);
+  const quick = fake("command");
+  const stop = autoDefer(quick, 20);
+  stop();
+  const answered = fake("command");
+  autoDefer(answered, 20);
+  answered.replied = true;
+  assert.strictEqual(autoDefer(fake("autocomplete"), 20), undefined, "autocomplete can't wait");
+  await wait(60);
+  assert.deepStrictEqual([button.did, button.xcAutoDeferred], [["deferUpdate"], "update"], "a button: quietly");
+  assert.deepStrictEqual([command.did, command.xcAutoDeferred], [["deferReply"], "reply"], "a command: thinking…");
+  assert.deepStrictEqual([quick.did, answered.did], [[], []], "a run that ended, or answered, is left alone");
+
+  // Send Message after that: a new message after a button, filled in after "thinking…".
+  const say = async (interaction, mode, isPrivate = false) => {
+    const b = load("messages/send_message.js");
+    const defaults = Object.fromEntries(Object.entries(b.fields).map(([k, f]) => [k, f.default ?? null]));
+    await b.run({ fields: { ...defaults, mode, text: "hi", private: isPrivate, interaction }, ctx: {} });
+    return interaction.did.slice(-1)[0];
+  };
+  assert.deepStrictEqual(await say(button, "reply", true), ["followUp", "hi", true], "after a quiet button answer: a new (private) message");
+  assert.deepStrictEqual(await say(command, "reply"), ["editReply", "hi"], "after thinking…: it's filled in");
+  assert.deepStrictEqual(await say(command, "reply", true), "deleteReply", "private after thinking…: sent privately, thinking… taken away");
+  assert.deepStrictEqual(command.did.slice(-2, -1)[0], ["followUp", "hi", true]);
+  assert.deepStrictEqual(await say(fake("command"), "reply"), ["reply", "hi"], "in time: a normal reply");
+  const defer = fake("command");
+  defer.deferred = true;
+  await say(defer, "defer");
+  assert.deepStrictEqual(defer.did, [], "Defer after an automatic one does nothing");
+
   // Mention: users, roles, channels, typed ids, lists, @everyone and @here.
   const mention = async (target, kind = "auto") => (await run("format/mention.js", { target, kind })).text;
   assert.strictEqual(await mention({ id: "1", username: "ada" }), "<@1>");

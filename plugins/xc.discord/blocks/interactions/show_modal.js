@@ -47,7 +47,7 @@ module.exports = {
     description:
       "Opens a form designed in the Modal Builder: questions with a box to type into, a select menu or a file upload, and texts. It must be the first answer to a command, button or menu (no Send Message before it). Answers arrive at Modal Submitted.",
     author: "XC Team",
-    version: "1.1.0",
+    version: "1.1.1",
   },
   search: {
     category: "components",
@@ -88,6 +88,9 @@ module.exports = {
     return connected.inputs ? { hide: ["form"] } : { hide: ["customId", "title"] };
   },
   async run({ fields: f, ctx }) {
+    // A form has to be the first answer, within Discord's 3 seconds.
+    if (f.interaction?.xcAutoDeferred) throw new Error("Show Modal came too late: a form must be the first answer, within 3 seconds of the command or button. Put it before the slow blocks.");
+    if (f.interaction) f.interaction.xcAnswering = true;
     const inputs = (f.inputs || []).flat().filter(Boolean).slice(0, 5);
     if (inputs.length) {
       await f.interaction.showModal(fromBlocks(inputs, f));

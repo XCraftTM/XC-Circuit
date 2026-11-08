@@ -13,6 +13,10 @@ While the bot runs, the editor shows what it does: blocks glow when they run, fa
 
 The bot runs as its own process: if a block crashes Node.js, the editor is unaffected, and the editor can't freeze the bot.
 
+## Answering in time
+
+Discord waits 3 seconds for an answer to a slash command, button, select menu or form, and then shows *This interaction failed*. When the blocks after one take longer (creating a channel, a transcript, a web request), the bot answers for them after 2.5 seconds: a button or menu quietly (its message stays as it is, and Send Message's reply comes as a new message), a command or form with *thinking…*, which Send Message's reply then fills in (a private reply comes privately, and *thinking…* goes away). So **Defer** is only needed to show *thinking…* at once. A form (Show Modal) can't come after that: put it before slow blocks.
+
 ## What Export does
 
 **Bot › Export…** writes a folder that runs on its own, without XC Circuit:

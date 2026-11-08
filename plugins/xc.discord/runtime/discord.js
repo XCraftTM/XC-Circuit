@@ -17,6 +17,9 @@ module.exports = {
     const client = new Client({ intents, partials: [Partials.Channel, Partials.Message, Partials.Reaction], ...sharding });
     rt.log.info(`Intents: ${names.length ? names.join(", ") : "Guilds"}`);
     if (sharding.shards) rt.log.info(`Shards: ${sharding.shardCount ?? "chosen by Discord"}`);
+    // A run that hasn't answered its button, menu, command or form after 2.5 s
+    // answers for itself, so Discord doesn't say "This interaction failed".
+    rt.watchRuns?.((outputs) => autoDefer(outputs && outputs.interaction));
     return { client, music: createMusic(rt, client), explainError };
   },
 
@@ -58,6 +61,27 @@ function shardOptions(setting) {
 }
 
 module.exports.shardOptions = shardOptions;
+
+/**
+ * Discord waits 3 seconds for an answer to a button, menu, command or form.
+ * When the run hasn't answered after `ms`, this answers for it: a button or
+ * menu quietly (its message stays as it is: what follows is a new message), a
+ * command or form with "thinking…" (what follows fills it in). Send Message
+ * reads `xcAutoDeferred` to answer the right way afterwards. Returns what
+ * stops the wait when the run ends first.
+ */
+function autoDefer(i, ms = 2500) {
+  if (!i || typeof i.isRepliable !== "function" || !i.isRepliable()) return undefined;
+  if (typeof i.isAutocomplete === "function" && i.isAutocomplete()) return undefined;
+  const timer = setTimeout(() => {
+    if (i.replied || i.deferred || i.xcAnswering) return;
+    const component = typeof i.isMessageComponent === "function" && i.isMessageComponent();
+    i.xcAutoDeferred = component ? "update" : "reply";
+    Promise.resolve(component ? i.deferUpdate() : i.deferReply()).catch(() => {});
+  }, ms);
+  return () => clearTimeout(timer);
+}
+module.exports.autoDefer = autoDefer;
 
 /** Discord's names for permissions, where the flag name doesn't read well. */
 const PERMISSION_NAMES = {

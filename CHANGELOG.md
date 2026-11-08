@@ -5,6 +5,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 ## Unreleased
 
 ### Added
+- **No more "This interaction failed" on slow flows**: when the blocks after a slash command, button, menu or form take longer than Discord's 3 seconds, the bot answers for them in time (quietly for buttons and menus, with *thinking…* for commands and forms), and Send Message's reply then arrives the right way. No Defer block needed.
 - **Fewer wires: the event's interaction and server**: an Interaction or Server input left unconnected takes the event's own, such as the slash command's interaction for Send Message's reply. The block shows **from the event** instead of *connect*. Users, members, channels and messages still need a wire, so an unconnected Ban can't hit the wrong person.
 - **The invite link asks for what your blocks need**: Invite your bot now offers, first, the permissions the project's blocks need (Create Channel needs Manage Channels, Moderate's ban needs Ban Members …), and lists them, so the bot doesn't fail later for a missing permission.
 - **Find Role, Find Channel and Find Member have a Missing path**: when what you look for isn't there, connect Missing to handle it (tell the user, use a default) instead of the whole flow stopping with an error. With nothing on Missing they fail as before. They also take mentions such as <@&id>, <#id> and <@id>.

@@ -29,7 +29,7 @@ module.exports = {
     name: "Send Message",
     description: "Replies to a command or button, or sends, replies to and edits messages in channels.",
     author: "XC Team",
-    version: "3.4.2",
+    version: "3.5.0",
   },
   search: {
     category: "send",
@@ -139,12 +139,30 @@ module.exports = {
       payload.files = all.length ? all : undefined;
     }
     const target = fields.interaction ?? (await channelOf(fields.channel, ctx)) ?? fields.message ?? (fields.user?.user ?? fields.user);
+    // Answered for us because the run took long (see the Discord runtime's autoDefer):
+    // "update" after a button or menu, "reply" ("thinking…") after a command or form.
+    const auto = fields.interaction ? fields.interaction.xcAutoDeferred : undefined;
+    if (fields.interaction) fields.interaction.xcAnswering = true;
+    const reply = async () => {
+      if (auto === "update") return target.followUp(payload);
+      if (!target.deferred) return target.reply({ ...payload, withResponse: true });
+      // "thinking…" can't turn private: answer privately and take it away.
+      if (auto === "reply" && fields.private) {
+        const sent = await target.followUp(payload);
+        await target.deleteReply().catch(() => {});
+        return sent;
+      }
+      return target.editReply(payload);
+    };
     const send = {
-      reply: () => (target.deferred ? target.editReply(payload) : target.reply({ ...payload, withResponse: true })),
+      reply,
       edit: () => target.editReply(payload),
       followup: () => target.followUp(payload),
-      defer: () => target.deferReply({ flags }),
-      update: () => target.update({ ...payload, flags: layout ? ["IsComponentsV2"] : undefined, withResponse: true }),
+      defer: () => (target.deferred || target.replied ? null : target.deferReply({ flags })),
+      update: () =>
+        auto === "update"
+          ? target.editReply({ ...payload, flags: layout ? ["IsComponentsV2"] : undefined })
+          : target.update({ ...payload, flags: layout ? ["IsComponentsV2"] : undefined, withResponse: true }),
       dm: () => target.send(payload),
       send: () => target.send(payload),
       msgReply: () => target.reply(payload),
