@@ -19,7 +19,27 @@ pub fn is_inline_editable(field: &FieldDef) -> bool {
 
 /// Whether a field is edited as free text (and so can be expanded on the canvas).
 pub fn is_plain_text(field: &FieldDef) -> bool {
-    !field.is_select() && !field.is_multiselect() && !field.by_id && field.type_name != "color" && is_inline_editable(field) && !matches!(field.ty.required(), PinType::Boolean | PinType::Number)
+    !field.is_select() && !field.is_multiselect() && !field.by_id && field.suggest.is_none() && field.type_name != "color" && is_inline_editable(field) && !matches!(field.ty.required(), PinType::Boolean | PinType::Number)
+}
+
+/// Where the project's custom ids are kept for this frame (see `share_suggestions`).
+const SUGGESTIONS: &str = "custom-id-suggestions";
+
+/// Puts the project's custom ids, by kind, where `suggest` fields find them.
+pub fn share_suggestions(ctx: &egui::Context, ids: std::collections::BTreeMap<String, Vec<String>>) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::unique(SUGGESTIONS), std::sync::Arc::new(ids)));
+}
+
+/// A custom id field of an event: the ids of its kind the project uses, then
+/// Custom… for any other (one made while the bot runs, say).
+fn suggested(ui: &mut Ui, id: egui::Id, field: &FieldDef, kind: &str, value: &mut Value, width: f32, full: bool) -> bool {
+    let all: Option<std::sync::Arc<std::collections::BTreeMap<String, Vec<String>>>> = ui.ctx().data(|d| d.get_temp(egui::Id::unique(SUGGESTIONS)));
+    let ids = all.as_ref().and_then(|a| a.get(kind)).cloned().unwrap_or_default();
+    let mut f = field.clone();
+    f.choices = Some(Value::Object(ids.iter().map(|i| (i.clone(), Value::String(i.clone()))).collect()));
+    f.custom = true;
+    f.placeholder = field.placeholder.clone().or_else(|| Some(t!("my-button").to_string()));
+    select_or_custom(ui, id, &f, value, width, full)
 }
 
 /// A field value as the text a text box shows.
@@ -39,6 +59,9 @@ pub fn value_editor(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Val
 }
 
 fn editor(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width: f32, multiline: bool, theme: &Theme) -> bool {
+    if let Some(kind) = field.suggest.as_deref() {
+        return suggested(ui, id, field, kind, value, width, multiline);
+    }
     if field.is_select() {
         return select(ui, id, field, value, width, multiline);
     }

@@ -96,6 +96,14 @@ pub struct FieldDef {
     /// other value. The value stays one text, so it can be connected too.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub custom: bool,
+    /// A custom id field of an event (Button Pressed): offers the ids of this
+    /// kind ("button", "select", "form") the project's layouts and blocks use.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggest: Option<String>,
+    /// A field that gives a button, menu or form its custom id ("button",
+    /// "select", "form"), for those suggestions and the checks in Problems.
+    #[serde(rename = "customIdOf", skip_serializing_if = "Option::is_none")]
+    pub custom_id_of: Option<String>,
     #[serde(skip)]
     pub ty: PinType,
     /// Its pin type can be looked up from an id (`fromId`): instead of

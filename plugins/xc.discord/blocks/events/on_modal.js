@@ -23,7 +23,7 @@ module.exports = {
     name: "Modal Submitted",
     description: "Runs when someone sends a form opened with Show Modal. Each text input's answer is an output.",
     author: "XC Team",
-    version: "1.1.0",
+    version: "1.2.0",
   },
   search: {
     category: "components",
@@ -37,7 +37,7 @@ module.exports = {
     intents: ["Guilds"],
   },
   fields: {
-    customId: { type: "text", pin: false, template: false, required: true, default: "", label: "Custom id", description: "The id given to the modal in Show Modal." },
+    customId: { type: "text", pin: false, template: false, required: true, default: "", suggest: "form", label: "Custom id", description: "The id given to the form in Show Modal: pick one, or type it." },
     match: { type: "select", pin: false, default: "equals", choices: MATCH, description: "How the id is compared." },
     inputIds: { type: "textarea", pin: false, template: false, default: "", label: "Input ids", description: "The ids of the modal's text inputs, one per line. Each becomes an output with the answer." },
   },

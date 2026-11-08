@@ -1,0 +1,230 @@
+//! Custom ids: the ids a project gives its buttons, menus and forms (in
+//! layouts, forms and blocks such as Button), and the events that handle them
+//! (Button Pressed, Select Menu Used, Modal Submitted). The events' Custom id
+//! fields offer the ids there are, and Problems says when one side has no
+//! partner: an event waiting for an id nothing uses, or a button nothing handles.
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use circuit_core::Project;
+use circuit_plugins::Registry;
+use serde_json::Value;
+
+/// A kind of thing with a custom id.
+pub const BUTTON: &str = "button";
+pub const SELECT: &str = "select";
+pub const FORM: &str = "form";
+
+/// One custom id the project gives something.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Source {
+    pub kind: &'static str,
+    pub id: String,
+    pub ws: String,
+    pub node: String,
+}
+
+/// An event waiting for a custom id.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Handler {
+    pub kind: String,
+    pub id: String,
+    /// "equals", "starts" or "pattern".
+    pub matching: String,
+    pub ws: String,
+    pub node: String,
+}
+
+/// What the project uses: the ids given (and whether some kind's ids are made
+/// while the bot runs, so they can't be known) and the events waiting for them.
+#[derive(Default, Debug)]
+pub struct Ids {
+    pub sources: Vec<Source>,
+    pub handlers: Vec<Handler>,
+    /// Kinds with ids that are connected or hold ${…}: not known before the bot runs.
+    pub unknown: BTreeSet<&'static str>,
+}
+
+fn kind_of(name: &str) -> Option<&'static str> {
+    [BUTTON, SELECT, FORM].into_iter().find(|k| *k == name)
+}
+
+/// Collects them from the workspaces that are on.
+pub fn collect(project: &Project, reg: &Registry) -> Ids {
+    let mut ids = Ids::default();
+    for (ws_key, ws) in project.workspaces.iter().filter(|(_, w)| !w.disabled) {
+        for (node_id, node) in &ws.nodes {
+            let Some(def) = reg.block(&node.block) else { continue };
+            for (key, f) in &def.fields {
+                let value = node.values.get(key).or(f.default.as_ref());
+                let wired = ws.links_into(node_id, key).next().is_some();
+                let mut give = |kind: &'static str, id: &str| {
+                    let id = id.trim();
+                    if id.is_empty() {
+                        return;
+                    }
+                    if id.contains("${") {
+                        ids.unknown.insert(kind);
+                    } else {
+                        ids.sources.push(Source { kind, id: id.to_string(), ws: ws_key.clone(), node: node_id.clone() });
+                    }
+                };
+                match f.type_name.as_str() {
+                    "layout" => {
+                        if let Some(v) = value {
+                            walk_layout(v.get("components").unwrap_or(&Value::Null), &mut give);
+                        }
+                    }
+                    "modal" => {
+                        if let Some(id) = value.and_then(|v| v.get("custom_id")).and_then(Value::as_str) {
+                            give(FORM, id);
+                        }
+                    }
+                    _ => {}
+                }
+                if let Some(kind) = f.custom_id_of.as_deref().and_then(kind_of) {
+                    if wired {
+                        ids.unknown.insert(kind);
+                    } else if let Some(id) = value.and_then(Value::as_str) {
+                        give(kind, id);
+                    }
+                }
+                if let Some(kind) = &f.suggest {
+                    let id = value.and_then(Value::as_str).unwrap_or_default().trim().to_string();
+                    let matching = node.values.get("match").and_then(Value::as_str).unwrap_or("equals").to_string();
+                    if !id.is_empty() {
+                        ids.handlers.push(Handler { kind: kind.clone(), id, matching, ws: ws_key.clone(), node: node_id.clone() });
+                    }
+                }
+            }
+        }
+    }
+    ids
+}
+
+/// Buttons (not links or premium) and menus in a layout, nested ones too.
+fn walk_layout(list: &Value, give: &mut dyn FnMut(&'static str, &str)) {
+    for c in list.as_array().into_iter().flatten() {
+        let ty = c.get("type").and_then(Value::as_u64).unwrap_or(0);
+        let id = c.get("custom_id").and_then(Value::as_str);
+        match (ty, id) {
+            (2, Some(id)) if !matches!(c.get("style").and_then(Value::as_u64), Some(5 | 6)) => give(BUTTON, id),
+            (3 | 5 | 6 | 7 | 8, Some(id)) => give(SELECT, id),
+            _ => {}
+        }
+        if let Some(a) = c.get("accessory") {
+            walk_layout(&Value::Array(vec![a.clone()]), give);
+        }
+        walk_layout(c.get("components").unwrap_or(&Value::Null), give);
+    }
+}
+
+impl Handler {
+    /// Whether this event runs for `id`, as the runtime matches it.
+    pub fn takes(&self, id: &str) -> bool {
+        match self.matching.as_str() {
+            "starts" => id.starts_with(&self.id),
+            // A pattern we can't read is taken as matching: no false alarm.
+            "pattern" => regex::Regex::new(&self.id).map(|r| r.is_match(id)).unwrap_or(true),
+            _ => id == self.id,
+        }
+    }
+}
+
+impl Ids {
+    /// The ids of each kind, sorted, for the events' Custom id fields.
+    pub fn suggestions(&self) -> BTreeMap<String, Vec<String>> {
+        let mut out: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        for s in &self.sources {
+            out.entry(s.kind.to_string()).or_default().insert(s.id.clone());
+        }
+        out.into_iter().map(|(k, v)| (k, v.into_iter().collect())).collect()
+    }
+
+    /// What doesn't fit: (workspace, block, message).
+    pub fn problems(&self) -> Vec<(String, String, String)> {
+        let mut out = Vec::new();
+        let noun = |kind: &str| match kind {
+            SELECT => t!("menu"),
+            FORM => t!("form"),
+            _ => t!("button"),
+        };
+        // An event waiting for an exact id nothing gives (unless such ids are made while running).
+        for h in self.handlers.iter().filter(|h| h.matching == "equals" && !h.id.contains("${")) {
+            let Some(kind) = kind_of(&h.kind) else { continue };
+            if self.unknown.contains(kind) || self.sources.iter().any(|s| s.kind == kind && s.id == h.id) {
+                continue;
+            }
+            out.push((h.ws.clone(), h.node.clone(), tf!("no {thing} has the custom id “{id}”, so this never runs: check it is spelled like the {thing}'s", thing = noun(kind), id = h.id)));
+        }
+        // A button, menu or form no event takes.
+        let mut told = BTreeSet::new();
+        for s in &self.sources {
+            if self.handlers.iter().any(|h| h.kind == s.kind && h.takes(&s.id)) || !told.insert((s.kind, s.id.clone())) {
+                continue;
+            }
+            let event = match s.kind {
+                SELECT => t!("Select Menu Used"),
+                FORM => t!("Modal Submitted"),
+                _ => t!("Button Pressed"),
+            };
+            out.push((s.ws.clone(), s.node.clone(), tf!("nothing handles the {thing} “{id}”: add {event} with this custom id", thing = noun(s.kind), id = s.id, event = event)));
+        }
+        out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn ids_in_layouts_blocks_and_forms_meet_their_events() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let ed = crate::editor::Editor::new(vec![root.join("plugins")], None).unwrap();
+        let dir = std::env::temp_dir().join(format!("xc-custom-ids-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut project = Project::create(&dir, "Ids", "discord-bot").unwrap();
+        let node = |block: &str, values: Value| circuit_core::Node { block: block.into(), values: values.as_object().cloned().unwrap_or_default(), ..Default::default() };
+        let ws = project.workspaces.values_mut().next().unwrap();
+        ws.nodes.insert(
+            "lay".into(),
+            node("discord.build_layout@1", json!({ "layout": { "components": [{ "type": 17, "components": [
+                { "type": 1, "components": [
+                    { "type": 2, "style": 4, "label": "Close", "custom_id": "ticket-close" },
+                    { "type": 2, "style": 5, "label": "Site", "url": "https://x.example" },
+                    { "type": 2, "style": 1, "label": "Vote", "custom_id": "vote:${id}" }
+                ] },
+                { "type": 1, "components": [{ "type": 3, "custom_id": "ticket-open", "options": [] }] }
+            ] }] } })),
+        );
+        ws.nodes.insert("btn".into(), node("discord.button@1", json!({ "customId": "help" })));
+        ws.nodes.insert("form".into(), node("discord.show_modal@1", json!({ "form": { "title": "T", "custom_id": "apply", "components": [] } })));
+        ws.nodes.insert("onClose".into(), node("discord.on_button@1", json!({ "customId": "ticket-close" })));
+        ws.nodes.insert("onTypo".into(), node("discord.on_button@1", json!({ "customId": "tiket-close" })));
+        ws.nodes.insert("onVote".into(), node("discord.on_button@1", json!({ "customId": "vote:", "match": "starts" })));
+        ws.nodes.insert("onApply".into(), node("discord.on_modal@1", json!({ "customId": "apply" })));
+        let ids = collect(&project, &ed.reg);
+        let sugg = ids.suggestions();
+        assert_eq!(sugg[BUTTON], ["help", "ticket-close"], "links have no id; ${{…}} ids aren't known");
+        assert_eq!(sugg[SELECT], ["ticket-open"]);
+        assert!(sugg[FORM].contains(&"apply".to_string()));
+        assert!(ids.unknown.contains(BUTTON));
+        let problems = ids.problems();
+        let about = |node: &str| problems.iter().filter(|(_, n, _)| n == node).map(|(_, _, m)| m.clone()).collect::<Vec<_>>();
+        assert!(about("onClose").is_empty() && about("onVote").is_empty() && about("onApply").is_empty(), "{problems:?}");
+        assert!(about("onTypo").is_empty(), "made-while-running button ids exist, so a typo can't be told apart: {problems:?}");
+        assert!(about("btn").iter().any(|m| m.contains("nothing handles the button “help”")), "{problems:?}");
+        assert!(about("lay").iter().any(|m| m.contains("nothing handles the menu “ticket-open”")), "{problems:?}");
+        assert!(!about("lay").iter().any(|m| m.contains("ticket-close")), "handled: {problems:?}");
+
+        // Without ids made while running, the typo shows.
+        project.workspaces.values_mut().next().unwrap().nodes.shift_remove("lay");
+        let ids = collect(&project, &ed.reg);
+        let problems = ids.problems();
+        assert!(problems.iter().any(|(_, n, m)| n == "onTypo" && m.contains("no button has the custom id “tiket-close”")), "{problems:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

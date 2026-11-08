@@ -409,6 +409,12 @@ pub fn collect_problems(ed: &mut Editor) -> Vec<ProblemItem> {
                 }
             }
         }
+        // Custom ids: events waiting for an id nothing gives, and buttons nothing handles.
+        for (ws_key, node, why) in crate::editor::custom_ids::collect(project, &ed.reg).problems() {
+            let Some(ws) = project.workspaces.get(&ws_key) else { continue };
+            let name = ws.nodes.get(&node).and_then(|n| ed.reg.block(&n.block)).map(|d| d.name.clone()).unwrap_or_default();
+            items.push((format!("{} › {name}", ws.name), why, Some((ws_key, node))));
+        }
         // Workspaces that are off don't run, so their blocks aren't checked.
         for (key, ws) in project.workspaces.iter().filter(|(_, ws)| !ws.disabled) {
             for (id, node) in &ws.nodes {

@@ -21,7 +21,7 @@ module.exports = {
     name: "Select Menu Used",
     description: "Runs when someone picks from a select menu whose custom id matches.",
     author: "XC Team",
-    version: "1.1.0",
+    version: "1.2.0",
   },
   search: {
     category: "components",
@@ -35,7 +35,7 @@ module.exports = {
     intents: ["Guilds"],
   },
   fields: {
-    customId: { type: "text", pin: false, template: false, required: true, default: "", label: "Custom id", description: "The id given to the menu when it was built." },
+    customId: { type: "text", pin: false, template: false, required: true, default: "", suggest: "select", label: "Custom id", description: "The id given to the menu when it was built: pick one your layouts and Select Menu blocks use, or type it." },
     match: { type: "select", pin: false, default: "equals", choices: MATCH, description: "How the id is compared." },
   },
   outputs: {

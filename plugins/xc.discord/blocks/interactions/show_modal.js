@@ -73,7 +73,7 @@ module.exports = {
       },
       description: "The form: its title, its custom id (what Modal Submitted matches) and up to 5 questions and texts. Open the Modal Builder to edit it.",
     },
-    customId: { type: "text", default: "my-form", label: "Custom id", description: "Identifies the form in Modal Submitted (with blocks wired into Inputs)." },
+    customId: { type: "text", default: "my-form", customIdOf: "form", label: "Custom id", description: "Identifies the form in Modal Submitted (with blocks wired into Inputs)." },
     title: { type: "text", default: "Tell us more", description: "The form's title, up to 45 characters (with blocks wired into Inputs)." },
     inputs: {
       type: "list<discord.component>",

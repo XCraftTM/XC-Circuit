@@ -5,6 +5,7 @@ pub mod exchange;
 pub mod history;
 pub mod keymap;
 pub mod prefs;
+pub mod custom_ids;
 pub mod values;
 
 use std::collections::HashMap;

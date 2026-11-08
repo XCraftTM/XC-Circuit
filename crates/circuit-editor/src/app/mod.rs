@@ -488,6 +488,9 @@ impl eframe::App for CircuitApp {
         let key = (self.ed.history.revision(), self.ed.reloads, self.ed.prefs.language.clone());
         if self.problems_found.as_ref().is_none_or(|(k, _)| *k != key) {
             self.problems_found = Some((key, panels::collect_problems(&mut self.ed)));
+            // The custom ids events offer change with the project, too.
+            let ids = self.ed.project.as_ref().map(|p| crate::editor::custom_ids::collect(p, &self.ed.reg).suggestions()).unwrap_or_default();
+            crate::ui::widgets::share_suggestions(ui.ctx(), ids);
         }
         let mut problems = self.problems_found.as_ref().map(|(_, p)| p.clone()).unwrap_or_default();
         problems.extend(self.plugin_host.problems());

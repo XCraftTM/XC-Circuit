@@ -21,7 +21,7 @@ module.exports = {
     name: "Button Pressed",
     description: "Runs when someone presses a button whose custom id matches.",
     author: "XC Team",
-    version: "1.2.0",
+    version: "1.3.0",
   },
   search: {
     category: "components",
@@ -34,7 +34,7 @@ module.exports = {
     intents: ["Guilds"],
   },
   fields: {
-    customId: { type: "text", pin: false, template: false, required: true, default: "", label: "Custom id", description: "The id given to the button when it was built." },
+    customId: { type: "text", pin: false, template: false, required: true, default: "", suggest: "button", label: "Custom id", description: "The id given to the button when it was built: pick one your layouts and Button blocks use, or type it." },
     match: { type: "select", pin: false, default: "equals", choices: MATCH, description: "How the id is compared. Starts with lets one block handle buttons like vote:1, vote:2 …" },
   },
   outputs: {

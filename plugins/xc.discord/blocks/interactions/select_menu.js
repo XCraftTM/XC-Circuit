@@ -19,7 +19,7 @@ module.exports = {
     name: "Select Menu",
     description: "A dropdown to attach to a message. Picks arrive at Select Menu Used with the same custom id.",
     author: "XC Team",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   search: {
     category: "components",
@@ -31,7 +31,7 @@ module.exports = {
   },
   fields: {
     menuType: { type: "select", pin: false, default: "string", label: "Choose from", choices: TYPES, description: "What people pick: options you list, or users, roles or channels of the server." },
-    customId: { type: "text", default: "my-menu", label: "Custom id", description: "Identifies the menu in Select Menu Used." },
+    customId: { type: "text", default: "my-menu", customIdOf: "select", label: "Custom id", description: "Identifies the menu in Select Menu Used." },
     options: { type: "textarea", default: "red | Red\nblue | Blue", show: { menuType: ["string"] }, description: "One option per line: value | Label | description | emoji. Only a label is fine too." },
     items: { type: "list<any>", pin: "only", multi: true, show: { menuType: ["string"] }, description: "More options from a list: texts, or objects with label, value and description." },
     placeholder: { type: "text", default: "Choose …", description: "Shown before anything is picked." },
