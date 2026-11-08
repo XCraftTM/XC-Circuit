@@ -2,6 +2,11 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
+## Unreleased
+
+### Changed
+- **Every option on the blocks**: options that used to hide in the Inspector under Advanced (Get Stored Value's If missing, Get Rows' Sort by and At most, a block's Delay …) now show on the blocks too, and the Inspector lists them with the others. Blocks with such options get taller, so in older projects one may now reach over the block below it. Settings › Editor › Advanced options on blocks turns it off again.
+
 ## 0.2.4
 
 ### Added

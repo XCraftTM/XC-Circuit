@@ -1173,6 +1173,8 @@ pub const UI_STRINGS: &[&str] = &[
     "The dotted background on canvases.",
     "Snap to grid",
     "Blocks and notes you drop line up with the grid. The magnet in the canvas toolbar switches it too.",
+    "Advanced options on blocks",
+    "Every option shows on the blocks. Off, the ones used less often stay in the Inspector under Advanced, so blocks are smaller.",
     "Wire thickness",
     "How thick the wires between blocks are drawn.",
     "Dark",

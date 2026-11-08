@@ -39,7 +39,7 @@ pub(super) struct NodeLayout {
 /// label and pin are centered on it. `width` is the block's own width when it
 /// was resized.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], width: Option<f32>, def: Option<&BlockDef>, shape: Option<&BlockShape>, tall: &HashMap<String, f32>, fit: &HashMap<String, f32>) -> NodeLayout {
+pub(super) fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], width: Option<f32>, def: Option<&BlockDef>, shape: Option<&BlockShape>, tall: &HashMap<String, f32>, fit: &HashMap<String, f32>, show_advanced: bool) -> NodeLayout {
     let (Some(def), Some(shape)) = (def, shape) else {
         let rect = Rect::from_min_size(pos2(at[0], at[1]), vec2(NODE_W, HEADER_H + ROW_H + PAD_BOTTOM));
         let header = Rect::from_min_size(rect.min, vec2(NODE_W, HEADER_H));
@@ -57,9 +57,10 @@ pub(super) fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], width: Opt
         rows.extend(shape.flows.iter().map(|f| RowKind::Flow(f.clone())));
     }
     for (key, f) in shape.visible_fields() {
-        // Advanced fields stay in the Inspector, unless they were made pins
-        // (there, or by connecting them).
-        if f.advanced && !pins_on.contains(key) {
+        // Advanced fields show too (Settings › Editor › Advanced options on
+        // blocks); with that off, they stay in the Inspector unless they
+        // were made pins (there, or by connecting them).
+        if f.advanced && !show_advanced && !pins_on.contains(key) {
             continue;
         }
         let pinned = f.pin == PinMode::Only || pins_on.contains(key);

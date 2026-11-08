@@ -11,20 +11,14 @@
     },
     "2": {
       "block": "discord.server_info@2",
-      "at": [
-        360,
-        490
-      ],
+      "at": [360, 784],
       "values": {
         "info": "systemChannel"
       }
     },
     "3": {
       "block": "discord.mention@1",
-      "at": [
-        360,
-        655
-      ]
+      "at": [360, 949]
     },
     "4": {
       "block": "discord.send_message@3",

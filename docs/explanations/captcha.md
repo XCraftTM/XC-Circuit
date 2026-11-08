@@ -17,7 +17,7 @@ A typical verification: a message with a **Verify** button in a `#verify` channe
 
 - **Tries** (3) and **Time** (3 minutes, in all). After a wrong answer they get a new challenge.
 - **Where**: to the interaction (from a button or a slash command; only they see it), or as a **direct message** (from On Member Join, say; people can turn DMs off, so a button is more reliable).
-- **Code length** (under Advanced) for the picture: 4 to 8.
+- **Code length** for the picture: 4 to 8.
 
 Then, for example: Passed › Add Role *Verified*; Failed › Moderate *kick*; Timed Out › Moderate *kick*, or nothing.
 

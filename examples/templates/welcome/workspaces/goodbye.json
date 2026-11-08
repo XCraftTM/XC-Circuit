@@ -11,20 +11,14 @@
     },
     "2": {
       "block": "discord.server_info@2",
-      "at": [
-        360,
-        490
-      ],
+      "at": [360, 784],
       "values": {
         "info": "systemChannel"
       }
     },
     "3": {
       "block": "discord.member_info@2",
-      "at": [
-        360,
-        655
-      ],
+      "at": [360, 1078],
       "values": {
         "info": "displayName"
       }

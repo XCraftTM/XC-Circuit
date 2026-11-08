@@ -358,6 +358,8 @@ fn text_fields_keep_focus_and_their_size() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
     ed.open_project(&root.join("examples/DemoBot"));
+    // Room to the right: the block gets wider below, past where Log (#5) is.
+    ed.project.as_mut().unwrap().workspaces.get_mut("rank-command").unwrap().nodes.get_mut("5").unwrap().at[0] += 400.0;
     let ctx = egui::Context::default();
     let settle = |ed: &mut Editor| {
         for _ in 0..6 {
@@ -365,7 +367,12 @@ fn text_fields_keep_focus_and_their_size() {
         }
     };
     settle(&mut ed);
+    // The box near the top of the canvas, so it has room to grow (the
+    // canvas toolbar sits at the bottom).
     let field = ("4".to_string(), "text".to_string());
+    let top = ed.views["rank-command"].text_fields.iter().find(|(k, _)| *k == field).map(|(_, r)| r.top()).unwrap();
+    ed.views.get_mut("rank-command").unwrap().offset.y -= (top - 120.0).max(0.0);
+    settle(&mut ed);
     let box_of = |ed: &Editor| ed.views["rank-command"].text_fields.iter().find(|(k, _)| *k == field).map(|(_, r)| *r).unwrap();
     let text = |ed: &Editor| ed.workspace("rank-command").unwrap().nodes["4"].values["text"].as_str().unwrap().to_string();
     let press = |pos: Pos2, pressed: bool| egui::Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Default::default() };
@@ -385,6 +392,7 @@ fn text_fields_keep_focus_and_their_size() {
     assert!(text(&ed).ends_with("!!?"), "typing stays in the box: {}", text(&ed));
 
     // Dragging the corner grip down and right makes it taller and wider, and the block with it.
+    let start_w = ed.views["rank-command"].block_rects().into_iter().find(|(id, _)| id == "4").unwrap().1.width();
     let grip = before.right_bottom() - vec2(8.0, 8.0);
     for _ in 0..60 {
         frame(&ctx, &mut ed, "rank-command", vec![egui::Event::PointerMoved(grip)]);
@@ -400,7 +408,7 @@ fn text_fields_keep_focus_and_their_size() {
     assert!((after.width() - before.width() - 80.0).abs() < 3.0, "grew {} px wider", after.width() - before.width());
     let node = &ed.workspace("rank-command").unwrap().nodes["4"];
     assert!((node.heights["text"] * zoom - after.height()).abs() < 2.0, "the height is kept with the block: {}", node.heights["text"]);
-    assert!(node.width.is_some_and(|w| (w - NODE_W - 80.0 / zoom).abs() < 3.0), "so is the width: {:?}", node.width);
+    assert!(node.width.is_some_and(|w| (w - start_w - 80.0 / zoom).abs() < 3.0), "so is the width: {:?}", node.width);
 
     // Double-clicking the grip puts the size back.
     let grip = after.right_bottom() - vec2(8.0, 8.0);
@@ -412,7 +420,7 @@ fn text_fields_keep_focus_and_their_size() {
     }
     settle(&mut ed);
     let node = &ed.workspace("rank-command").unwrap().nodes["4"];
-    assert!(!node.heights.contains_key("text") && node.width.is_none(), "the size is reset");
+    assert!(!node.heights.contains_key("text") && node.width.is_none(), "the size is reset: {:?} {:?}", node.heights, node.width);
     assert!((box_of(&ed).size() - before.size()).length() < 1.0);
 }
 
@@ -444,8 +452,9 @@ fn wire_hit_test() {
     assert_eq!(wire_distance(a, b, pos2(500.0, 500.0)), f32::INFINITY);
 }
 
-/// Send Message shows its Files on the block; an advanced input (Components)
-/// shows there once it's a pin, so it can be connected.
+/// Send Message shows its Files on the block; with advanced options off, an
+/// advanced input shows there once it's a pin, so it can be connected, and
+/// with them on (the default), it always does.
 #[test]
 fn files_and_pinned_advanced_inputs_show_on_the_block() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -454,7 +463,7 @@ fn files_and_pinned_advanced_inputs_show_on_the_block() {
     let values = serde_json::json!({ "mode": "send" });
     let shape = circuit_core::BlockShape::build(def, values.as_object().unwrap(), None);
     let keys = |pins: &[String]| {
-        let l = layout::layout_node("1", [0.0, 0.0], pins, None, Some(def), Some(&shape), &Default::default(), &Default::default());
+        let l = layout::layout_node("1", [0.0, 0.0], pins, None, Some(def), Some(&shape), &Default::default(), &Default::default(), false);
         l.rows.iter().filter_map(|(r, _)| if let layout::RowKind::Field { key, .. } = r { Some(key.clone()) } else { None }).collect::<Vec<_>>()
     };
     let plain = keys(&[]);
@@ -462,12 +471,22 @@ fn files_and_pinned_advanced_inputs_show_on_the_block() {
     // An advanced input shows once its pin is turned on: Show Modal's Inputs.
     let def = ed.reg.block("discord.show_modal").unwrap();
     let shape = circuit_core::BlockShape::build(def, &Default::default(), None);
-    let keys = |pins: &[String]| {
-        let l = layout::layout_node("1", [0.0, 0.0], pins, None, Some(def), Some(&shape), &Default::default(), &Default::default());
+    let keys = |pins: &[String], all: bool| {
+        let l = layout::layout_node("1", [0.0, 0.0], pins, None, Some(def), Some(&shape), &Default::default(), &Default::default(), all);
         l.rows.iter().filter_map(|(r, _)| if let layout::RowKind::Field { key, .. } = r { Some(key.clone()) } else { None }).collect::<Vec<_>>()
     };
-    assert!(!keys(&[]).contains(&"inputs".to_string()));
-    assert!(keys(&["inputs".to_string()]).contains(&"inputs".to_string()));
+    assert!(!keys(&[], false).contains(&"inputs".to_string()));
+    assert!(keys(&["inputs".to_string()], false).contains(&"inputs".to_string()));
+    assert!(keys(&[], true).contains(&"inputs".to_string()), "every option on the block");
+    // Every option a block has shows with them on.
+    let def = ed.reg.block("core.get_stored").unwrap();
+    let shape = circuit_core::BlockShape::build(def, &Default::default(), None);
+    let l = layout::layout_node("1", [0.0, 0.0], &[], None, Some(def), Some(&shape), &Default::default(), &Default::default(), true);
+    let shown: Vec<String> = l.rows.iter().filter_map(|(r, _)| if let layout::RowKind::Field { key, .. } = r { Some(key.clone()) } else { None }).collect();
+    let all: Vec<String> = shape.visible_fields().map(|(k, _)| k.clone()).collect();
+    assert_eq!(shown, all);
+    assert!(shown.contains(&"fallback".to_string()), "If missing is advanced");
+    assert!(crate::editor::prefs::Prefs::default().show_advanced, "on to start with");
 }
 
 /// The glow of a missing required input pulses between faint and full, once every 1.5 seconds.
@@ -547,4 +566,56 @@ fn note_texts_stay_readable_zoomed_out() {
     assert_eq!(text_sizes(2.0), (15.0, 12.5), "zoomed in: their own size");
     let (title, desc) = text_sizes(0.25);
     assert_eq!((title * 0.25, desc * 0.25), (14.0, 11.0), "at 25%: 14 and 11 on screen");
+}
+
+/// Moves blocks in the examples and templates apart where they overlap (a
+/// block that got taller reaching into the one below): the lower block and
+/// everything under it in its column go down. Run by hand, then check:
+/// cargo test -p circuit-editor tidy_example_layouts -- --ignored
+#[test]
+#[ignore]
+fn tidy_example_layouts() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut dirs = vec![root.join("examples/DemoBot")];
+    dirs.extend(std::fs::read_dir(root.join("examples/templates")).unwrap().map(|e| e.unwrap().path()));
+    for dir in dirs {
+        let mut project = circuit_core::Project::load(&dir).unwrap();
+        let keys: Vec<String> = project.workspaces.keys().cloned().collect();
+        for ws in keys {
+            let before: Vec<(String, [f32; 2])> = project.workspaces[&ws].nodes.iter().map(|(id, n)| (id.clone(), n.at)).collect();
+            for _round in 0..60 {
+                let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+                ed.project = Some(project.clone());
+                let ctx = egui::Context::default();
+                for _ in 0..3 {
+                    frame(&ctx, &mut ed, &ws, vec![]);
+                }
+                let rects = ed.views[&ws].block_rects();
+                let overlap = rects.iter().flat_map(|(a, ra)| rects.iter().map(move |(b, rb)| (a, ra, b, rb))).find(|(a, ra, b, rb)| a != b && ra.shrink(1.0).intersects(**rb) && (rb.top() > ra.top() + 0.5 || (rb.top() - ra.top()).abs() <= 0.5 && a < b));
+                let Some((_, ra, b, rb)) = overlap else { break };
+                let push = ra.bottom() - rb.top() + 40.0;
+                let column = rb.x_range();
+                let w = project.workspaces.get_mut(&ws).unwrap();
+                for (id, r) in &rects {
+                    if (id == b || (r.top() >= rb.top() - 0.5 && r.x_range().intersects(column))) && let Some(n) = w.nodes.get_mut(id) {
+                        n.at[1] += push;
+                    }
+                }
+            }
+            // Only the moved blocks' "at" changes in the file, as it's written.
+            let path = dir.join("workspaces").join(format!("{ws}.json"));
+            let mut text = std::fs::read_to_string(&path).unwrap();
+            for (id, at) in before {
+                let now = project.workspaces[&ws].nodes[&id].at;
+                if now == at {
+                    continue;
+                }
+                let start = text.find(&format!("\"{id}\": {{")).unwrap();
+                let at_key = start + text[start..].find("\"at\": [").unwrap() + "\"at\": [".len();
+                let end = at_key + text[at_key..].find(']').unwrap();
+                text.replace_range(at_key..end, &format!("{}, {}", now[0], now[1]));
+            }
+            std::fs::write(&path, text).unwrap();
+        }
+    }
 }

@@ -1056,7 +1056,7 @@ A bot backs up its stored data when it starts and every 6 hours, keeping the new
 
 Timers are kept with the stored data, so they still run after the bot restarts. One that was due while the bot was off runs when it starts again, with **Late** saying by how much; turn off *Run missed ones* on On Scheduled to drop those instead. Users, channels and messages in the value come back as their data (id, name …), not as live objects: find the member again with its id when you need more.
 
-- A **key** (under Advanced) replaces an earlier timer with the same key: `remind-${user.id}` gives everyone one reminder at most.
+- A **key** replaces an earlier timer with the same key: `remind-${user.id}` gives everyone one reminder at most.
 - **Cancel Scheduled** removes timers before they run: by the id Schedule gave, by key, or all with a name.
 - **List Scheduled** gives the waiting timers, soonest first.
 
@@ -1072,7 +1072,7 @@ The blocks in **Files** keep files in the bot's **files folder**: `.circuit/data
 | **Write File** | Text, JSON, a table or bytes (a Build Canvas picture); replaces the file, or adds to its end (added text gets a line of its own; added rows no second header). |
 | **List Files** | A folder's files, newest first, matching a name like `*.png`. |
 | **File Action** | Checks that a file is there, deletes, copies or moves it, makes a folder. |
-| **Download File** | Saves a file from the web, or a message's attachment (at most 25 MB unless you say otherwise). An address that comes from `${…}` or a wire (one people type) may only go to the public web; *Private addresses too* (under Advanced) lifts that for addresses only you choose. |
+| **Download File** | Saves a file from the web, or a message's attachment (at most 25 MB unless you say otherwise). An address that comes from `${…}` or a wire (one people type) may only go to the public web; *Private addresses too* lifts that for addresses only you choose. |
 
 Each gives the file's whole **path** on disk, which Send Message's **Files** takes.
 
@@ -1212,10 +1212,10 @@ A user's avatar: `${user.displayAvatarURL({ extension: 'png', size: 256 })}`.
 
 ## Sending the picture
 
-- Connect **File** to Send Message's **Files** (in the Inspector, under Advanced).
+- Connect **File** to Send Message's **Files**.
 - To show it inside an embed, put the block's **URL** (`attachment://canvas.png`) into the embed's image, and send the file with the message too.
 
-**File name** (under Advanced) changes `canvas.png`.
+**File name** changes `canvas.png`.
 
 A picture that can't be loaded (a wrong address, say) is left out, with a warning in the Console; the rest is drawn.
 
@@ -1268,9 +1268,9 @@ Announcing a new video in an embed: On New Post › Build Embed (title `${title}
 ## How it checks
 
 - It looks every **Check every** minutes (5 by default; at least 1).
-- **The first time**, posts that are already there only count as seen, so a new bot doesn't announce a channel's last 15 videos. Turn on *Announce what's there at first* (under Advanced) to announce the newest few.
+- **The first time**, posts that are already there only count as seen, so a new bot doesn't announce a channel's last 15 videos. Turn on *Announce what's there at first* to announce the newest few.
 - **Nothing twice:** what it has seen is kept with the stored data, so a restart doesn't announce old posts again. More than 5 new posts at once (a feed that was off for a while): the 5 newest are announced.
-- **Only if it contains** (under Advanced) announces only posts whose title or text has a word or phrase.
+- **Only if it contains** announces only posts whose title or text has a word or phrase.
 - When a source can't be reached, the Console says so once and it keeps trying; it says when it works again.
 
 Two On New Post blocks for the same channel each announce on their own (to two servers, say).
@@ -1349,7 +1349,7 @@ A typical verification: a message with a **Verify** button in a `#verify` channe
 
 - **Tries** (3) and **Time** (3 minutes, in all). After a wrong answer they get a new challenge.
 - **Where**: to the interaction (from a button or a slash command; only they see it), or as a **direct message** (from On Member Join, say; people can turn DMs off, so a button is more reliable).
-- **Code length** (under Advanced) for the picture: 4 to 8.
+- **Code length** for the picture: 4 to 8.
 
 Then, for example: Passed › Add Role *Verified*; Failed › Moderate *kick*; Timed Out › Moderate *kick*, or nothing.
 
@@ -1381,7 +1381,7 @@ A ticket's *Close* button, for example: On Button › **Create Transcript** (the
 | **At most** | The latest messages to keep (1000). 0 keeps all; in a long channel that takes a while. |
 | **File name** | `transcript-${channel.name}.html` by default. |
 | **Keep pictures** | Puts pictures into the file, so they still show when Discord's links expire. The file gets much bigger. |
-| **Bots' messages too** | Off leaves out what bots wrote, such as the ticket's own buttons (under Advanced). |
+| **Bots' messages too** | Off leaves out what bots wrote, such as the ticket's own buttons. |
 
 It gives the **file**, how many messages it holds (**count**) and its **size**.
 
@@ -1517,7 +1517,7 @@ The bot runs as its own process: if a block crashes Node.js, the editor is unaff
 
 Discord waits 3 seconds for an answer to a slash command, button, select menu or form, and then shows *This interaction failed*. When the blocks after one take longer (creating a channel, a transcript, a web request), the bot answers for them after 2.5 seconds: a button or menu quietly (its message stays as it is, and Send Message's reply comes as a new message), a command or form with *thinking…*, which Send Message's reply then fills in (a private reply comes privately, and *thinking…* goes away). So **Defer** is only needed to show *thinking…* at once. A form (Show Modal) can't come after that: put it before slow blocks.
 
-**Defer, then delete** answers with *thinking…* and takes it away again (after **Delete after** seconds; 0 as soon as it shows): the command or button counts as answered, and nothing stays. A reply after it comes as a new message. Send Message's **Delete after** (under Advanced) also deletes replies, private ones too, through the interaction; Discord allows that for 15 minutes, later only messages the bot can see in their channel.
+**Defer, then delete** answers with *thinking…* and takes it away again (after **Delete after** seconds; 0 as soon as it shows): the command or button counts as answered, and nothing stays. A reply after it comes as a new message. Send Message's **Delete after** also deletes replies, private ones too, through the interaction; Discord allows that for 15 minutes, later only messages the bot can see in their channel.
 
 ## What Export does
 
@@ -2367,7 +2367,7 @@ fields: {
 | `required` | boolean | Empty is a problem (listed in Problems). |
 | `pin` | `"auto"` · `true` · `false` · `"only"` | `"auto"` (default): filled in on the block, with a pin toggle. `true`: starts as a pin. `false`: never a pin. `"only"`: must be connected (inputs whose pin type has [`fromId`](./pin-types#finding-values-by-id), such as channels, can still be switched to a box for an id). |
 | `multi` | boolean | The pin accepts several wires; the block gets their values as one list. |
-| `advanced` | boolean | Not shown on the block; the Inspector lists it under *Advanced*. Once it's a pin (with the **pin** chip there, also for `pin: "only"` fields, or by connecting it), it shows on the block too. |
+| `advanced` | boolean | An option used less often. It shows on the block like any other, unless the user turns off **Settings › Editor › Advanced options on blocks**: then it isn't on the block, and the Inspector lists it under *Advanced*; once it's a pin (with the **pin** chip there, also for `pin: "only"` fields, or by connecting it), it shows on the block too. |
 | `show` | object | Shown only when other fields have one of these values: `{ mode: ["send", "edit"] }`. |
 | `choices` | object | For `select`: value → label. A nested object makes a group: `{ "Text": { plain: "Plain", bold: "Bold" } }`. |
 | `template` | boolean | Whether `${…}` in the text is filled in. Default: yes for text fields and colours. |

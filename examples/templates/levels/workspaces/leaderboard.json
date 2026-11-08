@@ -4,20 +4,14 @@
   "nodes": {
     "1": {
       "block": "discord.on_slash_command@2",
-      "at": [
-        40,
-        60
-      ],
+      "at": [40, 15577],
       "values": {
         "command": "leaderboard"
       }
     },
     "2": {
       "block": "core.leaderboard@1",
-      "at": [
-        360,
-        520
-      ],
+      "at": [360, 16333],
       "values": {
         "scope": "user",
         "key": "xp",
@@ -26,10 +20,7 @@
     },
     "3": {
       "block": "discord.send_message@3",
-      "at": [
-        360,
-        60
-      ],
+      "at": [360, 15577],
       "values": {
         "mode": "reply",
         "text": "🏆 **Top 10**\n${board}",

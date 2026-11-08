@@ -14,10 +14,7 @@
     },
     "2": {
       "block": "discord.select_menu@1",
-      "at": [
-        360,
-        520
-      ],
+      "at": [360, 788],
       "values": {
         "customId": "roles",
         "options": "ROLE_ID_1 | Gamer | Game nights\nROLE_ID_2 | Artist | Art channel",

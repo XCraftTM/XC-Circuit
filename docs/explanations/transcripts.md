@@ -13,7 +13,7 @@ A ticket's *Close* button, for example: On Button › **Create Transcript** (the
 | **At most** | The latest messages to keep (1000). 0 keeps all; in a long channel that takes a while. |
 | **File name** | `transcript-${channel.name}.html` by default. |
 | **Keep pictures** | Puts pictures into the file, so they still show when Discord's links expire. The file gets much bigger. |
-| **Bots' messages too** | Off leaves out what bots wrote, such as the ticket's own buttons (under Advanced). |
+| **Bots' messages too** | Off leaves out what bots wrote, such as the ticket's own buttons. |
 
 It gives the **file**, how many messages it holds (**count**) and its **size**.
 

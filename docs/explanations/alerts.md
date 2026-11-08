@@ -36,9 +36,9 @@ Announcing a new video in an embed: On New Post › Build Embed (title `${title}
 ## How it checks
 
 - It looks every **Check every** minutes (5 by default; at least 1).
-- **The first time**, posts that are already there only count as seen, so a new bot doesn't announce a channel's last 15 videos. Turn on *Announce what's there at first* (under Advanced) to announce the newest few.
+- **The first time**, posts that are already there only count as seen, so a new bot doesn't announce a channel's last 15 videos. Turn on *Announce what's there at first* to announce the newest few.
 - **Nothing twice:** what it has seen is kept with the stored data, so a restart doesn't announce old posts again. More than 5 new posts at once (a feed that was off for a while): the 5 newest are announced.
-- **Only if it contains** (under Advanced) announces only posts whose title or text has a word or phrase.
+- **Only if it contains** announces only posts whose title or text has a word or phrase.
 - When a source can't be reached, the Console says so once and it keeps trying; it says when it works again.
 
 Two On New Post blocks for the same channel each announce on their own (to two servers, say).

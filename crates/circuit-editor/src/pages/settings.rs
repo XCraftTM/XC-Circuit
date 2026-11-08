@@ -232,6 +232,9 @@ fn appearance(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsVi
     kit::setting_row(ui, theme, t!("Snap to grid"), t!("Blocks and notes you drop line up with the grid. The magnet in the canvas toolbar switches it too."), |ui| {
         toggle(ui, theme, &mut ed.prefs.snap_to_grid);
     });
+    kit::setting_row(ui, theme, t!("Advanced options on blocks"), t!("Every option shows on the blocks. Off, the ones used less often stay in the Inspector under Advanced, so blocks are smaller."), |ui| {
+        toggle(ui, theme, &mut ed.prefs.show_advanced);
+    });
     let theme_wire = ed.reg.theme(&current).map(|d| d.shape.wire_width).unwrap_or(2.0);
     kit::setting_row(ui, theme, t!("Wire thickness"), t!("How thick the wires between blocks are drawn."), |ui| {
         if ed.prefs.wire_width.is_some() && crate::ui::kit::button(ui, theme, t!("Reset")).clicked() {

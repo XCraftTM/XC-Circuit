@@ -34,10 +34,10 @@ A user's avatar: `${user.displayAvatarURL({ extension: 'png', size: 256 })}`.
 
 ## Sending the picture
 
-- Connect **File** to Send Message's **Files** (in the Inspector, under Advanced).
+- Connect **File** to Send Message's **Files**.
 - To show it inside an embed, put the block's **URL** (`attachment://canvas.png`) into the embed's image, and send the file with the message too.
 
-**File name** (under Advanced) changes `canvas.png`.
+**File name** changes `canvas.png`.
 
 A picture that can't be loaded (a wrong address, say) is left out, with a warning in the Console; the rest is drawn.
 

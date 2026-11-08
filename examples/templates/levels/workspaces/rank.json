@@ -14,10 +14,7 @@
     },
     "2": {
       "block": "core.leaderboard@1",
-      "at": [
-        360,
-        580
-      ],
+      "at": [360, 872],
       "values": {
         "scope": "user",
         "key": "xp",

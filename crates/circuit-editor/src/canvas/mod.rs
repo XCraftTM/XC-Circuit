@@ -245,7 +245,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             (w, Some(&need)) if need > w.unwrap_or_else(|| def.map_or(NODE_W, default_width)) => Some(need),
             (w, _) => w,
         };
-        (node.at[0].to_bits(), node.at[1].to_bits(), width.map(f32::to_bits), &node.pins, text_scale).hash(&mut h);
+        (node.at[0].to_bits(), node.at[1].to_bits(), width.map(f32::to_bits), &node.pins, text_scale, prefs.show_advanced).hash(&mut h);
         for (k, v) in &node.heights {
             (k, v.to_bits()).hash(&mut h);
         }
@@ -304,7 +304,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                 fit.insert(key.to_string(), h + 8.0);
             }
         }
-        let layout = layout_node(id, node.at, &node.pins, width, def, shape.as_deref(), &tall, &fit);
+        let layout = layout_node(id, node.at, &node.pins, width, def, shape.as_deref(), &tall, &fit, prefs.show_advanced);
         view.layout_cache.insert(id.clone(), (key, shape.clone(), layout.clone()));
         layouts.push(layout);
         if let Some(s) = shape {
