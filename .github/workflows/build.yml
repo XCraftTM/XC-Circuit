@@ -175,6 +175,9 @@ jobs:
       # .deb, .rpm and .AppImage.
       - name: Linux packages
         if: runner.os == 'Linux'
+        env:
+          # To fetch appimagetool signed in (read-only; see the script).
+          GH_TOKEN: ${{ github.token }}
         run: bash packaging/linux/build-packages.sh "XC-Circuit-${{ matrix.name }}" "$VERSION" "${{ matrix.arch }}" dist
 
       - uses: actions/upload-artifact@v7
