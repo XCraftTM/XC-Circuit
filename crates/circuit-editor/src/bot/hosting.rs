@@ -211,6 +211,14 @@ impl HostingUi {
                 Err(TryRecvError::Disconnected) => self.servers = None,
             }
         }
+        // The console is the open project's server's: another project (or
+        // none, or another server chosen) closes it.
+        if self.console.as_ref().is_some_and(|c| {
+            let h = settings_of(ed);
+            ed.project.is_none() || h.kind != Kind::Calagopus || h.server != c.server
+        }) {
+            self.console = None;
+        }
         if let Some(c) = &mut self.console {
             c.poll(ctx);
         }
@@ -330,18 +338,25 @@ impl HostingUi {
 
     /// Bot › Server console, for a Calagopus server.
     pub fn open_console(&mut self, ed: &mut Editor) {
-        let h = settings_of(ed);
-        let Some(key) = secrets_of(ed).api_key.filter(|_| h.kind == Kind::Calagopus && !h.server.is_empty()) else {
+        if !self.restore_console(ed) {
             ed.log(Level::Warn, t!("The server console is for a Calagopus server: choose one in Bot › Server… first."));
             self.open(ed);
-            return;
-        };
+        }
+    }
+
+    /// Connects the console to the project's Calagopus server, quietly: false
+    /// when the project has none (or no API key). Also how the console tab of
+    /// the last run comes back when the app starts.
+    pub fn restore_console(&mut self, ed: &Editor) -> bool {
+        let h = settings_of(ed);
+        let Some(key) = secrets_of(ed).api_key.filter(|_| h.kind == Kind::Calagopus && !h.server.is_empty()) else { return false };
         if self.console.as_ref().is_some_and(|c| c.server == h.server) {
-            return;
+            return true;
         }
         let panel = calagopus::Panel::new(&h.panel, &key);
         let name = if h.server_name.is_empty() { h.server.clone() } else { h.server_name.clone() };
         self.console = Some(ConsoleView::new(panel, h.server.clone(), name));
+        true
     }
 
     /// The Server tab.
@@ -795,6 +810,31 @@ mod tests {
         ui.poll(&mut ed, &ctx);
         assert!(said(&ed), "{:?}", ed.log.iter().map(|l| &l.text).collect::<Vec<_>>());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The console belongs to the project's server: it stays while that's
+    /// the server, and closes when another is chosen.
+    #[test]
+    fn the_console_follows_the_projects_server() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&root.join("examples/DemoBot"));
+        let ctx = egui::Context::default();
+        let mut ui = HostingUi::new();
+        let set = |ed: &mut Editor, server: &str| {
+            let h = Hosting { kind: Kind::Calagopus, panel: "http://127.0.0.1:9".into(), server: server.into(), ..Default::default() };
+            ed.project.as_mut().unwrap().meta.data.insert(DATA_KEY.into(), serde_json::to_value(&h).unwrap());
+        };
+        set(&mut ed, "u-1");
+        // Nobody signed in to DemoBot's panel: nothing to reconnect at start.
+        assert!(!ui.restore_console(&ed));
+        // A console for its server (here at an address nobody answers on).
+        ui.console = Some(ConsoleView::new(calagopus::Panel::new("http://127.0.0.1:9", "c7sp_x"), "u-1".into(), "Bot".into()));
+        ui.poll(&mut ed, &ctx);
+        assert!(ui.console.is_some(), "the project's server: it stays");
+        set(&mut ed, "u-2");
+        ui.poll(&mut ed, &ctx);
+        assert!(ui.console.is_none(), "another server: closed");
     }
 
     fn copy_dir(from: &std::path::Path, to: &std::path::Path) {

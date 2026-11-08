@@ -297,6 +297,11 @@ impl CircuitApp {
         };
 
         let mut app = Self::with_editor(cc, ed, dock, bundled_plugins);
+        // The server console tab of the last run, connected again where it
+        // was (without its project's server, the tab closes as before).
+        if app.dock.contains(&Tab::ServerConsole) {
+            app.bot.hosting.restore_console(&app.ed);
+        }
         app.frame_stats = std::env::var_os("XC_FRAME_STATS").map(|_| (0, std::time::Instant::now()));
         app.fps = std::env::var_os("XC_FPS_OUT").map(|out| fps::Run::new(PathBuf::from(out), graphics.clone()));
         // A crash the user hasn't been told about yet.
