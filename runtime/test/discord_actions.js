@@ -198,6 +198,16 @@ const log = (name) => (...args) => {
     Module._load = load0;
   }
 
+  // Mention: users, roles, channels, typed ids, lists, @everyone and @here.
+  const mention = async (target, kind = "auto") => (await run("format/mention.js", { target, kind })).text;
+  assert.strictEqual(await mention({ id: "1", username: "ada" }), "<@1>");
+  assert.strictEqual(await mention({ id: "2", hexColor: "#fff" }), "<@&2>");
+  assert.strictEqual(await mention("123", "role"), "<@&123>");
+  assert.strictEqual(await mention("<@456>"), "<@456>", "a typed mention stays one");
+  assert.strictEqual(await mention([{ id: "1" }, { id: "4" }]), "<@1> <@4>");
+  assert.strictEqual(await mention("", "everyone"), "@everyone");
+  await assert.rejects(mention(""), /needs a user/);
+
   console.log("discord actions test passed");
 })().catch((e) => {
   console.error(e);

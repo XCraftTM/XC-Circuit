@@ -29,6 +29,10 @@ A name none of these give gets an **input of its own** under the text, so you ca
 
 Values are real objects: a Discord *User* is a discord.js `User`, a *Member* a `GuildMember`. Their properties and reading methods work: `${user.username}`, `${member.roles.highest.name}`, `${user.displayAvatarURL()}`. Typing a `.` after a value inside `${…}` lists its members with their types, like a code editor.
 
+## Mentions
+
+A user, member, role or channel in a text is a mention: `Welcome ${user}!` pings them, `${role}` pings the role and `${channel}` links the channel, as `<@id>`, `<@&id>` and `<#id>` do. For a name without a ping, use `${user.username}`, `${member.displayName}` or `${role.name}`. The list after `${` says which values ping (**pings them**) or link (**links it**). The **Mention** block does the same for an id, a list of people, `@everyone` or `@here`; Send Message's **Who gets pinged** decides who is notified.
+
 ## Splitting text
 
 **Split Text** takes a text apart at a separator (spaces when it's empty, or `,`, `|` …) and gives the parts ready to use: **First**, **Last**, **Part** (by number: 1 is the first, -1 the last), **Rest** (everything after the first part) and **Count**. For `!kick @ada being rude`: First is `!kick`, Part 2 is `@ada`, Rest is `@ada being rude`.

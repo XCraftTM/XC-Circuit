@@ -135,6 +135,20 @@ pub struct Avail {
     pub kind: String,
     /// The class of its value in the catalogs, for what can follow a dot.
     pub class: Option<String>,
+    /// What it does in a text, when that's a mention: "pings them".
+    pub mention: Option<&'static str>,
+}
+
+/// What a value of this pin type does in a text: users, members and roles
+/// ping (`${user}` is `<@id>`), channels and threads link (`<#id>`).
+pub fn mention_of(type_id: &str) -> Option<&'static str> {
+    let t = type_id.trim_end_matches('?');
+    match t {
+        "discord.user" | "discord.member" => Some(t!("pings them")),
+        "discord.role" => Some(t!("pings the role")),
+        _ if t.starts_with("discord.") && (t.ends_with("channel") || t.ends_with("thread")) => Some(t!("links it")),
+        _ => None,
+    }
 }
 
 /// The values one block gives (or the run's variables).
@@ -177,7 +191,7 @@ pub fn available(ws: &Workspace, node: &str, reg: &Registry, shape_of: &mut dyn 
             let name = n.values.get("name").and_then(|v| v.as_str()).unwrap_or_default();
             let run_scope = n.values.get("scope").and_then(|v| v.as_str()).is_none_or(|s| s == "run");
             if run_scope && !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '$') {
-                vars.push(Avail { token: name.into(), alias: None, label: name.into(), kind: t!("Variable").into(), class: None });
+                vars.push(Avail { token: name.into(), alias: None, label: name.into(), kind: t!("Variable").into(), class: None, mention: None });
             }
         }
         let Some(shape) = shape_of(id) else { continue };
@@ -192,6 +206,7 @@ pub fn available(ws: &Workspace, node: &str, reg: &Registry, shape_of: &mut dyn 
                     label: o.label(key),
                     kind: reg.types.get(type_id).map(|t| t.name.clone()).unwrap_or_else(|| circuit_core::block::title_case(type_id)),
                     class: reg.type_classes.get(type_id).cloned(),
+                    mention: mention_of(type_id),
                 }
             })
             .collect();
@@ -458,7 +473,12 @@ fn rows_at(scope: &Scope, steps: &[Step]) -> Vec<Row> {
 
 fn value_row(scope: &Scope, v: &Avail) -> Row {
     let into = v.class.as_ref().filter(|c| !scope.members(c).is_empty()).map(|c| Step::Members { class: c.clone(), token: v.token.clone(), label: v.label.clone() });
-    Row { code: v.token.clone(), text: v.label.clone(), kind: v.kind.clone(), insert: Some(v.token.clone()), into, doc: None }
+    // A user, role or channel in a text is a mention: say so where it's picked.
+    let (kind, doc) = match v.mention {
+        Some(does) => (format!("{} · {does}", v.kind), Some(tf!("In a text, ${{token}} becomes a mention: it {does}. For its name, use ${{token}.username} or ${{token}.name}.", token = v.token, does = does))),
+        None => (v.kind.clone(), None),
+    };
+    Row { code: v.token.clone(), text: v.label.clone(), kind, insert: Some(v.token.clone()), into, doc }
 }
 
 fn member_row(scope: &Scope, m: &Member, prefix: &str) -> Row {
@@ -854,6 +874,22 @@ pub fn list(ui: &mut Ui, theme: &Theme, scope: &Scope) {
 
 #[cfg(test)]
 mod tests {
+    /// Users, roles and channels say they mention, with the syntax on hover.
+    #[test]
+    fn mentions_are_marked() {
+        assert_eq!(mention_of("discord.user"), Some("pings them"));
+        assert_eq!(mention_of("discord.member?"), Some("pings them"));
+        assert_eq!(mention_of("discord.role"), Some("pings the role"));
+        assert_eq!(mention_of("discord.voice_channel"), Some("links it"));
+        assert_eq!(mention_of("discord.thread"), Some("links it"));
+        assert_eq!(mention_of("discord.message"), None);
+        assert_eq!(mention_of("text"), None);
+        let v = Avail { token: "#1.user".into(), alias: None, label: "User".into(), kind: "User".into(), class: None, mention: mention_of("discord.user") };
+        let row = value_row(&Scope { sources: Vec::new(), classes: Default::default() }, &v);
+        assert_eq!(row.kind, "User · pings them");
+        assert_eq!(row.doc.as_deref(), Some("In a text, ${#1.user} becomes a mention: it pings them. For its name, use ${#1.user.username} or ${#1.user.name}."));
+    }
+
     use super::*;
 
     /// The {name} inputs a block's shape has, by name.
