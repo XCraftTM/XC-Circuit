@@ -163,15 +163,10 @@ impl CircuitApp {
                                 see_app = ui.link(t!("See what's new and update…")).clicked();
                             }
                         });
-                        // Updates itself: download, then install as it closes and open again.
-                        if let Some(a) = &asset {
+                        // Updates itself, with the button at the bottom right.
+                        if let Some(p) = progress {
                             ui.add_space(4.0);
-                            let label = match progress {
-                                Some(p) => tf!("Downloading… {percent} %", percent = (p * 100.0).round() as u32),
-                                None => t!("Update and restart").to_string(),
-                            };
-                            let tip = tf!("Downloads {size} MB and installs it when XC Circuit closes, then opens it again. You're asked about unsaved changes first.", size = (a.size as f64 / 1e6).round());
-                            update_app = ui.add_enabled_ui(progress.is_none(), |ui| kit::button(ui, &theme, label)).inner.on_hover_text(tip).clicked();
+                            muted(ui, &tf!("Downloading… {percent} %", percent = (p * 100.0).round() as u32));
                         }
                     } else {
                         match &app_check {
@@ -233,8 +228,18 @@ impl CircuitApp {
                     muted(ui, t!("Your projects keep working: blocks that changed are upgraded when a project opens. Help › Undo Block Updates goes back."));
                 }
                 dialog::Part::Footer => {
-                    let busy = checking || installing;
-                    if !newer.is_empty() {
+                    let busy = checking || installing || progress.is_some();
+                    // One button for everything there is: the blocks and the
+                    // app; it restarts only when the app itself updates.
+                    if let Some(a) = &asset {
+                        let label = match progress {
+                            Some(p) => tf!("Downloading… {percent} %", percent = (p * 100.0).round() as u32),
+                            None => t!("Update and restart").to_string(),
+                        };
+                        let tip = tf!("Updates the blocks too, downloads {size} MB and installs it when XC Circuit closes, then opens it again. You're asked about unsaved changes first.", size = (a.size as f64 / 1e6).round());
+                        update_app = ui.add_enabled_ui(!busy, |ui| kit::primary_button(ui, &theme, &label)).inner.on_hover_text(tip).clicked();
+                        update = update_app && !newer.is_empty();
+                    } else if !newer.is_empty() {
                         update = ui.add_enabled_ui(!busy, |ui| kit::primary_button(ui, &theme, t!("Update blocks"))).inner.clicked();
                     } else {
                         ok = kit::primary_button(ui, &theme, t!("Close")).clicked();
@@ -278,6 +283,11 @@ impl CircuitApp {
         let theme = self.ed.theme.clone();
         let offers = self.block_updates.offers.clone();
         let installing = self.block_updates.installing();
+        // An app update that installs itself goes along with the same button.
+        let install = crate::app::updater::Install::current();
+        let app_asset = self.updater.available.as_ref().and_then(|r| install.asset(r).cloned());
+        let app_version = self.updater.available.as_ref().map(|r| r.version.clone());
+        let downloading = self.updater.progress().is_some();
         let (mut update, mut later) = (false, false);
         let close = dialog::show(
             ctx,
@@ -298,18 +308,36 @@ impl CircuitApp {
                             ui.label(RichText::new(tf!("{from} to {to}", from = o.current, to = o.entry.version)).color(theme.text_muted));
                         });
                     }
+                    if let (Some(_), Some(v)) = (&app_asset, &app_version) {
+                        ui.add_space(4.0);
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(t!("XC Circuit")).strong().color(theme.text));
+                            ui.label(RichText::new(tf!("{from} to {to}", from = env!("CARGO_PKG_VERSION"), to = v)).color(theme.text_muted));
+                        });
+                    }
                     ui.add_space(6.0);
                     ui.label(RichText::new(t!("Your projects keep working: blocks that changed are upgraded when a project opens. Help › Undo Block Updates goes back.")).size(12.0).color(theme.text_muted));
                 }
                 dialog::Part::Footer => {
-                    let label = if installing { t!("Updating…") } else { t!("Update") };
-                    update = ui.add_enabled_ui(!installing, |ui| kit::primary_button(ui, &theme, label)).inner.clicked();
+                    let label = if installing || downloading {
+                        t!("Updating…")
+                    } else if app_asset.is_some() {
+                        t!("Update and restart")
+                    } else {
+                        t!("Update")
+                    };
+                    update = ui.add_enabled_ui(!installing && !downloading, |ui| kit::primary_button(ui, &theme, label)).inner.clicked();
                     later = kit::secondary_button(ui, &theme, t!("Later")).clicked();
                 }
             },
         );
         if update {
             self.block_updates.install_all();
+            if let Some(a) = &app_asset {
+                self.updater.download(&install, a);
+                self.updater.restart_when_ready = true;
+                self.updater.show = false;
+            }
         }
         if (later || close) && !installing {
             self.block_updates.show = false;
@@ -365,6 +393,11 @@ impl CircuitApp {
             let _ = open::that(&r.url);
         }
         if update && let Some(a) = &asset {
+            // Newer blocks come along, before the app restarts.
+            if !self.block_updates.offers.is_empty() && !self.block_updates.installing() {
+                self.block_updates.install_all();
+                self.block_updates.show = false;
+            }
             self.updater.download(&install, a);
             self.updater.restart_when_ready = true;
         }
@@ -591,7 +624,7 @@ impl CircuitApp {
                 self.updater.show = false;
                 self.updater.restart_when_ready = false;
                 self.updates_open = false;
-                ctx.send_viewport_cmd(ViewportCommand::Close);
+                self.restart_for_update = true;
             }
             Some(Ok(_)) => {
                 let version = self.updater.available.as_ref().map(|r| r.version.clone()).unwrap_or_default();
@@ -599,6 +632,14 @@ impl CircuitApp {
             }
             Some(Err(e)) => self.ed.log(Level::Error, tf!("Couldn't download the update: {error}. The release page has it too (Help › Check for Updates).", error = e)),
             None => {}
+        }
+        // The app's update is downloaded: close (asking about unsaved changes
+        // as always) to install it, once block updates are in as well.
+        if self.restart_for_update && !self.block_updates.installing() {
+            self.restart_for_update = false;
+            ctx.send_viewport_cmd(ViewportCommand::Close);
+        } else if self.restart_for_update {
+            ctx.request_repaint_after(std::time::Duration::from_millis(200));
         }
         // Block updates: what's offered for the plugins loaded now.
         if self.block_updates.busy() {

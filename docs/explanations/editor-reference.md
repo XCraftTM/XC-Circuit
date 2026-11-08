@@ -4,7 +4,7 @@
 | Action | How |
 | --- | --- |
 | Add a block | Add block in the canvas toolbar (bottom left), right-click empty canvas, or press Space |
-| Connect | Drag from a pin to another pin |
+| Connect | Drag from a pin to another pin. Holding the wire at an edge of the canvas moves the canvas that way, for blocks out of view |
 | Add a connected block | Drag a wire into empty space; the picker shows only compatible blocks |
 | Move a block | Drag its title bar |
 | Pan / zoom | Drag empty canvas or middle mouse / mouse wheel |

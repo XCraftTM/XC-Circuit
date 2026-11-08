@@ -514,3 +514,26 @@ fn preview_blocks_get_as_wide_as_their_message() {
     assert_eq!(width("long"), 508.0, "long text stops at Discord's widest");
     assert_eq!(width("given"), 320.0, "a width it was given stays");
 }
+
+/// Holding a dragged wire at an edge of the canvas moves the canvas that way;
+/// away from the edges, or far off over other panels, nothing moves.
+#[test]
+fn a_wire_held_at_an_edge_moves_the_canvas() {
+    let outer = Rect::from_min_size(pos2(100.0, 50.0), vec2(800.0, 600.0));
+    assert_eq!(edge_push(outer, pos2(500.0, 350.0)), Vec2::ZERO, "the middle");
+    assert_eq!(edge_push(outer, pos2(500.0, 50.0 + 41.0)), Vec2::ZERO, "just inside the band");
+    let right = edge_push(outer, pos2(899.0, 350.0));
+    assert!(right.x > 0.9 && right.y == 0.0, "at the right edge: {right:?}");
+    let gentle = edge_push(outer, pos2(900.0 - 30.0, 350.0));
+    assert!(gentle.x > 0.0 && gentle.x < 0.2, "the start of the band is gentle: {gentle:?}");
+    assert_eq!(edge_push(outer, pos2(80.0, 30.0)), vec2(-1.0, -1.0), "past the top-left corner");
+    assert_eq!(edge_push(outer, pos2(1300.0, 350.0)), Vec2::ZERO, "far off to the right");
+
+    // The view: holding at the right edge shows more of the right.
+    let mut view = CanvasView { zoom: 1.0, ..Default::default() };
+    let before = view.offset;
+    assert!(view.edge_pan(outer, pos2(905.0, 350.0), 1.0 / 60.0));
+    assert!(view.offset.x < before.x && view.offset.y == before.y, "{:?}", view.offset);
+    assert!((before.x - view.offset.x - 15.0).abs() < 0.01, "900 points a second");
+    assert!(!view.edge_pan(outer, pos2(500.0, 350.0), 1.0 / 60.0));
+}

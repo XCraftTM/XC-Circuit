@@ -135,6 +135,19 @@ impl CanvasView {
         TSTransform::from_translation(origin.to_vec2() + self.offset) * TSTransform::from_scaling(self.zoom)
     }
 
+    /// Moves the canvas toward an edge the pointer is held at while a wire
+    /// is dragged, so a wire can reach blocks out of view. `dt` is the
+    /// frame's time; says whether it moved.
+    fn edge_pan(&mut self, outer: Rect, pointer: Pos2, dt: f32) -> bool {
+        let push = edge_push(outer, pointer);
+        if push == Vec2::ZERO {
+            return false;
+        }
+        // Up to 900 points a second, whatever the zoom.
+        self.offset -= push * 900.0 * dt.clamp(0.0, 0.05);
+        true
+    }
+
     fn zoom_at(&mut self, origin: Pos2, pointer: Pos2, factor: f32) {
         let scene = (pointer - origin - self.offset) / self.zoom;
         self.zoom = (self.zoom * factor).clamp(ZOOM_RANGE.0, ZOOM_RANGE.1);
@@ -168,6 +181,30 @@ fn missing_glow(painter: &egui::Painter, theme: &Theme, row: Rect, time: f64) {
 /// How strong the glow is now, from 0 to 1: once a second and a half, smoothly.
 fn glow_strength(time: f64) -> f32 {
     (0.5 + 0.5 * (time * std::f64::consts::TAU / 1.5).sin()) as f32
+}
+
+/// Which way, and how hard (0 to 1 on each axis), a pointer near or past an
+/// edge of the canvas pushes it: nothing inside a band of 40 points along
+/// the edges, full strength at the edge and beyond (up to 200 points out,
+/// so a pointer far off over other panels doesn't count).
+fn edge_push(outer: Rect, p: Pos2) -> Vec2 {
+    const BAND: f32 = 40.0;
+    const BEYOND: f32 = 200.0;
+    if !outer.expand(BEYOND).contains(p) || outer.width() < BAND * 3.0 || outer.height() < BAND * 3.0 {
+        return Vec2::ZERO;
+    }
+    let along = |v: f32, lo: f32, hi: f32| {
+        if v < lo + BAND {
+            -((lo + BAND - v) / BAND).min(1.0)
+        } else if v > hi - BAND {
+            ((v - (hi - BAND)) / BAND).min(1.0)
+        } else {
+            0.0
+        }
+    };
+    // Eased, so the very start of the band moves it gently.
+    let ease = |x: f32| x.signum() * x * x;
+    vec2(ease(along(p.x, outer.left(), outer.right())), ease(along(p.y, outer.top(), outer.bottom())))
 }
 
 pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
@@ -338,6 +375,16 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         if scroll.x != 0.0 {
             view.offset.x += scroll.x;
         }
+    }
+
+    // Holding a wire at an edge of the canvas (or past it) moves the canvas
+    // that way, for wires to blocks out of view.
+    if view.drag.is_some()
+        && let Some(p) = pointer
+        && ctx.input(|i| i.pointer.any_down())
+        && view.edge_pan(outer, p, ctx.input(|i| i.stable_dt))
+    {
+        ctx.request_repaint();
     }
 
     let to_global = view.to_global(outer.min);

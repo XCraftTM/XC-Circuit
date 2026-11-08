@@ -27,7 +27,7 @@ The installer isn't signed yet, so Windows asks first. Choose **More info › Ru
 
 The app looks for newer versions itself (at start, and from Help › Check for Updates; you can turn the check off in Settings).
 
-- **Installed with the Windows Setup, or an AppImage:** **Update and restart** downloads the new version, checks it against the checksum GitHub publishes, and installs it as XC Circuit closes (asking about unsaved changes first). Then XC Circuit opens again. On Windows only a small progress window shows; installed for everyone, Windows asks for administrator rights.
+- **Installed with the Windows Setup, or an AppImage:** **Update and restart** downloads the new version, checks it against the checksum GitHub publishes, and installs it as XC Circuit closes (asking about unsaved changes first). Then XC Circuit opens again. On Windows only a small progress window shows; installed for everyone, Windows asks for administrator rights. When newer blocks are offered too, the same button updates them first, so one click does both.
 - **.deb, .rpm, .zip or .tar.gz:** **Download** opens the release page; install the new file as you did the first one.
 
 ## What you need
