@@ -78,6 +78,10 @@ impl DockViewer<Tab> for Viewer<'_> {
         }
     }
 
+    fn system_titlebar(&self) -> bool {
+        self.ed.prefs.system_titlebar
+    }
+
     fn icon(&self, tab: &Tab) -> Option<PathBuf> {
         self.ed.reg.icons.get(tab.icon()).cloned()
     }

@@ -1478,6 +1478,8 @@ pub const UI_STRINGS: &[&str] = &[
     "Hide the values, so the preview gets their room",
     "Show the values you can use in ${…}",
     "Close (Esc)",
+    "Back into the app",
+    "Put this back into XC Circuit's window",
     "Back into the main window",
     "Open in its own window",
     "A window outside the app's, to put on another monitor",

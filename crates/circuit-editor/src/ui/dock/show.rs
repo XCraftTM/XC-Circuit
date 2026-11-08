@@ -35,6 +35,11 @@ pub trait DockViewer<T> {
     }
     /// More entries for the tab's right-click menu.
     fn tab_menu(&mut self, _ui: &mut Ui, _tab: &T) {}
+    /// Whether windows have the system's title bar and frame. Without, a
+    /// tab's window of its own moves by its tab bar and has its own buttons.
+    fn system_titlebar(&self) -> bool {
+        true
+    }
     /// A tab let go of outside every area: true when the app takes it (it
     /// then leaves the dock); otherwise it gets a window of its own.
     fn take_drop(&mut self, _tab: &T, _pos: Pos2) -> bool {
@@ -68,6 +73,9 @@ struct Pass<'t, T> {
     os: bool,
     /// Windows of their own are possible (the system and graphics allow them).
     can_pop: bool,
+    /// In a window of its own without the system's frame: its tab bar moves
+    /// it, and this top right part of it holds its buttons.
+    controls: Option<Rect>,
 }
 
 /// Paints an icon file (once its texture is loaded) into `rect`.
@@ -166,6 +174,7 @@ impl<T: Clone + PartialEq + Hash + std::fmt::Debug> Dock<T> {
             moves: Vec::new(),
             os: false,
             can_pop: !ctx.embed_viewports(),
+            controls: None,
         };
         if let Some(main) = &mut self.main {
             node_ui(ui, main, rect, &mut p, viewer, None, &mut Vec::new());
@@ -184,16 +193,39 @@ impl<T: Clone + PartialEq + Hash + std::fmt::Debug> Dock<T> {
                 let need = w.node.leaves().iter().flat_map(|l| l.tabs.iter()).map(|t| viewer.min_size(t)).fold(vec2(320.0, 240.0), |a, b| a.max(b + vec2(0.0, p.bar_h)));
                 let title = w.node.leaves().first().and_then(|l| l.active_tab()).map(|t| viewer.title(t)).unwrap_or_default();
                 // Where it first went, and how big: the system keeps it after.
-                let builder = egui::ViewportBuilder::default().with_title(format!("{title} · XC Circuit")).with_position(first.min).with_inner_size(first.size()).with_min_inner_size(need);
+                let framed = viewer.system_titlebar();
+                let builder = egui::ViewportBuilder::default().with_title(format!("{title} · XC Circuit")).with_position(first.min).with_inner_size(first.size()).with_min_inner_size(need).with_decorations(framed);
                 let id = w.id;
                 let node = &mut w.node;
                 let before = p.places.len();
                 p.os = true;
+                let mut put_back = false;
                 let (closed, inner) = ctx.show_viewport_immediate(egui::ViewportId::from_hash_of(("dock-os-window", id)), builder, |ui, _| {
                     let all = ui.max_rect();
                     ui.painter().rect_filled(all, 0.0, theme.panel);
+                    // Without the system's frame: Back into the app, minimize
+                    // and maximize at the tab bar's right end.
+                    let controls = Rect::from_min_max(pos2(all.right() - 2.0 * 46.0 - 150.0, all.top()), pos2(all.right(), all.top() + p.bar_h));
+                    p.controls = (!framed).then_some(controls);
                     node_ui(ui, node, all, &mut p, viewer, Some(id), &mut Vec::new());
+                    p.controls = None;
                     ui.allocate_rect(all, Sense::hover());
+                    if !framed {
+                        let mut row = ui.new_child(UiBuilder::new().max_rect(controls).layout(Layout::right_to_left(Align::Center)));
+                        row.spacing_mut().item_spacing.x = 0.0;
+                        crate::app::titlebar::minimize_maximize(&mut row, theme, p.bar_h);
+                        row.add_space(8.0);
+                        let back = crate::ui::kit::button(&mut row, theme, t!("Back into the app")).on_hover_text(t!("Put this back into XC Circuit's window"));
+                        put_back = back.clicked();
+                        // Room left of the buttons moves the window, as the tab bar does.
+                        let spare = Rect::from_min_max(controls.min, pos2(row.min_rect().left(), controls.bottom()));
+                        if spare.width() > 0.0 {
+                            let drag = ui.interact(spare, Id::unique(("dock-os-spare", id)), Sense::click_and_drag());
+                            move_own_window(ui.ctx(), &drag);
+                        }
+                        // Resizing at its edges, and a thin border.
+                        crate::app::titlebar::frame_edges(ui.ctx(), theme);
+                    }
                     // Its key presses, for the app's shortcuts (Ctrl+S, F5 …).
                     keys.extend(ui.ctx().input(|i| i.events.iter().filter(|e| matches!(e, egui::Event::Key { pressed: true, .. })).cloned().collect::<Vec<_>>()));
                     ui.ctx().input(|i| (i.viewport().close_requested(), i.viewport().inner_rect))
@@ -204,7 +236,7 @@ impl<T: Clone + PartialEq + Hash + std::fmt::Debug> Dock<T> {
                 if let Some(r) = inner {
                     w.size = r.size();
                 }
-                if closed {
+                if closed || put_back {
                     back.push(id);
                 }
                 continue;
@@ -395,20 +427,29 @@ fn node_ui<T: Clone + PartialEq + Hash + std::fmt::Debug, V: DockViewer<T>>(ui: 
 fn leaf_ui<T: Clone + PartialEq + Hash + std::fmt::Debug, V: DockViewer<T>>(ui: &mut Ui, leaf: &mut Leaf<T>, rect: Rect, p: &mut Pass<T>, viewer: &mut V, window: Option<u64>) {
     let t = p.theme;
     leaf.rect = rect;
-    let bar = Rect::from_min_size(rect.min, vec2(rect.width(), p.bar_h.min(rect.height())));
-    let body = Rect::from_min_max(pos2(rect.left(), bar.bottom()), rect.max);
+    let full = Rect::from_min_size(rect.min, vec2(rect.width(), p.bar_h.min(rect.height())));
+    // The tab bar under a frameless window's buttons stops before them.
+    let bar = match p.controls {
+        Some(c) if full.right() > c.left() && (full.top() - c.top()).abs() < 1.0 => Rect::from_min_max(full.min, pos2(c.left().max(full.left()), full.bottom())),
+        _ => full,
+    };
+    let body = Rect::from_min_max(pos2(rect.left(), full.bottom()), rect.max);
     leaf.body = body;
-    // In a window, its rounded corners.
-    let (top, bottom) = if window.is_some() { (CornerRadius { nw: 8, ne: 8, sw: 0, se: 0 }, CornerRadius { nw: 0, ne: 0, sw: 8, se: 8 }) } else { (CornerRadius::ZERO, CornerRadius::ZERO) };
+    // In a window inside the app, its rounded corners.
+    let (top, bottom) = if window.is_some() && !p.os { (CornerRadius { nw: 8, ne: 8, sw: 0, se: 0 }, CornerRadius { nw: 0, ne: 0, sw: 8, se: 8 }) } else { (CornerRadius::ZERO, CornerRadius::ZERO) };
     let painter = ui.painter_at(rect);
-    painter.rect_filled(bar, top, t.frame);
+    painter.rect_filled(full, top, t.frame);
     painter.rect_filled(body, bottom, t.panel);
-    painter.hline(bar.x_range(), bar.bottom() - 0.5, Stroke::new(1.0, t.line));
-    // A window moves by the empty part of its tab bar (the tabs come after, on top).
-    if let Some(id) = window.filter(|_| !p.os) {
-        let moved = ui.interact(bar, Id::unique(("dock-window-bar", id, leaf.tabs.first())), Sense::drag());
-        if moved.dragged() {
+    painter.hline(full.x_range(), full.bottom() - 0.5, Stroke::new(1.0, t.line));
+    // A window moves by the empty part of its tab bar (the tabs come after,
+    // on top); a frameless window of its own, as the system's title bar would.
+    if let Some(id) = window {
+        let moved = ui.interact(bar, Id::unique(("dock-window-bar", id, leaf.tabs.first())), if p.os { Sense::click_and_drag() } else { Sense::drag() });
+        if !p.os && moved.dragged() {
             p.moves.push((id, moved.drag_delta()));
+        }
+        if p.os && p.controls.is_some() {
+            move_own_window(ui.ctx(), &moved);
         }
     }
 
@@ -493,8 +534,12 @@ fn leaf_ui<T: Clone + PartialEq + Hash + std::fmt::Debug, V: DockViewer<T>>(ui: 
         if resp.middle_clicked() && closeable[i] {
             p.acts.push(Act::Close(tab.clone()));
         }
-        if resp.drag_started() && !p.os {
+        if !p.os && resp.drag_started() {
             p.acts.push(Act::Drag(tab.clone()));
+        }
+        // In a frameless window of its own, a tab moves the window too.
+        if p.os && p.controls.is_some() {
+            move_own_window(ui.ctx(), &resp);
         }
         let mut close_it = false;
         resp.context_menu(|ui| {
@@ -536,4 +581,15 @@ fn leaf_ui<T: Clone + PartialEq + Hash + std::fmt::Debug, V: DockViewer<T>>(ui: 
         viewer.ui(&mut child, tab);
     }
     p.places.push(Place { tabs: leaf.tabs.clone(), rect, bar, body, tab_rects, layer: ui.layer_id() });
+}
+
+/// A frameless window of its own: dragging moves it, a double-click
+/// maximizes it (or puts it back to its size), as a title bar does.
+fn move_own_window(ctx: &egui::Context, resp: &egui::Response) {
+    if resp.double_clicked() {
+        let max = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!max));
+    } else if resp.drag_started_by(egui::PointerButton::Primary) {
+        ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
+    }
 }

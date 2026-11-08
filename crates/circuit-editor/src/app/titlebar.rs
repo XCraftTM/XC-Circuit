@@ -55,8 +55,18 @@ enum Button {
 
 /// Minimize, maximize/restore and close, laid out right to left.
 pub fn window_buttons(ui: &mut egui::Ui, theme: &Theme) {
-    for b in [Button::Close, Button::Maximize, Button::Minimize] {
-        let (rect, resp) = ui.allocate_exact_size(vec2(BUTTON_W, HEIGHT), Sense::click());
+    buttons(ui, theme, &[Button::Close, Button::Maximize, Button::Minimize], HEIGHT);
+}
+
+/// Minimize and maximize/restore, `height` tall, right to left: for a tab's
+/// window of its own, which goes back into the app instead of closing.
+pub fn minimize_maximize(ui: &mut egui::Ui, theme: &Theme, height: f32) {
+    buttons(ui, theme, &[Button::Maximize, Button::Minimize], height);
+}
+
+fn buttons(ui: &mut egui::Ui, theme: &Theme, list: &[Button], height: f32) {
+    for &b in list {
+        let (rect, resp) = ui.allocate_exact_size(vec2(BUTTON_W, height), Sense::click());
         let name = match b {
             Button::Minimize => t!("Minimize"),
             Button::Maximize if maximized(ui.ctx()) => t!("Restore"),
