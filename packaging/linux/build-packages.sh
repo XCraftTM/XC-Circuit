@@ -105,7 +105,8 @@ exec "$here/opt/xc-circuit/xc-circuit" "$@"
 EOF
 chmod 755 "$app/AppRun"
 tool="$work/appimagetool"
-curl -fsSL -o "$tool" "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-$arch.AppImage"
+# GitHub's release downloads sometimes time out (504) for a while: try again, waiting longer each time.
+curl -fsSL --retry 8 --retry-delay 20 --retry-all-errors --connect-timeout 30 -o "$tool" "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-$arch.AppImage"
 chmod 755 "$tool"
 # The runners have no FUSE: the tool unpacks itself instead.
 APPIMAGE_EXTRACT_AND_RUN=1 ARCH="$arch" "$tool" --no-appstream "$app" "$out/XC-Circuit-$version-linux-$arch.AppImage"
