@@ -174,6 +174,7 @@ impl<T: Clone + PartialEq + Hash + std::fmt::Debug> Dock<T> {
         // Where the app's window is on the screen: windows of their own are placed from it.
         let screen = ctx.input(|i| i.viewport().inner_rect).map_or(egui::Vec2::ZERO, |r| r.min.to_vec2());
         let mut back = Vec::new();
+        let mut keys = Vec::new();
         for w in &mut self.windows {
             if let Some(first) = w.os {
                 if !p.can_pop {
@@ -193,6 +194,8 @@ impl<T: Clone + PartialEq + Hash + std::fmt::Debug> Dock<T> {
                     ui.painter().rect_filled(all, 0.0, theme.panel);
                     node_ui(ui, node, all, &mut p, viewer, Some(id), &mut Vec::new());
                     ui.allocate_rect(all, Sense::hover());
+                    // Its key presses, for the app's shortcuts (Ctrl+S, F5 …).
+                    keys.extend(ui.ctx().input(|i| i.events.iter().filter(|e| matches!(e, egui::Event::Key { pressed: true, .. })).cloned().collect::<Vec<_>>()));
                     ui.ctx().input(|i| (i.viewport().close_requested(), i.viewport().inner_rect))
                 });
                 p.os = false;
@@ -248,6 +251,10 @@ impl<T: Clone + PartialEq + Hash + std::fmt::Debug> Dock<T> {
         }
         let Pass { acts, places, moves, .. } = p;
         self.places = places;
+        if !keys.is_empty() {
+            self.keys.extend(keys);
+            ctx.request_repaint();
+        }
         // Closed by the system's ×: back into the app's window, nothing lost.
         for id in back {
             self.put_back(id);

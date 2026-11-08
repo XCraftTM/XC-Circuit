@@ -413,6 +413,11 @@ impl eframe::App for CircuitApp {
         }
         // Shortcuts that work everywhere (also while typing), unless one is being recorded.
         if !self.ed.recording_shortcut(&ctx) {
+            // Presses in a tab's window of its own count here too.
+            let passed = self.dock.take_keys();
+            if !passed.is_empty() {
+                ctx.input_mut(|i| i.events.extend(passed.into_iter().filter(keymap::passed_on)));
+            }
             let keys = self.ed.prefs.shortcuts.clone();
             let typing = ctx.text_edit_focused();
             let hit = |action| keymap::consume_while(&ctx, &keys, action, typing);
@@ -425,6 +430,41 @@ impl eframe::App for CircuitApp {
             }
             if hit(Hotkey::Stop) {
                 self.bot.stop_pressed(&mut self.ed);
+            }
+            if hit(Hotkey::Start) && self.ed.project.is_some() {
+                self.bot.start_pressed(&mut self.ed, &ctx);
+            }
+            if hit(Hotkey::Restart) && self.ed.project.is_some() {
+                self.bot.restart_pressed(&mut self.ed, &ctx);
+            }
+            let has_project = self.ed.project.is_some();
+            if hit(Hotkey::BotSettings) && has_project {
+                self.bot.open_settings(&mut self.ed);
+            }
+            if hit(Hotkey::SlashCommands) && has_project && self.ed.has_slash_commands() {
+                crate::builders::slash::open(&mut self.ed);
+            }
+            if hit(Hotkey::ExportBot) && has_project {
+                self.bot.open_export(&self.ed);
+            }
+            if hit(Hotkey::Upload) && has_project {
+                self.bot.hosting.upload(&mut self.ed);
+            }
+            if hit(Hotkey::ServerConsole) && has_project {
+                self.bot.hosting.open_console(&mut self.ed);
+            }
+            if hit(Hotkey::ServerSettings) && has_project {
+                self.bot.hosting.open(&self.ed);
+            }
+            if hit(Hotkey::ToggleRemote) && has_project {
+                if self.bot.hosting.can_control(&self.ed) {
+                    let server = !self.bot.hosting.remote;
+                    self.pick_remote(server);
+                    let to = if server { t!("the server") } else { t!("this computer") };
+                    self.ed.log(Level::Info, tf!("Run, Restart and Stop now act on {place}.", place = to));
+                } else {
+                    self.ed.log(Level::Info, t!("Run can switch to the server once a Calagopus server is set up (Bot › Server…)."));
+                }
             }
             if hit(Hotkey::Settings) {
                 self.open_settings();

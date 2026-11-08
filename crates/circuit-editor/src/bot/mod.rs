@@ -200,6 +200,20 @@ impl BotUi {
         }
     }
 
+    /// Start, but only when it's stopped (a shortcut for Start alone).
+    pub fn start_pressed(&mut self, ed: &mut Editor, ctx: &egui::Context) {
+        if self.shown_state() == BotState::Stopped {
+            self.run_pressed(ed, ctx);
+        }
+    }
+
+    /// Restart, but only when it runs (a shortcut for Restart alone).
+    pub fn restart_pressed(&mut self, ed: &mut Editor, ctx: &egui::Context) {
+        if self.shown_state() == BotState::Running {
+            self.run_pressed(ed, ctx);
+        }
+    }
+
     /// The state Run and the status bar show: the server's with Server picked.
     pub fn shown_state(&self) -> BotState {
         match (&self.hosting.watch, self.hosting.remote) {

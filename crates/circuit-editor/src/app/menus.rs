@@ -185,25 +185,25 @@ impl CircuitApp {
                     self.bot.stop_pressed(&mut self.ed);
                 }
                 ui.separator();
-                if self.ed.has_slash_commands() && kit::menu_item(ui, t!("Slash Commands…"), None, has_project).clicked() {
+                if self.ed.has_slash_commands() && kit::menu_item(ui, t!("Slash Commands…"), self.shortcut_shown(Hotkey::SlashCommands), has_project).clicked() {
                     crate::builders::slash::open(&mut self.ed);
                 }
-                if kit::menu_item(ui, t!("Settings…"), None, has_project).clicked() {
+                if kit::menu_item(ui, t!("Settings…"), self.shortcut_shown(Hotkey::BotSettings), has_project).clicked() {
                     self.bot.open_settings(&mut self.ed);
                 }
-                if kit::menu_item(ui, t!("Export…"), None, has_project).clicked() {
+                if kit::menu_item(ui, t!("Export…"), self.shortcut_shown(Hotkey::ExportBot), has_project).clicked() {
                     self.bot.open_export(&self.ed);
                 }
                 ui.separator();
-                if kit::menu_item(ui, t!("Server…"), None, has_project).clicked() {
+                if kit::menu_item(ui, t!("Server…"), self.shortcut_shown(Hotkey::ServerSettings), has_project).clicked() {
                     self.bot.hosting.open(&self.ed);
                 }
                 let configured = has_project && crate::bot::hosting::HostingUi::configured(&self.ed);
-                if kit::menu_item(ui, t!("Upload to the server"), None, configured && self.bot.hosting.busy().is_none()).clicked() {
+                if kit::menu_item(ui, t!("Upload to the server"), self.shortcut_shown(Hotkey::Upload), configured && self.bot.hosting.busy().is_none()).clicked() {
                     self.bot.hosting.upload(&mut self.ed);
                 }
                 let calagopus = has_project && crate::bot::hosting::settings_of(&self.ed).kind == circuit_runner::hosting::Kind::Calagopus;
-                if calagopus && kit::menu_item(ui, t!("Server console"), None, true).clicked() {
+                if calagopus && kit::menu_item(ui, t!("Server console"), self.shortcut_shown(Hotkey::ServerConsole), true).clicked() {
                     self.bot.hosting.open_console(&mut self.ed);
                 }
             }).response);

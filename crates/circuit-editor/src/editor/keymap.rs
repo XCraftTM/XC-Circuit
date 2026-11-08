@@ -19,6 +19,19 @@ pub enum Action {
     OpenProject,
     Run,
     Stop,
+    /// Start only (nothing when it runs already).
+    Start,
+    /// Restart only (nothing when it's stopped).
+    Restart,
+    BotSettings,
+    SlashCommands,
+    ExportBot,
+    /// Upload to the bot's server.
+    Upload,
+    ServerConsole,
+    ServerSettings,
+    /// Run, Restart and Stop between this computer and the server.
+    ToggleRemote,
     Undo,
     Redo,
     Duplicate,
@@ -37,7 +50,7 @@ pub enum Action {
 pub const PER_ACTION: usize = 2;
 
 impl Action {
-    pub const ALL: [Action; 19] = [
+    pub const ALL: [Action; 28] = [
         Action::CommandPalette,
         Action::Settings,
         Action::Save,
@@ -45,6 +58,15 @@ impl Action {
         Action::OpenProject,
         Action::Run,
         Action::Stop,
+        Action::Start,
+        Action::Restart,
+        Action::BotSettings,
+        Action::SlashCommands,
+        Action::ExportBot,
+        Action::Upload,
+        Action::ServerConsole,
+        Action::ServerSettings,
+        Action::ToggleRemote,
         Action::Undo,
         Action::Redo,
         Action::Duplicate,
@@ -69,6 +91,15 @@ impl Action {
             Action::OpenProject => "open_project",
             Action::Run => "run",
             Action::Stop => "stop",
+            Action::Start => "start",
+            Action::Restart => "restart",
+            Action::BotSettings => "bot_settings",
+            Action::SlashCommands => "slash_commands",
+            Action::ExportBot => "export_bot",
+            Action::Upload => "upload",
+            Action::ServerConsole => "server_console",
+            Action::ServerSettings => "server_settings",
+            Action::ToggleRemote => "toggle_remote",
             Action::Undo => "undo",
             Action::Redo => "redo",
             Action::Duplicate => "duplicate",
@@ -93,6 +124,15 @@ impl Action {
             Action::OpenProject => t!("Open project"),
             Action::Run => t!("Run or restart the bot"),
             Action::Stop => t!("Stop the bot"),
+            Action::Start => t!("Start the bot (when it's stopped)"),
+            Action::Restart => t!("Restart the bot (when it runs)"),
+            Action::BotSettings => t!("Bot settings"),
+            Action::SlashCommands => t!("Slash Commands"),
+            Action::ExportBot => t!("Export the bot"),
+            Action::Upload => t!("Upload to the server"),
+            Action::ServerConsole => t!("Server console"),
+            Action::ServerSettings => t!("Server settings (Bot › Server…)"),
+            Action::ToggleRemote => t!("Switch Run between this computer and the server"),
             Action::Undo => t!("Undo"),
             Action::Redo => t!("Redo"),
             Action::Duplicate => t!("Duplicate the selected blocks"),
@@ -112,7 +152,8 @@ impl Action {
     pub fn group(self) -> &'static str {
         match self {
             Action::CommandPalette | Action::Settings | Action::Save | Action::NewProject | Action::OpenProject => t!("General"),
-            Action::Run | Action::Stop => t!("Bot"),
+            Action::Run | Action::Stop | Action::Start | Action::Restart | Action::BotSettings | Action::SlashCommands | Action::ExportBot => t!("Bot"),
+            Action::Upload | Action::ServerConsole | Action::ServerSettings | Action::ToggleRemote => t!("Server"),
             Action::Undo | Action::Redo | Action::Duplicate | Action::SelectAll | Action::Delete => t!("Editing"),
             _ => t!("Canvas"),
         }
@@ -145,6 +186,8 @@ impl Action {
             Action::ZoomIn => vec![s("Ctrl+=")],
             Action::ZoomOut => vec![s("Ctrl+-")],
             Action::ZoomReset => vec![s("Ctrl+0")],
+            // None to start with: set in Settings › Shortcuts.
+            Action::Start | Action::Restart | Action::BotSettings | Action::SlashCommands | Action::ExportBot | Action::Upload | Action::ServerConsole | Action::ServerSettings | Action::ToggleRemote => Vec::new(),
         }
     }
 }
@@ -304,6 +347,13 @@ fn store(custom: &mut Custom, action: Action, list: Vec<Shortcut>) {
     }
 }
 
+/// Whether a key press in another of the app's windows (a tab in a window
+/// of its own) is passed on to the main one for its shortcuts: only presses
+/// that can't be typing (with Ctrl or Alt, or a function key).
+pub fn passed_on(event: &Event) -> bool {
+    Shortcut::from_event(event).is_some_and(|s| s.works_while_typing() && matches!(s.trigger, Trigger::Key(_)))
+}
+
 /// Whether an action's shortcut was pressed this frame; takes the press, so
 /// nothing else reacts to it.
 pub fn consume(ctx: &egui::Context, custom: &Custom, action: Action) -> bool {
@@ -344,9 +394,11 @@ mod tests {
         assert_eq!(Shortcut::parse("Alt+Ctrl+Home").unwrap().text(), "Ctrl+Alt+Home", "any order in, one order out");
         assert_eq!(Shortcut::parse("Del").unwrap().text(), "Delete");
         assert!(Shortcut::parse("Hyper+K").is_none() && Shortcut::parse("Ctrl+NoSuchKey").is_none());
-        // Every default is readable, and every key egui knows reads back.
+        // Every default is readable (the newer actions have none to start
+        // with), and every key egui knows reads back.
         for a in Action::ALL {
-            assert!(!a.defaults().is_empty(), "{a:?}");
+            assert!(!a.defaults().is_empty() || a.group() == "Server" || matches!(a, Action::Start | Action::Restart | Action::BotSettings | Action::SlashCommands | Action::ExportBot), "{a:?}");
+            assert!(!a.id().is_empty() && Action::ALL.iter().filter(|b| b.id() == a.id()).count() == 1, "{a:?}: one id each");
         }
         for k in Key::ALL {
             let s = Shortcut { ctrl: true, shift: false, alt: true, trigger: Trigger::Key(*k) };
@@ -397,5 +449,37 @@ mod tests {
         // Back to the defaults: nothing stays stored for it.
         set(&mut custom, Action::Run, Action::Run.defaults());
         assert!(!custom.contains_key("run"));
+    }
+
+    /// The newer actions (Upload, Start, Restart …) have no shortcut to
+    /// start with, and take one like the others.
+    #[test]
+    fn newer_actions_take_a_shortcut() {
+        let mut custom = Custom::new();
+        assert!(shortcuts(&custom, Action::Upload).is_empty() && label(&custom, Action::Upload).is_empty());
+        set(&mut custom, Action::Upload, vec![Shortcut::parse("Ctrl+U").unwrap()]);
+        assert_eq!(label(&custom, Action::Upload), "Ctrl+U");
+        let ctx = egui::Context::default();
+        let press = key(Key::U, Modifiers::COMMAND);
+        let raw = egui::RawInput { events: vec![press], ..Default::default() };
+        let mut fired = false;
+        let mut out = ctx.run_ui(raw, |_| fired = consume(&ctx, &custom, Action::Upload));
+        out.textures_delta.clear();
+        assert!(fired);
+        // Taken back to none, nothing stays stored.
+        set(&mut custom, Action::Upload, Vec::new());
+        assert!(custom.is_empty());
+    }
+
+    /// From a tab's window of its own, only presses that can't be typing
+    /// reach the main window's shortcuts.
+    #[test]
+    fn other_windows_pass_on_only_real_shortcuts() {
+        assert!(passed_on(&key(Key::S, Modifiers::COMMAND)));
+        assert!(passed_on(&key(Key::F5, Modifiers::NONE)));
+        assert!(passed_on(&key(Key::F5, Modifiers::SHIFT)));
+        assert!(!passed_on(&key(Key::N, Modifiers::NONE)), "typed");
+        assert!(!passed_on(&key(Key::Delete, Modifiers::NONE)), "deleting text");
+        assert!(!passed_on(&key(Key::Escape, Modifiers::NONE)));
     }
 }

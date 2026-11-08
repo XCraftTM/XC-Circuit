@@ -141,6 +141,9 @@ pub struct Dock<T> {
     /// The tab the user last clicked into.
     #[serde(skip)]
     focused: Option<T>,
+    /// Key presses in windows of their own, for the app's shortcuts.
+    #[serde(skip)]
+    keys: Vec<egui::Event>,
     /// A tab being dragged.
     #[serde(skip)]
     drag: Option<T>,
@@ -280,7 +283,7 @@ pub fn prune<T>(node: Node<T>) -> Option<Node<T>> {
 
 impl<T: Clone + PartialEq> Default for Dock<T> {
     fn default() -> Self {
-        Dock { main: None, windows: Vec::new(), focused: None, drag: None, places: Vec::new(), next_window: 1 }
+        Dock { main: None, windows: Vec::new(), focused: None, drag: None, places: Vec::new(), next_window: 1, keys: Vec::new() }
     }
 }
 
@@ -418,6 +421,11 @@ impl<T: Clone + PartialEq> Dock<T> {
             Some(main) => main.leaves_mut()[0].push(tab),
             None => self.main = Some(Node::leaf(vec![tab])),
         }
+    }
+
+    /// Key presses made in windows of their own since this was last asked.
+    pub fn take_keys(&mut self) -> Vec<egui::Event> {
+        std::mem::take(&mut self.keys)
     }
 
     /// Opens tabs in a window of their own.

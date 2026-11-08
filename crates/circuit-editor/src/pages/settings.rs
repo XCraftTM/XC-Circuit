@@ -601,7 +601,8 @@ fn shortcuts(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsVie
                 ui.label(RichText::new(action.name()).size(13.0).color(theme.text));
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     ui.spacing_mut().item_spacing.x = 6.0;
-                    if changed && ui.link(RichText::new(t!("Reset")).size(12.0)).on_hover_text(tf!("Back to {keys}", keys = action.defaults().iter().map(Shortcut::text).collect::<Vec<_>>().join(", "))).clicked() {
+                    let back = if action.defaults().is_empty() { t!("Back to no shortcut").to_string() } else { tf!("Back to {keys}", keys = action.defaults().iter().map(Shortcut::text).collect::<Vec<_>>().join(", ")) };
+                    if changed && ui.link(RichText::new(t!("Reset")).size(12.0)).on_hover_text(back).clicked() {
                         reset = true;
                     }
                     let recording_here = view.recording.filter(|(a, _)| *a == action).map(|(_, s)| s);

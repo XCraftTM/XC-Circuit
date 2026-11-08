@@ -18,16 +18,16 @@ impl CircuitApp {
         }
         if has_project {
             if self.ed.has_slash_commands() {
-                items.push(Item::new(t!("Bot"), t!("Slash Commands…"), Cmd::SlashCommands));
+                items.push(Item::new(t!("Bot"), t!("Slash Commands…"), Cmd::SlashCommands).shortcut(self.key_label(Hotkey::SlashCommands)));
             }
-            items.push(Item::new(t!("Bot"), t!("Bot Settings…"), Cmd::Settings));
-            items.push(Item::new(t!("Bot"), "Export…", Cmd::Export));
-            items.push(Item::new(t!("Bot"), t!("Server…"), Cmd::Hosting));
+            items.push(Item::new(t!("Bot"), t!("Bot Settings…"), Cmd::Settings).shortcut(self.key_label(Hotkey::BotSettings)));
+            items.push(Item::new(t!("Bot"), "Export…", Cmd::Export).shortcut(self.key_label(Hotkey::ExportBot)));
+            items.push(Item::new(t!("Bot"), t!("Server…"), Cmd::Hosting).shortcut(self.key_label(Hotkey::ServerSettings)));
             if crate::bot::hosting::HostingUi::configured(&self.ed) {
-                items.push(Item::new(t!("Bot"), t!("Upload to the server"), Cmd::Upload));
+                items.push(Item::new(t!("Bot"), t!("Upload to the server"), Cmd::Upload).shortcut(self.key_label(Hotkey::Upload)));
             }
             if crate::bot::hosting::settings_of(&self.ed).kind == circuit_runner::hosting::Kind::Calagopus {
-                items.push(Item::new(t!("Bot"), t!("Server console"), Cmd::ServerConsole));
+                items.push(Item::new(t!("Bot"), t!("Server console"), Cmd::ServerConsole).shortcut(self.key_label(Hotkey::ServerConsole)));
             }
             items.push(Item::new(t!("File"), "Save", Cmd::Save).shortcut(self.key_label(Hotkey::Save)));
             items.push(Item::new(t!("File"), t!("Import workspaces…"), Cmd::ImportWorkspaces));
@@ -172,5 +172,10 @@ impl CircuitApp {
     /// An action's first shortcut, for menus and the palette.
     pub(super) fn key_label(&self, action: Hotkey) -> String {
         keymap::label(&self.ed.prefs.shortcuts, action)
+    }
+
+    /// An action's shortcut for a menu, when it has one.
+    pub(super) fn shortcut_shown(&self, action: Hotkey) -> Option<String> {
+        Some(self.key_label(action)).filter(|k| !k.is_empty())
     }
 }
