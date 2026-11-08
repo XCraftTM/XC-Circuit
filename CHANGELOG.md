@@ -14,6 +14,9 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **A lighter canvas background**: the dots are one repeated picture instead of a small circle each, which took up to a third of a canvas frame and 20,000 triangles. They look the same.
 - **A freeze detector**: when XC Circuit stops answering (Windows says "Not Responding": it can't reach the window; one that only isn't drawing while it's moved or minimized doesn't count) for three seconds or more, the Console says for how long and where it was stuck (a tab, saving, the Problems list, plugins, or after its frame: the graphics card, Windows or a tool reading the window), and freezes.log in the app's data folder keeps it, also while it's still stuck. It also says when the app was stuck inside egui (laying out a long text, say, or the window's accessibility tree). It helps find what makes slower computers freeze.
 
+### Fixed
+- **Pasted blocks point at each other**: a text such as `${#7.user.id}` kept pointing at block #7 after copying and pasting, though the pasted blocks get new numbers, so in another workspace it read a block that isn't there ("Cannot read properties of undefined"). Pasting (and Duplicate) now points it at the pasted copy of #7 when that was copied along, in texts, embeds and layouts alike. Problems now also lists a text that uses a block number the workspace doesn't have, for blocks pasted before this fix.
+
 ## 0.2.3
 
 ### Added

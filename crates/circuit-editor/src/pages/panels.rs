@@ -452,6 +452,19 @@ pub fn collect_problems(ed: &mut Editor) -> Vec<ProblemItem> {
                         items.push((format!("{} › {}", ws.name, def.name), format!("{}: {p}", f.label(k)), Some((key.clone(), id.clone()))));
                     }
                 }
+                // `${#4.…}` pointing at a block this workspace doesn't have (a
+                // copy pasted without it, or a block since deleted).
+                let mut said = std::collections::HashSet::new();
+                for (k, v) in &node.values {
+                    let mut refs = Vec::new();
+                    circuit_core::graph::block_refs_in(v, &mut refs);
+                    for r in refs.into_iter().filter(|r| !ws.nodes.contains_key(r)) {
+                        if said.insert((k.clone(), r.clone())) {
+                            let field = def.fields.get(k).map(|f| f.label(k).to_string()).unwrap_or_else(|| k.clone());
+                            items.push((format!("{} › {}", ws.name, def.name), tf!("`{field}` uses #{block}, but this workspace has no block #{block}", field = field, block = r), Some((key.clone(), id.clone()))));
+                        }
+                    }
+                }
             }
             for (from, count) in ws.split_paths() {
                 let name = ws.nodes.get(&from.node).and_then(|n| ed.reg.block(&n.block)).map(|d| d.name.clone()).or_else(|| ws.zones.get(&from.node).map(|z| format!("Try {}", z.title))).unwrap_or_default();
@@ -589,6 +602,34 @@ mod tests {
         let at = |node: &str, what: &str| items.iter().any(|(_, why, at)| at.as_ref().is_some_and(|(_, n)| n == node) && why.contains(what));
         assert!(at("embed", "Embed: The title has 300 characters: Discord allows 256."), "{items:?}");
         assert!(at("layout", "label has up to 80 characters"), "{items:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// `${#7.…}` pointing at a block the workspace doesn't have (a copy
+    /// pasted without it) is a problem on the block that uses it.
+    #[test]
+    fn a_reference_to_a_missing_block_is_a_problem() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        let dir = std::env::temp_dir().join(format!("xc-problems-refs-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        circuit_core::Project::create(&dir, "Refs", "discord-bot").unwrap();
+        ed.open_project(&dir);
+        let log = |text: &str| Node { block: "core.log@1".into(), values: serde_json::json!({ "message": text }).as_object().cloned().unwrap(), ..Default::default() };
+        let project = ed.project.as_mut().unwrap();
+        let mut ws = Workspace::new("Main");
+        ws.nodes.insert("1".into(), Node { block: "core.on_start@1".into(), ..Default::default() });
+        ws.nodes.insert("2".into(), log("${#7.user.id} and ${#7.user.name}"));
+        ws.nodes.insert("3".into(), log("${#1.anything} ${'#9'}"));
+        ws.links.push("1.next > 2.in".parse().unwrap());
+        ws.links.push("2.next > 3.in".parse().unwrap());
+        project.workspaces.clear();
+        project.workspaces.insert("main".into(), ws);
+        let items = collect_problems(&mut ed);
+        let on = |node: &str| items.iter().filter(|(_, why, at)| at.as_ref().is_some_and(|(_, n)| n == node) && why.contains("but this workspace has no block")).count();
+        assert_eq!(on("2"), 1, "said once: {items:?}");
+        assert!(items.iter().any(|(_, why, _)| why.contains("uses #7, but this workspace has no block #7")), "{items:?}");
+        assert_eq!(on("3"), 0, "#1 is there, and '#9' is a text");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

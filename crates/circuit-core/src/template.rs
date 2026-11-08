@@ -167,6 +167,81 @@ fn names_in(code: &[char], out: &mut Vec<String>) {
     }
 }
 
+/// The `#4` block references in a text's `${…}` expressions (not inside
+/// strings): where each id starts and ends (character indexes), and the id.
+pub fn block_refs(text: &str) -> Vec<(usize, usize, String)> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = Vec::new();
+    for (start, end) in expressions(text) {
+        refs_in(&chars, start, end, &mut out);
+    }
+    out
+}
+
+fn refs_in(chars: &[char], from: usize, to: usize, out: &mut Vec<(usize, usize, String)>) {
+    let mut i = from;
+    while i < to {
+        let c = chars[i];
+        if c == '"' || c == '\'' {
+            i = string_end(chars, i);
+        } else if c == '`' {
+            // A template string: only its own ${…} parts are code.
+            let end = template_end(chars, i).min(to);
+            let mut j = i + 1;
+            while j + 1 < end {
+                if chars[j] == '\\' {
+                    j += 2;
+                    continue;
+                }
+                if chars[j] == '$' && chars[j + 1] == '{' {
+                    match expression_end(chars, j + 2) {
+                        Some(e) => {
+                            refs_in(chars, j + 2, e.min(end), out);
+                            j = e;
+                        }
+                        None => break,
+                    }
+                }
+                j += 1;
+            }
+            i = end;
+        } else if c == '#' {
+            let start = i + 1;
+            let mut j = start;
+            while j < to && is_name_char(chars[j]) {
+                j += 1;
+            }
+            if j > start {
+                out.push((start, j, chars[start..j].iter().collect()));
+            }
+            i = j;
+            continue;
+        } else if is_name_char(c) {
+            // Inside a name (a#b isn't a reference).
+            while i < to && is_name_char(chars[i]) {
+                i += 1;
+            }
+            continue;
+        }
+        i += 1;
+    }
+}
+
+/// The text with its `#4` block references renamed by `rename` (those it
+/// gives a new id for), or `None` when none changed.
+pub fn rename_blocks(text: &str, rename: impl Fn(&str) -> Option<String>) -> Option<String> {
+    let refs = block_refs(text);
+    let mut chars: Vec<char> = text.chars().collect();
+    let mut changed = false;
+    for (start, end, id) in refs.into_iter().rev() {
+        if let Some(new) = rename(&id).filter(|n| *n != id) {
+            chars.splice(start..end, new.chars());
+            changed = true;
+        }
+    }
+    changed.then(|| chars.into_iter().collect())
+}
+
 /// A text in the older `{name}` form (`{user}`, `{user.name}`, `{#4.message}`)
 /// in the `${…}` form, or `None` when it has none. Other braces stay.
 pub fn upgrade(text: &str) -> Option<String> {
@@ -225,6 +300,12 @@ mod tests {
 
     #[test]
     fn the_older_form_upgrades() {
+        let refs = |t: &str| block_refs(t).into_iter().map(|(_, _, id)| id).collect::<Vec<_>>();
+        assert_eq!(refs("${#7.user.id} and ${a + #12.value} #3"), vec!["7", "12"], "only inside ${{…}}");
+        assert_eq!(refs("${'#7' + \"#8\" + #9.x}"), vec!["9"], "not inside strings");
+        assert_eq!(refs("${`id ${#4.id} #5`}"), vec!["4"], "a template string's own ${{…}}");
+        assert_eq!(rename_blocks("${#7.user.id} ${#70.a} ${#8}", |id| (id == "7").then(|| "23".to_string())).unwrap(), "${#23.user.id} ${#70.a} ${#8}");
+        assert_eq!(rename_blocks("${#8}", |_| None), None);
         assert_eq!(upgrade("Hi {user}, {#4.message.url} and {user.name}!").unwrap(), "Hi ${user}, ${#4.message.url} and ${user.name}!");
         assert_eq!(upgrade("${user} \\d{3} {a,b} {} { x } {x.}"), None, "other braces and the new form stay");
     }

@@ -214,12 +214,46 @@ impl Workspace {
             map.insert(old.clone(), id.clone());
             new_ids.push(id);
         }
+        // `${#4.…}` in texts: blocks pasted along get their new ids.
+        let blocks: HashMap<&String, &String> = clip.nodes.keys().filter_map(|old| map.get(old).map(|new| (old, new))).collect();
+        for id in &new_ids {
+            if let Some(n) = self.nodes.get_mut(id) {
+                for v in n.values.values_mut() {
+                    rename_blocks_in(v, &|old| blocks.get(&old.to_string()).map(|s| s.to_string()));
+                }
+            }
+        }
         for l in &clip.links {
             if let (Some(from), Some(to)) = (map.get(&l.from.node), map.get(&l.to.node)) {
                 self.links.push(Link { from: PinRef::new(from, &l.from.pin), to: PinRef::new(to, &l.to.pin) });
             }
         }
         (new_ids, new_notes)
+    }
+}
+
+/// Renames `#4` block references in every text of a value (embeds, layouts
+/// and lists included).
+fn rename_blocks_in(v: &mut Value, rename: &dyn Fn(&str) -> Option<String>) {
+    match v {
+        Value::String(s) => {
+            if let Some(new) = crate::template::rename_blocks(s, rename) {
+                *s = new;
+            }
+        }
+        Value::Array(a) => a.iter_mut().for_each(|v| rename_blocks_in(v, rename)),
+        Value::Object(o) => o.values_mut().for_each(|v| rename_blocks_in(v, rename)),
+        _ => {}
+    }
+}
+
+/// Every `#4` block reference in a value's texts.
+pub fn block_refs_in(v: &Value, out: &mut Vec<String>) {
+    match v {
+        Value::String(s) => out.extend(crate::template::block_refs(s).into_iter().map(|(_, _, id)| id)),
+        Value::Array(a) => a.iter().for_each(|v| block_refs_in(v, out)),
+        Value::Object(o) => o.values().for_each(|v| block_refs_in(v, out)),
+        _ => {}
     }
 }
 
@@ -578,6 +612,35 @@ mod tests {
         assert_eq!(w.nodes[&ids[0]].at, [100.0, 0.0]);
         assert_eq!(w.nodes[&ids[0]].zone.as_deref(), Some("z2"));
         assert!(w.links.iter().any(|l| l.from.node == ids[0] && l.to.node == ids[1]));
+    }
+
+    /// `${#7.user.id}` in a pasted block points at the pasted copy of #7,
+    /// in plain texts and inside embeds alike; references to blocks that
+    /// weren't copied stay as they are.
+    #[test]
+    fn pasted_texts_point_at_the_pasted_blocks() {
+        let mut w: Workspace = serde_json::from_value(serde_json::json!({
+            "name": "t",
+            "nodes": {
+                "7": { "block": "discord.on_button@1", "at": [0, 0] },
+                "8": { "block": "core.check@1", "at": [10, 0], "values": { "value": "${#7.user.id}", "embed": { "title": "Hi ${#7.user}", "fields": [{ "value": "${#3.x}" }] } } },
+                "3": { "block": "core.log@1", "at": [20, 0] }
+            },
+            "links": ["7.next > 8.in"]
+        }))
+        .unwrap();
+        let clip = w.extract(&["7".into(), "8".into()]);
+        let ids = w.paste(&clip, [0.0, 100.0]);
+        assert_eq!(ids, ["9", "10"]);
+        let pasted = &w.nodes["10"].values;
+        assert_eq!(pasted["value"], "${#9.user.id}");
+        assert_eq!(pasted["embed"]["title"], "Hi ${#9.user}");
+        assert_eq!(pasted["embed"]["fields"][0]["value"], "${#3.x}", "#3 wasn't copied");
+        assert_eq!(w.nodes["8"].values["value"], "${#7.user.id}", "the original is untouched");
+        let mut refs = Vec::new();
+        block_refs_in(&serde_json::Value::Object(pasted.clone()), &mut refs);
+        refs.sort();
+        assert_eq!(refs, ["3", "9", "9"]);
     }
 
     #[test]

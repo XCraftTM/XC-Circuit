@@ -1130,6 +1130,7 @@ pub const UI_STRINGS: &[&str] = &[
     "Connected · {block} ({pin})",
     "Waiting for a {type} wire",
     "calls {name}, but its When Called block is in {workspace}, which is turned off",
+    "`{field}` uses #{block}, but this workspace has no block #{block}",
     "its {pin} output leads to {count} blocks: an action path can't split. Chain them one after another, or branch with If or Switch",
     "its {pin} wire leads back to a block before it, so this path never ends. To repeat blocks, use Repeat, Loop While or For Each",
     "its {pin} wire goes to a block it reads from, so they would wait for each other forever",
