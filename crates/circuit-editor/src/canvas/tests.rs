@@ -526,3 +526,39 @@ fn missing_inputs_pulse() {
     assert!((at(0.375) - 1.0).abs() < 1e-3 && at(1.125) < 1e-3, "full a quarter in, faint three quarters in");
     assert!((at(0.2) - at(1.7)).abs() < 1e-3, "it repeats");
 }
+
+/// Blocks with a message preview get as wide as the message, as Discord
+/// sizes it: a short one keeps the usual width, a row of buttons gets room,
+/// and long text stops at Discord's widest. A width set by hand wins.
+#[test]
+fn preview_blocks_get_as_wide_as_their_message() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+    ed.open_project(&root.join("examples/DemoBot"));
+    let button = |label: &str| serde_json::json!({ "type": 2, "style": 1, "label": label, "custom_id": label });
+    let layouts = [
+        ("short", serde_json::json!({ "components": [{ "type": 10, "content": "Hi" }] })),
+        ("buttons", serde_json::json!({ "components": [{ "type": 1, "components": [button("Close ticket"), button("Transcript"), button("Claim ticket")] }] })),
+        ("long", serde_json::json!({ "components": [{ "type": 10, "content": "A very long line of text that would not fit into any block on one line, so it wraps where Discord wraps it." }] })),
+    ];
+    let ws = ed.project.as_mut().unwrap().workspaces.get_mut("rank-command").unwrap();
+    ws.nodes.clear();
+    ws.links.clear();
+    for (i, (id, value)) in layouts.iter().enumerate() {
+        let mut values = serde_json::Map::new();
+        values.insert("layout".into(), value.clone());
+        ws.nodes.insert(id.to_string(), circuit_core::Node { block: "discord.build_layout@1".into(), at: [0.0, i as f32 * 600.0], values, ..Default::default() });
+    }
+    let mut values = serde_json::Map::new();
+    values.insert("layout".into(), layouts[2].1.clone());
+    ws.nodes.insert("given".into(), circuit_core::Node { block: "discord.build_layout@1".into(), at: [0.0, 1800.0], values, width: Some(320.0), ..Default::default() });
+    let ctx = egui::Context::default();
+    for _ in 0..3 {
+        frame(&ctx, &mut ed, "rank-command", vec![]);
+    }
+    let width = |id: &str| ed.views["rank-command"].block_rects().into_iter().find(|(k, _)| k == id).unwrap().1.width();
+    assert_eq!(width("short"), 300.0, "a short message keeps the usual width");
+    assert!(width("buttons") > 300.0 && width("buttons") < 508.0, "room for the buttons side by side: {}", width("buttons"));
+    assert_eq!(width("long"), 508.0, "long text stops at Discord's widest");
+    assert_eq!(width("given"), 320.0, "a width set with the grip stays");
+}

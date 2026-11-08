@@ -963,6 +963,35 @@ pub fn block_preview(ui: &mut Ui, layout: &Value, width: f32) {
     });
 }
 
+/// How wide a block's preview of `layout` wants to be (the whole box): as
+/// wide as its widest part on one line, such as a row of buttons or a line
+/// of text, as Discord sizes a message, but no wider than Discord shows one.
+pub fn block_preview_width(painter: &egui::Painter, layout: &Value) -> f32 {
+    let list = components(layout);
+    let inner = if list.is_empty() { 200.0 } else { list.iter().map(|c| wanted_width(painter, c)).fold(0.0, f32::max) };
+    (inner + 20.0).min(PREVIEW_W - 40.0)
+}
+
+/// How wide part `c` wants to be on one line (see `block_preview_width`).
+fn wanted_width(painter: &egui::Painter, c: &Value) -> f32 {
+    let text = |t: &str| crate::builders::markdown::layout(painter, t, crate::builders::markdown::Kind::Full, 14.0, discord::TEXT, 10_000.0).size().x;
+    let children = list_of(c, "components");
+    match ty(c) {
+        kind::TEXT => text(text_of(c, "content")),
+        kind::SECTION => children.iter().map(|t| text(text_of(t, "content"))).fold(0.0, f32::max) + 12.0 + 84.0,
+        kind::CONTAINER => children.iter().map(|x| wanted_width(painter, x)).fold(0.0, f32::max) + 32.0,
+        // Pictures take all the room there is.
+        kind::GALLERY => f32::INFINITY,
+        kind::FILE => 400.0,
+        kind::SEPARATOR => 0.0,
+        kind::ROW => {
+            let widths: Vec<f32> = children.iter().map(|x| if is_select(x) { 400.0 } else { painter.layout_no_wrap(button_label(x), FontId::proportional(13.5), Color32::WHITE).size().x + 32.0 }).collect();
+            widths.iter().sum::<f32>() + 8.0 * widths.len().saturating_sub(1) as f32
+        }
+        _ => 120.0,
+    }
+}
+
 fn preview_list(ui: &mut Ui, list: &[Value], width: f32) {
     for c in list {
         preview_one(ui, c, width);
@@ -1100,13 +1129,18 @@ fn spoiler_cover(ui: &mut Ui, r: egui::Rect) {
     ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, t!("SPOILER"), FontId::proportional(12.0), discord::STRONG);
 }
 
+/// A button's text as the preview shows it: its emoji and label.
+fn button_label(b: &Value) -> String {
+    match (text_of(b, "label"), emoji_text(b.get("emoji"))) {
+        (l, e) if !e.is_empty() && !e.starts_with('<') => format!("{e} {l}"),
+        (l, _) if picked_style(b) == 6 => if l.is_empty() { t!("Buy").to_string() } else { l.to_string() },
+        (l, _) => l.to_string(),
+    }
+}
+
 fn preview_button(ui: &mut Ui, b: &Value) {
     let style = picked_style(b);
-    let label = match (text_of(b, "label"), emoji_text(b.get("emoji"))) {
-        (l, e) if !e.is_empty() && !e.starts_with('<') => format!("{e} {l}"),
-        (l, _) if style == 6 => if l.is_empty() { t!("Buy").to_string() } else { l.to_string() },
-        (l, _) => l.to_string(),
-    };
+    let label = button_label(b);
     let disabled = b.get("disabled").and_then(Value::as_bool).unwrap_or(false);
     let fill = discord::button(style);
     let fill = if disabled { fill.gamma_multiply(0.5) } else { fill };

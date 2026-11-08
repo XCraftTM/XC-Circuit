@@ -162,6 +162,44 @@ pub(super) fn default_width(def: &BlockDef) -> f32 {
     def.width.unwrap_or(if shows { EMBED_NODE_W } else { NODE_W })
 }
 
+/// How wide a block with an embed, layout or form preview gets by itself:
+/// enough for the preview as Discord sizes it (as wide as its content, up to
+/// Discord's widest), never narrower than it starts. None for other blocks.
+/// Worked out again only when its values change (`cache`).
+pub(super) fn auto_width(measure: &egui::Painter, cache: &mut HashMap<String, (u64, f32)>, id: &str, node: &circuit_core::Node, def: Option<&BlockDef>, shape: Option<&BlockShape>) -> Option<f32> {
+    let (def, shape) = (def?, shape?);
+    let previews: Vec<(&String, &circuit_core::FieldDef)> = shape.visible_fields().filter(|(_, f)| matches!(f.type_name.as_str(), "layout" | "modal" | "embed")).collect();
+    if previews.is_empty() {
+        return None;
+    }
+    let value = |key: &String, f: &circuit_core::FieldDef| node.values.get(key).or(f.default.as_ref()).cloned().unwrap_or(Value::Null);
+    let mut h = crate::editor::Fingerprint::default();
+    for (key, f) in &previews {
+        (key.as_str(), value(key, f).to_string()).hash(&mut h);
+    }
+    let print = h.finish();
+    if let Some((p, w)) = cache.get(id)
+        && *p == print
+    {
+        return Some(*w);
+    }
+    let preview = previews
+        .iter()
+        .map(|(key, f)| {
+            let v = value(key, f);
+            match f.type_name.as_str() {
+                "layout" => crate::builders::layout::block_preview_width(measure, &v),
+                "modal" => crate::builders::modal::block_preview_width(measure, &v),
+                _ => crate::builders::embed::layout(measure, &crate::builders::embed::EmbedData::from_value(&v), crate::builders::embed::MAX_WIDTH, Some(4), 1.0).width,
+            }
+        })
+        .fold(0.0, f32::max);
+    // The preview sits 14 px in from each side.
+    let w = (preview + 28.0).max(default_width(def)).ceil();
+    cache.insert(id.to_string(), (print, w));
+    Some(w)
+}
+
 /// How tall a text box on a block is: as it was resized, or as it starts.
 pub(super) fn text_box_h(node: &circuit_core::Node, key: &str, f: &circuit_core::FieldDef) -> f32 {
     node.heights.get(key).copied().unwrap_or(if f.type_name == "textarea" { TEXT_AREA_H } else { TEXT_BOX_H })

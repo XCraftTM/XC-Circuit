@@ -95,7 +95,7 @@
     "3": {
       "block": "discord.send_message@3",
       "at": [
-        820,
+        1060,
         140
       ],
       "values": {
@@ -106,7 +106,7 @@
     "4": {
       "block": "discord.send_message@3",
       "at": [
-        1200,
+        1440,
         140
       ],
       "values": {
@@ -130,7 +130,7 @@
       "rect": [
         20,
         40,
-        1480,
+        1720,
         560
       ],
       "color": "#5865F2"

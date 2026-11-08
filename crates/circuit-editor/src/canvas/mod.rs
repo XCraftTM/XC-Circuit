@@ -110,6 +110,9 @@ pub struct CanvasView {
     /// How tall each layout field's preview was last drawn, uncut:
     /// (block, field) → height.
     pub preview_heights: HashMap<(String, String), f32>,
+    /// How wide each block with a message or form preview gets by itself,
+    /// with a fingerprint of the values it was worked out from: block → width.
+    auto_widths: HashMap<String, (u64, f32)>,
     /// Where the canvas' top-left corner was, and in which frame.
     pub last_origin: Option<(Pos2, u64)>,
     /// A note whose editor opens the next time this canvas is drawn (a new one).
@@ -197,8 +200,10 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         // Everything the layout is made from besides the shape: where the
         // block is, its width, pins, resized text boxes and measured rows.
         let mut h = crate::editor::Fingerprint::default();
-        // Wide enough for its controls, whatever width it was given.
-        let width = match (node.width, view.needed_widths.get(id.as_str())) {
+        // Wide enough for its controls, whatever width it was given; without
+        // one, as wide as its preview wants.
+        let given = node.width.or_else(|| auto_width(&measure, &mut view.auto_widths, id, node, def, shape.as_deref()));
+        let width = match (given, view.needed_widths.get(id.as_str())) {
             (w, Some(&need)) if need > w.unwrap_or_else(|| def.map_or(NODE_W, default_width)) => Some(need),
             (w, _) => w,
         };
@@ -243,14 +248,14 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         if let (Some(s), Some(d)) = (&shape, def) {
             for (key, f) in s.visible_fields().filter(|(_, f)| f.type_name == "canvas") {
                 let data = crate::builders::canvas::CanvasData::from_value(node.values.get(key).or(f.default.as_ref()).unwrap_or(&Value::Null));
-                let w = node.width.unwrap_or_else(|| default_width(d)) - 28.0;
+                let w = width.unwrap_or_else(|| default_width(d)) - 28.0;
                 tall.insert(key.clone(), 4.0 + crate::builders::canvas::block_height(&data, w) + 8.0 + 26.0 + 8.0);
             }
         }
         if let (Some(s), Some(d)) = (&shape, def) {
             for (key, f) in s.visible_fields().filter(|(_, f)| f.type_name == "embed") {
                 let data = crate::builders::embed::EmbedData::from_value(node.values.get(key).or(f.default.as_ref()).unwrap_or(&Value::Null));
-                let w = node.width.unwrap_or_else(|| default_width(d)) - 28.0;
+                let w = width.unwrap_or_else(|| default_width(d)) - 28.0;
                 tall.insert(key.clone(), crate::builders::embed::layout(&measure, &data, w, Some(4), EMBED_SCALE).height + 44.0);
             }
         }

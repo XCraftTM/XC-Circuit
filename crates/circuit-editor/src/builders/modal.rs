@@ -517,6 +517,27 @@ pub fn block_preview(ui: &mut Ui, form: &Value, width: f32) {
     });
 }
 
+/// How wide a block's preview of `form` wants to be (the whole box): as wide
+/// as its title, questions and texts on one line, but no wider than Discord's
+/// forms.
+pub fn block_preview_width(painter: &egui::Painter, form: &Value) -> f32 {
+    let one_line = |t: &str, size: f32| painter.layout_no_wrap(t.to_string(), egui::FontId::proportional(size), Color32::WHITE).size().x;
+    let mut inner = one_line(text_of(form, "title"), 14.5).max(220.0);
+    for c in parts(form) {
+        let w = match ty(c) {
+            kind::TEXT => markdown_width(painter, text_of(c, "content")),
+            kind::LABEL => one_line(&format!("{} *", text_of(c, "label")), 14.0).max(one_line(text_of(c, "description"), 12.5)),
+            _ => 0.0,
+        };
+        inner = inner.max(w);
+    }
+    (inner + 20.0).min(440.0)
+}
+
+fn markdown_width(painter: &egui::Painter, text: &str) -> f32 {
+    crate::builders::markdown::layout(painter, text, crate::builders::markdown::Kind::Full, 14.0, discord::TEXT, 10_000.0).size().x
+}
+
 fn parts_preview(ui: &mut Ui, form: &Value, width: f32) {
     for c in parts(form) {
         match ty(c) {
