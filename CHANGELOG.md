@@ -20,6 +20,9 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **Make any block wider**: drag the small grip in a block's bottom-right corner sideways to make it wider or narrower (the project keeps it); double-click it to reset. Handy for a Build Layout with a row of buttons or a long text.
 - **Update the app from the Updates window**: when a new XC Circuit is out, Help › Check for Updates now has **Update and restart** right there: it downloads the update, installs it as XC Circuit closes (asking about unsaved changes first) and opens it again. **What's new…** shows the release notes.
 
+### Changed
+- **Emoji in colour**: emoji in the editor (previews, block texts, the Console) are drawn with the computer's own colour emoji, as in Windows and Discord, instead of black-and-white outlines. Symbols the editor uses as marks, such as ▶ and ⚠, stay plain.
+
 ### Fixed
 - **Buttons in a layout preview no longer squash**: in a row of buttons too wide for the block, the last button's text broke over several lines. Buttons keep their text on one line, as in Discord, and move to the next line when there's no room.
 - **Problems lists empty inputs a block adds itself**: inputs that appear from a block's settings, such as Send Message's Channel when sending to a channel or its Interaction when replying, weren't checked, so an empty one only glowed on the block. They're listed in Problems now too.

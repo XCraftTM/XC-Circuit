@@ -16,6 +16,7 @@
 | One path per action | An action output leads to one block: connecting it to another block replaces the old wire. Paths can join, and branch only through blocks made for it (If, Switch, For Each). Older projects with split paths show them in Problems |
 | Yes/no inputs | Switches like Private reply can be connected too: click their pin toggle in the Inspector |
 | Long text | Text fields on blocks are boxes of a few lines; drag a box's corner down to make it taller or shorter and sideways to make the whole block wider or narrower (the block saves both in the project), double-click the corner to reset them |
+| Emoji | Emoji show in colour, as in Discord, with the computer's own emoji font (Segoe UI Emoji on Windows, Noto Color Emoji on Linux); symbols the editor uses as marks (▶ ⚠ ✔ ™ arrows) stay plain. Without an emoji font they're black and white |
 | Wider blocks | Drag the small grip in a block's bottom-right corner sideways to make it wider or narrower, such as a Build Layout so a row of buttons fits on one line; double-click it to reset the width |
 | Colors | Click a color swatch for the picker: square and hue bar, hex and RGB, Discord colors and your recent ones |
 | Field as pin | Click a field's faint pin, or "pin" in the Inspector |

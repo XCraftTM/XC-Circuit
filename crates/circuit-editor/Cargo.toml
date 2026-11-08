@@ -29,6 +29,9 @@ skrifa = { version = "0.44", default-features = false, features = ["std"] }
 # The symbol and emoji fonts (⚠, ✓, ▶ …) egui bundled up to 0.36; from 0.37
 # on they come only with this feature.
 egui = { version = "0.37", default-features = false, features = ["monochrome_emoji_fonts"] }
+# Colour emoji (the computer's emoji font, as in Discord): drawn by epaint
+# with this feature.
+epaint = { version = "0.37", default-features = false, features = ["color_fonts"] }
 egui_extras.workspace = true
 image.workspace = true
 base64 = "0.23"
