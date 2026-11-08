@@ -19,13 +19,13 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **Folders in folders**: workspaces and slash commands can be sorted into folders inside folders. Drag a folder onto the middle of another to put it in there, onto its top or bottom edge to put it above or below, or onto the project (or Slash commands) row to bring it back to the top; a folder's menu has **New folder here**. Deleting a folder moves what's in it up a level. Projects keep their folders as they were.
 - **More room for the builders' preview**: in the Embed, Layout and Modal Builders, **Hide** puts the values from earlier blocks away so the preview gets the whole column, and the line between the preview and the values can be dragged up or down. Both are remembered.
 - **Blocks fit their message**: blocks that show a message, embed or form (Build Layout, Build Embed, Show Modal …) get as wide as it is in Discord by themselves, up to Discord's widest (about 520 px for messages, 440 for forms): a row of buttons fits on one line, long text wraps where Discord wraps it. In your own projects, such a block can now reach into the one next to it: move that one a little.
-- **Make any block wider**: drag the small grip in a block's bottom-right corner sideways to make it wider or narrower (the project keeps it); double-click it to go back to the automatic width.
 - **Update the app from the Updates window**: when a new XC Circuit is out, Help › Check for Updates now has **Update and restart** right there: it downloads the update, installs it as XC Circuit closes (asking about unsaved changes first) and opens it again. **What's new…** shows the release notes.
 
 ### Changed
 - **Emoji in colour**: emoji in the editor (previews, block texts, the Console) are drawn with the computer's own colour emoji, as in Windows and Discord, instead of black-and-white outlines. Symbols the editor uses as marks, such as ▶ and ⚠, stay plain.
 
 ### Fixed
+- **Buttons show their Emoji field**: the Button block's Emoji was tucked away with the advanced settings, so it looked like buttons couldn't have one. It's a normal field now, and a button with an emoji can leave its text empty.
 - **Better block search**: searching for *date* listed Member Updated and other events first, because *date* is inside *Updated*. Blocks whose name starts with what you typed come first now, then whole words, then the start of a word, then the description; a match inside another word comes last.
 - **Buttons in a layout preview no longer squash**: in a row of buttons too wide for the block, the last button's text broke over several lines. Buttons keep their text on one line, as in Discord, and move to the next line when there's no room.
 - **Plugin updates show their versions properly**: the list of plugin updates showed a box instead of the arrow between the old and new version. It now says "1.0.3 to 1.0.4".

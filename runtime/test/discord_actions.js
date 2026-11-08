@@ -286,6 +286,27 @@ const log = (name) => (...args) => {
   assert.strictEqual(await mention("", "everyone"), "@everyone");
   await assert.rejects(mention(""), /needs a user/);
 
+  // Button: an emoji before the text, or an emoji alone (discord.js's
+  // ButtonBuilder stood in for by one that keeps what was set).
+  const realLoad = Module._load;
+  class ButtonBuilder {
+    constructor() { this.data = {}; }
+    setStyle(v) { this.data.style = v; return this; }
+    setLabel(v) { this.data.label = v; return this; }
+    setEmoji(v) { this.data.emoji = v; return this; }
+    setCustomId(v) { this.data.custom_id = v; return this; }
+    setURL(v) { this.data.url = v; return this; }
+    setDisabled(v) { this.data.disabled = v; return this; }
+  }
+  Module._load = function (request, ...rest) {
+    return request === "discord.js" ? { ButtonBuilder, ButtonStyle: { Primary: 1, Secondary: 2, Success: 3, Danger: 4, Link: 5, Premium: 6 } } : realLoad.call(this, request, ...rest);
+  };
+  const made = async (fields) => (await run("messages/button.js", fields)).button.data;
+  assert.deepStrictEqual(await made({ label: "Close", emoji: "🔒" }), { style: 1, disabled: false, label: "Close", custom_id: "my-button", emoji: "🔒" });
+  assert.ok(!("label" in (await made({ label: "", emoji: "<:tick:123>" }))), "an emoji alone: no text");
+  assert.strictEqual((await made({ label: "" })).label, " ", "neither: a blank text, as before");
+  Module._load = realLoad;
+
   console.log("discord actions test passed");
 })().catch((e) => {
   console.error(e);
