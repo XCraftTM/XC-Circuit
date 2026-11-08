@@ -22,6 +22,21 @@ pub(super) struct NoteSelection<'a> {
     pub(super) notes: &'a mut std::collections::HashSet<(String, String)>,
 }
 
+/// A note's title and description sizes on the canvas (in its own units).
+const TITLE_SIZE: f32 = 15.0;
+const DESC_SIZE: f32 = 12.5;
+/// The least they show as on screen, zoomed out.
+const TITLE_ON_SCREEN: f32 = 14.0;
+const DESC_ON_SCREEN: f32 = 11.0;
+
+/// The title's and description's sizes at a zoom: their own, or bigger when
+/// zoomed out so they show at least as big as TITLE_ON_SCREEN and
+/// DESC_ON_SCREEN.
+pub(super) fn text_sizes(zoom: f32) -> (f32, f32) {
+    let zoom = zoom.max(0.01);
+    (TITLE_SIZE.max(TITLE_ON_SCREEN / zoom), DESC_SIZE.max(DESC_ON_SCREEN / zoom))
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, ws_key: &str, blocks: &[NodeLayout], theme: &Theme, reg: &Registry, view: &mut CanvasView, edited: &mut bool, sel: NoteSelection, snap_to_grid: bool) {
     let ctx = cui.ctx().clone();
@@ -34,14 +49,29 @@ pub(super) fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, 
         let Some(note) = ws.notes.get(&nid).cloned() else { continue };
         let r = note_rect(&note);
         let color = note.color.as_deref().and_then(|c| Color32::from_hex(c).ok()).unwrap_or(theme.accent);
-        let pad = 14.0;
+        // Zoomed out, the title and description stay readable on screen
+        // (like a map's labels), as the edit button does; the room around
+        // them grows along.
+        let (title_size, desc_size) = text_sizes(zoom);
+        let k = title_size / TITLE_SIZE;
+        let pad = 14.0 * k;
+        let gap = 10.0 * k;
         let text_w = (r.width() - 2.0 * pad).max(20.0);
         let title = if note.title.trim().is_empty() { t!("Note").to_string() } else { note.title.clone() };
-        let job = egui::text::LayoutJob::simple(title, crate::ui::fonts::bold(15.0), theme.text, (text_w - button - 8.0).max(20.0));
+        let job = egui::text::LayoutJob::simple(title, crate::ui::fonts::bold(title_size), theme.text, (text_w - button - 8.0).max(20.0));
         let title_g = painter.layout_job(crate::ui::fonts::usable(&ctx, job));
-        let desc_g = (!note.text.trim().is_empty()).then(|| painter.layout(note.text.clone(), FontId::proportional(12.5), theme.text_muted, text_w));
-        let line = title_g.size().y.max(button);
-        let header_h = (10.0 + line + desc_g.as_ref().map_or(0.0, |g| 4.0 + g.size().y) + 10.0).min(r.height());
+        // The edit button sits on the title's line; only a button much
+        // taller than the title makes the line taller (no room above it).
+        let line = title_g.size().y.max(button - gap);
+        let desc = |size: f32| (!note.text.trim().is_empty()).then(|| painter.layout(note.text.clone(), FontId::proportional(size), theme.text_muted, text_w));
+        let height = |g: &Option<std::sync::Arc<egui::Galley>>| gap + line + g.as_ref().map_or(0.0, |g| 4.0 * k + g.size().y) + gap;
+        let mut desc_g = desc(desc_size);
+        // A bigger description mustn't cover the blocks: when it would take
+        // more than half the note, it keeps its own size.
+        if desc_size > DESC_SIZE && height(&desc_g) > r.height() * 0.5 {
+            desc_g = desc(DESC_SIZE);
+        }
+        let header_h = height(&desc_g).min(r.height());
         let header = Rect::from_min_size(r.min, vec2(r.width(), header_h));
 
         let key = (ws_key.to_string(), nid.clone());
@@ -51,9 +81,9 @@ pub(super) fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, 
         painter.rect_filled(header, CornerRadius { nw: 14, ne: 14, sw: 0, se: 0 }, with_alpha(color, 30));
         let inside = painter.with_clip_rect(r.intersect(painter.clip_rect()));
         let title_h = title_g.size().y;
-        inside.galley(header.min + vec2(pad, 10.0 + (line - title_h) / 2.0), title_g, theme.text);
+        inside.galley(header.min + vec2(pad, gap + (line - title_h) / 2.0), title_g, theme.text);
         if let Some(g) = desc_g {
-            inside.galley(header.min + vec2(pad, 10.0 + line + 4.0), g, theme.text_muted);
+            inside.galley(header.min + vec2(pad, gap + line + 4.0 * k), g, theme.text_muted);
         }
         // A grip in the bottom-right corner.
         for i in 1..=2 {
@@ -122,7 +152,7 @@ pub(super) fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, 
         });
 
         // The edit button, on the right of the title.
-        let pr = Rect::from_center_size(pos2(header.right() - 8.0 / zoom - button / 2.0, header.top() + 10.0 + line / 2.0), Vec2::splat(button));
+        let pr = Rect::from_center_size(pos2(header.right() - 8.0 / zoom - button / 2.0, header.top() + gap + line / 2.0), Vec2::splat(button));
         let pencil = cui.interact(pr, cui.scope_id().with(("note-edit", &nid)), Sense::click()).on_hover_cursor(CursorIcon::PointingHand);
         crate::ui::kit::describe(&pencil, egui::Role::Button, t!("Edit note"));
         let fill = if pencil.hovered() { mix(theme.panel, color, 0.25) } else { theme.panel };

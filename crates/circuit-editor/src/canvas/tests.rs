@@ -537,3 +537,14 @@ fn a_wire_held_at_an_edge_moves_the_canvas() {
     assert!((before.x - view.offset.x - 15.0).abs() < 0.01, "900 points a second");
     assert!(!view.edge_pan(outer, pos2(500.0, 350.0), 1.0 / 60.0));
 }
+
+/// Zoomed out, a note's title and description grow on the canvas so they
+/// stay readable on screen; zoomed in, they keep their own size.
+#[test]
+fn note_texts_stay_readable_zoomed_out() {
+    use super::notes::text_sizes;
+    assert_eq!(text_sizes(1.0), (15.0, 12.5));
+    assert_eq!(text_sizes(2.0), (15.0, 12.5), "zoomed in: their own size");
+    let (title, desc) = text_sizes(0.25);
+    assert_eq!((title * 0.25, desc * 0.25), (14.0, 11.0), "at 25%: 14 and 11 on screen");
+}
