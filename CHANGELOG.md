@@ -2,7 +2,7 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## Unreleased
+## 0.2.4
 
 ### Added
 - **For older computers**: Settings › Window › Lighter drawing is a list to tick, each part on its own or All at once: No shadows, No fading, Still glows (empty required fields and blocks that just ran glow without pulsing, so the app doesn't draw itself again 30 times a second) and Simpler edges (about 55–65% fewer triangles on the canvas). All of them are on by themselves when the app draws without a graphics card (and the Console says so), unless All without a graphics card is unticked. Settings › Window › Graphics picks Automatic, OpenGL or Older OpenGL from the next start, for graphics chips that can't do DirectX 12 or Vulkan.
