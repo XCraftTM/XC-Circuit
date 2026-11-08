@@ -625,8 +625,64 @@ fn name_problem(name: &str) -> Option<&'static str> {
     }
 }
 
+/// Discord counts at most this many characters per command: names,
+/// descriptions and choice values of the command, its subcommands and
+/// options (for each, its longest translation).
+const MAX_COMMAND_CHARS: usize = 8000;
+/// Commands (first words) a bot can register.
+const MAX_COMMANDS: usize = 100;
+
+/// The characters Discord counts toward [`MAX_COMMAND_CHARS`] for one entry.
+fn counted_chars(c: &SlashCommand) -> usize {
+    let longest = |text: &str, locales: &Locales, name: bool| {
+        let own = text.chars().count();
+        locales.values().map(|l| if name { l.name.chars().count() } else { l.description.chars().count() }).fold(own, usize::max)
+    };
+    // A subcommand's name is its last word.
+    let own_name = c.name.rsplit(' ').next().unwrap_or("");
+    let mut n = longest(own_name, &c.locales, true) + longest(&c.description, &c.locales, false);
+    for o in &c.options {
+        n += longest(&o.name, &o.locales, true) + longest(&o.description, &o.locales, false);
+        for ch in &o.choices {
+            n += longest(&ch.name, &ch.locales, true) + crate::ui::widgets::as_text(&ch.value).chars().count();
+        }
+    }
+    n
+}
+
 fn problems(cmds: &[SlashCommand]) -> Vec<String> {
     let mut out = Vec::new();
+    // Per command (first word): its size, how many subcommands it has, and
+    // how many commands there are.
+    let mut roots: Vec<&str> = Vec::new();
+    for c in cmds.iter().filter(|c| !c.disabled) {
+        let r = root_of(&c.name);
+        if !r.is_empty() && !roots.contains(&r) {
+            roots.push(r);
+        }
+    }
+    if roots.len() > MAX_COMMANDS {
+        out.push(tf!("{count} commands: Discord takes {max} per bot.", count = roots.len(), max = MAX_COMMANDS));
+    }
+    for root in &roots {
+        let entries: Vec<&SlashCommand> = cmds.iter().filter(|c| root_of(&c.name) == *root).collect();
+        let size: usize = entries.iter().map(|c| counted_chars(c)).sum();
+        if size > MAX_COMMAND_CHARS {
+            out.push(tf!("/{command}: {count} characters in names, descriptions and choices; Discord takes {max} per command.", command = root, count = size, max = MAX_COMMAND_CHARS));
+        }
+        // Subcommands and groups right under it, and subcommands in each group.
+        let depth = |c: &&&SlashCommand| c.name.split_whitespace().count();
+        let under = entries.iter().filter(|c| depth(c) == 2).count();
+        if under > 25 {
+            out.push(tf!("/{command}: {count} subcommands and groups; Discord takes 25.", command = root, count = under));
+        }
+        for group in entries.iter().filter(|c| depth(c) == 2 && is_header(cmds, &c.name)) {
+            let inside = entries.iter().filter(|c| depth(c) == 3 && c.name.starts_with(&format!("{} ", group.name))).count();
+            if inside > 25 {
+                out.push(tf!("/{group}: {count} subcommands; Discord takes 25.", group = group.name, count = inside));
+            }
+        }
+    }
     for (i, c) in cmds.iter().enumerate() {
         let label = if c.name.is_empty() { format!("Command {}", i + 1) } else { format!("/{}", c.name) };
         if let Some(p) = command_name_problem(&c.name) {
@@ -649,6 +705,17 @@ fn problems(cmds: &[SlashCommand]) -> Vec<String> {
         out.extend(locales::problems(&c.locales, true, 32, true).into_iter().map(|p| format!("{label}: {p}")));
         if c.options.len() > 25 {
             out.push(format!("{label}: at most 25 options"));
+        }
+        // Discord wants the options people must fill in first.
+        if c.options.iter().skip_while(|o| o.required).any(|o| o.required) {
+            out.push(tf!("{command}: required options go before the optional ones", command = label));
+        }
+        let mut seen: Vec<&str> = Vec::new();
+        for o in &c.options {
+            if !o.name.is_empty() && seen.contains(&o.name.as_str()) {
+                out.push(tf!("{command}: two options are called “{name}”", command = label, name = o.name));
+            }
+            seen.push(&o.name);
         }
         for o in &c.options {
             let at = format!("{label} › {}", o.name);
@@ -1409,5 +1476,27 @@ mod tests {
         assert_eq!((c.options[0].max_length, c.options[0].max), (Some(50), None));
         let saved = serde_json::to_value(&c).unwrap();
         assert!(saved.get("permission").is_none() && saved.get("dm").is_none(), "{saved}");
+    }
+
+    /// Discord's limits (from its docs) on a whole command: required options
+    /// first, names once, 25 subcommands and 8000 characters per command.
+    #[test]
+    fn problems_follow_discords_command_limits() {
+        let opt = |name: &str, required: bool| SlashOption { name: name.into(), kind: "string".into(), description: "d".into(), required, ..Default::default() };
+        let cmd = |name: &str, options: Vec<SlashOption>| SlashCommand { name: name.into(), description: "d".into(), contexts: vec!["guild".into()], options, ..Default::default() };
+        let order = vec![cmd("ask", vec![opt("topic", false), opt("who", true), opt("topic", false)])];
+        let p = problems(&order).join("\n");
+        assert!(p.contains("required options go before the optional ones") && p.contains("two options are called “topic”"), "{p}");
+        assert!(problems(&[cmd("ask", vec![opt("who", true), opt("topic", false)])]).is_empty());
+
+        let mut many = vec![cmd("admin", vec![])];
+        many.extend((0..26).map(|i| cmd(&format!("admin s{i}"), vec![])));
+        assert!(problems(&many).iter().any(|p| p.contains("26 subcommands and groups")), "{:?}", problems(&many));
+
+        // 26 subcommands of 25 options with long descriptions: over 8000 characters.
+        let long = |n: &str| SlashOption { description: "x".repeat(100), ..opt(n, false) };
+        let mut big = vec![cmd("big", vec![])];
+        big.extend((0..4).map(|i| SlashCommand { description: "y".repeat(100), ..cmd(&format!("big s{i}"), (0..25).map(|j| long(&format!("o{j}"))).collect()) }));
+        assert!(problems(&big).iter().any(|p| p.contains("Discord takes 8000 per command")), "{:?}", problems(&big));
     }
 }

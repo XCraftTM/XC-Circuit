@@ -59,6 +59,78 @@ pub struct EmbedField {
     pub inline: bool,
 }
 
+/// Discord's limits for an embed (characters; `${…}` isn't counted, as it's
+/// only known when the bot runs).
+const MAX_TITLE: usize = 256;
+const MAX_DESCRIPTION: usize = 4096;
+const MAX_FIELDS: usize = 25;
+const MAX_FIELD_NAME: usize = 256;
+const MAX_FIELD_VALUE: usize = 1024;
+const MAX_FOOTER: usize = 2048;
+const MAX_AUTHOR: usize = 256;
+/// All of title, description, fields, footer and author together.
+const MAX_TOTAL: usize = 6000;
+
+/// Everything Discord would refuse the embed for.
+pub fn problems(e: &EmbedData) -> Vec<String> {
+    use crate::builders::{fixed_len, too_long, web_address_ok};
+    let mut out = Vec::new();
+    let mut over = |text: &str, max: usize, what: &str| {
+        if too_long(text, max) {
+            out.push(tf!("{what} has {count} characters: Discord allows {max}.", what = what, count = fixed_len(text), max = max));
+        }
+    };
+    over(&e.title, MAX_TITLE, t!("The title"));
+    over(&e.description, MAX_DESCRIPTION, t!("The description"));
+    if let Some(a) = &e.author {
+        over(&a.name, MAX_AUTHOR, t!("The author's name"));
+    }
+    if let Some(f) = &e.footer {
+        over(&f.text, MAX_FOOTER, t!("The footer"));
+    }
+    for (i, f) in e.fields.iter().enumerate() {
+        let n = i + 1;
+        if too_long(&f.name, MAX_FIELD_NAME) {
+            out.push(tf!("Field {n}'s name has {count} characters: Discord allows {max}.", n = n, count = fixed_len(&f.name), max = MAX_FIELD_NAME));
+        }
+        if too_long(&f.value, MAX_FIELD_VALUE) {
+            out.push(tf!("Field {n}'s value has {count} characters: Discord allows {max}.", n = n, count = fixed_len(&f.value), max = MAX_FIELD_VALUE));
+        }
+    }
+    if e.fields.len() > MAX_FIELDS {
+        out.push(tf!("{count} fields: Discord allows {max}.", count = e.fields.len(), max = MAX_FIELDS));
+    }
+    let total: usize = [e.title.as_str(), &e.description, e.author.as_ref().map_or("", |a| a.name.as_str()), e.footer.as_ref().map_or("", |f| f.text.as_str())]
+        .iter()
+        .map(|s| fixed_len(s))
+        .sum::<usize>()
+        + e.fields.iter().map(|f| fixed_len(&f.name) + fixed_len(&f.value)).sum::<usize>();
+    if total > MAX_TOTAL {
+        out.push(tf!("{count} characters in all: Discord allows {max} in an embed.", count = total, max = MAX_TOTAL));
+    }
+    let links = [
+        (e.url.as_str(), t!("The title's link")),
+        (e.image.as_str(), t!("The image")),
+        (e.thumbnail.as_str(), t!("The thumbnail")),
+        (e.author.as_ref().map_or("", |a| a.icon.as_str()), t!("The author's icon")),
+        (e.author.as_ref().map_or("", |a| a.url.as_str()), t!("The author's link")),
+        (e.footer.as_ref().map_or("", |f| f.icon.as_str()), t!("The footer's icon")),
+    ];
+    for (link, what) in links {
+        if !web_address_ok(link) {
+            out.push(tf!("{what} must be a web address starting with https:// (or attachment://).", what = what));
+        }
+    }
+    // Discord refuses an embed with nothing to show.
+    let empty = [e.title.as_str(), &e.description, &e.image, &e.thumbnail, e.author.as_ref().map_or("", |a| a.name.as_str()), e.footer.as_ref().map_or("", |f| f.text.as_str())].iter().all(|s| s.trim().is_empty())
+        && e.fields.iter().all(|f| f.name.trim().is_empty() && f.value.trim().is_empty());
+    if empty {
+        out.push(t!("The embed is empty: give it a title, a description, a field or a picture.").into());
+    }
+    out.dedup();
+    out
+}
+
 impl EmbedData {
     pub fn from_value(v: &Value) -> EmbedData {
         serde_json::from_value(v.clone()).unwrap_or_default()
@@ -434,6 +506,10 @@ fn form_column(ui: &mut Ui, theme: &Theme, edit: &mut EmbedEdit, values: Option<
         }
         return;
     }
+    // What Discord would refuse it for.
+    for p in problems(&edit.draft).iter().take(4) {
+        ui.label(RichText::new(format!("• {p}")).size(12.0).color(theme.warning));
+    }
     ScrollArea::vertical().id_salt("embed-form").max_height(dialog::remaining_height(ui, 300.0)).auto_shrink([false, false]).show(ui, |ui| {
         ui.set_width(ui.available_width() - 18.0);
         form(ui, theme, &mut edit.draft);
@@ -618,5 +694,30 @@ mod tests {
         let back = EmbedData::from_discord(&message).unwrap();
         assert_eq!((back.title.as_str(), back.color.as_str(), back.time.as_str(), back.timestamp), ("T", "#FF0000", "2026-12-24T18:00:00.000Z", false));
         assert!(EmbedData::from_discord(&json!([1])).is_err());
+    }
+
+    /// Discord's embed limits (from its docs): a text over one is named,
+    /// `${…}` doesn't count, and so is an embed with nothing in it.
+    #[test]
+    fn problems_follow_discords_limits() {
+        let ok = EmbedData { title: "Hi ${user.username}".into(), description: "x".repeat(4096), ..Default::default() };
+        assert!(problems(&ok).is_empty(), "{:?}", problems(&ok));
+        let field = |name: &str, value: &str| EmbedField { name: name.into(), value: value.into(), inline: false };
+        let bad = EmbedData {
+            title: "t".repeat(257),
+            description: "d".repeat(4097),
+            url: "example.com".into(),
+            image: "${picture}".into(),
+            author: Some(NameIcon { name: "a".repeat(257), icon: String::new(), url: String::new() }),
+            footer: Some(FooterData { text: "f".repeat(2049), icon: String::new() }),
+            fields: (0..26).map(|i| if i == 0 { field(&"n".repeat(257), &"v".repeat(1025)) } else { field("n", "v") }).collect(),
+            ..Default::default()
+        };
+        let p = problems(&bad).join("\n");
+        for want in ["The title has 257", "The description has 4097", "The author's name has 257", "The footer has 2049", "Field 1's name has 257", "Field 1's value has 1025", "26 fields", "characters in all", "The title's link must be a web address"] {
+            assert!(p.contains(want), "{want} in:\n{p}");
+        }
+        assert!(!p.contains("The image"), "${{…}} is only known when it runs");
+        assert!(problems(&EmbedData { color: "#FF0000".into(), ..Default::default() }).iter().any(|p| p.contains("empty")));
     }
 }

@@ -439,6 +439,18 @@ pub fn collect_problems(ed: &mut Editor) -> Vec<ProblemItem> {
                     if f.required && !connected && empty && !crate::editor::values::from_event(ws, id, k, &f.type_name, &ed.reg) {
                         items.push((format!("{} › {}", ws.name, def.name), format!("`{}` needs a value", f.label(k)), Some((key.clone(), id.clone()))));
                     }
+                    // An embed, layout or form Discord would refuse (a text
+                    // over its limit, too many parts …), as its builder says.
+                    let designed = node.values.get(k).or(f.default.as_ref());
+                    let refused = match (f.type_name.as_str(), designed) {
+                        ("embed", Some(v)) => crate::builders::embed::problems(&crate::builders::embed::EmbedData::from_value(v)),
+                        ("layout", Some(v)) => crate::builders::layout::problems(v),
+                        ("modal", Some(v)) => crate::builders::modal::problems(v),
+                        _ => Vec::new(),
+                    };
+                    for p in refused {
+                        items.push((format!("{} › {}", ws.name, def.name), format!("{}: {p}", f.label(k)), Some((key.clone(), id.clone()))));
+                    }
                 }
             }
             for (from, count) in ws.split_paths() {
@@ -550,6 +562,33 @@ mod tests {
         let items = collect_problems(&mut ed);
         assert_eq!(about(&items, "calls greet, but its When Called block is in Helpers, which is turned off"), 1, "{items:?}");
         assert_eq!(about(&items, "nothing runs this block"), 0, "blocks of a workspace that is off aren't checked");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An embed, layout or form on a block that Discord would refuse shows
+    /// in Problems, as its builder says, without opening the builder.
+    #[test]
+    fn designs_over_discords_limits_are_problems() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        let dir = std::env::temp_dir().join(format!("xc-problems-designs-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        circuit_core::Project::create(&dir, "Designs", "discord-bot").unwrap();
+        ed.open_project(&dir);
+        let block = |block: &str, values: serde_json::Value| Node { block: block.into(), values: values.as_object().cloned().unwrap(), ..Default::default() };
+        let project = ed.project.as_mut().unwrap();
+        let mut ws = Workspace::new("Main");
+        ws.nodes.insert("go".into(), Node { block: "core.on_start@1".into(), ..Default::default() });
+        ws.nodes.insert("embed".into(), block("discord.build_embed@2", serde_json::json!({ "embed": { "title": "t".repeat(300), "fields": [] } })));
+        ws.nodes.insert("layout".into(), block("discord.build_layout@1", serde_json::json!({ "layout": { "components": [{ "type": 1, "components": [{ "type": 2, "style": 1, "label": "b".repeat(90), "custom_id": "x" }] }] } })));
+        ws.links.push("go.next > embed.in".parse().unwrap());
+        ws.links.push("embed.next > layout.in".parse().unwrap());
+        project.workspaces.clear();
+        project.workspaces.insert("main".into(), ws);
+        let items = collect_problems(&mut ed);
+        let at = |node: &str, what: &str| items.iter().any(|(_, why, at)| at.as_ref().is_some_and(|(_, n)| n == node) && why.contains(what));
+        assert!(at("embed", "Embed: The title has 300 characters: Discord allows 256."), "{items:?}");
+        assert!(at("layout", "label has up to 80 characters"), "{items:?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

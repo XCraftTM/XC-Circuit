@@ -166,9 +166,12 @@ fn check_list(list: &[Value], out: &mut Vec<String>, ids: &mut Vec<String>) {
                 }
             }
             kind::GALLERY => {
-                let items = list_of(c, "items").len();
-                if items == 0 || items > 10 {
+                let items = list_of(c, "items");
+                if items.is_empty() || items.len() > 10 {
                     out.push(t!("A media gallery has 1 to 10 pictures.").into());
+                }
+                for item in items {
+                    check_media(item, out);
                 }
             }
             kind::ROW => {
@@ -183,20 +186,94 @@ fn check_list(list: &[Value], out: &mut Vec<String>, ids: &mut Vec<String>) {
         if ty(c) == kind::BUTTON || is_select(c) {
             check_interactive(c, out, ids);
         }
-        if let Some(a) = c.get("accessory")
-            && ty(a) == kind::BUTTON
-        {
-            check_interactive(a, out, ids);
+        if let Some(a) = c.get("accessory") {
+            if ty(a) == kind::BUTTON {
+                check_interactive(a, out, ids);
+            } else if ty(a) == kind::THUMBNAIL {
+                check_media(a, out);
+            }
         }
         check_list(children, out, ids);
     }
 }
 
+/// A select menu's placeholder, how many can be picked and (for a menu of
+/// options) its options, as Discord takes them. Forms' menus are checked so too.
+pub(crate) fn check_select(c: &Value, out: &mut Vec<String>) {
+    use crate::builders::too_long;
+    if too_long(text_of(c, "placeholder"), 150) {
+        out.push(t!("A select menu's placeholder has up to 150 characters.").into());
+    }
+    let num = |k: &str| c.get(k).and_then(Value::as_u64);
+    let (min, max) = (num("min_values"), num("max_values"));
+    if min.is_some_and(|m| m > 25) || max.is_some_and(|m| m == 0 || m > 25) {
+        out.push(t!("A select menu picks 0 to 25 at least, and 1 to 25 at most.").into());
+    }
+    if let (Some(a), Some(b)) = (min, max)
+        && a > b
+    {
+        out.push(t!("A select menu's least number to pick is above its most.").into());
+    }
+    if ty(c) != kind::STRING_SELECT {
+        return;
+    }
+    let options = list_of(c, "options");
+    if max.is_some_and(|m| m as usize > options.len()) && !options.is_empty() {
+        out.push(t!("A select menu can't let people pick more than it has options.").into());
+    }
+    let mut values: Vec<&str> = Vec::new();
+    for o in options {
+        let label = text_of(o, "label");
+        let value = text_of(o, "value");
+        if label.trim().is_empty() || too_long(label, 100) {
+            out.push(t!("A select menu's options need a label of 1 to 100 characters.").into());
+        }
+        if value.trim().is_empty() || too_long(value, 100) {
+            out.push(t!("A select menu's options need a value of 1 to 100 characters.").into());
+        } else if values.contains(&value) {
+            out.push(tf!("Two options of a select menu have the value “{value}”: each needs its own.", value = value));
+        } else {
+            values.push(value);
+        }
+        if too_long(text_of(o, "description"), 100) {
+            out.push(t!("An option's description has up to 100 characters.").into());
+        }
+    }
+}
+
+/// A picture's description (alt text) and address.
+fn check_media(item: &Value, out: &mut Vec<String>) {
+    if crate::builders::too_long(text_of(item, "description"), 1024) {
+        out.push(t!("A picture's description has up to 1024 characters.").into());
+    }
+    let url = item.get("media").map(|m| text_of(m, "url")).unwrap_or("");
+    if !crate::builders::web_address_ok(url) && !looks_like_file(url) {
+        out.push(t!("A picture needs a web address (https://…), a file path or attachment://.").into());
+    }
+}
+
+/// A path to a file on this computer, attached when sending.
+fn looks_like_file(url: &str) -> bool {
+    let u = url.trim();
+    u.starts_with('/') || u.starts_with('.') || u.starts_with('~') || u.chars().nth(1) == Some(':')
+}
+
 fn check_interactive(c: &Value, out: &mut Vec<String>, ids: &mut Vec<String>) {
     let style = c.get("style").and_then(Value::as_u64).unwrap_or(1);
+    if ty(c) == kind::BUTTON && crate::builders::too_long(text_of(c, "label"), 80) {
+        out.push(t!("A button's label has up to 80 characters.").into());
+    }
+    if is_select(c) {
+        check_select(c, out);
+    }
     if ty(c) == kind::BUTTON && style == 5 {
-        if text_of(c, "url").trim().is_empty() {
+        let url = text_of(c, "url").trim();
+        if url.is_empty() {
             out.push(t!("A link button needs a web address.").into());
+        } else if crate::builders::too_long(url, 512) {
+            out.push(t!("A link button's address has up to 512 characters.").into());
+        } else if !url.contains("${") && !["http://", "https://", "discord://"].iter().any(|p| url.to_ascii_lowercase().starts_with(p)) {
+            out.push(t!("A link button's address starts with https:// (or http://, discord://).").into());
         }
     } else if ty(c) == kind::BUTTON && style == 6 {
         if text_of(c, "sku_id").trim().is_empty() {
@@ -1232,5 +1309,32 @@ mod tests {
         assert_eq!(emoji_text(Some(&json!({ "id": "123", "name": "party", "animated": true }))), "<a:party:123>");
         assert_eq!(emoji_text(Some(&parse_emoji("👍").unwrap())), "👍");
         assert!(parse_emoji("  ").is_none());
+    }
+
+    /// Discord's component limits (from its docs) on what the Layout
+    /// Builder makes: labels, addresses, menus and their options, pictures.
+    #[test]
+    fn problems_follow_discords_component_limits() {
+        let layout = json!({ "components": [
+            { "type": 1, "components": [
+                { "type": 2, "style": 1, "label": "b".repeat(81), "custom_id": "long" },
+                { "type": 2, "style": 5, "label": "Site", "url": "example.com" }
+            ] },
+            { "type": 1, "components": [{ "type": 3, "custom_id": "menu", "placeholder": "p".repeat(151), "min_values": 3, "max_values": 2, "options": [
+                { "label": "", "value": "same" },
+                { "label": "Two", "value": "same", "description": "d".repeat(101) }
+            ] }] },
+            { "type": 12, "items": [{ "media": { "url": "https://x.example/a.png" }, "description": "a".repeat(1025) }] },
+            { "type": 9, "components": [{ "type": 10, "content": "x" }], "accessory": { "type": 11, "media": { "url": "not an address" } } }
+        ] });
+        let p = problems(&layout).join("\n");
+        for want in ["label has up to 80", "starts with https://", "placeholder has up to 150", "least number to pick is above its most", "need a label of 1 to 100", "have the value “same”", "description has up to 100", "picture's description has up to 1024", "A picture needs a web address"] {
+            assert!(p.contains(want), "{want} in:\n{p}");
+        }
+        let fine = json!({ "components": [
+            { "type": 1, "components": [{ "type": 2, "style": 5, "label": "Site", "url": "${link}" }] },
+            { "type": 12, "items": [{ "media": { "url": "C:/pics/cat.png" } }, { "media": { "url": "${user.avatarURL()}" } }] }
+        ] });
+        assert!(problems(&fine).is_empty(), "{:?}", problems(&fine));
     }
 }

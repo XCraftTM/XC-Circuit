@@ -147,6 +147,12 @@ pub fn problems(form: &Value) -> Vec<String> {
                         if num("max_length").is_some_and(|m| m == 0 || m > 4000) || num("min_length").is_some_and(|m| m > 4000) {
                             out.push(t!("A box takes up to 4000 characters.").into());
                         }
+                        if crate::builders::too_long(text_of(input, "placeholder"), 100) {
+                            out.push(t!("A box's placeholder has up to 100 characters.").into());
+                        }
+                        if crate::builders::too_long(text_of(input, "value"), 4000) {
+                            out.push(t!("A box's filled-in text has up to 4000 characters.").into());
+                        }
                         if let (Some(a), Some(b)) = (num("min_length"), num("max_length"))
                             && a > b
                         {
@@ -158,13 +164,22 @@ pub fn problems(form: &Value) -> Vec<String> {
                         if options == 0 || options > 25 {
                             out.push(t!("A select menu has 1 to 25 options.").into());
                         }
+                        crate::builders::layout::check_select(input, &mut out);
                     }
                     kind::FILE_UPLOAD => {
-                        if num("max_values").is_some_and(|m| m == 0 || m > 10) {
+                        if num("max_values").is_some_and(|m| m == 0 || m > 10) || num("min_values").is_some_and(|m| m > 10) {
                             out.push(t!("A file upload takes 1 to 10 files.").into());
                         }
+                        if let (Some(a), Some(b)) = (num("min_values"), num("max_values"))
+                            && a > b
+                        {
+                            out.push(t!("A file upload's least number of files is above its most.").into());
+                        }
+                        if list_of(input, "file_types").len() > 10 {
+                            out.push(t!("A file upload filters up to 10 file types.").into());
+                        }
                     }
-                    t if kind::PICKERS.contains(&t) => {}
+                    t if kind::PICKERS.contains(&t) => crate::builders::layout::check_select(input, &mut out),
                     _ => out.push(t!("A question needs a box, a menu or a file upload.").into()),
                 }
             }
@@ -648,5 +663,20 @@ mod tests {
             assert!(p.contains(want), "{want}: {p}");
         }
         assert!(problems(&json!({ "title": "T", "custom_id": "f", "components": [{ "type": 10, "content": "x" }] })).iter().any(|p| p.contains("at least one question")));
+    }
+
+    /// Discord's limits (from its docs) on a form's boxes, menus and uploads.
+    #[test]
+    fn problems_follow_discords_form_limits() {
+        let form = json!({ "title": "T", "custom_id": "f", "components": [
+            { "type": 18, "label": "A", "component": { "type": 4, "custom_id": "a", "placeholder": "p".repeat(101), "value": "v".repeat(4001) } },
+            { "type": 18, "label": "B", "component": { "type": 3, "custom_id": "b", "max_values": 5, "options": [{ "label": "One", "value": "1" }] } },
+            { "type": 18, "label": "C", "component": { "type": 5, "custom_id": "c", "max_values": 30 } },
+            { "type": 18, "label": "D", "component": { "type": 19, "custom_id": "d", "min_values": 4, "max_values": 2, "file_types": [".a", ".b", ".c", ".d", ".e", ".f", ".g", ".h", ".i", ".j", ".k"] } }
+        ] });
+        let p = problems(&form).join("\n");
+        for want in ["box's placeholder has up to 100", "filled-in text has up to 4000", "more than it has options", "1 to 25 at most", "least number of files is above its most", "up to 10 file types"] {
+            assert!(p.contains(want), "{want} in:\n{p}");
+        }
     }
 }
