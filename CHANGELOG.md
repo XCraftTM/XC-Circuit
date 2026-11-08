@@ -2,6 +2,15 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
+## Unreleased
+
+### Changed
+- **The server console can go in the side bar**: drag its tab onto the activity bar or the side bar (either half), like the Console. In a narrow side bar its buttons go under the server's name.
+- **No command line in the server console**: bots don't read typed commands, so the box under it is gone and the console gets the room.
+
+### Fixed
+- **The server console fits a small area**: made smaller, it shows fewer lines instead of keeping a least height and running past the bottom.
+
 ## 0.2.0
 
 ### Added

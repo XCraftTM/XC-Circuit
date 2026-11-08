@@ -628,7 +628,6 @@ pub struct ConsoleView {
     stats: Option<(u64, u64, f64)>,
     connected: bool,
     problem: Option<String>,
-    input: String,
     /// A power action under way, and its answer.
     action: Option<(String, Receiver<Result<(), String>>)>,
 }
@@ -636,7 +635,7 @@ pub struct ConsoleView {
 impl ConsoleView {
     pub(crate) fn new(panel: calagopus::Panel, server: String, name: String) -> ConsoleView {
         let console = calagopus::Console::open(panel.clone(), server.clone());
-        ConsoleView { console, panel, server, name, lines: VecDeque::new(), state: String::new(), stats: None, connected: false, problem: None, input: String::new(), action: None }
+        ConsoleView { console, panel, server, name, lines: VecDeque::new(), state: String::new(), stats: None, connected: false, problem: None, action: None }
     }
 
     pub(crate) fn poll(&mut self, ctx: &egui::Context) {
@@ -688,9 +687,12 @@ impl ConsoleView {
         });
     }
 
-    /// The console tab.
+    /// The console tab (in the main area or the side bar). It takes the room
+    /// it's given and no more: in a small area the lines get fewer, and in a
+    /// narrow one the buttons go under the name.
     pub fn tab(&mut self, ui: &mut egui::Ui, ed: &Editor) {
         let theme = ed.theme.clone();
+        let narrow = ui.available_width() < 520.0;
         egui::Frame::new().fill(theme.panel).inner_margin(egui::Margin::symmetric(12, 10)).show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(RichText::new(&self.name).size(14.0).strong().color(theme.text));
@@ -702,35 +704,17 @@ impl ConsoleView {
                     _ => (t!("…"), theme.text_muted),
                 };
                 kit::pill(ui, label, color);
-                if let Some((memory, limit, cpu)) = self.stats {
-                    let mb = |b: u64| b as f64 / 1_048_576.0;
-                    let memory = if limit > 0 { format!("{:.0} / {:.0} MB", mb(memory), mb(limit)) } else { format!("{:.0} MB", mb(memory)) };
-                    ui.label(RichText::new(tf!("CPU {cpu}% · RAM {memory}", cpu = format!("{cpu:.0}"), memory = memory)).size(12.0).color(theme.text_muted));
+                if !narrow {
+                    self.stats_label(ui, &theme);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| self.power_buttons(ui, &theme, true));
                 }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let busy = self.action.is_some();
-                    let offline = matches!(self.state.as_str(), "offline" | "");
-                    ui.add_enabled_ui(!busy, |ui| {
-                        if kit::danger_button(ui, &theme, t!("Kill")).on_hover_text(t!("Ends it at once, without letting it save")).clicked() {
-                            self.power("kill");
-                        }
-                        if kit::secondary_button(ui, &theme, t!("Stop")).clicked() {
-                            self.power("stop");
-                        }
-                        if kit::secondary_button(ui, &theme, t!("Restart")).clicked() {
-                            self.power("restart");
-                        }
-                        ui.add_enabled_ui(offline, |ui| {
-                            if kit::primary_button(ui, &theme, t!("Start")).clicked() {
-                                self.power("start");
-                            }
-                        });
-                    });
-                    if busy {
-                        ui.spinner();
-                    }
-                });
             });
+            if narrow {
+                if self.stats.is_some() {
+                    self.stats_label(ui, &theme);
+                }
+                ui.horizontal_wrapped(|ui| self.power_buttons(ui, &theme, false));
+            }
             if let Some(p) = &self.problem {
                 ui.label(RichText::new(p).size(12.0).color(theme.warning));
             } else if !self.connected {
@@ -741,8 +725,10 @@ impl ConsoleView {
             }
             ui.add_space(6.0);
             let font = crate::ui::fonts::console(ui.ctx(), 12.5);
-            let input_h = 34.0;
-            let h = (ui.available_height() - input_h - 8.0).max(80.0);
+            // What's left, less the box's own margins (8 above and below)
+            // and the tab's margin under it (10): never more, so the tab
+            // never asks for more room than it has.
+            let h = (ui.available_height() - 26.0).max(0.0);
             egui::Frame::new().fill(theme.field).corner_radius(6).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
                 // Only the lines in view are laid out, so a long console stays quick.
                 let row_h = ui.fonts_mut(|f| f.row_height(&font));
@@ -752,7 +738,7 @@ impl ConsoleView {
                 // with a gap there it'd count space the lines never take, and
                 // that showed as empty room under the last line.
                 ui.spacing_mut().item_spacing.y = 0.0;
-                egui::ScrollArea::both().id_salt("server-console").max_height(h).auto_shrink([false, false]).stick_to_bottom(true).show_rows(ui, row_h, self.lines.len(), |ui, rows| {
+                egui::ScrollArea::both().id_salt("server-console").min_scrolled_height(0.0).max_height(h).auto_shrink([false, false]).stick_to_bottom(true).show_rows(ui, row_h, self.lines.len(), |ui, rows| {
                     for line in self.lines.range(rows) {
                         let mut job = egui::text::LayoutJob::default();
                         for piece in line {
@@ -767,16 +753,42 @@ impl ConsoleView {
                     }
                 });
             });
-            ui.add_space(6.0);
-            let r = ui.add(egui::TextEdit::singleline(&mut self.input).hint_text(t!("Type a command and press Enter")).desired_width(f32::INFINITY).font(font));
-            if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                let command = std::mem::take(&mut self.input);
-                if !command.trim().is_empty() {
-                    self.console.send(command.trim());
+        });
+    }
+
+    /// CPU and memory, as the panel last said.
+    fn stats_label(&self, ui: &mut egui::Ui, theme: &crate::ui::theme::Theme) {
+        if let Some((memory, limit, cpu)) = self.stats {
+            let mb = |b: u64| b as f64 / 1_048_576.0;
+            let memory = if limit > 0 { format!("{:.0} / {:.0} MB", mb(memory), mb(limit)) } else { format!("{:.0} MB", mb(memory)) };
+            ui.label(RichText::new(tf!("CPU {cpu}% · RAM {memory}", cpu = format!("{cpu:.0}"), memory = memory)).size(12.0).color(theme.text_muted));
+        }
+    }
+
+    /// Start, Restart, Stop and Kill; `reversed` for a right-to-left row.
+    fn power_buttons(&mut self, ui: &mut egui::Ui, theme: &crate::ui::theme::Theme, reversed: bool) {
+        let busy = self.action.is_some();
+        let offline = matches!(self.state.as_str(), "offline" | "");
+        let mut order = ["start", "restart", "stop", "kill"];
+        if reversed {
+            order.reverse();
+        }
+        ui.add_enabled_ui(!busy, |ui| {
+            for action in order {
+                let clicked = match action {
+                    "start" => ui.add_enabled_ui(offline, |ui| kit::primary_button(ui, theme, t!("Start"))).inner.clicked(),
+                    "restart" => kit::secondary_button(ui, theme, t!("Restart")).clicked(),
+                    "stop" => kit::secondary_button(ui, theme, t!("Stop")).clicked(),
+                    _ => kit::danger_button(ui, theme, t!("Kill")).on_hover_text(t!("Ends it at once, without letting it save")).clicked(),
+                };
+                if clicked {
+                    self.power(action);
                 }
-                r.request_focus();
             }
         });
+        if busy {
+            ui.spinner();
+        }
     }
 }
 
@@ -810,6 +822,27 @@ mod tests {
         ui.poll(&mut ed, &ctx);
         assert!(said(&ed), "{:?}", ed.log.iter().map(|l| &l.text).collect::<Vec<_>>());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The console tab takes the height it's given, however little, and no
+    /// more: a small area shows fewer lines instead of running past its edge.
+    #[test]
+    fn the_console_fits_a_small_area() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        let mut view = ConsoleView::new(calagopus::Panel::new("http://127.0.0.1:9", "c7sp_x"), "u-1".into(), "Bot".into());
+        view.lines.extend((0..200).map(|i| vec![calagopus::Piece { text: format!("line {i}"), style: Default::default() }]));
+        let ctx = egui::Context::default();
+        for (width, height) in [(900.0, 140.0), (900.0, 400.0), (300.0, 220.0)] {
+            let mut used = egui::Rect::NOTHING;
+            let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, height))), ..Default::default() };
+            let mut out = ctx.run_ui(raw, |ui| {
+                view.tab(ui, &ed);
+                used = ui.min_rect();
+            });
+            out.textures_delta.clear();
+            assert!(used.height() <= height + 0.5, "{width}×{height}: took {}", used.height());
+        }
     }
 
     /// The console belongs to the project's server: it stays while that's

@@ -95,13 +95,15 @@ impl Tab {
     const PANELS: [(Tab, &'static str); 3] = [(Tab::Inspector, n("Inspector")), (Tab::Console, n("Console")), (Tab::Problems, n("Problems"))];
 
     /// The key of a tab that can be an icon in the activity bar: Workspaces,
-    /// Stored Data, Plugins and the panels (not workspaces, builders or pages).
+    /// Stored Data, Plugins and the panels, the server console too (not
+    /// workspaces, builders or pages).
     pub(super) fn side_key(&self) -> Option<String> {
         Some(match self {
             Tab::Side(view) => view.key().into(),
             Tab::Inspector => "inspector".into(),
             Tab::Console => "console".into(),
             Tab::Problems => "problems".into(),
+            Tab::ServerConsole => "server-console".into(),
             Tab::Plugin(plugin, panel) => format!("plugin:{plugin}:{panel}"),
             _ => return None,
         })
@@ -116,6 +118,7 @@ impl Tab {
             "inspector" => Tab::Inspector,
             "console" => Tab::Console,
             "problems" => Tab::Problems,
+            "server-console" => Tab::ServerConsole,
             _ => {
                 let (plugin, panel) = key.strip_prefix("plugin:")?.split_once(':')?;
                 Tab::Plugin(plugin.into(), panel.into())
@@ -299,7 +302,7 @@ impl CircuitApp {
         let mut app = Self::with_editor(cc, ed, dock, bundled_plugins);
         // The server console tab of the last run, connected again where it
         // was (without its project's server, the tab closes as before).
-        if app.dock.contains(&Tab::ServerConsole) {
+        if app.dock.contains(&Tab::ServerConsole) || app.ed.prefs.activity.iter().any(|k| k == "server-console") {
             app.bot.hosting.restore_console(&app.ed);
         }
         app.frame_stats = std::env::var_os("XC_FRAME_STATS").map(|_| (0, std::time::Instant::now()));

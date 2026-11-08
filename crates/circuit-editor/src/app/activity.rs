@@ -112,6 +112,10 @@ impl CircuitApp {
         match tab {
             Tab::Side(view) => view.name().to_string(),
             Tab::Plugin(plugin, panel) => self.plugin_host.panel_title(plugin, panel).unwrap_or_else(|| panel.clone()),
+            Tab::ServerConsole => match &self.bot.hosting.console {
+                Some(c) => tf!("Console of {server}", server = c.name),
+                None => t!("Server console").into(),
+            },
             other => Tab::PANELS.iter().find(|(t, _)| t == other).map(|(_, n)| crate::i18n::t(n).to_string()).unwrap_or_default(),
         }
     }
@@ -406,7 +410,7 @@ impl CircuitApp {
         let head_rect = egui::Rect::from_min_size(rect.min, egui::vec2(rect.width(), 34.0));
         let head = ui.interact(head_rect, egui::Id::unique(("side-head", key)), egui::Sense::click());
         ui.painter().text(head_rect.left_center() + egui::vec2(14.0, 0.0), egui::Align2::LEFT_CENTER, heading.to_uppercase(), egui::FontId::proportional(11.0), t.text_muted);
-        let (mut out, mut close, mut swap) = (false, false, false);
+        let (mut out, mut close, mut swap, mut connect) = (false, false, false, false);
         head.context_menu(|ui| {
             if split {
                 if crate::ui::kit::menu_item(ui, if lower { t!("Move to the upper half") } else { t!("Move to the lower half") }, None, true).clicked() {
@@ -446,7 +450,28 @@ impl CircuitApp {
             }
             Tab::Problems => panels::problems(ui, &mut self.ed, problems.to_vec()),
             Tab::Plugin(plugin, panel) => self.plugin_host.panel_ui(ui, &mut self.ed, &plugin, &panel, running),
+            Tab::ServerConsole => match &mut self.bot.hosting.console {
+                Some(c) => c.tab(ui, &self.ed),
+                // Not connected (no server chosen yet, or another project).
+                None => {
+                    let t = &self.ed.theme;
+                    ui.add_space(12.0);
+                    ui.horizontal(|ui| {
+                        ui.add_space(14.0);
+                        ui.vertical(|ui| {
+                            ui.label(RichText::new(t!("Not connected to a server.")).size(12.5).color(t.text_muted));
+                            ui.add_space(6.0);
+                            if crate::ui::kit::secondary_button(ui, t, t!("Connect")).clicked() {
+                                connect = true;
+                            }
+                        });
+                    });
+                }
+            },
             _ => {}
+        }
+        if connect {
+            self.bot.hosting.open_console(&mut self.ed);
         }
         if swap {
             std::mem::swap(&mut self.ed.prefs.side_shown, &mut self.ed.prefs.side_lower);
