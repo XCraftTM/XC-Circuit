@@ -6,6 +6,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 
 ### Changed
 - **The server console can go in the side bar**: drag its tab onto the activity bar or the side bar (either half), like the Console. In a narrow side bar its buttons go under the server's name.
+- **The server console wraps long lines** at its width, so nothing is cut off at the side and there's no sideways scrolling.
 - **No command line in the server console**: bots don't read typed commands, so the box under it is gone and the console gets the room.
 
 ### Fixed

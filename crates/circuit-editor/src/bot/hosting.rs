@@ -562,6 +562,19 @@ fn place_name(h: &Hosting) -> String {
     }
 }
 
+/// A console line as text to lay out: in its colours, wrapped at `width`.
+fn line_job(line: &[calagopus::Piece], font: &egui::FontId, text: egui::Color32, dark: bool, width: f32) -> egui::text::LayoutJob {
+    let mut job = egui::text::LayoutJob::default();
+    for piece in line {
+        job.append(&piece.text, 0.0, egui::TextFormat { font_id: font.clone(), color: piece_color(piece.style, text, dark), ..Default::default() });
+    }
+    if line.is_empty() {
+        job.append(" ", 0.0, egui::TextFormat { font_id: font.clone(), ..Default::default() });
+    }
+    job.wrap.max_width = width;
+    job
+}
+
 /// The colour of a console piece: the terminal colours like a modern
 /// terminal shows them, darker on a light theme; bold makes the first eight
 /// bright (as terminals do), dim fades it; `text` without a colour.
@@ -624,6 +637,9 @@ pub struct ConsoleView {
     pub server: String,
     pub name: String,
     lines: VecDeque<Vec<calagopus::Piece>>,
+    /// Each line's height, wrapped at `wrap_width` (NaN: not worked out yet).
+    heights: VecDeque<f32>,
+    wrap_width: f32,
     state: String,
     stats: Option<(u64, u64, f64)>,
     connected: bool,
@@ -635,7 +651,7 @@ pub struct ConsoleView {
 impl ConsoleView {
     pub(crate) fn new(panel: calagopus::Panel, server: String, name: String) -> ConsoleView {
         let console = calagopus::Console::open(panel.clone(), server.clone());
-        ConsoleView { console, panel, server, name, lines: VecDeque::new(), state: String::new(), stats: None, connected: false, problem: None, action: None }
+        ConsoleView { console, panel, server, name, lines: VecDeque::new(), heights: VecDeque::new(), wrap_width: 0.0, state: String::new(), stats: None, connected: false, problem: None, action: None }
     }
 
     pub(crate) fn poll(&mut self, ctx: &egui::Context) {
@@ -648,12 +664,10 @@ impl ConsoleView {
                     self.problem = None;
                     // The panel sends the recent lines again.
                     self.lines.clear();
+                    self.heights.clear();
                 }
                 calagopus::ConsoleEvent::Output(line) => {
-                    self.lines.push_back(line);
-                    while self.lines.len() > 3000 {
-                        self.lines.pop_front();
-                    }
+                    self.push(line);
                 }
                 calagopus::ConsoleEvent::Status(s) => self.state = s,
                 calagopus::ConsoleEvent::Stats { memory, memory_limit, cpu } => self.stats = Some((memory, memory_limit, cpu)),
@@ -676,6 +690,16 @@ impl ConsoleView {
         }
         // The thread sends as things happen; look again soon.
         ctx.request_repaint_after(std::time::Duration::from_millis(250));
+    }
+
+    /// A line for the console (the oldest goes past 3000).
+    fn push(&mut self, line: Vec<calagopus::Piece>) {
+        self.lines.push_back(line);
+        self.heights.push_back(f32::NAN);
+        while self.lines.len() > 3000 {
+            self.lines.pop_front();
+            self.heights.pop_front();
+        }
     }
 
     fn power(&mut self, action: &str) {
@@ -730,26 +754,39 @@ impl ConsoleView {
             // never asks for more room than it has.
             let h = (ui.available_height() - 26.0).max(0.0);
             egui::Frame::new().fill(theme.field).corner_radius(6).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
-                // Only the lines in view are laid out, so a long console stays quick.
-                let row_h = ui.fonts_mut(|f| f.row_height(&font));
                 let dark = ui.visuals().dark_mode;
-                // No gap between lines: show_rows works out the whole height
-                // from this (rows × (height + gap)) before any is drawn, so
-                // with a gap there it'd count space the lines never take, and
-                // that showed as empty room under the last line.
                 ui.spacing_mut().item_spacing.y = 0.0;
-                egui::ScrollArea::both().id_salt("server-console").min_scrolled_height(0.0).max_height(h).auto_shrink([false, false]).stick_to_bottom(true).show_rows(ui, row_h, self.lines.len(), |ui, rows| {
-                    for line in self.lines.range(rows) {
-                        let mut job = egui::text::LayoutJob::default();
-                        for piece in line {
-                            let format = egui::TextFormat { font_id: font.clone(), color: piece_color(piece.style, theme.text, dark), ..Default::default() };
-                            job.append(&piece.text, 0.0, format);
+                let (lines, heights, wrap_width) = (&self.lines, &mut self.heights, &mut self.wrap_width);
+                egui::ScrollArea::vertical().id_salt("server-console").min_scrolled_height(0.0).max_height(h).auto_shrink([false, false]).stick_to_bottom(true).show_viewport(ui, |ui, view| {
+                    // Long lines wrap at the console's width. How tall each
+                    // one is gets worked out once (again only when the width
+                    // changes); only the lines in view are drawn, so a long
+                    // console stays quick.
+                    let width = ui.available_width().max(40.0);
+                    if (width - *wrap_width).abs() > 0.5 {
+                        *wrap_width = width;
+                        heights.iter_mut().for_each(|h| *h = f32::NAN);
+                    }
+                    for (line, height) in lines.iter().zip(heights.iter_mut()) {
+                        if height.is_nan() {
+                            *height = ui.fonts_mut(|f| f.layout_job(line_job(line, &font, theme.text, dark, width))).size().y;
                         }
-                        if line.is_empty() {
-                            job.append(" ", 0.0, egui::TextFormat { font_id: font.clone(), ..Default::default() });
+                    }
+                    let total: f32 = heights.iter().sum();
+                    ui.set_height(total);
+                    let origin = ui.max_rect().min;
+                    let mut y = 0.0;
+                    for (line, height) in lines.iter().zip(heights.iter()) {
+                        if y + height >= view.min.y {
+                            let galley = ui.fonts_mut(|f| f.layout_job(line_job(line, &font, theme.text, dark, width)));
+                            // As wide as its text, so it starts at the left edge.
+                            let rect = egui::Rect::from_min_size(origin + egui::vec2(0.0, y), egui::vec2(galley.size().x.min(width), *height));
+                            ui.put(rect, egui::Label::new(galley));
                         }
-                        job.wrap.max_width = f32::INFINITY;
-                        ui.add(egui::Label::new(job).wrap_mode(egui::TextWrapMode::Extend));
+                        y += height;
+                        if y > view.max.y {
+                            break;
+                        }
                     }
                 });
             });
@@ -826,12 +863,15 @@ mod tests {
 
     /// The console tab takes the height it's given, however little, and no
     /// more: a small area shows fewer lines instead of running past its edge.
+    /// Long lines wrap at its width.
     #[test]
-    fn the_console_fits_a_small_area() {
+    fn the_console_fits_a_small_area_and_wraps() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let ed = Editor::new(vec![root.join("plugins")], None).unwrap();
         let mut view = ConsoleView::new(calagopus::Panel::new("http://127.0.0.1:9", "c7sp_x"), "u-1".into(), "Bot".into());
-        view.lines.extend((0..200).map(|i| vec![calagopus::Piece { text: format!("line {i}"), style: Default::default() }]));
+        for i in 0..200 {
+            view.push(vec![calagopus::Piece { text: format!("line {i}"), style: Default::default() }]);
+        }
         let ctx = egui::Context::default();
         for (width, height) in [(900.0, 140.0), (900.0, 400.0), (300.0, 220.0)] {
             let mut used = egui::Rect::NOTHING;
@@ -843,6 +883,17 @@ mod tests {
             out.textures_delta.clear();
             assert!(used.height() <= height + 0.5, "{width}×{height}: took {}", used.height());
         }
+        // A long line wraps at the console's width: in a narrow one it takes
+        // more rows than in a wide one.
+        view.push(vec![calagopus::Piece { text: "Logged in and ready to answer slash commands in every server. ".repeat(4), style: Default::default() }]);
+        let mut tall = |width: f32| {
+            let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 300.0))), ..Default::default() };
+            let mut out = ctx.run_ui(raw, |ui| view.tab(ui, &ed));
+            out.textures_delta.clear();
+            *view.heights.back().unwrap()
+        };
+        let (wide, narrow) = (tall(2400.0), tall(300.0));
+        assert!(narrow > wide * 3.0, "wide {wide}, narrow {narrow}");
     }
 
     /// The console belongs to the project's server: it stays while that's
