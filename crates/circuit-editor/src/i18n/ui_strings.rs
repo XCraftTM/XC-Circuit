@@ -957,6 +957,7 @@ pub const UI_STRINGS: &[&str] = &[
     "Click to select, drag to move the note with the blocks in it (hold Alt to move only the note). Double-click to edit it.",
     "Edit note",
     "The theme's accent",
+    "Other color",
     "Move blocks with the note",
     "Dragging the title also moves the blocks inside. Hold Alt for the opposite.",
     "Delete note",

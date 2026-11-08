@@ -139,10 +139,16 @@ pub(super) fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, 
             let Some(n) = ws.notes.get_mut(&nid) else { return };
             ui.spacing_mut().item_spacing.y = 8.0;
             ui.label(RichText::new(t!("Note")).strong());
+            // Both boxes grow by the grip in their corner; the title stays one
+            // line (Enter doesn't break it), a long one wraps.
             let label = ui.label(t!("Title")).id;
-            *edited |= crate::ui::kit::labelled(ui, label, |ui| ui.add(crate::ui::kit::TextLine::new(&mut n.title))).changed();
+            let title = crate::ui::kit::labelled(ui, label, |ui| ui.add(crate::ui::inputs::TextArea::new(("note-title", &nid), &mut n.title).rows(1).min_rows(1)));
+            if title.changed() {
+                n.title = n.title.replace(['\r', '\n'], " ");
+                *edited = true;
+            }
             let label = ui.label(t!("Description")).id;
-            *edited |= ui.add(egui::TextEdit::multiline(&mut n.text).desired_rows(4).desired_width(f32::INFINITY)).labelled_by(label).changed();
+            *edited |= crate::ui::kit::labelled(ui, label, |ui| ui.add(crate::ui::inputs::TextArea::new(("note-text", &nid), &mut n.text).rows(4))).changed();
             ui.label(t!("Color"));
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
@@ -164,13 +170,30 @@ pub(super) fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, 
                     }
                 }
             });
+            // Any other colour, with the picker.
+            crate::ui::kit::line(ui, |ui| {
+                let label = ui.label(RichText::new(t!("Other color")).size(12.5).color(theme.text_muted)).id;
+                let mut picked = n.color.as_deref().and_then(|c| Color32::from_hex(c).ok()).unwrap_or(theme.accent);
+                if crate::ui::kit::labelled(ui, label, |ui| crate::builders::color::color_button(ui, ui.scope_id().with(("note-color", &nid)), &mut picked, theme, Some(130.0))) {
+                    n.color = Some(crate::builders::color::to_hex(picked));
+                    *edited = true;
+                }
+            });
             let mut carry = !n.loose;
             if crate::ui::kit::toggle_row(ui, theme, &mut carry, t!("Move blocks with the note"), t!("Dragging the title also moves the blocks inside. Hold Alt for the opposite.")).changed() {
                 n.loose = !carry;
                 *edited = true;
             }
             ui.separator();
-            if crate::ui::kit::button(ui, theme, t!("Delete note")).on_hover_text(t!("The blocks in it stay")).clicked() {
+            // As wide as its text, with room around it (the menu would
+            // stretch it across, with the text at the edge).
+            let gone = ui
+                .horizontal(|ui| {
+                    ui.spacing_mut().button_padding = vec2(12.0, 4.0);
+                    crate::ui::kit::danger_button(ui, theme, t!("Delete note")).on_hover_text(t!("The blocks in it stay")).clicked()
+                })
+                .inner;
+            if gone {
                 delete = Some(nid.clone());
                 ui.close();
             }

@@ -83,11 +83,18 @@ pub struct TextArea<'a> {
     value: &'a mut String,
     hint: String,
     rows: usize,
+    min_rows: f32,
 }
 
 impl<'a> TextArea<'a> {
     pub fn new(id_salt: impl std::hash::Hash + std::fmt::Debug, value: &'a mut String) -> Self {
-        TextArea { id_salt: Id::unique(id_salt), value, hint: String::new(), rows: 4 }
+        TextArea { id_salt: Id::unique(id_salt), value, hint: String::new(), rows: 4, min_rows: MIN_ROWS }
+    }
+
+    /// The fewest lines it can be dragged down to (two, unless set).
+    pub fn min_rows(mut self, rows: usize) -> Self {
+        self.min_rows = rows.max(1) as f32;
+        self
     }
 
     pub fn hint(mut self, hint: impl Into<String>) -> Self {
@@ -108,7 +115,7 @@ impl Widget for TextArea<'_> {
         let height_id = id.with("height");
         let line = ui.text_style_height(&egui::TextStyle::Body);
         let default_h = self.rows as f32 * line + PAD.y * 2.0;
-        let min_h = MIN_ROWS * line + PAD.y * 2.0;
+        let min_h = self.min_rows * line + PAD.y * 2.0;
         let height = ui.data_mut(|d| d.get_persisted::<f32>(height_id)).unwrap_or(default_h).clamp(min_h, MAX_HEIGHT);
 
         let (outer, _) = ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::hover());
