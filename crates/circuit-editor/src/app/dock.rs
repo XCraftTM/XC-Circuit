@@ -160,6 +160,7 @@ impl DockViewer<Tab> for Viewer<'_> {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, tab: &Tab) {
+        crate::app::watchdog::mark(format!("in the {} tab", self.title(tab)));
         let name = match tab {
             Tab::Canvas(_) => Some("canvas"),
             Tab::Inspector => Some("inspector"),

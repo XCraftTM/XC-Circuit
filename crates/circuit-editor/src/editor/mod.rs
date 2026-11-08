@@ -360,6 +360,7 @@ impl Editor {
     }
 
     pub fn save(&mut self) {
+        crate::app::watchdog::mark("saving the project");
         let Some(project) = self.project.as_mut() else { return };
         match project.save() {
             Ok(()) => {

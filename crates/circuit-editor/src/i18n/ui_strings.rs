@@ -225,6 +225,7 @@ pub const UI_STRINGS: &[&str] = &[
     "this computer",
     "Run can switch to the server once a Calagopus server is set up (Bot › Server…).",
     "Plugin files changed, reloading",
+    "XC Circuit didn't answer for {seconds} s: it was stuck {phase}. This is kept in freezes.log in the app's data folder.",
     "Run, Restart and Stop now act on {place}.",
     "Couldn't load the bot's name and picture: {error}",
     "Problems",

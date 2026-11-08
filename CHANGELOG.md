@@ -2,6 +2,11 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
+## Unreleased
+
+### Added
+- **A freeze detector**: when XC Circuit stops answering (Windows says "Not Responding") for three seconds or more, the Console says for how long and where it was stuck (a tab, saving, the Problems list, plugins, or after its frame: the graphics card, Windows or a tool reading the window), and freezes.log in the app's data folder keeps it, also while it's still stuck. It helps find what makes slower computers freeze.
+
 ## 0.2.3
 
 ### Added

@@ -6,6 +6,7 @@ pub mod icon;
 pub mod reveal;
 pub mod titlebar;
 pub mod updater;
+pub mod watchdog;
 
 use crate::editor::prefs::SideView;
 use std::env;
@@ -381,6 +382,14 @@ impl eframe::App for CircuitApp {
 
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        // The freeze detector: where each frame is, and what it found.
+        watchdog::start(ctx.clone(), crate::bot::app_data_dir().join("freezes.log"));
+        // Any of its windows (a tab in a window of its own too).
+        watchdog::focused(ctx.input(|i| i.focused || i.raw.viewports.values().any(|v| v.focused == Some(true))));
+        watchdog::mark("at the frame's start (updates, the start page)");
+        for f in watchdog::take_found() {
+            self.ed.log(Level::Warn, tf!("XC Circuit didn't answer for {seconds} s: it was stuck {phase}. This is kept in freezes.log in the app's data folder.", seconds = format!("{:.1}", f.seconds), phase = f.phase));
+        }
         if let Some(mut run) = self.fps.take()
             && run.frame(self, &ctx, frame.info().cpu_usage)
         {
@@ -480,6 +489,7 @@ impl eframe::App for CircuitApp {
                 self.open_project_dialog();
             }
         }
+        watchdog::mark("in the bot and its server's messages");
         self.bot.poll(&mut self.ed, &ctx);
         self.bot.hosting.poll(&mut self.ed, &ctx);
         if let Some(Err(e)) = self.ed.bot_profile.poll() {
@@ -500,6 +510,7 @@ impl eframe::App for CircuitApp {
             let s = &self.ed.servers;
             crate::ui::widgets::share_servers(ui.ctx(), crate::ui::widgets::ServersView { list: s.shown.clone(), busy: s.busy(), no_token: s.no_token, error: s.error.clone() });
         }
+        watchdog::mark("in plugins and AI agents' requests");
         self.run_plugins(&ctx);
         if self.watcher.poll() {
             self.ed.log(Level::Info, t!("Plugin files changed, reloading"));
@@ -544,6 +555,7 @@ impl eframe::App for CircuitApp {
         }
         top.show(ui, |ui| {
             crate::ui::theme::compact(ui.style_mut());
+            watchdog::mark("in the menus and the status bar");
             self.menu_bar(ui)
         });
         egui::Panel::bottom("status")
@@ -552,6 +564,7 @@ impl eframe::App for CircuitApp {
             .show(ui, |ui| self.status_bar(ui));
         let key = (self.ed.history.revision(), self.ed.reloads, self.ed.prefs.language.clone());
         if self.problems_found.as_ref().is_none_or(|(k, _)| *k != key) {
+            watchdog::mark("working out the Problems list");
             self.problems_found = Some((key, panels::collect_problems(&mut self.ed)));
             // The custom ids events offer change with the project, too.
             let ids = crate::editor::custom_ids::collect_for(&mut self.ed).suggestions();
@@ -628,6 +641,7 @@ impl eframe::App for CircuitApp {
                 keep_panel_sizes(main, size - before);
             }
             self.dock_size = Some(size);
+            watchdog::mark("in the tabs and windows");
             self.dock.show(ui, &theme, &mut viewer);
             let asks = std::mem::take(&mut viewer.asks);
             let start_pick = viewer.start_pick.take();
@@ -682,6 +696,7 @@ impl eframe::App for CircuitApp {
                 self.run_command(cmd, &ctx);
             }
         }
+        watchdog::mark("in dialogs and the command palette");
         self.apply_actions();
         self.dialogs(&ctx);
         self.bot.windows(&ctx, &mut self.ed);
@@ -697,6 +712,7 @@ impl eframe::App for CircuitApp {
         let input = ctx.input(|i| i.events.iter().any(|e| !matches!(e, egui::Event::PointerMoved(_) | egui::Event::MouseMoved(_))));
         let due = self.ed.edited || input || self.last_check.elapsed() >= CHECK_EVERY;
         if settled && due {
+            watchdog::mark("comparing the project for undo");
             self.ed.check_changes();
             self.last_check = std::time::Instant::now();
         }
@@ -704,7 +720,10 @@ impl eframe::App for CircuitApp {
         if self.ed.unsaved() && settled && self.tour.is_none() && self.last_recovery.elapsed() >= RECOVERY_EVERY {
             self.last_recovery = std::time::Instant::now();
             if let Some(p) = &self.ed.project
-                && let Err(e) = self.ed.backups.write_recovery(p)
+                && let Err(e) = {
+                    watchdog::mark("writing the recovery copy");
+                    self.ed.backups.write_recovery(p)
+                }
             {
                 self.ed.log(Level::Warn, format!("Couldn't keep a recovery copy of your unsaved changes: {e:#}"));
             }
@@ -712,6 +731,7 @@ impl eframe::App for CircuitApp {
         if self.ed.unsaved() {
             ctx.request_repaint_after(RECOVERY_EVERY);
         }
+        watchdog::mark(watchdog::AFTER_FRAME);
     }
 
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
