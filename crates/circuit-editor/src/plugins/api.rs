@@ -194,6 +194,36 @@ pub trait Host {
     fn agent_link(&self) -> serde_json::Value {
         serde_json::Value::Null
     }
+    /// The app's settings (Settings page): theme, sizes, the Console's font,
+    /// shortcuts … Nothing secret is in them.
+    fn app_settings(&self) -> serde_json::Value {
+        serde_json::Value::Null
+    }
+    /// Bot › Settings of the open project: each setting with its page, type,
+    /// choices, default and value. Secrets (the token) only say whether one
+    /// is saved, never what it is.
+    fn bot_settings(&self) -> serde_json::Value {
+        serde_json::Value::Null
+    }
+    /// Changes Bot › Settings (`{ key: value }`); secrets can't be set this
+    /// way. Returns the keys changed.
+    fn set_bot_settings(&mut self, _values: &serde_json::Value) -> Result<serde_json::Value, String> {
+        Err("this editor can't change bot settings for plugins".into())
+    }
+    /// The bot's server (Bot › Server…): where it uploads, whether Run acts
+    /// there, the server's state, the last upload and the server console's
+    /// last lines. Never passwords or keys.
+    fn server(&self) -> serde_json::Value {
+        serde_json::Value::Null
+    }
+    /// The installed plugins (and turned-off ones), with their blocks.
+    fn plugins(&self) -> serde_json::Value {
+        serde_json::Value::Array(Vec::new())
+    }
+    /// A block type's source file: its plugin, the file and the code.
+    fn block_source(&self, _block: &str) -> Result<serde_json::Value, String> {
+        Err("this editor can't show block sources".into())
+    }
 }
 
 /// What the editor calls on a plugin (a script, see [`crate::plugins::script`]).

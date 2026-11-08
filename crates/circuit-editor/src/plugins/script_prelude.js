@@ -171,6 +171,18 @@
     blockTypes: (query) => host("blockTypes", text(query)),
     /** A block type ("core.log"): its fields, outputs and flows, or null. */
     blockType: (type) => host("blockType", String(type).split("@")[0]),
+    /** A block type's source file: { type, plugin, file, version, source }. */
+    blockSource: (type) => host("blockSource", String(type).split("@")[0]),
+    /** The installed plugins (and turned-off ones): [{ id, name, version, turnedOn, blocks, … }]. */
+    plugins: () => host("plugins"),
+    /** The app's settings (Settings page), with the shortcuts as they are now. */
+    appSettings: () => host("appSettings"),
+    /** Bot › Settings: { mode, pages, settings: [{ key, label, type, page, value, … }] }. Secrets only say whether one is saved. */
+    botSettings: () => host("botSettings"),
+    /** Changes Bot › Settings ({ key: value }; not secrets). Returns the keys changed. */
+    setBotSettings: (values) => host("setBotSettings", values),
+    /** The bot's server (Bot › Server…): where it uploads, Run's target, its state, the last upload, its console. Null without a project. */
+    server: () => host("server"),
     /** A block of a workspace as it is now: its values and pins, with their types. */
     blockPins: (workspace, block) => host("blockPins", workspace, String(block)),
     /** Connects two pins ("3.next" to "4.in"), checked like a wire drawn on the canvas. It can be undone. */

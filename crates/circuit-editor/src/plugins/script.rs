@@ -605,6 +605,12 @@ fn host_call(h: &mut dyn Host, method: &str, args: &str) -> Result<Value, String
         "agentInstall" => json!(h.agent_install(&s(0), a.get(1).and_then(Value::as_bool).unwrap_or(false))?),
         "agentSnippet" => json!(h.agent_snippet()),
         "agentLink" => h.agent_link(),
+        "appSettings" => h.app_settings(),
+        "botSettings" => h.bot_settings(),
+        "setBotSettings" => h.set_bot_settings(&value(0))?,
+        "server" => h.server(),
+        "plugins" => h.plugins(),
+        "blockSource" => h.block_source(&s(0))?,
         other => return Err(format!("xc has no `{other}`")),
     })
 }

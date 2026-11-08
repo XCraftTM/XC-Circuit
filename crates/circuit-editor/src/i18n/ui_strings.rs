@@ -284,6 +284,7 @@ pub const UI_STRINGS: &[&str] = &[
     "{count} tables: {names}",
     "Signed in to the panel: the API key is kept in your system's credential store.",
     "Signing in to the panel stopped: no key came back within 15 minutes.",
+    "The server can't be started or stopped from here: choose a Calagopus server in Bot › Server… and sign in.",
     "An upload is under way: press Run again once it's done.",
     "Upload",
     "Restarting the bot on the server.",

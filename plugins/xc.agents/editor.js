@@ -49,7 +49,7 @@ function tool(def) {
 
 tool({
   name: "get_project",
-  description: "The open project: its name, workspaces (key, name, folder, block count, whether turned off), how many problems it has, its slash commands and whether the bot is running. Start here.",
+  description: "The open project: its name, build mode, workspaces (key, name, folder, block count, whether turned off), how many problems it has, its slash commands, whether the bot is running here, and its server (where run_bot acts: here or on the server). Start here.",
   input: schema({}),
   run() {
     const project = xc.project();
@@ -59,7 +59,9 @@ tool({
       return { key: w.key, name: w.name, folder: ws.folder || null, blocks: Object.keys(ws.nodes || {}).length, turnedOff: !!ws.disabled };
     });
     const commands = xc.data.get("slashCommands") || [];
-    return { name: project.name, workspaces, problems: xc.problems().length, slashCommands: commands.map((c) => c.name), botRunning: xc.botRunning() };
+    const server = xc.server ? xc.server() : null;
+    const serverSummary = server && server.kind !== "none" ? { kind: server.kind, name: server.serverName || server.host || server.panel || null, runTarget: server.runTarget, state: server.state || null } : null;
+    return { name: project.name, workspaces, problems: xc.problems().length, slashCommands: commands.map((c) => c.name), botRunning: xc.botRunning(), server: serverSummary };
   },
 });
 
@@ -85,6 +87,39 @@ tool({
     const found = xc.blockTypes(query || "");
     const max = 80;
     return found.length > max ? { blockTypes: found.slice(0, max), more: `${found.length - max} more: search with more words.` } : { blockTypes: found };
+  },
+});
+
+tool({
+  name: "list_block_types",
+  description: "Every installed block type, grouped by category: type, name and kind (event, action, value). For a whole picture of what can be built; get_block_type then tells one's fields, get_block_source its code.",
+  input: schema({}),
+  run() {
+    const all = xc.blockTypes("");
+    const categories = {};
+    for (const b of all) {
+      const c = b.category || "other";
+      (categories[c] = categories[c] || []).push({ type: b.type, name: b.name, kind: b.kind });
+    }
+    return { count: all.length, categories };
+  },
+});
+
+tool({
+  name: "get_block_source",
+  description: "A block type's source code (the JavaScript file in its plugin), to see exactly what it does when the bot runs: its fields, define() and run(). Long files are cut at 200,000 characters.",
+  input: schema({ type: { type: "string", description: "The block type, such as discord.send_message." } }, ["type"]),
+  run({ type }) {
+    return xc.blockSource(type);
+  },
+});
+
+tool({
+  name: "list_plugins",
+  description: "The installed plugins (and turned-off ones): id, name, version, description, whether turned on, and the block types each one adds.",
+  input: schema({}),
+  run() {
+    return xc.plugins();
   },
 });
 
@@ -126,6 +161,73 @@ tool({
   input: schema({ lines: { type: "integer", description: "How many lines (50 when not given, at most 1000).", minimum: 1, maximum: 1000 } }),
   run({ lines }) {
     return xc.console(lines || 50);
+  },
+});
+
+tool({
+  name: "get_app_settings",
+  description: "XC Circuit's own settings (the Settings page): theme, accent, interface size, the Console's font, whether saving restarts the bot, Node.js, backups, language, the shortcuts and more. Reading only.",
+  input: schema({}),
+  run() {
+    return xc.appSettings();
+  },
+});
+
+tool({
+  name: "get_bot_settings",
+  description: "The project's Bot › Settings: each setting's key, label, type, page, choices, default and value (status, intents, presence and what plugins add). Secrets such as the bot token only say whether one is saved, never what it is.",
+  input: schema({}),
+  run() {
+    needProject();
+    return xc.botSettings();
+  },
+});
+
+tool({
+  name: "set_bot_settings",
+  description: "Changes Bot › Settings: { key: value } with keys from get_bot_settings (null puts one back to its default). Values are checked against the setting's type and choices. Secrets (the bot token) can't be set: the user does that in Bot › Settings.",
+  input: schema({ values: { type: "object", description: "The settings to change, such as { \"status\": \"idle\" }." } }, ["values"]),
+  run({ values }) {
+    needProject();
+    const changed = xc.setBotSettings(values || {});
+    return changed.length ? { changed, note: "Saved with the project (save_project). A running bot gets them when it starts again." } : "Nothing changed: they had these values already.";
+  },
+});
+
+tool({
+  name: "get_server",
+  description: "The bot's server (Bot › Server…): how it uploads (sftp, ftp, calagopus or none), where, whether Run acts there (runTarget: local or server) and can (canRunThere: a Calagopus server with a key), the server's state (running, starting, stopping, offline) with CPU and memory, the last upload, and the server console's last lines when its tab is open. Never passwords or keys.",
+  input: schema({}),
+  run() {
+    needProject();
+    return xc.server();
+  },
+});
+
+tool({
+  name: "server_action",
+  description: "Does something on the bot's server: upload (sends what changed), start or restart (uploads what changed first, then starts or restarts it, as Run does), stop, or kill (ends it at once). Start, restart, stop and kill need a Calagopus server (get_server: canRunThere). Check get_server a few seconds later for its state.",
+  input: schema({ action: { type: "string", enum: ["upload", "start", "restart", "stop", "kill"], description: "What to do." } }, ["action"]),
+  run({ action }) {
+    needProject();
+    const server = xc.server() || {};
+    if (!server.kind || server.kind === "none") throw new Error("The project has no server set up: the user chooses one in Bot › Server….");
+    if (action !== "upload" && !server.canRunThere) throw new Error("This server can't be started or stopped from here: that needs a Calagopus server with a saved key (Bot › Server…). upload works.");
+    if (server.uploading && action !== "stop" && action !== "kill") throw new Error("An upload is under way: try again once it's done (get_server: uploading).");
+    xc.run(`server.${action}`);
+    return action === "upload" ? "Uploading what changed. get_server's lastUpload says how it went." : `Asked the server to ${action}. get_server shows its state in a few seconds.`;
+  },
+});
+
+tool({
+  name: "set_run_target",
+  description: "Where run_bot and stop_bot act: local (on this computer) or server (the bot's Calagopus server; get_server: canRunThere). Picking server stops the bot running here, so the two don't both answer.",
+  input: schema({ target: { type: "string", enum: ["local", "server"] } }, ["target"]),
+  run({ target }) {
+    needProject();
+    if (target === "server" && !(xc.server() || {}).canRunThere) throw new Error("Run can't act on a server here: that needs a Calagopus server with a saved key (Bot › Server…).");
+    xc.run(`run.${target}`);
+    return `Run, Restart and Stop now act ${target === "server" ? "on the server" : "on this computer"}.`;
   },
 });
 
@@ -470,7 +572,7 @@ tool({
 
 tool({
   name: "run_bot",
-  description: "Starts (or restarts) the bot with the project as it is. Check get_console a few seconds later to see it log in and what it does.",
+  description: "Starts (or restarts) the bot with the project as it is: on this computer, or on its server when get_server's runTarget is server (it uploads what changed first). Check get_console (here) or get_server (on the server) a few seconds later.",
   input: schema({}),
   run() {
     needProject();
@@ -481,9 +583,14 @@ tool({
 
 tool({
   name: "stop_bot",
-  description: "Stops the running bot.",
+  description: "Stops the running bot: here, or on its server when get_server's runTarget is server.",
   input: schema({}),
   run() {
+    const server = xc.server ? xc.server() : null;
+    if (server && server.runTarget === "server") {
+      xc.run("bot.stop");
+      return "Stopping the bot on the server. get_server shows its state.";
+    }
     if (!xc.botRunning()) return "The bot isn't running.";
     xc.run("bot.stop");
     return "Stopping the bot.";

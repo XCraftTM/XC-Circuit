@@ -99,6 +99,9 @@ pub struct Editor {
     pub log: Vec<LogLine>,
     pub shapes: ShapeCache,
     pub views: HashMap<String, CanvasView>,
+    /// The bot's server as plugins and agents see it (`xc.server()`), kept
+    /// up to date by the hosting part of the app. Nothing secret.
+    pub server_view: serde_json::Value,
     pub picker: Option<Picker>,
     pub actions: Vec<Action>,
     /// The workspace whose canvas was used last.
@@ -180,6 +183,7 @@ impl Editor {
             log: Vec::new(),
             shapes: ShapeCache::default(),
             views: HashMap::new(),
+            server_view: serde_json::Value::Null,
             picker: None,
             actions: Vec::new(),
             active_workspace: None,

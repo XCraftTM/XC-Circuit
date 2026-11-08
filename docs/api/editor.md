@@ -39,6 +39,9 @@ Types for your code editor: `/// <reference types="@xc-circuit/sdk/editor" />` (
 | `xc.storage.get(key)` | the plugin's own store (on this computer) |
 | `xc.botRunning()` · `xc.screen()` | is the bot running · window size |
 | `xc.blockTypes(query)` · `xc.blockType(type)` | installed block types · one type's fields, outputs and flows |
+| `xc.blockSource(type)` · `xc.plugins()` | a block type's code: `{ type, plugin, file, version, source }` · the plugins, turned on or off, with their blocks |
+| `xc.appSettings()` · `xc.botSettings()` | the app's settings (with the shortcuts) · Bot › Settings: `{ mode, pages, settings: [{ key, label, type, page, value, … }] }` (secrets only say whether one is saved) |
+| `xc.server()` | the bot's server (Bot › Server…): kind, where, `runTarget` (`local` or `server`), `canRunThere`, `state`, CPU and memory, `lastUpload`, the server console's last lines; never a password or key |
 | `xc.blockPins(workspace, id)` | a block as it is now: its values and pins, with types and wires |
 | `xc.problems()` · `xc.console(lines)` | what the Problems panel and the Console show |
 | `xc.t(text)` | text in the app's language, from the plugins' `locales/*.toml` |
@@ -58,7 +61,8 @@ Types for your code editor: `/// <reference types="@xc-circuit/sdk/editor" />` (
 | `xc.select(workspace, ids)` · `xc.reveal(workspace, id)` | select · go to a block |
 | `xc.data.set(key, value)` · `xc.storage.set(key, value)` | save data |
 | `xc.log(…)` · `xc.success(…)` · `xc.warn(…)` · `xc.error(…)` | write to the Console |
-| `xc.run(id)` | run a command: a plugin's, or `"bot.run"`, `"bot.stop"`, `"file.save"` |
+| `xc.setBotSettings({ key: value })` | change Bot › Settings (not secrets), checked against each setting's type and choices; returns the keys changed |
+| `xc.run(id)` | run a command: a plugin's, or `"bot.run"`, `"bot.stop"`, `"file.save"`, `"server.upload"`, `"server.start"`, `"server.restart"`, `"server.stop"`, `"server.kill"`, `"run.local"`, `"run.server"` |
 | `xc.moveOverlay(id, x, y)` · `xc.overlayPosition(id)` | move an overlay |
 
 Every change can be undone with Ctrl+Z, like your own edits.

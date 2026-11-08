@@ -5,6 +5,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 ## Unreleased
 
 ### Added
+- **AI agents see much more**: new MCP tools list every block type (`list_block_types`), show a block's source code (`get_block_source`) and the plugins (`list_plugins`), read the app's settings and read or change Bot › Settings (`get_app_settings`, `get_bot_settings`, `set_bot_settings`; never the token), and see and work the bot's server (`get_server`, `server_action`: upload, start, restart, stop, kill; `set_run_target`). `run_bot` and `stop_bot` act on the server when Run does, and `get_project` tells about the server. Plugins get the same through `xc.server()`, `xc.botSettings()`, `xc.blockSource()` and more.
 - **Defer, then delete**: a Send Message mode that answers a command, button or form with *thinking…* and takes it away again (after Delete after seconds, or as soon as it shows), so it counts as answered and nothing stays. A reply after it comes as a new message.
 
 ### Fixed

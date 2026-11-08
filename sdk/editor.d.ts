@@ -102,9 +102,35 @@ export interface Xc {
   success(...parts: unknown[]): void;
   warn(...parts: unknown[]): void;
   error(...parts: unknown[]): void;
-  /** Runs a command after this handler: a plugin's, or "bot.run", "bot.stop", "file.save". */
+  /** Runs a command after this handler: a plugin's, or "bot.run", "bot.stop", "file.save",
+   * "server.upload", "server.start", "server.restart", "server.stop", "server.kill", "run.local", "run.server". */
   run(id: string): void;
   botRunning(): boolean;
+  /** A block type's source file. */
+  blockSource(type: string): { type: string; plugin: string; file: string; version: string; source: string; cut: boolean };
+  /** The installed plugins (and turned-off ones), with their block types. */
+  plugins(): { id: string; name: string; version: string; author: string; description: string; turnedOn: boolean; optional: boolean; blocks: string[]; editorScript: boolean }[];
+  /** The app's settings (the Settings page), with the shortcuts as they are now. Nothing secret. */
+  appSettings(): Record<string, any>;
+  /** Bot › Settings of the open project. Secrets only say whether one is saved. */
+  botSettings(): {
+    mode: string;
+    pages: { id: string; name: string }[];
+    settings: { key: string; label: string; type: string; page: string; description?: string; default: any; value: any; choices?: any; plugin: string; secret?: true; saved?: boolean }[];
+  } | null;
+  /** Changes Bot › Settings ({ key: value }, null for the default; not secrets). Returns the keys changed. */
+  setBotSettings(values: Record<string, unknown>): string[];
+  /** The bot's server (Bot › Server…). Never a password or key. Null without a project. */
+  server(): {
+    kind: "none" | "sftp" | "ftp" | "calagopus";
+    host: string; port: number; user: string; panel: string; server: string; serverName: string; folder: string;
+    uploadAfterSave: boolean; sendToken: boolean; restartAfterUpload: boolean;
+    canRunThere: boolean; runTarget: "local" | "server";
+    state: "running" | "starting" | "stopping" | "offline" | null;
+    cpuPercent: number | null; memoryMb: number | null; memoryLimitMb: number | null; unreachable: string | null;
+    uploading: boolean; lastUpload: { ok: boolean; text: string; secondsAgo: number } | null;
+    console: string[] | null;
+  } | null;
   plugin: { name: string };
 }
 

@@ -90,11 +90,13 @@ pub struct HostingUi {
     controllable: Option<(String, bool)>,
     /// Stop on the server, under way.
     power: Option<Receiver<Result<(), String>>>,
+    /// When `Editor::server_view` was last written.
+    view_at: Option<Instant>,
 }
 
 impl HostingUi {
     pub fn new() -> Self {
-        HostingUi { draft: None, job: None, log: VecDeque::new(), outcome: None, seen_saves: None, again: false, sign_in: None, servers: None, console: None, remote: false, watch: None, controllable: None, power: None }
+        HostingUi { draft: None, job: None, log: VecDeque::new(), outcome: None, seen_saves: None, again: false, sign_in: None, servers: None, console: None, remote: false, watch: None, controllable: None, power: None, view_at: None }
     }
 
     /// Bot › Server…: the tab with the project's settings.
@@ -308,6 +310,71 @@ impl HostingUi {
                 ed.log(Level::Error, tf!("The server didn't stop: {error}", error = e));
             }
         }
+        // What plugins and agents see of it (xc.server()), twice a second.
+        if self.view_at.is_none_or(|t| t.elapsed() > std::time::Duration::from_millis(500)) {
+            self.view_at = Some(Instant::now());
+            ed.server_view = self.view(ed);
+        }
+    }
+
+    /// The server as plugins and agents see it: settings without secrets,
+    /// where Run acts, the server's state, the last upload, its console.
+    fn view(&mut self, ed: &Editor) -> serde_json::Value {
+        if ed.project.is_none() {
+            return serde_json::Value::Null;
+        }
+        let h = settings_of(ed);
+        let can = self.can_control(ed);
+        let mb = |b: u64| (b as f64 / 1_048_576.0).round();
+        let w = self.watch.as_ref();
+        let last = w.and_then(|w| w.last.as_ref());
+        serde_json::json!({
+            "kind": serde_json::to_value(h.kind).unwrap_or(serde_json::Value::Null),
+            "host": h.host,
+            "port": h.port,
+            "user": h.user,
+            "panel": h.panel,
+            "server": h.server,
+            "serverName": h.server_name,
+            "folder": h.folder,
+            "uploadAfterSave": h.auto_upload,
+            "sendToken": h.include_token,
+            "restartAfterUpload": h.restart,
+            "canRunThere": can,
+            "runTarget": if self.remote { "server" } else { "local" },
+            "state": w.map(|w| w.state().to_string()).filter(|s| !s.is_empty()),
+            "cpuPercent": last.map(|r| (r.cpu * 10.0).round() / 10.0),
+            "memoryMb": last.map(|r| mb(r.memory)),
+            "memoryLimitMb": last.map(|r| mb(r.memory_limit)),
+            "unreachable": w.and_then(|w| w.problem.clone()),
+            "uploading": self.job.is_some(),
+            "lastUpload": self.outcome.as_ref().map(|o| serde_json::json!({ "ok": o.ok, "text": o.text, "secondsAgo": o.at.elapsed().as_secs() })),
+            "console": self.console.as_ref().map(|c| c.lines.iter().rev().take(60).rev().map(|l| calagopus::plain(l)).collect::<Vec<_>>()),
+        })
+    }
+
+    /// A power action on the server, asked by a plugin or an agent: start
+    /// and restart upload what changed first (as Run does), stop and kill
+    /// right away.
+    pub fn remote_action(&mut self, ed: &mut Editor, action: &str) {
+        if !self.can_control(ed) {
+            ed.log(Level::Warn, t!("The server can't be started or stopped from here: choose a Calagopus server in Bot › Server… and sign in."));
+            return;
+        }
+        match action {
+            "start" | "restart" => {
+                if self.job.is_some() {
+                    ed.log(Level::Warn, t!("An upload is under way: press Run again once it's done."));
+                    return;
+                }
+                if let Some(w) = &mut self.watch {
+                    w.expect(action);
+                }
+                self.start_upload(ed, Some(if action == "start" { "start" } else { "restart" }));
+            }
+            "stop" | "kill" => self.power_remote(ed, if action == "stop" { "stop" } else { "kill" }),
+            _ => {}
+        }
     }
 
     /// Run on the server: what changed is uploaded, then the server starts
@@ -329,17 +396,22 @@ impl HostingUi {
 
     /// Stop on the server.
     pub fn stop_remote(&mut self, ed: &mut Editor) {
+        self.power_remote(ed, "stop");
+    }
+
+    /// Stop or kill on the server.
+    fn power_remote(&mut self, ed: &mut Editor, action: &'static str) {
         let h = settings_of(ed);
         let Some(key) = secrets_of(ed).api_key else { return };
         if let Some(w) = &mut self.watch {
-            w.expect("stop");
+            w.expect(action);
         }
         ed.log(Level::Info, tf!("Stopping the bot on {server}.", server = place_name(&h)));
         let panel = calagopus::Panel::new(&h.panel, &key);
         let (tx, rx) = channel();
         self.power = Some(rx);
         thread::spawn(move || {
-            let _ = tx.send(panel.power(&h.server, "stop").map_err(|e| format!("{e:#}")));
+            let _ = tx.send(panel.power(&h.server, action).map_err(|e| format!("{e:#}")));
         });
     }
 

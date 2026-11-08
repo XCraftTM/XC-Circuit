@@ -443,6 +443,130 @@ impl api::Host for EditorHost<'_> {
         )
     }
 
+    fn app_settings(&self) -> Value {
+        let mut v = serde_json::to_value(&self.ed.prefs).unwrap_or(Value::Null);
+        if let Some(o) = v.as_object_mut() {
+            o.insert("theme".into(), Value::String(self.ed.theme.id.clone()));
+            o.insert("appVersion".into(), Value::String(env!("CARGO_PKG_VERSION").into()));
+            // The shortcuts as they are now, by action, not only the changed ones.
+            let keys: serde_json::Map<String, Value> = crate::editor::keymap::Action::ALL
+                .iter()
+                .map(|a| (a.id().to_string(), Value::Array(crate::editor::keymap::shortcuts(&self.ed.prefs.shortcuts, *a).iter().map(|s| Value::String(s.text())).collect())))
+                .collect();
+            o.insert("shortcuts".into(), Value::Object(keys));
+        }
+        v
+    }
+
+    fn bot_settings(&self) -> Value {
+        let (Some(project), Some(mode)) = (&self.ed.project, self.ed.mode()) else { return Value::Null };
+        let all = self.ed.reg.bot_settings(mode);
+        let settings: Vec<Value> = all
+            .settings
+            .iter()
+            .filter(|s| !matches!(s.kind(), "note" | "link"))
+            .map(|s| {
+                let secret = s.is_secret();
+                let value = if secret { Value::Null } else { project.meta.settings.get(&s.key).or(s.spec.get("default")).cloned().unwrap_or(Value::Null) };
+                let mut v = serde_json::json!({
+                    "key": s.key,
+                    "label": s.text("label").unwrap_or(&s.key),
+                    "type": s.kind(),
+                    "page": s.page,
+                    "description": s.text("description"),
+                    "default": if secret { Value::Null } else { s.spec.get("default").cloned().unwrap_or(Value::Null) },
+                    "value": value,
+                    "plugin": s.plugin,
+                });
+                if let Some(choices) = s.spec.get("choices") {
+                    v["choices"] = choices.clone();
+                }
+                if secret {
+                    v["secret"] = Value::Bool(true);
+                    v["saved"] = Value::Bool(circuit_runner::secrets::get(&project.root, &s.key).is_some());
+                }
+                v
+            })
+            .collect();
+        let pages: Vec<Value> = all.pages.iter().map(|p| serde_json::json!({ "id": p.id, "name": p.name })).collect();
+        serde_json::json!({ "mode": mode.id, "pages": pages, "settings": settings })
+    }
+
+    fn set_bot_settings(&mut self, values: &Value) -> Result<Value, String> {
+        let Some(mode) = self.ed.mode() else { return Err("no project is open".into()) };
+        let all = self.ed.reg.bot_settings(mode);
+        let Some(values) = values.as_object() else { return Err("give the settings as { key: value }".into()) };
+        // Checked first, so nothing changes when one is wrong.
+        for (key, value) in values {
+            let Some(s) = all.settings.iter().find(|s| s.key == *key) else {
+                let keys: Vec<&str> = all.settings.iter().filter(|s| !s.is_secret() && !matches!(s.kind(), "note" | "link")).map(|s| s.key.as_str()).collect();
+                return Err(format!("no bot setting `{key}`; there are: {}", keys.join(", ")));
+            };
+            if s.is_secret() {
+                return Err(format!("`{key}` is a secret: it's set in Bot › Settings by the user, never by an agent"));
+            }
+            let fits = match s.kind() {
+                "note" | "link" => return Err(format!("`{key}` only shows something; it has no value")),
+                "boolean" => value.is_boolean(),
+                "number" | "slider" => value.is_number(),
+                "list" | "multiselect" => value.is_array(),
+                "select" => match s.spec.get("choices") {
+                    Some(Value::Object(c)) => value.as_str().is_some_and(|v| c.contains_key(v)) || c.values().any(|g| g.as_object().is_some_and(|g| value.as_str().is_some_and(|v| g.contains_key(v)))),
+                    Some(Value::Array(c)) => c.iter().any(|x| x == value || x.get("value") == Some(value)),
+                    _ => true,
+                },
+                _ => value.is_string() || value.is_null(),
+            };
+            if !fits {
+                return Err(format!("`{key}` is a {} setting: {value} doesn't fit", s.kind()));
+            }
+        }
+        let Some(project) = self.ed.project.as_mut() else { return Err("no project is open".into()) };
+        let mut changed = Vec::new();
+        for (key, value) in values {
+            if project.meta.settings.get(key) != Some(value) {
+                if value.is_null() {
+                    project.meta.settings.remove(key);
+                } else {
+                    project.meta.settings.insert(key.clone(), value.clone());
+                }
+                changed.push(Value::String(key.clone()));
+            }
+        }
+        if !changed.is_empty() {
+            self.ed.edited = true;
+            self.ed.refresh_define_ctx();
+        }
+        Ok(Value::Array(changed))
+    }
+
+    fn server(&self) -> Value {
+        self.ed.server_view.clone()
+    }
+
+    fn plugins(&self) -> Value {
+        let reg = &self.ed.reg;
+        let one = |p: &circuit_plugins::registry::LoadedPlugin, on: bool| {
+            let m = &p.manifest;
+            let blocks: Vec<&str> = reg.blocks.values().filter(|b| b.plugin == m.id).map(|b| b.id.as_str()).collect();
+            serde_json::json!({ "id": m.id, "name": m.name, "version": m.version, "author": m.author, "description": m.description, "turnedOn": on, "optional": m.optional, "blocks": blocks, "editorScript": m.editor.is_some() })
+        };
+        Value::Array(reg.plugins.iter().map(|p| one(p, true)).chain(reg.disabled.iter().map(|p| one(p, false))).collect())
+    }
+
+    fn block_source(&self, block: &str) -> Result<Value, String> {
+        let id = block.split('@').next().unwrap_or(block);
+        let d = self.ed.reg.block(id).ok_or_else(|| format!("no block type `{id}` is installed"))?;
+        let text = std::fs::read_to_string(&d.source).map_err(|e| format!("couldn't read {}: {e}", d.source.display()))?;
+        const MAX: usize = 200_000;
+        let cut = text.len() > MAX;
+        let code: String = if cut { text.chars().take(MAX).collect() } else { text };
+        // The file within its plugin's folder (blocks/messages/send_message.js).
+        let dir = self.ed.reg.plugins.iter().find(|p| p.manifest.id == d.plugin).map(|p| p.dir.clone());
+        let file = dir.as_deref().and_then(|dir| d.source.strip_prefix(dir).ok()).unwrap_or(&d.source).to_string_lossy().replace('\\', "/");
+        Ok(serde_json::json!({ "type": d.id, "plugin": d.plugin, "file": file, "version": d.version, "source": code, "cut": cut }))
+    }
+
     fn block_type(&self, block: &str) -> Option<Value> {
         let d = self.ed.reg.block(block.split('@').next().unwrap_or(block))?;
         let fields: Vec<Value> = d
@@ -822,6 +946,61 @@ mod tests {
         let commands = serde_json::json!({ "commands": [{ "name": "ticket-panel", "description": "Posts the panel", "contexts": ["guild"] }] });
         host.call_tool(&mut ed, "set_slash_commands", &commands, false).expect("a tool").unwrap();
         assert_eq!(ed.define_ctx["data"]["slashCommands"][0]["name"], "ticket-panel", "blocks see the new commands: {}", ed.define_ctx);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// Agents see as much as they can: every block type and its code, the
+    /// plugins, the app's and the bot's settings (never a secret), and the
+    /// bot's server; they change bot settings, checked like the page does.
+    #[test]
+    fn agents_see_settings_server_plugins_and_block_code() {
+        let tmp = std::env::temp_dir().join(format!("xc-agent-see-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let plugins = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+        let mut ed = Editor::new(vec![plugins], None).unwrap();
+        Project::create(tmp.join("bot"), "Seeing Bot", "discord-bot").unwrap();
+        ed.open_project(&tmp.join("bot"));
+        let mut host = PluginHost::new(BTreeMap::new());
+        host.sync(&mut ed, None);
+        let mut call = |ed: &mut Editor, name: &str, args: serde_json::Value| host.call_tool(ed, name, &args, false).expect("a tool");
+
+        let list = call(&mut ed, "list_block_types", serde_json::json!({})).unwrap();
+        assert!(list["count"].as_u64().unwrap() > 60 && list["categories"].as_object().unwrap().len() > 5, "{list}");
+        let code = call(&mut ed, "get_block_source", serde_json::json!({ "type": "core.log" })).unwrap();
+        assert!(code["source"].as_str().unwrap().contains("module.exports") && code["file"].as_str().unwrap().starts_with("blocks/"), "{code}");
+        assert!(call(&mut ed, "get_block_source", serde_json::json!({ "type": "no.such" })).is_err());
+        let plugins = call(&mut ed, "list_plugins", serde_json::json!({})).unwrap();
+        let core = plugins.as_array().unwrap().iter().find(|p| p["id"] == "xc.core").expect("xc.core");
+        assert!(core["turnedOn"] == true && core["blocks"].as_array().unwrap().iter().any(|b| b == "core.log"));
+
+        let app = call(&mut ed, "get_app_settings", serde_json::json!({})).unwrap();
+        assert_eq!(app["shortcuts"]["run"], serde_json::json!(["F5"]));
+        assert!(app["theme"].is_string() && app["appVersion"].is_string());
+
+        // Bot settings: secrets only say whether one is saved.
+        let bot = call(&mut ed, "get_bot_settings", serde_json::json!({})).unwrap();
+        let settings = bot["settings"].as_array().unwrap();
+        let secret = settings.iter().find(|s| s["secret"] == true).expect("the token is a setting");
+        assert!(secret["value"].is_null() && secret["saved"].is_boolean(), "{secret}");
+        assert!(call(&mut ed, "set_bot_settings", serde_json::json!({ "values": { secret["key"].as_str().unwrap(): "abc" } })).is_err(), "no secrets");
+        assert!(call(&mut ed, "set_bot_settings", serde_json::json!({ "values": { "noSuchSetting": 1 } })).is_err());
+        let flag = settings.iter().find(|s| s["type"] == "boolean").expect("a switch");
+        let key = flag["key"].as_str().unwrap().to_string();
+        let flipped = !flag["value"].as_bool().unwrap_or(false);
+        assert!(call(&mut ed, "set_bot_settings", serde_json::json!({ "values": { &key: "yes" } })).is_err(), "a switch takes true or false");
+        let done = call(&mut ed, "set_bot_settings", serde_json::json!({ "values": { &key: flipped } })).unwrap();
+        assert_eq!(done["changed"], serde_json::json!([key.clone()]));
+        assert_eq!(ed.project.as_ref().unwrap().meta.settings[&key], serde_json::json!(flipped));
+
+        // The server: none set up yet, so it can't be run there.
+        let mut hosting = crate::bot::hosting::HostingUi::new();
+        hosting.poll(&mut ed, &egui::Context::default());
+        let server = call(&mut ed, "get_server", serde_json::json!({})).unwrap();
+        assert_eq!((server["kind"].as_str(), server["runTarget"].as_str(), server["canRunThere"].as_bool()), (Some("none"), Some("local"), Some(false)), "{server}");
+        assert!(call(&mut ed, "server_action", serde_json::json!({ "action": "start" })).is_err());
+        assert!(call(&mut ed, "set_run_target", serde_json::json!({ "target": "server" })).is_err());
+        let project = call(&mut ed, "get_project", serde_json::json!({})).unwrap();
+        assert!(project["server"].is_null(), "no server to show: {project}");
         let _ = std::fs::remove_dir_all(&tmp);
     }
 

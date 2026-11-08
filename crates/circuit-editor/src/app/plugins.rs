@@ -255,6 +255,20 @@ impl CircuitApp {
                 "bot.run" => self.run_command(Cmd::Run, ctx),
                 "bot.stop" => self.run_command(Cmd::Stop, ctx),
                 "file.save" => self.run_command(Cmd::Save, ctx),
+                // The bot's server (Bot › Server…).
+                "server.upload" => self.bot.hosting.upload(&mut self.ed),
+                "server.start" | "server.restart" | "server.stop" | "server.kill" => {
+                    let action = id.trim_start_matches("server.").to_string();
+                    self.bot.hosting.remote_action(&mut self.ed, &action);
+                }
+                "run.local" => self.pick_remote(false),
+                "run.server" => {
+                    if self.bot.hosting.can_control(&self.ed) {
+                        self.pick_remote(true);
+                    } else {
+                        self.ed.log(Level::Info, t!("Run can switch to the server once a Calagopus server is set up (Bot › Server…)."));
+                    }
+                }
                 _ => {
                     if !self.plugin_host.run_command(&mut self.ed, &id, running) {
                         self.ed.log(Level::Warn, format!("No command `{id}`"));
