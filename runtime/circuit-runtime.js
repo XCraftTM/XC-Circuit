@@ -273,6 +273,8 @@ class Runtime {
         if (outputs) run.setOutputs(node.id, outputs);
         await graph.follow(run, node.id, flow, path);
       },
+      /** Whether this block's `flow` output has a wire: a block can then fail as before when nothing handles it. */
+      wired: (flow) => (graph.flowsOut.get(`${node.id}.${flow}`) || []).length > 0,
       set: (output, value) => {
         if (run) run.setOutputs(node.id, { [output]: value });
       },

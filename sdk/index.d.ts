@@ -72,6 +72,8 @@ export interface Vars {
 export interface Ctx {
   /** Continues on one of the block's `flows`, after setting `outputs`. Resolves when the rest of the flow is done. */
   next(flow: string, outputs?: Record<string, unknown>): Promise<void>;
+  /** Whether one of the block's `flows` has a wire: take an optional path (Missing) only when it's connected. */
+  wired?(flow: string): boolean;
   /** Sets one output without continuing. */
   set(output: string, value: unknown): void;
   /** Reads the block's inputs again (for loops whose condition changes). */

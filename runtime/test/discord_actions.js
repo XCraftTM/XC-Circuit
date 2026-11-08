@@ -198,6 +198,34 @@ const log = (name) => (...args) => {
     Module._load = load0;
   }
 
+  // Find Role, Find Channel, Find Member: Missing when it isn't there (an error with nothing on Missing).
+  const finder = async (rel, fields, wired) => {
+    const b = load(rel);
+    const took = [];
+    const ctx = { wired: (f) => f === "missing" && wired, next: async (flow, out) => took.push([flow, out]), discord: { client: { channels: { fetch: async (id) => (id === "900000000000000001" ? { id, name: "logs" } : Promise.reject(new Error("Unknown Channel"))) } } } };
+    const defaults = Object.fromEntries(Object.entries(b.fields).map(([k, f]) => [k, f.default ?? null]));
+    await b.run({ fields: { ...defaults, ...fields }, ctx });
+    return took[0];
+  };
+  const roleList = [{ id: "700000000000000001", name: "Support" }];
+  const srv = {
+    name: "Test",
+    roles: { cache: { find: (fn) => roleList.find(fn) }, fetch: async (id) => roleList.find((r) => r.id === id) ?? Promise.reject(new Error("Unknown Role")) },
+    channels: { cache: { find: (fn) => [{ id: "c1", name: "general" }].find(fn) } },
+    members: { fetch: async (id) => (id === "42" ? { id } : Promise.reject(new Error("Unknown Member"))), search: async () => new Map() },
+  };
+  assert.deepStrictEqual(await finder("roles/find_role.js", { server: srv, role: "support" }, true), ["next", { role: roleList[0] }]);
+  assert.deepStrictEqual(await finder("roles/find_role.js", { server: srv, role: "<@&700000000000000001>" }, true), ["next", { role: roleList[0] }]);
+  assert.deepStrictEqual(await finder("roles/find_role.js", { server: srv, role: "Admins" }, true), ["missing", { role: null }]);
+  await assert.rejects(finder("roles/find_role.js", { server: srv, role: "Admins" }, false), /No role "Admins"/, "nothing on Missing: an error, as before");
+  assert.deepStrictEqual((await finder("channels/find_channel.js", { channel: "<#900000000000000001>" }, true))[1].channel.name, "logs");
+  assert.deepStrictEqual(await finder("channels/find_channel.js", { channel: "900000000000000009" }, true), ["missing", { channel: null }]);
+  assert.strictEqual((await finder("channels/find_channel.js", { channel: "#general", server: srv }, true))[1].channel.id, "c1");
+  await assert.rejects(finder("channels/find_channel.js", { channel: "nope", server: srv }, false), /No channel named "nope"/);
+  assert.deepStrictEqual(await finder("members/find_member.js", { server: srv, by: "id", user: "<@!42>" }, true), ["next", { member: { id: "42" } }]);
+  assert.deepStrictEqual(await finder("members/find_member.js", { server: srv, by: "id", user: "7" }, true), ["missing", { member: null }]);
+  await assert.rejects(finder("members/find_member.js", { server: srv, by: "name", name: "zed" }, false), /Nobody named "zed"/);
+
   // Mention: users, roles, channels, typed ids, lists, @everyone and @here.
   const mention = async (target, kind = "auto") => (await run("format/mention.js", { target, kind })).text;
   assert.strictEqual(await mention({ id: "1", username: "ada" }), "<@1>");

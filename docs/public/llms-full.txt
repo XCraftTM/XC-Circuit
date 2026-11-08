@@ -2365,6 +2365,14 @@ await ctx.next(flow, outputs?)
 
 Continues the flow on one of the block's [`flows`](./blocks#flows), after setting `outputs`. Resolves when everything after it has finished, so a loop can call it once per item. Only actions with `flows` call it.
 
+## wired
+
+```js
+ctx.wired(flow) // true or false
+```
+
+Whether this block's `flow` output has a wire. For a path that handles a case some projects don't care about, such as Find Role's **Missing**: take it when it's connected, and fail as before when it isn't. Apps older than 0.1.9 don't have it, so check with `ctx.wired?.("missing")`.
+
 ## set
 
 ```js
