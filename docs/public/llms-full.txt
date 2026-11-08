@@ -924,6 +924,16 @@ A name none of these give gets an **input of its own** under the text, so you ca
 
 Values are real objects: a Discord *User* is a discord.js `User`, a *Member* a `GuildMember`. Their properties and reading methods work: `${user.username}`, `${member.roles.highest.name}`, `${user.displayAvatarURL()}`. Typing a `.` after a value inside `${…}` lists its members with their types, like a code editor.
 
+## Splitting text
+
+**Split Text** takes a text apart at a separator (spaces when it's empty, or `,`, `|` …) and gives the parts ready to use: **First**, **Last**, **Part** (by number: 1 is the first, -1 the last), **Rest** (everything after the first part) and **Count**. For `!kick @ada being rude`: First is `!kick`, Part 2 is `@ada`, Rest is `@ada being rude`.
+
+## Dates and times
+
+- **Date & Time**: now (or a given date), moved with **Add** (`1d 2h`, `30m`, `-1w`), as text: your own pattern such as `DD.MM.YYYY HH:mm` in a time zone such as `Europe/Berlin`, or a Discord timestamp that each reader sees in their own time zone and language.
+- **Read Date**: what people type, as a date: `2026-12-24 18:00`, `24.12.2026`, `18:30`, `tomorrow 9:00`, `in 2h`, `1d 12h`, a unix time or a Discord timestamp. **Valid** says whether it could be read.
+- **Time Between**: the time between two dates (empty is now) in days, hours, minutes and seconds, and as text such as `2 d 3 h`. A user or member counts from when the account was made.
+
 ## Errors
 
 A mistake in an expression (a typo, reading a property of nothing) stops the block with an error that quotes the expression. Use optional chaining and fallbacks where a value may be missing: `${member?.nickname ?? user.username}`.

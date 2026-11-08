@@ -5,6 +5,8 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 ## Unreleased
 
 ### Added
+- **Split Text**: takes a text apart at spaces, commas or any separator and gives the first part, the last, one by number (-1 is the last), everything after the first, and how many there are: no more list blocks to get one argument of a command.
+- **Dates made easy**: Date & Time adds any amount (`1d 2h`, `-30m`), writes your own pattern (`DD.MM.YYYY HH:mm`) in any time zone and gives every Discord timestamp style. **Read Date** turns typed text into a date (`24.12.2026 18:00`, `tomorrow 9:00`, `in 2h` …), and **Time Between** says how long lies between two dates, in days, hours and minutes or as text.
 - **AI agents get XC Circuit's tools as soon as it opens**: an AI client that started while XC Circuit was closed only saw `open_xc_circuit` until it reconnected. The MCP server now tells the client when XC Circuit opens or closes, so its tools appear (or go) by themselves within a few seconds.
 - **Update the app from the Updates window**: when a new XC Circuit is out, Help › Check for Updates now has **Update and restart** right there: it downloads the update, installs it as XC Circuit closes (asking about unsaved changes first) and opens it again. **What's new…** shows the release notes.
 
