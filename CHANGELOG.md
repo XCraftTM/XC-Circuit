@@ -5,6 +5,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 ## Unreleased
 
 ### Added
+- **A full ticket system to start from**: the Tickets starter (File › New Project) is now a ticket system with Components V2: /ticket-panel posts a panel with a menu, picking a kind opens a private ticket channel with Close ticket and Transcript buttons, closing asks first, keeps a transcript in #ticket-logs and deletes the channel. It needs no ids: make a ticket-logs channel and a Support role (or pick yours in Find Role).
 - **Pick channels and roles from a list**: with the bot token saved, id fields for channels, categories and roles (Send Message's channel, Create Channel's category, Find Role, Add Role …) get a button that lists your bot's servers with their channels or roles. Pick one and its id goes in: no Developer Mode and copying ids.
 - **Custom ids are picked, not typed twice**: Button Pressed, Select Menu Used and Modal Submitted list the custom ids your layouts, forms and Button and Select Menu blocks use (Custom… for any other). Problems now says when an event waits for an id nothing has (a typo such as tiket-close) and when a button, menu or form has nothing to handle it.
 - **No more "This interaction failed" on slow flows**: when the blocks after a slash command, button, menu or form take longer than Discord's 3 seconds, the bot answers for them in time (quietly for buttons and menus, with *thinking…* for commands and forms), and Send Message's reply then arrives the right way. No Defer block needed.

@@ -1,0 +1,71 @@
+{
+  "name": "Transcript",
+  "folder": "Tickets",
+  "nodes": {
+    "1": {
+      "block": "discord.on_button@1",
+      "at": [
+        60,
+        140
+      ],
+      "values": {
+        "customId": "ticket-transcript"
+      }
+    },
+    "2": {
+      "block": "discord.send_message@3",
+      "at": [
+        400,
+        140
+      ],
+      "values": {
+        "mode": "defer",
+        "private": true
+      }
+    },
+    "3": {
+      "block": "discord.create_transcript@1",
+      "at": [
+        740,
+        140
+      ],
+      "values": {
+        "limit": 1000,
+        "images": false,
+        "bots": true
+      }
+    },
+    "4": {
+      "block": "discord.send_message@3",
+      "at": [
+        1080,
+        140
+      ],
+      "values": {
+        "mode": "followup",
+        "private": true,
+        "text": "📄 Here's the transcript of this ticket so far: ${#3.count} messages. Open the file in a browser to read it."
+      }
+    }
+  },
+  "links": [
+    "1.next > 2.in",
+    "2.next > 3.in",
+    "3.next > 4.in",
+    "1.channel > 3.channel",
+    "3.file > 4.files"
+  ],
+  "notes": {
+    "n1": {
+      "title": "Transcript button",
+      "text": "Anyone in the ticket gets the conversation so far as a file, privately. The file is a web page: open it in a browser.",
+      "rect": [
+        20,
+        40,
+        1360,
+        560
+      ],
+      "color": "#FEE75C"
+    }
+  }
+}

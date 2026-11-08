@@ -1,0 +1,196 @@
+{
+  "name": "Close Ticket",
+  "folder": "Tickets",
+  "nodes": {
+    "1": {
+      "block": "discord.on_button@1",
+      "at": [
+        60,
+        140
+      ],
+      "values": {
+        "customId": "ticket-close"
+      }
+    },
+    "2": {
+      "block": "discord.build_layout@1",
+      "at": [
+        400,
+        140
+      ],
+      "values": {
+        "layout": {
+          "components": [
+            {
+              "type": 17,
+              "accent_color": 15548997,
+              "components": [
+                {
+                  "type": 10,
+                  "content": "### 🔒 Close this ticket?"
+                },
+                {
+                  "type": 10,
+                  "content": "A transcript is saved for the team in #ticket-logs, then this channel is deleted. This can't be undone."
+                },
+                {
+                  "type": 1,
+                  "components": [
+                    {
+                      "type": 2,
+                      "style": 4,
+                      "label": "Yes, close it",
+                      "custom_id": "ticket-close-confirm",
+                      "emoji": {
+                        "name": "🔒"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "3": {
+      "block": "discord.send_message@3",
+      "at": [
+        780,
+        140
+      ],
+      "values": {
+        "mode": "reply",
+        "private": true,
+        "format": "layout"
+      }
+    },
+    "4": {
+      "block": "discord.on_button@1",
+      "at": [
+        60,
+        760
+      ],
+      "values": {
+        "customId": "ticket-close-confirm"
+      }
+    },
+    "5": {
+      "block": "discord.send_message@3",
+      "at": [
+        400,
+        760
+      ],
+      "values": {
+        "mode": "reply",
+        "text": "🔒 ${user} closed this ticket. The channel is deleted in 5 seconds."
+      }
+    },
+    "6": {
+      "block": "discord.create_transcript@1",
+      "at": [
+        740,
+        760
+      ],
+      "values": {
+        "limit": 1000,
+        "images": false,
+        "bots": true
+      }
+    },
+    "7": {
+      "block": "discord.find_channel@1",
+      "at": [
+        1080,
+        760
+      ],
+      "values": {
+        "channel": "ticket-logs"
+      }
+    },
+    "8": {
+      "block": "discord.send_message@3",
+      "at": [
+        1420,
+        760
+      ],
+      "values": {
+        "mode": "send",
+        "text": "📄 **#${#4.channel.name}** was closed by ${user}. The transcript holds ${#6.count} messages."
+      }
+    },
+    "9": {
+      "block": "core.wait@1",
+      "at": [
+        1760,
+        760
+      ],
+      "values": {
+        "seconds": 5
+      }
+    },
+    "10": {
+      "block": "discord.delete_channel@1",
+      "at": [
+        2100,
+        760
+      ],
+      "values": {
+        "after": 0,
+        "reason": "Ticket closed by ${user.username}"
+      }
+    },
+    "11": {
+      "block": "discord.send_message@3",
+      "at": [
+        1420,
+        1220
+      ],
+      "values": {
+        "mode": "followup",
+        "private": true,
+        "text": "⚠️ There is no #ticket-logs channel, so the transcript can't be kept and the ticket stays open. Make a channel called ticket-logs (only the team should see it), then close the ticket again."
+      }
+    }
+  },
+  "links": [
+    "1.next > 2.in",
+    "2.next > 3.in",
+    "2.layout > 3.layout",
+    "4.next > 5.in",
+    "5.next > 6.in",
+    "6.next > 7.in",
+    "7.next > 8.in",
+    "7.missing > 11.in",
+    "8.next > 9.in",
+    "9.next > 10.in",
+    "4.channel > 6.channel",
+    "7.channel > 8.channel",
+    "6.file > 8.files",
+    "4.channel > 10.channel"
+  ],
+  "notes": {
+    "n1": {
+      "title": "Close ticket: ask first",
+      "text": "The button in a ticket asks privately whether to close it.",
+      "rect": [
+        20,
+        40,
+        1120,
+        560
+      ],
+      "color": "#ED4245"
+    },
+    "n2": {
+      "title": "Close it: transcript to #ticket-logs, then delete",
+      "text": "The transcript goes to the channel called ticket-logs (make one that only the team sees). The ticket is deleted only after that worked; without the channel it stays open and says why.",
+      "rect": [
+        20,
+        660,
+        2400,
+        1000
+      ],
+      "color": "#ED4245"
+    }
+  }
+}

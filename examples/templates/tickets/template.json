@@ -1,6 +1,6 @@
 {
   "name": "Tickets",
-  "description": "/ticket opens a private thread for the member with a Close button. Closing saves a transcript of the thread, sends it to the member in a DM and deletes the thread. Use it in a channel where the bot can create private threads.",
+  "description": "A ticket system with Components V2: /ticket-panel posts a panel with a menu, picking a kind opens a private ticket channel with Close ticket and Transcript buttons; closing asks first, keeps a transcript in #ticket-logs and deletes the channel. Make a ticket-logs channel and a Support role (or set yours in Find Role).",
   "category": "Moderation",
   "icon": "message"
 }

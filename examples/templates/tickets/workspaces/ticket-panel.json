@@ -1,0 +1,139 @@
+{
+  "name": "Ticket Panel",
+  "folder": "Tickets",
+  "nodes": {
+    "1": {
+      "block": "discord.on_slash_command@2",
+      "at": [
+        60,
+        140
+      ],
+      "values": {
+        "command": "ticket-panel"
+      }
+    },
+    "2": {
+      "block": "discord.build_layout@1",
+      "at": [
+        440,
+        140
+      ],
+      "values": {
+        "layout": {
+          "components": [
+            {
+              "type": 17,
+              "accent_color": 5793266,
+              "components": [
+                {
+                  "type": 10,
+                  "content": "## 🎫 Support tickets"
+                },
+                {
+                  "type": 10,
+                  "content": "Need help? Pick what it's about below, and a private channel opens just for you and the team."
+                },
+                {
+                  "type": 14,
+                  "divider": true,
+                  "spacing": 1
+                },
+                {
+                  "type": 1,
+                  "components": [
+                    {
+                      "type": 3,
+                      "custom_id": "ticket-open",
+                      "placeholder": "What do you need help with?",
+                      "options": [
+                        {
+                          "label": "General support",
+                          "value": "Support",
+                          "description": "Questions and problems with the server",
+                          "emoji": {
+                            "name": "💬"
+                          }
+                        },
+                        {
+                          "label": "Report a member",
+                          "value": "Report",
+                          "description": "Rule breaks, spam or abuse",
+                          "emoji": {
+                            "name": "🚨"
+                          }
+                        },
+                        {
+                          "label": "Partnership",
+                          "value": "Partnership",
+                          "description": "Working together with us",
+                          "emoji": {
+                            "name": "🤝"
+                          }
+                        },
+                        {
+                          "label": "Something else",
+                          "value": "Other",
+                          "description": "Anything that doesn't fit above",
+                          "emoji": {
+                            "name": "❓"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": 10,
+                  "content": "-# Please open one ticket per topic. The team answers as soon as they can."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "3": {
+      "block": "discord.send_message@3",
+      "at": [
+        820,
+        140
+      ],
+      "values": {
+        "mode": "send",
+        "format": "layout"
+      }
+    },
+    "4": {
+      "block": "discord.send_message@3",
+      "at": [
+        1200,
+        140
+      ],
+      "values": {
+        "mode": "reply",
+        "private": true,
+        "text": "✅ The ticket panel is posted in this channel."
+      }
+    }
+  },
+  "links": [
+    "1.next > 2.in",
+    "2.next > 3.in",
+    "3.next > 4.in",
+    "1.channel > 3.channel",
+    "2.layout > 3.layout"
+  ],
+  "notes": {
+    "n1": {
+      "title": "Ticket panel",
+      "text": "/ticket-panel (for people who can manage the server) posts the panel in the channel it is used in. Picking an option in its menu opens a ticket (Open Ticket). Edit the options with Edit layout…: their value is the ticket's kind.",
+      "rect": [
+        20,
+        40,
+        1480,
+        560
+      ],
+      "color": "#5865F2"
+    }
+  }
+}

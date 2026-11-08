@@ -1,0 +1,226 @@
+{
+  "name": "Open Ticket",
+  "folder": "Tickets",
+  "nodes": {
+    "1": {
+      "block": "discord.on_select@1",
+      "at": [
+        60,
+        140
+      ],
+      "values": {
+        "customId": "ticket-open"
+      }
+    },
+    "2": {
+      "block": "discord.send_message@3",
+      "at": [
+        400,
+        140
+      ],
+      "values": {
+        "mode": "defer",
+        "private": true
+      }
+    },
+    "3": {
+      "block": "discord.create_channel@1",
+      "at": [
+        740,
+        140
+      ],
+      "values": {
+        "type": "text",
+        "name": "ticket-${user.username}",
+        "private": true,
+        "topic": "${value} ticket of ${user.username} (${user.id})",
+        "reason": "Ticket opened by ${user.username}"
+      }
+    },
+    "4": {
+      "block": "discord.set_permissions@1",
+      "at": [
+        1080,
+        140
+      ],
+      "values": {
+        "who": "target",
+        "mode": "change",
+        "allow": [
+          "ViewChannel",
+          "SendMessages",
+          "ReadMessageHistory",
+          "AttachFiles",
+          "EmbedLinks"
+        ],
+        "deny": [],
+        "reason": "Ticket owner"
+      }
+    },
+    "5": {
+      "block": "discord.build_layout@1",
+      "at": [
+        60,
+        820
+      ],
+      "values": {
+        "layout": {
+          "components": [
+            {
+              "type": 17,
+              "accent_color": 5763719,
+              "components": [
+                {
+                  "type": 10,
+                  "content": "## 🎫 ${value} ticket"
+                },
+                {
+                  "type": 10,
+                  "content": "Hi ${user}, thanks for reaching out! Tell us what's going on, with screenshots if they help, and the team will answer here soon."
+                },
+                {
+                  "type": 14,
+                  "divider": true,
+                  "spacing": 1
+                },
+                {
+                  "type": 10,
+                  "content": "-# Only you and the team can see this channel. Close it when you're done; a transcript is kept."
+                },
+                {
+                  "type": 1,
+                  "components": [
+                    {
+                      "type": 2,
+                      "style": 4,
+                      "label": "Close ticket",
+                      "custom_id": "ticket-close",
+                      "emoji": {
+                        "name": "🔒"
+                      }
+                    },
+                    {
+                      "type": 2,
+                      "style": 2,
+                      "label": "Transcript",
+                      "custom_id": "ticket-transcript",
+                      "emoji": {
+                        "name": "📄"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "6": {
+      "block": "discord.send_message@3",
+      "at": [
+        440,
+        820
+      ],
+      "values": {
+        "mode": "send",
+        "format": "layout"
+      }
+    },
+    "7": {
+      "block": "discord.send_message@3",
+      "at": [
+        820,
+        820
+      ],
+      "values": {
+        "mode": "followup",
+        "private": true,
+        "text": "✅ Your ticket is open: ${#3.channel}"
+      }
+    },
+    "8": {
+      "block": "discord.find_role@1",
+      "at": [
+        1160,
+        820
+      ],
+      "values": {
+        "role": "Support"
+      }
+    },
+    "9": {
+      "block": "discord.set_permissions@1",
+      "at": [
+        1500,
+        820
+      ],
+      "values": {
+        "who": "target",
+        "mode": "change",
+        "allow": [
+          "ViewChannel",
+          "SendMessages",
+          "ReadMessageHistory",
+          "AttachFiles",
+          "EmbedLinks",
+          "ManageMessages"
+        ],
+        "deny": [],
+        "reason": "Ticket staff"
+      }
+    },
+    "10": {
+      "block": "core.log@1",
+      "at": [
+        1500,
+        1180
+      ],
+      "values": {
+        "message": "Tickets: there is no role called \"Support\". Set your staff role in Open Ticket › Find Role so the team can see tickets.",
+        "level": "warn"
+      }
+    }
+  },
+  "links": [
+    "1.next > 2.in",
+    "2.next > 3.in",
+    "3.next > 4.in",
+    "4.next > 5.in",
+    "5.next > 6.in",
+    "6.next > 7.in",
+    "7.next > 8.in",
+    "8.next > 9.in",
+    "8.missing > 10.in",
+    "3.channel > 4.channel",
+    "1.member > 4.target",
+    "3.channel > 6.channel",
+    "5.layout > 6.layout",
+    "3.channel > 9.channel",
+    "8.role > 9.target"
+  ],
+  "notes": {
+    "n1": {
+      "title": "Open a ticket",
+      "text": "Someone picked a kind in the panel's menu: a private channel ticket-name opens that only they (and the team) can see. Create Channel › Category: pick a category to keep tickets together.",
+      "rect": [
+        20,
+        40,
+        1480,
+        640
+      ],
+      "color": "#57F287"
+    },
+    "n2": {
+      "title": "Welcome them and let the team in",
+      "text": "The welcome message has the Close ticket and Transcript buttons. Find Role › Id or name: your staff role (now Support); without one, Missing writes a warning to the Console.",
+      "rect": [
+        20,
+        720,
+        1840,
+        700
+      ],
+      "color": "#57F287"
+    }
+  }
+}

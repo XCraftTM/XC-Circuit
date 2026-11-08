@@ -12,15 +12,18 @@
   "data": {
     "slashCommands": [
       {
-        "name": "ticket",
-        "description": "Open a private support ticket",
+        "name": "ticket-panel",
+        "description": "Posts the ticket panel in this channel",
         "options": [],
-        "dm": false
+        "contexts": [
+          "guild"
+        ],
+        "permission": "ManageGuild",
+        "folder": "Tickets"
       }
     ]
   },
   "folders": [
-    "Commands",
-    "Events"
+    "Tickets"
   ]
 }
