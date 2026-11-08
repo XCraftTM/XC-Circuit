@@ -133,6 +133,26 @@ assert.deepStrictEqual(
   ["ping"],
 );
 
+// Show Modal: a box's filled-in text that is empty or shorter than the
+// box's least characters is left out (Discord would refuse the whole form).
+{
+  const { fitTexts } = require(path.join(dir, "interactions", "show_modal.js"));
+  const said = [];
+  const form = fitTexts(
+    [
+      { type: 18, label: "Colour", component: { type: 4, custom_id: "c", min_length: 7, value: "#FFF" } },
+      { type: 18, label: "Name", component: { type: 4, custom_id: "n", value: "", placeholder: "" } },
+      { type: 18, label: "Short", component: { type: 4, custom_id: "s", max_length: 3, value: "abcdef" } },
+      { type: 18, label: "Fine", component: { type: 4, custom_id: "f", min_length: 2, value: "ok" } },
+    ],
+    (t) => said.push(t),
+  );
+  assert.ok(!("value" in form[0].component) && said[0].includes('"Colour"') && said[0].includes("7"), said.join(" | "));
+  assert.ok(!("value" in form[1].component) && !("placeholder" in form[1].component));
+  assert.strictEqual(form[2].component.value, "abc");
+  assert.strictEqual(form[3].component.value, "ok");
+}
+
 // Colours: hex with or without its #, picked or from an input or ${…}.
 {
   const fill = (s, f) => s.replace(/\$\{(\w+)\}/g, (w, k) => (k in f ? String(f[k]) : w));

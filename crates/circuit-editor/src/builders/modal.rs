@@ -153,6 +153,15 @@ pub fn problems(form: &Value) -> Vec<String> {
                         if crate::builders::too_long(text_of(input, "value"), 4000) {
                             out.push(t!("A box's filled-in text has up to 4000 characters.").into());
                         }
+                        // Discord refuses the form when the text in the box
+                        // doesn't fit the box's own lengths.
+                        let value = text_of(input, "value");
+                        if !value.is_empty() && !value.contains("${") {
+                            let n = value.chars().count() as u64;
+                            if num("min_length").is_some_and(|m| n < m) || num("max_length").is_some_and(|m| n > m) {
+                                out.push(t!("A box's filled-in text must fit its least and most number of characters.").into());
+                            }
+                        }
                         if let (Some(a), Some(b)) = (num("min_length"), num("max_length"))
                             && a > b
                         {
@@ -678,5 +687,10 @@ mod tests {
         for want in ["box's placeholder has up to 100", "filled-in text has up to 4000", "more than it has options", "1 to 25 at most", "least number of files is above its most", "up to 10 file types"] {
             assert!(p.contains(want), "{want} in:\n{p}");
         }
+        // Text already in a box must fit the box's own lengths (Discord
+        // refuses the form otherwise); a ${…} is only known when it runs.
+        let colour = |value: &str| json!({ "title": "T", "custom_id": "f", "components": [{ "type": 18, "label": "Colour", "component": { "type": 4, "custom_id": "c", "min_length": 7, "max_length": 7, "value": value } }] });
+        assert!(problems(&colour("#FFF")).iter().any(|p| p.contains("must fit its least and most")));
+        assert!(problems(&colour("#FF5CA8")).is_empty() && problems(&colour("${colour}")).is_empty());
     }
 }

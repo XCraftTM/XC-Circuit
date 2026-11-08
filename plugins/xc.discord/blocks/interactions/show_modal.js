@@ -11,6 +11,34 @@ function mapStrings(v, fn) {
   return v;
 }
 
+/**
+ * Text boxes' texts as Discord takes them: a filled-in text that is empty
+ * or shorter than the box's least number of characters (a ${…} that came
+ * out short) is left out, so the box starts empty, instead of Discord
+ * refusing the whole form; one too long is cut. Says so through `warn`.
+ */
+function fitTexts(list, warn = () => {}) {
+  for (const c of Array.isArray(list) ? list : []) {
+    const input = c && (c.component || c);
+    if (input && input.type === 4) {
+      const len = (s) => [...s].length;
+      if (typeof input.value === "string") {
+        const min = Number(input.min_length) || 0;
+        const max = Math.min(Number(input.max_length) || 4000, 4000);
+        if (!input.value) delete input.value;
+        else if (len(input.value) < min) {
+          warn(`The box "${c.label || input.custom_id}" starts empty: its text "${input.value}" is shorter than its least ${min} characters`);
+          delete input.value;
+        } else if (len(input.value) > max) input.value = [...input.value].slice(0, max).join("");
+      }
+      if (input.placeholder === "") delete input.placeholder;
+      else if (typeof input.placeholder === "string" && len(input.placeholder) > 100) input.placeholder = [...input.placeholder].slice(0, 100).join("");
+    }
+    if (c && Array.isArray(c.components)) fitTexts(c.components, warn);
+  }
+  return list;
+}
+
 /** The older way: builders from the blocks wired into Inputs. */
 function fromBlocks(inputs, f) {
   const { ModalBuilder, ActionRowBuilder, LabelBuilder } = require("discord.js");
@@ -47,7 +75,7 @@ module.exports = {
     description:
       "Opens a form designed in the Modal Builder: questions with a box to type into, a select menu or a file upload, and texts. It must be the first answer to a command, button or menu (no Send Message before it). Answers arrive at Modal Submitted.",
     author: "XC Team",
-    version: "1.1.1",
+    version: "1.1.2",
   },
   search: {
     category: "components",
@@ -101,6 +129,10 @@ module.exports = {
     if (!Array.isArray(form.components) || !form.components.length) throw new Error("The form has no questions: open the Modal Builder to add some");
     form.title = String(form.title || "Form").slice(0, 45);
     form.custom_id = String(form.custom_id || "form").slice(0, 100);
+    fitTexts(form.components, (text) => ctx.log?.warn?.(text));
     await f.interaction.showModal(new ModalBuilder(form));
   },
+
+  // For tests.
+  fitTexts,
 };
