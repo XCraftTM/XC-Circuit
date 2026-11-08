@@ -26,7 +26,77 @@ pub(super) fn icon_after(slots: &[(String, egui::Rect)], y: f32) -> Option<&str>
     slots.iter().find(|(_, r)| r.center().y > y).map(|(k, _)| k.as_str())
 }
 
+/// The side bar's views put right after a change: the lower one only beside
+/// another one that shows (it moves up when the upper one goes), and only
+/// while its icon is in the activity bar.
+pub(super) fn tidy_side(prefs: &mut crate::editor::prefs::Prefs) {
+    let in_bar = |k: &Option<String>| k.as_ref().is_some_and(|k| prefs.activity.contains(k));
+    if !in_bar(&prefs.side_lower) || prefs.side_lower == prefs.side_shown {
+        prefs.side_lower = None;
+    }
+    if !in_bar(&prefs.side_shown) {
+        prefs.side_shown = prefs.side_lower.take();
+    }
+    prefs.side_split = prefs.side_split.clamp(0.15, 0.85);
+}
+
+/// Shows `key` in the side bar: in its upper half (the one shown), or with
+/// `lower` in its lower half, under the one shown. The two swap when it's
+/// the other one already.
+pub(super) fn show_in_side(prefs: &mut crate::editor::prefs::Prefs, key: &str, lower: bool) {
+    let key = Some(key.to_string());
+    match (lower, prefs.side_shown.is_some()) {
+        // Nothing above it yet: it's the only one.
+        (true, false) => prefs.side_shown = key,
+        (true, true) if prefs.side_shown == key => std::mem::swap(&mut prefs.side_shown, &mut prefs.side_lower),
+        (true, true) => prefs.side_lower = key,
+        (false, _) if prefs.side_lower == key => std::mem::swap(&mut prefs.side_shown, &mut prefs.side_lower),
+        (false, _) => prefs.side_shown = key,
+    }
+    tidy_side(prefs);
+}
+
+/// A click on an activity icon: shows its view, or hides it when it shows
+/// (in either half; the other one then takes the whole side bar).
+pub(super) fn click_in_side(prefs: &mut crate::editor::prefs::Prefs, key: &str) {
+    let key = Some(key.to_string());
+    if prefs.side_shown == key {
+        prefs.side_shown = prefs.side_lower.take();
+    } else if prefs.side_lower == key {
+        prefs.side_lower = None;
+    } else {
+        prefs.side_shown = key;
+    }
+    tidy_side(prefs);
+}
+
+/// Over the side bar (`bar`), a drop at `pos` goes in its lower half when
+/// it's below the middle and something else shows above.
+fn drops_lower(prefs: &crate::editor::prefs::Prefs, bar: egui::Rect, pos: egui::Pos2, key: &str) -> bool {
+    pos.y > bar.center().y && prefs.side_shown.as_deref().is_some_and(|k| k != key || prefs.side_lower.is_some())
+}
+
 impl CircuitApp {
+    /// While an icon or a tab is dragged over the side bar: the half it
+    /// would show in lights up, with what letting go does.
+    fn paint_side_drop(&self, ctx: &egui::Context, key: &str, pos: egui::Pos2) {
+        let Some(bar) = self.ed.ui_rects.get("side-bar").copied().filter(|r| r.contains(pos)) else { return };
+        let t = &self.ed.theme;
+        let lower = drops_lower(&self.ed.prefs, bar, pos, key);
+        let half = if !lower && self.ed.prefs.side_shown.is_none() {
+            bar
+        } else if lower {
+            egui::Rect::from_min_max(egui::pos2(bar.left(), bar.center().y), bar.max)
+        } else {
+            egui::Rect::from_min_max(bar.min, egui::pos2(bar.right(), bar.center().y))
+        };
+        let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::unique("side-drop")));
+        painter.rect_filled(half.shrink(3.0), 6.0, crate::ui::theme::with_alpha(t.accent, 40));
+        painter.rect_stroke(half.shrink(3.0), 6.0, egui::Stroke::new(1.5, t.accent), egui::StrokeKind::Inside);
+        let text = if lower { t!("Show below") } else { t!("Show above") };
+        painter.text(half.center(), egui::Align2::CENTER_CENTER, text, egui::FontId::proportional(13.0), t.accent);
+    }
+
     /// The tab an activity bar key stands for, while it can be shown (a
     /// plugin's panel only while the plugin has it).
     pub(super) fn activity_tab(&self, key: &str) -> Option<Tab> {
@@ -63,21 +133,30 @@ impl CircuitApp {
         let mut out = None;
         for key in self.ed.prefs.activity.clone() {
             let Some(tab) = self.activity_tab(&key) else { continue };
-            let shown = self.ed.prefs.side_shown.as_deref() == Some(key.as_str());
+            let shown = self.ed.prefs.side_shown.as_deref() == Some(key.as_str()) || self.ed.prefs.side_lower.as_deref() == Some(key.as_str());
             let name = self.panel_name(&tab);
             let lifted = icon_drag.as_deref() == Some(key.as_str());
             let resp = self.activity_button(ui, tab.icon(), &name, shown, lifted, egui::Sense::click_and_drag());
             slots.push((key.clone(), resp.rect));
             resp.dnd_set_drag_payload(ActivityDrag(key.clone()));
             if resp.clicked() {
-                self.ed.prefs.side_shown = (!shown).then(|| key.clone());
+                click_in_side(&mut self.ed.prefs, &key);
             }
+            let mut below = false;
             resp.context_menu(|ui| {
+                let other_above = self.ed.prefs.side_shown.as_deref().is_some_and(|k| k != key);
+                if other_above && self.ed.prefs.side_lower.as_deref() != Some(key.as_str()) && crate::ui::kit::menu_item(ui, t!("Show in the lower half"), None, true).clicked() {
+                    below = true;
+                    ui.close();
+                }
                 if crate::ui::kit::menu_item(ui, t!("Move to the main area"), None, true).clicked() {
                     out = Some(key.clone());
                     ui.close();
                 }
             });
+            if below {
+                show_in_side(&mut self.ed.prefs, &key, true);
+            }
         }
         if let Some(key) = out {
             self.move_to_main(&key, None);
@@ -134,22 +213,33 @@ impl CircuitApp {
     /// puts it there (or, over the bar, in its new place in the bar).
     /// Called after the dock is drawn, for where its areas are now.
     pub(super) fn activity_drag(&mut self, ctx: &egui::Context) {
+        // A tab from the main area held over the side bar: the half it would show in.
+        if let (Some(key), Some(pos)) = (self.dock.dragged().and_then(Tab::side_key), ctx.pointer_latest_pos()) {
+            self.paint_side_drop(ctx, &key, pos);
+        }
         let Some(key) = egui::DragAndDrop::payload::<ActivityDrag>(ctx).map(|d| d.0.clone()) else { return };
         let Some(pos) = ctx.pointer_latest_pos() else { return };
         let over = |name: &str| self.ed.ui_rects.get(name).is_some_and(|r| r.contains(pos));
         let over_bar = over("activity-bar");
-        let target = if over_bar || over("side-bar") { None } else { self.dock.target_at(pos, None, ctx.layer_id_at(pos)) };
+        let over_side = over("side-bar");
+        let target = if over_bar || over_side { None } else { self.dock.target_at(pos, None, ctx.layer_id_at(pos)) };
         if ctx.input(|i| i.pointer.any_released()) {
             egui::DragAndDrop::clear_payload(ctx);
             if over_bar {
                 let before = icon_after(&self.activity_slots, pos.y).map(str::to_string);
                 put_in_activity(&mut self.ed.prefs.activity, &key, before.as_deref());
+            } else if over_side {
+                // Into the side bar's upper or lower half.
+                let bar = self.ed.ui_rects["side-bar"];
+                let lower = drops_lower(&self.ed.prefs, bar, pos, &key);
+                show_in_side(&mut self.ed.prefs, &key, lower);
             } else if let Some(drop) = target {
                 self.move_to_main(&key, Some(drop.target));
             }
             return;
         }
         ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
+        self.paint_side_drop(ctx, &key, pos);
         let t = self.ed.theme.clone();
         if let Some(drop) = &target {
             crate::ui::dock::paint_drop(ctx, &t, drop);
@@ -168,6 +258,7 @@ impl CircuitApp {
         if self.ed.prefs.side_shown.as_deref() == Some(key) {
             self.ed.prefs.side_shown = None;
         }
+        tidy_side(&mut self.ed.prefs);
         if let Some(tab) = Tab::from_side_key(key)
             && !self.dock.contains(&tab)
         {
@@ -185,7 +276,12 @@ impl CircuitApp {
         close_tabs(&mut self.dock, |t| *t == tab);
         let before = pos.filter(|p| self.ed.ui_rects.get("activity-bar").is_some_and(|r| r.contains(*p))).and_then(|p| icon_after(&self.activity_slots, p.y)).map(str::to_string);
         put_in_activity(&mut self.ed.prefs.activity, &key, before.as_deref());
-        self.ed.prefs.side_shown = Some(key);
+        // Dropped on the side bar's lower half: shown there, under the other one.
+        let lower = match (pos, self.ed.ui_rects.get("side-bar")) {
+            (Some(p), Some(bar)) if bar.contains(p) => drops_lower(&self.ed.prefs, *bar, p, &key),
+            _ => false,
+        };
+        show_in_side(&mut self.ed.prefs, &key, lower);
     }
 
     /// Each of Workspaces, Stored Data, Plugins and the panels is an icon in
@@ -229,6 +325,7 @@ impl CircuitApp {
                 if self.ed.prefs.side_shown.as_ref() == Some(key) {
                     self.ed.prefs.side_shown = None;
                 }
+                tidy_side(&mut self.ed.prefs);
             }
             close_tabs(&mut self.dock, |t| *t == tab);
             return;
@@ -245,7 +342,7 @@ impl CircuitApp {
     /// Whether a panel (or Workspaces …) can be seen: a tab, or what the side bar shows.
     pub(super) fn panel_open(&self, tab: &Tab) -> bool {
         match tab.side_key() {
-            Some(key) if self.ed.prefs.activity.contains(&key) => self.ed.prefs.side_shown.as_deref() == Some(key.as_str()),
+            Some(key) if self.ed.prefs.activity.contains(&key) => [&self.ed.prefs.side_shown, &self.ed.prefs.side_lower].iter().any(|k| k.as_deref() == Some(key.as_str())),
             _ => self.dock.contains(tab),
         }
     }
@@ -255,7 +352,11 @@ impl CircuitApp {
         if let Some(key) = tab.side_key()
             && self.ed.prefs.activity.contains(&key)
         {
-            self.ed.prefs.side_shown = Some(key);
+            // Already in the lower half: it shows.
+            if self.ed.prefs.side_lower.as_deref() != Some(key.as_str()) {
+                self.ed.prefs.side_shown = Some(key);
+                tidy_side(&mut self.ed.prefs);
+            }
             return;
         }
         match self.dock.contains(&tab) {
@@ -264,33 +365,69 @@ impl CircuitApp {
         }
     }
 
-    /// The side bar: what the activity bar's icon picked, under its name.
+    /// The side bar: what the activity bar's icon picked, under its name, and
+    /// with a second one picked for its lower half, that one under it, with a
+    /// line between them to drag.
     pub(super) fn side_bar(&mut self, ui: &mut egui::Ui, key: &str, tab: Tab, problems: &[panels::ProblemItem]) {
         let t = self.ed.theme.clone();
         let line = ui.max_rect();
         ui.painter().vline(line.right() - 0.5, line.y_range(), egui::Stroke::new(1.0, t.line));
         self.ed.ui_rects.insert("side-bar".into(), line);
+        let full = ui.available_rect_before_wrap();
+        ui.allocate_rect(full, egui::Sense::hover());
+        let lower = self.ed.prefs.side_lower.clone().filter(|k| k != key).and_then(|k| self.activity_tab(&k).map(|t| (k, t)));
+        let Some((lower_key, lower_tab)) = lower else {
+            self.side_section(ui, full, key, tab, problems, false);
+            return;
+        };
+        let split = full.top() + full.height() * self.ed.prefs.side_split;
+        let top = egui::Rect::from_min_max(full.min, egui::pos2(full.right(), split - 3.0));
+        let bottom = egui::Rect::from_min_max(egui::pos2(full.left(), split + 3.0), full.max);
+        self.side_section(ui, top, key, tab, problems, false);
+        // The line between them: drag it to share the height differently.
+        let divider = egui::Rect::from_min_max(egui::pos2(full.left(), split - 3.0), egui::pos2(full.right() - 1.0, split + 3.0));
+        let drag = ui.interact(divider, egui::Id::unique("side-split"), egui::Sense::drag()).on_hover_cursor(egui::CursorIcon::ResizeVertical);
+        let color = if drag.hovered() || drag.dragged() { t.accent } else { t.line };
+        ui.painter().hline(divider.x_range(), split, egui::Stroke::new(if drag.dragged() { 2.0 } else { 1.0 }, color));
+        if drag.dragged()
+            && let Some(p) = ui.ctx().pointer_interact_pos()
+        {
+            self.ed.prefs.side_split = ((p.y - full.top()) / full.height().max(1.0)).clamp(0.15, 0.85);
+        }
+        self.side_section(ui, bottom, &lower_key, lower_tab, problems, true);
+    }
+
+    /// One view in the side bar, in `rect`: its name (with a menu), then it.
+    #[allow(clippy::too_many_arguments)]
+    fn side_section(&mut self, ui: &mut egui::Ui, rect: egui::Rect, key: &str, tab: Tab, problems: &[panels::ProblemItem], lower: bool) {
+        let t = self.ed.theme.clone();
+        let split = self.ed.prefs.side_lower.is_some();
         let heading = self.panel_name(&tab);
-        let head = ui
-            .horizontal(|ui| {
-                ui.set_min_height(34.0);
-                ui.add_space(14.0);
-                ui.label(RichText::new(heading.to_uppercase()).size(11.0).strong().color(t.text_muted));
-            })
-            .response;
-        let mut out = false;
-        head.interact(egui::Sense::click()).context_menu(|ui| {
+        let head_rect = egui::Rect::from_min_size(rect.min, egui::vec2(rect.width(), 34.0));
+        let head = ui.interact(head_rect, egui::Id::unique(("side-head", key)), egui::Sense::click());
+        ui.painter().text(head_rect.left_center() + egui::vec2(14.0, 0.0), egui::Align2::LEFT_CENTER, heading.to_uppercase(), egui::FontId::proportional(11.0), t.text_muted);
+        let (mut out, mut close, mut swap) = (false, false, false);
+        head.context_menu(|ui| {
+            if split {
+                if crate::ui::kit::menu_item(ui, if lower { t!("Move to the upper half") } else { t!("Move to the lower half") }, None, true).clicked() {
+                    swap = true;
+                    ui.close();
+                }
+                if crate::ui::kit::menu_item(ui, t!("Close this half"), None, true).clicked() {
+                    close = true;
+                    ui.close();
+                }
+            }
             if crate::ui::kit::menu_item(ui, t!("Move to the main area"), None, true).clicked() {
                 out = true;
                 ui.close();
             }
         });
-        // It draws in a box of the side bar's size: whatever it holds, the
-        // side bar keeps the width it was given (or dragged to).
-        let area = ui.available_rect_before_wrap();
-        let mut view_ui = ui.new_child(egui::UiBuilder::new().max_rect(area).layout(egui::Layout::top_down(egui::Align::Min)));
+        // It draws in a box of its part's size: whatever it holds, the side
+        // bar keeps the width it was given (or dragged to).
+        let area = egui::Rect::from_min_max(egui::pos2(rect.left(), head_rect.bottom()), rect.max);
+        let mut view_ui = ui.new_child(egui::UiBuilder::new().id_salt(("side-view", key)).max_rect(area).layout(egui::Layout::top_down(egui::Align::Min)));
         view_ui.set_clip_rect(area.intersect(ui.clip_rect()));
-        ui.allocate_rect(area, egui::Sense::hover());
         let ui = &mut view_ui;
         let running = self.bot.state != BotState::Stopped;
         match tab {
@@ -310,6 +447,12 @@ impl CircuitApp {
             Tab::Problems => panels::problems(ui, &mut self.ed, problems.to_vec()),
             Tab::Plugin(plugin, panel) => self.plugin_host.panel_ui(ui, &mut self.ed, &plugin, &panel, running),
             _ => {}
+        }
+        if swap {
+            std::mem::swap(&mut self.ed.prefs.side_shown, &mut self.ed.prefs.side_lower);
+        }
+        if close {
+            click_in_side(&mut self.ed.prefs, key);
         }
         if out {
             self.move_to_main(key, None);

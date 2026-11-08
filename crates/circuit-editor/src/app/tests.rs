@@ -196,3 +196,39 @@ fn every_tab_has_an_icon() {
         assert!(ed.reg.icons.contains_key(tab.icon()), "{tab:?}: no icon {}", tab.icon());
     }
 }
+
+/// The side bar shows one view, or two: a second one in its lower half.
+#[test]
+fn the_side_bar_shows_a_second_view_below() {
+    use activity::{click_in_side, show_in_side, tidy_side};
+    let mut p = crate::editor::prefs::Prefs::default();
+    let shown = |p: &crate::editor::prefs::Prefs| (p.side_shown.clone(), p.side_lower.clone());
+    let s = |k: &str| Some(k.to_string());
+    assert_eq!(shown(&p), (s("workspaces"), None));
+    // Stored Data dropped on the lower half: under Workspaces.
+    show_in_side(&mut p, "stored-data", true);
+    assert_eq!(shown(&p), (s("workspaces"), s("stored-data")));
+    // Plugins on the upper half: it takes Workspaces' place.
+    show_in_side(&mut p, "plugins", false);
+    assert_eq!(shown(&p), (s("plugins"), s("stored-data")));
+    // The upper one dropped below: the two swap.
+    show_in_side(&mut p, "plugins", true);
+    assert_eq!(shown(&p), (s("stored-data"), s("plugins")));
+    // Clicking the upper one's icon hides it: the lower one takes the whole bar.
+    click_in_side(&mut p, "stored-data");
+    assert_eq!(shown(&p), (s("plugins"), None));
+    // Nothing above: one dropped below is simply shown.
+    click_in_side(&mut p, "plugins");
+    assert_eq!(shown(&p), (None, None));
+    show_in_side(&mut p, "workspaces", true);
+    assert_eq!(shown(&p), (s("workspaces"), None));
+    // An icon taken out of the activity bar leaves its half.
+    show_in_side(&mut p, "stored-data", true);
+    p.activity.retain(|k| k != "stored-data");
+    tidy_side(&mut p);
+    assert_eq!(shown(&p), (s("workspaces"), None));
+    // The split stays in a sensible range.
+    p.side_split = 2.0;
+    tidy_side(&mut p);
+    assert_eq!(p.side_split, 0.85);
+}

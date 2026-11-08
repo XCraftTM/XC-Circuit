@@ -525,7 +525,8 @@ impl eframe::App for CircuitApp {
                 .frame(Frame::new().fill(theme.frame).inner_margin(Margin::symmetric(0, 6)))
                 .show(ui, |ui| self.activity(ui));
         }
-        // What the activity bar's icon picked, beside it.
+        // What the activity bar's icon picked, beside it (and a second one under it).
+        activity::tidy_side(&mut self.ed.prefs);
         let side = self.ed.prefs.side_shown.clone().filter(|k| self.ed.prefs.activity.contains(k)).and_then(|k| self.activity_tab(&k).map(|t| (k, t)));
         if bars && let Some((key, tab)) = side {
             egui::Panel::left("side-bar")
