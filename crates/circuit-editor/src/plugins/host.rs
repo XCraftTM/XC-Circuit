@@ -980,9 +980,10 @@ mod tests {
         // Bot settings: secrets only say whether one is saved.
         let bot = call(&mut ed, "get_bot_settings", serde_json::json!({})).unwrap();
         let settings = bot["settings"].as_array().unwrap();
-        let secret = settings.iter().find(|s| s["secret"] == true).expect("the token is a setting");
-        assert!(secret["value"].is_null() && secret["saved"].is_boolean(), "{secret}");
-        assert!(call(&mut ed, "set_bot_settings", serde_json::json!({ "values": { secret["key"].as_str().unwrap(): "abc" } })).is_err(), "no secrets");
+        let hidden = settings.iter().find(|s| s["secret"] == true).expect("the token is a setting");
+        let hidden_key = hidden["key"].as_str().unwrap().to_string();
+        assert!(hidden["value"].is_null() && hidden["saved"].is_boolean(), "{hidden_key}: no value, only whether one is saved");
+        assert!(call(&mut ed, "set_bot_settings", serde_json::json!({ "values": { &hidden_key: "abc" } })).is_err(), "no secrets");
         assert!(call(&mut ed, "set_bot_settings", serde_json::json!({ "values": { "noSuchSetting": 1 } })).is_err());
         let flag = settings.iter().find(|s| s["type"] == "boolean").expect("a switch");
         let key = flag["key"].as_str().unwrap().to_string();
