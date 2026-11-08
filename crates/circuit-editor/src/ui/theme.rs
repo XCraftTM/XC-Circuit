@@ -39,6 +39,10 @@ pub struct Theme {
     /// Touch mode (a preference, not part of the theme file): bigger
     /// controls and more room between them.
     pub touch: bool,
+    /// Lighter drawing, for older computers (a preference, or by itself when
+    /// the app draws in software): no shadows, no animations, and edges
+    /// without their smoothing fringe, which about halves the triangles.
+    pub lighter: bool,
 }
 
 impl Theme {
@@ -80,6 +84,7 @@ impl Theme {
             node_radius: def.shape.node_radius,
             wire_width: def.shape.wire_width,
             touch: false,
+            lighter: false,
         }
     }
 
@@ -154,11 +159,19 @@ impl Theme {
         w.active.bg_stroke = Stroke::new(1.0, self.accent);
         w.open.bg_stroke = Stroke::new(1.0, self.node_border);
 
+        if self.lighter {
+            v.window_shadow = Shadow::NONE;
+            v.popup_shadow = Shadow::NONE;
+        }
         let theme = if self.dark { egui::Theme::Dark } else { egui::Theme::Light };
         ctx.set_visuals_of(theme, v);
+        let lighter = self.lighter;
+        ctx.tessellation_options_mut(|t| t.feathering = !lighter);
         ctx.set_theme(theme);
         let touch = self.touch;
         ctx.all_styles_mut(|s| {
+            // Lighter drawing: things appear and go at once, no fading.
+            s.animation_time = if lighter { 0.0 } else { egui::Style::default().animation_time };
             if touch {
                 // Everything a finger presses is at least 40 points tall.
                 s.spacing.item_spacing = egui::vec2(12.0, 10.0);

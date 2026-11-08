@@ -187,12 +187,66 @@ pub fn describe(cc: &eframe::CreationContext<'_>) -> (String, bool) {
         wgpu::Backend::Gl => "OpenGL",
         _ => "WebGPU",
     };
-    (format!("{api} · {}", info.name), info.device_type == wgpu::DeviceType::Cpu)
+    let text = format!("{api} · {}", info.name);
+    let _ = DESCRIBED.set(text.clone());
+    (text, info.device_type == wgpu::DeviceType::Cpu)
+}
+
+/// What draws the app this time, as [`describe`] said.
+static DESCRIBED: OnceLock<String> = OnceLock::new();
+
+pub fn in_use() -> Option<&'static str> {
+    DESCRIBED.get().map(String::as_str)
+}
+
+/// The way to draw picked in Settings for the next start: `auto`, `opengl`
+/// or `glow` (kept in graphics.txt, as a fallback that worked is).
+pub fn chosen() -> &'static str {
+    chosen_in(&crate::bot::app_data_dir())
+}
+
+fn chosen_in(data_dir: &std::path::Path) -> &'static str {
+    let text = std::fs::read_to_string(data_dir.join(REMEMBERED)).unwrap_or_default();
+    ["opengl", "glow"].into_iter().find(|s| text.trim().eq_ignore_ascii_case(s)).unwrap_or("auto")
+}
+
+/// Picks the way to draw from the next start on: `auto` lets the app choose
+/// (and fall back) again.
+pub fn choose(stage: &str) -> std::io::Result<()> {
+    choose_in(&crate::bot::app_data_dir(), stage)
+}
+
+fn choose_in(data_dir: &std::path::Path, stage: &str) -> std::io::Result<()> {
+    let file = data_dir.join(REMEMBERED);
+    if stage == "auto" {
+        return match std::fs::remove_file(&file) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+            _ => Ok(()),
+        };
+    }
+    std::fs::create_dir_all(data_dir)?;
+    std::fs::write(file, format!("{stage}\n"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The way to draw picked in Settings: kept for the next start, and
+    /// Automatic takes the choice away again.
+    #[test]
+    fn a_picked_way_to_draw_is_kept() {
+        let dir = std::env::temp_dir().join(format!("xc-graphics-pick-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(chosen_in(&dir), "auto");
+        choose_in(&dir, "glow").unwrap();
+        assert_eq!(chosen_in(&dir), "glow");
+        assert_eq!(pick_stage(None, &dir).0, "glow", "the next start uses it");
+        choose_in(&dir, "auto").unwrap();
+        assert_eq!((chosen_in(&dir), pick_stage(None, &dir).0), ("auto", "auto"));
+        choose_in(&dir, "auto").unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     /// OpenGL's graphics card, not its software drawing.
     #[test]

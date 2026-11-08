@@ -5,6 +5,10 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 ## Unreleased
 
 ### Added
+- **For older computers**: Settings › Window › Lighter drawing leaves out shadows, animations and the smoothing of edges, so the canvas draws about 55–65% fewer triangles; it turns on by itself when the app draws without a graphics card (and the Console says so). Settings › Window › Graphics picks Automatic, OpenGL or Older OpenGL from the next start, for graphics chips that can't do DirectX 12 or Vulkan.
+
+### Changed
+- **A lighter canvas background**: the dots are one repeated picture instead of a small circle each, which took up to a third of a canvas frame and 20,000 triangles. They look the same.
 - **A freeze detector**: when XC Circuit stops answering (Windows says "Not Responding") for three seconds or more, the Console says for how long and where it was stuck (a tab, saving, the Problems list, plugins, or after its frame: the graphics card, Windows or a tool reading the window), and freezes.log in the app's data folder keeps it, also while it's still stuck. It helps find what makes slower computers freeze.
 
 ## 0.2.3

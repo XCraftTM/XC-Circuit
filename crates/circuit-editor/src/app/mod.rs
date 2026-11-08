@@ -237,6 +237,10 @@ impl CircuitApp {
         ed.theme.apply(&cc.egui_ctx);
         // What draws the app, and whether it had to fall back.
         let (graphics, software) = crate::app::graphics::describe(cc);
+        // Drawing in software: lighter drawing, unless turned off by hand.
+        crate::editor::prefs::set_software_drawing(software);
+        ed.restyle();
+        ed.theme.apply(&cc.egui_ctx);
         if let Some(why) = crate::app::graphics::remembered() {
             ed.log(Level::Info, why);
         }
@@ -246,7 +250,14 @@ impl CircuitApp {
         ed.log(Level::Info, format!("Graphics: {graphics}"));
         eprintln!("graphics: {graphics}");
         if software {
-            ed.log(Level::Warn, "No graphics card driver could be used, so the app is drawn in software, which is slower.");
+            ed.log(
+                Level::Warn,
+                if ed.prefs.lighter_drawing == Some(false) {
+                    t!("No graphics card driver could be used, so the app is drawn in software, which is slower. Updating the graphics driver usually helps; Settings › Window › Graphics can try another way to draw.")
+                } else {
+                    t!("No graphics card driver could be used, so the app is drawn in software, which is slower: lighter drawing is on (Settings › Window). Updating the graphics driver usually helps; Settings › Window › Graphics can try another way to draw.")
+                },
+            );
         }
 
         let examples_dir = bundled_root.as_ref().map(|r| r.join("examples"));

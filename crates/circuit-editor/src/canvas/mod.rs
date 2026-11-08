@@ -583,7 +583,9 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         };
         let radius = if layout.value_block { 14.0 } else { theme.node_radius };
 
-        painter.add(Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha(if theme.dark { 90 } else { 30 }) }.as_shape(layout.rect, radius));
+        if !theme.lighter {
+            painter.add(Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha(if theme.dark { 90 } else { 30 }) }.as_shape(layout.rect, radius));
+        }
         let failed = recent(id).and_then(|a| a.error.clone());
         let lit = glow(id);
         let border = if failed.is_some() {

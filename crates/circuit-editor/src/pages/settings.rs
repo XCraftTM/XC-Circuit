@@ -4,7 +4,7 @@
 use eframe::egui::{self, Align, Align2, Color32, CursorIcon, FontId, Layout, Rect, RichText, ScrollArea, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
 
 use crate::ui::kit;
-use crate::editor::Editor;
+use crate::editor::{Editor, Level};
 use crate::i18n::n;
 use crate::editor::prefs::{ACCENTS, UI_SCALES};
 use crate::ui::theme::{Theme, mix, with_alpha};
@@ -291,6 +291,43 @@ fn editor(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView, 
         if crate::ui::kit::button(ui, theme, t!("Reset layout")).clicked() {
             asks.push(Ask::ResetLayout);
         }
+    });
+    // For older computers: lighter drawing, and another way to draw.
+    let software = crate::editor::prefs::software_drawing();
+    kit::setting_row(ui, theme, t!("Lighter drawing"), t!("For older computers: no shadows, no animations and simpler edges, so there's less to draw. Automatic turns it on when the app draws without a graphics card."), |ui| {
+        let auto = if software { t!("Automatic (on now)") } else { t!("Automatic (off now)") };
+        let options = [(None, auto), (Some(true), t!("On")), (Some(false), t!("Off"))];
+        let shown = options.iter().find(|(v, _)| *v == ed.prefs.lighter_drawing).map_or(auto, |(_, n)| *n);
+        let mut picked = None;
+        crate::ui::kit::dropdown(ui, egui::Id::unique("settings-lighter"), 200.0, shown, |ui| {
+            for (value, name) in options {
+                if crate::ui::kit::option(ui, ed.prefs.lighter_drawing == value, name).clicked() {
+                    picked = Some(value);
+                }
+            }
+        });
+        if let Some(value) = picked {
+            ed.prefs.lighter_drawing = value;
+            ed.restyle();
+            ed.theme.apply(&ctx);
+        }
+    });
+    let now = crate::app::graphics::in_use().map(|g| tf!("Now: {graphics}.", graphics = g)).unwrap_or_default();
+    let about = format!("{} {now}", t!("How the app draws, from its next start. Automatic tries DirectX 12 or Vulkan first; on an older computer, OpenGL or Older OpenGL can draw with the graphics card where those can't."));
+    kit::setting_row(ui, theme, t!("Graphics"), &about, |ui| {
+        let chosen = crate::app::graphics::chosen();
+        let options = [("auto", t!("Automatic")), ("opengl", t!("OpenGL")), ("glow", t!("Older OpenGL"))];
+        let shown = options.iter().find(|(s, _)| *s == chosen).map_or(t!("Automatic"), |(_, n)| *n);
+        crate::ui::kit::dropdown(ui, egui::Id::unique("settings-graphics"), 200.0, shown, |ui| {
+            for (stage, name) in options {
+                if crate::ui::kit::option(ui, chosen == stage, name).clicked() && chosen != stage {
+                    match crate::app::graphics::choose(stage) {
+                        Ok(()) => ed.log(Level::Info, tf!("The app draws with {graphics} when it starts again.", graphics = name)),
+                        Err(e) => ed.log(Level::Warn, tf!("Couldn't keep the graphics choice: {error}", error = e)),
+                    }
+                }
+            }
+        });
     });
     console_font(ui, ed, theme, view, asks);
     kit::group(ui, theme, t!("Startup"));
