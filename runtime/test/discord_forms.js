@@ -182,6 +182,39 @@ const json = (x) => JSON.parse(JSON.stringify(x.toJSON()));
   assert.deepStrictEqual(o.files, [file]);
   assert.deepStrictEqual(o.picked, { who: [ada] });
 
+  // Without Input ids, each input comes as what it is: the text, the
+  // values or members, roles and channels picked, the files.
+  const typedOut = [];
+  const typedClient = new EventEmitter();
+  onModal.listen({ fields: { ...defaults(onModal), customId: "apply" }, discord: { client: typedClient } }, (x) => typedOut.push(x));
+  const mod = { id: "2", name: "Mods" };
+  const both = new Map([...fields, ["staff", { values: ["2"], roles: new Map([["2", mod]]) }], ["boss", { values: ["1"], users: new Map([["1", ada]]), members: new Map([["1", { id: "1", user: ada }]]) }]]);
+  typedClient.emit("interactionCreate", { isModalSubmit: () => true, customId: "apply", user: ada, member: null, fields: { fields: both, getTextInputValue: (id) => both.get(id).value } });
+  await new Promise((r) => setImmediate(r));
+  const t = typedOut[0];
+  assert.strictEqual(t.name, "Ada");
+  assert.deepStrictEqual(t.team, ["red"], "a text menu: the values picked");
+  assert.deepStrictEqual(t.proof, [file], "an upload: its files");
+  assert.deepStrictEqual(t.who, [ada], "a user menu in DMs: the users");
+  assert.deepStrictEqual(t.boss, [{ id: "1", user: ada }], "in a server: the members");
+  assert.deepStrictEqual(t.staff, [mod], "a role menu: the roles");
+  assert.strictEqual(t.user, ada, "the fixed outputs stay");
+
+  // The editor gives define() the project's forms: each input of the form
+  // with this custom id is an output of its kind; Input ids stay text.
+  const forms = [
+    { customId: "apply", inputs: [{ id: "name", kind: "text", label: "Your name" }, { id: "who", kind: "users", label: "Who" }, { id: "staff", kind: "roles", label: "Team" }, { id: "proof", kind: "files", label: "Proof" }, { id: "user", kind: "text" }] },
+    { customId: "other", inputs: [{ id: "x", kind: "text" }] },
+  ];
+  const outs = (values) => onModal.define({ values: { ...defaults(onModal), ...values }, project: { forms } }).outputs;
+  const d = outs({ customId: "apply" });
+  assert.deepStrictEqual(Object.fromEntries(Object.entries(d).map(([k, v]) => [k, v.type])), { name: "text", who: "list<discord.member>", staff: "list<discord.role>", proof: "list<object>" }, "not other's, and not one named like a fixed output");
+  assert.strictEqual(d.who.label, "Who");
+  assert.strictEqual(outs({ customId: "apply", inputIds: "who" }).who.type, "text", "an id in Input ids stays text");
+  assert.deepStrictEqual(Object.keys(outs({ customId: "ap", match: "starts" })).sort(), ["name", "proof", "staff", "who"], "Starts with");
+  assert.deepStrictEqual(outs({ customId: "(" , match: "pattern" }), {}, "a broken pattern: nothing, no error");
+  assert.deepStrictEqual(outs({ customId: "" }), {}, "no id yet: nothing");
+
   console.log(`forms test passed${real ? " (with discord.js)" : " (with stand-ins)"}`);
 })().catch((e) => {
   console.error(e);

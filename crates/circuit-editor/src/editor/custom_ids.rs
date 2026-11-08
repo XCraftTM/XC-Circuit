@@ -124,6 +124,58 @@ fn collect_with(project: &Project, reg: &Registry, hidden: &mut dyn FnMut(&str, 
     ids
 }
 
+/// The forms the project designs in the Modal Builder (Show Modal's form), in
+/// the workspaces that are on, for blocks' `define()` (as `project.forms`):
+/// `[{ customId, inputs: [{ id, kind, label }] }]`. An input's kind is
+/// text, options, users, roles, mentionables, channels or files. Forms
+/// with a worked-out id (`${…}`) are left out.
+pub fn forms(project: &Project, reg: &Registry) -> Value {
+    let mut out = Vec::new();
+    for ws in project.workspaces.values().filter(|w| !w.disabled) {
+        for node in ws.nodes.values() {
+            let Some(def) = reg.block(&node.block) else { continue };
+            for (key, f) in def.fields.iter().filter(|(_, f)| f.type_name == "modal") {
+                let Some(form) = node.values.get(key).or(f.default.as_ref()) else { continue };
+                let Some(id) = form.get("custom_id").and_then(Value::as_str).map(str::trim).filter(|id| !id.is_empty() && !id.contains("${")) else { continue };
+                let mut inputs = Vec::new();
+                form_inputs(form.get("components").unwrap_or(&Value::Null), None, &mut inputs);
+                out.push(serde_json::json!({ "customId": id, "inputs": inputs }));
+            }
+        }
+    }
+    Value::Array(out)
+}
+
+/// A form's inputs: inside labels (their question), and older rows.
+fn form_inputs(list: &Value, label: Option<&str>, out: &mut Vec<Value>) {
+    for c in list.as_array().into_iter().flatten() {
+        let kind = match c.get("type").and_then(Value::as_u64).unwrap_or(0) {
+            18 => {
+                let question = c.get("label").and_then(Value::as_str);
+                if let Some(inner) = c.get("component") {
+                    form_inputs(&Value::Array(vec![inner.clone()]), question, out);
+                }
+                continue;
+            }
+            1 => {
+                form_inputs(c.get("components").unwrap_or(&Value::Null), label, out);
+                continue;
+            }
+            4 => "text",
+            3 => "options",
+            5 => "users",
+            6 => "roles",
+            7 => "mentionables",
+            8 => "channels",
+            19 => "files",
+            _ => continue,
+        };
+        let Some(id) = c.get("custom_id").and_then(Value::as_str).map(str::trim).filter(|id| !id.is_empty()) else { continue };
+        let label = label.or_else(|| c.get("label").and_then(Value::as_str)).unwrap_or(id);
+        out.push(serde_json::json!({ "id": id, "kind": kind, "label": label }));
+    }
+}
+
 /// Buttons (not links or premium) and menus in a layout, nested ones too.
 fn walk_layout(list: &Value, give: &mut dyn FnMut(&'static str, &str)) {
     for c in list.as_array().into_iter().flatten() {
@@ -201,6 +253,51 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn modal_submitted_gives_its_forms_inputs_as_what_they_are() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = crate::editor::Editor::new(vec![root.join("plugins")], None).unwrap();
+        let dir = std::env::temp_dir().join(format!("xc-form-outputs-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        Project::create(&dir, "Forms", "discord-bot").unwrap();
+        ed.open_project(&dir);
+        let node = |block: &str, values: Value| circuit_core::Node { block: block.into(), values: values.as_object().cloned().unwrap_or_default(), ..Default::default() };
+        let form = |extra: Value| json!({ "form": { "title": "Apply", "custom_id": "apply", "components": [
+            { "type": 18, "label": "Your name", "component": { "type": 4, "custom_id": "name", "style": 1 } },
+            { "type": 18, "label": "Who vouches", "component": { "type": 5, "custom_id": "who" } },
+            { "type": 18, "label": "Team", "component": { "type": 6, "custom_id": "team" } },
+            { "type": 18, "label": "Proof", "component": { "type": 19, "custom_id": "proof" } },
+            { "type": 10, "content": "Thanks!" },
+            extra
+        ] } });
+        let key = {
+            let p = ed.project.as_mut().unwrap();
+            let (key, ws) = p.workspaces.iter_mut().next().unwrap();
+            ws.nodes.insert("show".into(), node("discord.show_modal@1", form(json!({ "type": 10, "content": "" }))));
+            ws.nodes.insert("got".into(), node("discord.on_modal@1", json!({ "customId": "apply" })));
+            key.clone()
+        };
+        ed.refresh_define_ctx();
+        let outputs = |ed: &mut crate::editor::Editor| {
+            let crate::editor::Editor { reg, engine, project, shapes, define_ctx, .. } = ed;
+            shapes.begin();
+            let ws = &project.as_ref().unwrap().workspaces[&key];
+            let shape = crate::editor::node_shape(reg, engine, shapes, &key, ws, "got", define_ctx).unwrap();
+            shape.outputs.iter().map(|(k, o)| (k.clone(), o.ty.to_string())).collect::<std::collections::BTreeMap<_, _>>()
+        };
+        let o = outputs(&mut ed);
+        assert_eq!(o.get("name").map(String::as_str), Some("Text"), "{o:?}");
+        assert_eq!(o.get("who").map(String::as_str), Some("List of discord.member"));
+        assert_eq!(o.get("team").map(String::as_str), Some("List of discord.role"));
+        assert_eq!(o.get("proof").map(String::as_str), Some("List of Object"));
+        // A question added to the form shows up after the edit.
+        ed.project.as_mut().unwrap().workspaces.get_mut(&key).unwrap().nodes.get_mut("show").unwrap().values =
+            form(json!({ "type": 18, "label": "Where", "component": { "type": 8, "custom_id": "where" } })).as_object().cloned().unwrap();
+        ed.refresh_forms();
+        assert_eq!(outputs(&mut ed).get("where").map(String::as_str), Some("List of discord.channel"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn ids_in_layouts_blocks_and_forms_meet_their_events() {

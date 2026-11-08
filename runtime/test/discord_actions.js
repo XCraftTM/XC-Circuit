@@ -307,6 +307,37 @@ const log = (name) => (...args) => {
   assert.strictEqual((await made({ label: "" })).label, " ", "neither: a blank text, as before");
   Module._load = realLoad;
 
+  // Action Row: the buttons you connect share a row, which Send Message
+  // keeps as it is; buttons after it start a row of their own.
+  class ActionRowBuilder {
+    constructor() { this.items = []; }
+    addComponents(...c) { this.items.push(...c); return this; }
+  }
+  const menu = { setMinValues() {} };
+  Module._load = function (request, ...rest) {
+    return request === "discord.js" ? { ActionRowBuilder } : realLoad.call(this, request, ...rest);
+  };
+  const row = async (components) => (await run("messages/action_row.js", { components })).row;
+  const [b1, b2, b3] = [{ n: 1 }, { n: 2 }, { n: 3 }];
+  const two = await row([b1, b2]);
+  assert.deepStrictEqual(two.items, [b1, b2]);
+  await assert.rejects(row([]), /needs a button or a select menu/);
+  await assert.rejects(row([menu, b1]), /select menu takes a row of its own/);
+  await assert.rejects(row([b1, b2, b3, b1, b2, b3]), /up to 5 buttons/);
+  await assert.rejects(row([two]), /can't hold another row/);
+  assert.deepStrictEqual((await row([menu])).items, [menu]);
+  const sent = [];
+  const send = load("messages/send_message.js");
+  const sendDefaults = Object.fromEntries(Object.entries(send.fields).map(([k, f]) => [k, f.default ?? null]));
+  const rowChannel = { id: "c", send: async (p) => (sent.push(p), { id: "m" }) };
+  await send.run({ fields: { ...sendDefaults, mode: "send", channel: rowChannel, text: "rows", components: [two, b3, await row([b1])] }, ctx: {} });
+  const rows = sent[0].components;
+  assert.strictEqual(rows.length, 3, "the row, then b3 in a row of its own, then the other row");
+  assert.strictEqual(rows[0], two, "an Action Row stays as it is");
+  assert.deepStrictEqual(rows[1].items, [b3]);
+  assert.deepStrictEqual(rows[2].items, [b1]);
+  Module._load = realLoad;
+
   console.log("discord actions test passed");
 })().catch((e) => {
   console.error(e);

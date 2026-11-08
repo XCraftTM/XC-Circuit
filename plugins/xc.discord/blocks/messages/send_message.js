@@ -47,7 +47,7 @@ module.exports = {
     name: "Send Message",
     description: "Replies to a command or button, or sends, replies to and edits messages in channels.",
     author: "XC Team",
-    version: "3.6.0",
+    version: "3.7.0",
   },
   search: {
     category: "send",
@@ -79,7 +79,7 @@ module.exports = {
       type: "list<discord.component>",
       pin: true,
       multi: true,
-      description: "Buttons and select menus, from Button and Select Menu blocks. Up to 5 per row; rows fill in order.",
+      description: "Buttons and select menus, from Button and Select Menu blocks, or rows from Action Row. Buttons fill rows of up to 5 in order; an Action Row keeps its own.",
     },
     private: {
       type: "boolean",
@@ -149,16 +149,21 @@ module.exports = {
     if (parse || fields.replyPing === false) payload.allowedMentions = { ...(parse ? { parse } : {}), repliedUser: fields.replyPing !== false };
     const parts = (fields.components || []).filter(Boolean);
     if (parts.length) {
-      // Buttons share a row (up to 5); a select menu takes a row of its own.
+      // Buttons share a row (up to 5); a select menu takes a row of its own;
+      // a row from Action Row stays as it is, and the next buttons start a new one.
       const { ActionRowBuilder } = require("discord.js");
       const rows = [];
       for (const c of parts) {
+        if (c instanceof ActionRowBuilder) {
+          rows.push({ row: c });
+          continue;
+        }
         const isSelect = typeof c.setMinValues === "function";
         const last = rows[rows.length - 1];
-        if (!isSelect && last && !last.isSelect && last.items.length < 5) last.items.push(c);
+        if (!isSelect && last && !last.row && !last.isSelect && last.items.length < 5) last.items.push(c);
         else rows.push({ isSelect, items: [c] });
       }
-      payload.components = rows.slice(0, 5).map((r) => new ActionRowBuilder().addComponents(...r.items));
+      payload.components = rows.slice(0, 5).map((r) => r.row || new ActionRowBuilder().addComponents(...r.items));
     }
     if (layout) {
       // Components V2: the layout is the whole message; buttons and menus from

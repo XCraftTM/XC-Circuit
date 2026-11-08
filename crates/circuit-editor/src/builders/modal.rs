@@ -371,13 +371,11 @@ fn form(ui: &mut Ui, theme: &Theme, edit: &mut ModalEdit, values: Option<&crate:
     });
 }
 
-/// The answer ids, for Modal Submitted › Input ids, with a button that copies them.
+/// The answer ids: Modal Submitted (with this form's custom id) gives each
+/// as an output of its own, of its kind.
 fn answers_hint(ui: &mut Ui, theme: &Theme, ids: &[String]) {
     ui.horizontal_wrapped(|ui| {
-        ui.label(RichText::new(tf!("Modal Submitted gives the answers as: {ids}", ids = ids.join(", "))).size(12.0).color(theme.text_muted));
-        if kit::button(ui, theme, t!("Copy for Input ids")).on_hover_text(t!("One per line, to paste into Modal Submitted › Input ids")).clicked() {
-            ui.ctx().copy_text(ids.join("\n"));
-        }
+        ui.label(RichText::new(tf!("Modal Submitted gives each answer as an output of its own: {ids}", ids = ids.join(", "))).size(12.0).color(theme.text_muted));
     });
 }
 

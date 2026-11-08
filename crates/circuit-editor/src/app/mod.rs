@@ -582,6 +582,8 @@ impl eframe::App for CircuitApp {
         let key = (self.ed.history.revision(), self.ed.reloads, self.ed.prefs.language.clone());
         if self.problems_found.as_ref().is_none_or(|(k, _)| *k != key) {
             watchdog::mark("working out the Problems list");
+            // A form that changed changes what Modal Submitted gives.
+            self.ed.refresh_forms();
             self.problems_found = Some((key, panels::collect_problems(&mut self.ed)));
             // The custom ids events offer change with the project, too.
             let ids = crate::editor::custom_ids::collect_for(&mut self.ed).suggestions();

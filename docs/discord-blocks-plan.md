@@ -49,7 +49,7 @@ The blocks below are chosen so these common bots can be built without code:
 | Member Joins / Leaves | ✅ | member, server | GuildMembers intent |
 | Reaction Added | ✅ | reaction, message, user, emoji | |
 | Select Menu Used | ✅ | interaction, custom id, values (list), user | string, user, role, channel menus |
-| Modal Submitted | ✅ | interaction, custom id, fields (object), user | answers by input id |
+| Modal Submitted | ✅ | interaction, custom id, fields (object), user, each of the form's inputs (typed: text, list of members, roles, channels, values or files) | answers by input id |
 | Autocomplete | ✅ | interaction, option, typed text | answered with Respond to Autocomplete |
 | Context Menu Used | ✅ | interaction, target user or message | needs context menus in the Slash Commands editor |
 | Message Edited | ✅ | before, after, author | before only when cached |
@@ -85,6 +85,7 @@ The blocks below are chosen so these common bots can be built without code:
 | Send Message: Direct message | ✅ | new mode with a user input | |
 | Send Message: files | ✅ | attachments (URL or text as file) | |
 | Select Menu | ✅ | custom id, placeholder, options or user/role/channel type, min/max → component | |
+| Action Row | ✅ | up to 5 buttons or one select menu → component (a row) | Send Message keeps it as one row |
 | Show Modal | ✅ | interaction, custom id, title, text inputs | answer is Modal Submitted |
 | Text Input | ✅ | id, label, short/paragraph, required, min/max, value → component | for Show Modal |
 | Respond to Autocomplete | ✅ | interaction, choices (list) | up to 25 |

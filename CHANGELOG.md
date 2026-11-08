@@ -4,7 +4,11 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 
 ## Unreleased
 
+### Added
+- **Action Row**: a block for one row of a message's buttons (up to 5) or a select menu, so you choose which buttons share a row: connect them to it, and it to Send Message's Components. Buttons without one still fill rows of five in order.
+
 ### Changed
+- **Modal Submitted knows the form**: each input of the form with its custom id (made in the Modal Builder) is an output by itself, of its kind: a box gives its text, a menu of options the values picked, a user, role or channel menu the members, roles or channels picked, an upload its files (as lists). No more typing the ids into Input ids, which is now only for forms made from blocks (ids there still give text, as before). The Modal Builder's Copy for Input ids is gone.
 - **Every option on the blocks**: options that used to hide in the Inspector under Advanced (Get Stored Value's If missing, Get Rows' Sort by and At most, a block's Delay …) now show on the blocks too, and the Inspector lists them with the others. Blocks with such options get taller, so in older projects one may now reach over the block below it. Settings › Editor › Advanced options on blocks turns it off again.
 
 ## 0.2.4

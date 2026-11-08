@@ -519,8 +519,18 @@ impl Editor {
     pub fn refresh_define_ctx(&mut self) {
         let data = self.project.as_ref().map(|p| p.meta.data.clone()).unwrap_or_default();
         let settings = self.project.as_ref().map(|p| p.meta.settings.clone()).unwrap_or_default();
-        self.define_ctx = serde_json::json!({ "data": data, "settings": settings });
+        let forms = self.project.as_ref().map(|p| crate::editor::custom_ids::forms(p, &self.reg)).unwrap_or_default();
+        self.define_ctx = serde_json::json!({ "data": data, "settings": settings, "forms": forms });
         self.shapes.clear();
+    }
+
+    /// After an edit: when a form (Show Modal's design) changed, blocks that
+    /// read the forms (Modal Submitted's outputs) are worked out again.
+    pub fn refresh_forms(&mut self) {
+        let forms = self.project.as_ref().map(|p| crate::editor::custom_ids::forms(p, &self.reg)).unwrap_or_default();
+        if self.define_ctx.get("forms") != Some(&forms) {
+            self.refresh_define_ctx();
+        }
     }
 
     /// Reads the bot's name and picture from Discord for the previews (when the
