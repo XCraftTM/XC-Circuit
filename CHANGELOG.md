@@ -2,7 +2,7 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## Unreleased
+## 0.2.2
 
 ### Added
 - **More shortcuts**: Settings › Shortcuts now also takes keys for Start and Restart on their own, Bot settings, Slash Commands, Export, Upload to the server, Server console, Server settings and switching Run between this computer and the server (none set to start with). With Server picked, Start, Restart and Stop act on the server. Shortcuts with Ctrl, Alt or a function key also work in a tab's window of its own.
