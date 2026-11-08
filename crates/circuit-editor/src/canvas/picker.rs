@@ -115,8 +115,8 @@ fn matching_pin(def: &BlockDef, pending: &PendingWire, reg: &Registry) -> Option
     }
 }
 
-/// How a block matches the search.
-#[derive(Clone, Debug, PartialEq)]
+/// Where the search's words are in a block.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Found {
     /// Every word is in its name.
     Name,
@@ -127,25 +127,72 @@ enum Found {
     Elsewhere,
 }
 
-fn search(def: &BlockDef, query: &str) -> Option<Found> {
+/// How well the words fit where they were found, best first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Fit {
+    /// It starts with what was typed: "date" in Date & Time.
+    Begins,
+    /// Each word is a whole word of it: "date" in Read Date.
+    Words,
+    /// Each word starts one of its words: "mess" in Send Message.
+    Starts,
+    /// A word is inside one of its words: "date" in Member Updated.
+    Inside,
+}
+
+/// A block the search found, and how well.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Match {
+    found: Found,
+    fit: Fit,
+}
+
+impl Match {
+    /// Lower is better: the name, other names and the rest by how well the
+    /// words fit; words only inside other words after all of those.
+    fn score(self) -> u8 {
+        match self.fit {
+            Fit::Inside => 20 + self.found as u8,
+            fit => self.found as u8 * 4 + fit as u8,
+        }
+    }
+}
+
+/// How well every word of `words` (lower case) fits `text`, if all are in it.
+fn fit(text: &str, query: &str, words: &[String]) -> Option<Fit> {
+    let text = text.to_lowercase();
+    let own: Vec<&str> = text.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect();
+    let mut worst = Fit::Words;
+    for w in words {
+        let one = if own.iter().any(|o| o == w) {
+            Fit::Words
+        } else if own.iter().any(|o| o.starts_with(w.as_str())) {
+            Fit::Starts
+        } else if text.contains(w.as_str()) {
+            Fit::Inside
+        } else {
+            return None;
+        };
+        worst = worst.max(one);
+    }
+    let typed = query.trim().to_lowercase();
+    Some(if worst <= Fit::Starts && !typed.is_empty() && text.starts_with(&typed) { Fit::Begins } else { worst })
+}
+
+fn search(def: &BlockDef, query: &str) -> Option<Match> {
     let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
-    let all_in = |text: &str| {
-        let text = text.to_lowercase();
-        words.iter().all(|w| text.contains(w.as_str()))
-    };
-    if all_in(&def.name) {
-        return Some(Found::Name);
-    }
-    if def.aliases.iter().any(|a| all_in(a)) {
-        return Some(Found::Alias);
-    }
     let timing = match def.timing() {
         Some(true) => "async",
         Some(false) => "sync",
         None => "",
     };
-    let hay = format!("{} {} {} {} {} {} {timing}", def.name, def.aliases.join(" "), def.id, def.description, def.tags.join(" "), def.category.as_deref().unwrap_or(""));
-    all_in(&hay).then_some(Found::Elsewhere)
+    let elsewhere = format!("{} {} {} {} {timing}", def.id, def.description, def.tags.join(" "), def.category.as_deref().unwrap_or(""));
+    // Each place it can be found, best first; the best fit wins (a whole word
+    // in the description beats a word inside the name).
+    let name = fit(&def.name, query, &words).map(|fit| Match { found: Found::Name, fit });
+    let alias = def.aliases.iter().filter_map(|a| fit(a, query, &words)).min().map(|fit| Match { found: Found::Alias, fit });
+    let rest = fit(&format!("{} {} {elsewhere}", def.name, def.aliases.join(" ")), "", &words).map(|fit| Match { found: Found::Elsewhere, fit });
+    [name, alias, rest].into_iter().flatten().min_by_key(|m| m.score())
 }
 
 /// Draws the picker if open. Places the chosen block and connects a pending wire.
@@ -168,7 +215,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
         3 => Some(BlockKind::Value),
         _ => None,
     });
-    let mut list: Vec<(&BlockDef, Option<String>, Found)> = ed
+    let mut list: Vec<(&BlockDef, Option<String>, Match)> = ed
         .reg
         .blocks
         .values()
@@ -186,9 +233,8 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
         .collect();
     let rank = |d: &BlockDef| mode.as_ref().map(|m| m.category_rank(d.category.as_deref().unwrap_or(""))).unwrap_or(usize::MAX);
     if searching {
-        // Best matches first (by name or another name), events first among them.
-        let strength = |f: &Found| if *f == Found::Elsewhere { 1 } else { 0 };
-        list.sort_by(|a, b| strength(&a.2).cmp(&strength(&b.2)).then_with(|| kind_order(a.0.kind).cmp(&kind_order(b.0.kind))).then_with(|| a.0.name.cmp(&b.0.name)));
+        // Best matches first (see Match::score), events first among equally good ones.
+        list.sort_by(|a, b| a.2.score().cmp(&b.2.score()).then_with(|| kind_order(a.0.kind).cmp(&kind_order(b.0.kind))).then_with(|| a.0.name.cmp(&b.0.name)));
     } else {
         list.sort_by(|a, b| rank(a.0).cmp(&rank(b.0)).then_with(|| kind_order(a.0.kind).cmp(&kind_order(b.0.kind))).then_with(|| a.0.name.cmp(&b.0.name)));
     }
@@ -618,10 +664,31 @@ mod tests {
     #[test]
     fn other_names_count_like_the_name() {
         let def = BlockDef { name: "Send Message".into(), aliases: vec!["Reply".into(), "Send DM".into()], tags: vec!["private".into()], ..Default::default() };
-        assert_eq!(search(&def, "send msg"), None);
-        assert_eq!(search(&def, "send"), Some(Found::Name));
-        assert_eq!(search(&def, "reply"), Some(Found::Alias));
-        assert_eq!(search(&def, "private"), Some(Found::Elsewhere));
-        assert_eq!(search(&def, ""), Some(Found::Name));
+        let found = |q: &str| search(&def, q).map(|m| m.found);
+        assert_eq!(found("send msg"), None);
+        assert_eq!(found("send"), Some(Found::Name));
+        assert_eq!(found("reply"), Some(Found::Alias));
+        assert_eq!(found("private"), Some(Found::Elsewhere));
+        assert_eq!(found(""), Some(Found::Name));
+    }
+
+    /// "date" finds Date & Time first, then blocks with the word Date, and
+    /// only after those ones where it is inside a word (Member Updated).
+    #[test]
+    fn whole_words_come_before_words_inside_words() {
+        let block = |name: &str, description: &str, kind: BlockKind| BlockDef { name: name.into(), description: description.into(), kind, ..Default::default() };
+        let blocks = [
+            block("Member Updated", "A member changed", BlockKind::Event),
+            block("Time Between", "How long lies between two dates", BlockKind::Value),
+            block("Read Date", "Turns text into a date", BlockKind::Value),
+            block("Date & Time", "The current time", BlockKind::Value),
+        ];
+        let mut found: Vec<(u8, &str)> = blocks.iter().filter_map(|b| search(b, "date").map(|m| (m.score(), b.name.as_str()))).collect();
+        found.sort();
+        let names: Vec<&str> = found.iter().map(|(_, n)| *n).collect();
+        assert_eq!(names, ["Date & Time", "Read Date", "Time Between", "Member Updated"]);
+        assert_eq!(search(&blocks[0], "date").unwrap().fit, Fit::Inside);
+        // A start of a word still counts: "mem upd".
+        assert_eq!(search(&blocks[0], "mem upd").unwrap(), Match { found: Found::Name, fit: Fit::Starts });
     }
 }

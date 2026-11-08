@@ -25,6 +25,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **Emoji in colour**: emoji in the editor (previews, block texts, the Console) are drawn with the computer's own colour emoji, as in Windows and Discord, instead of black-and-white outlines. Symbols the editor uses as marks, such as ▶ and ⚠, stay plain.
 
 ### Fixed
+- **Better block search**: searching for *date* listed Member Updated and other events first, because *date* is inside *Updated*. Blocks whose name starts with what you typed come first now, then whole words, then the start of a word, then the description; a match inside another word comes last.
 - **Buttons in a layout preview no longer squash**: in a row of buttons too wide for the block, the last button's text broke over several lines. Buttons keep their text on one line, as in Discord, and move to the next line when there's no room.
 - **Plugin updates show their versions properly**: the list of plugin updates showed a box instead of the arrow between the old and new version. It now says "1.0.3 to 1.0.4".
 - **Problems lists empty inputs a block adds itself**: inputs that appear from a block's settings, such as Send Message's Channel when sending to a channel or its Interaction when replying, weren't checked, so an empty one only glowed on the block. They're listed in Problems now too.
