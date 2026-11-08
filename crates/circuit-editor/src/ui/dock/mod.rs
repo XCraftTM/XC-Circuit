@@ -93,6 +93,9 @@ pub struct Window<T> {
     edge_drag: Option<(Rect, Pos2)>,
     /// Its layer, to tell which window is on top.
     layer: Option<egui::LayerId>,
+    /// A window of its own outside the app's (on another monitor, say):
+    /// where it first goes on the screen and how big. `None`: inside the app.
+    pub os: Option<Rect>,
 }
 
 /// Where something dropped on the dock goes.
@@ -421,7 +424,36 @@ impl<T: Clone + PartialEq> Dock<T> {
     pub fn add_window(&mut self, tabs: Vec<T>, rect: Rect) {
         let id = self.next_window;
         self.next_window += 1;
-        self.windows.push(Window { id, node: Node::leaf(tabs), pos: rect.min, size: rect.size(), move_to: None, resize_to: None, edge_drag: None, layer: None });
+        self.windows.push(Window { id, node: Node::leaf(tabs), pos: rect.min, size: rect.size(), move_to: None, resize_to: None, edge_drag: None, layer: None, os: None });
+    }
+
+    /// Moves a tab into a window of its own outside the app's, at `screen`
+    /// (where on the screen, and how big). A window that has only it goes
+    /// out as it is. Not the main area's last tab.
+    pub fn pop_out(&mut self, tab: &T, screen: Rect) {
+        if let Some(w) = self.windows.iter_mut().find(|w| w.node.leaves().iter().map(|l| l.tabs.len()).sum::<usize>() == 1 && w.node.contains(tab)) {
+            w.os = Some(screen);
+            w.size = screen.size();
+            return;
+        }
+        let last = self.main.as_ref().is_some_and(|m| m.leaves().iter().map(|l| l.tabs.len()).sum::<usize>() == 1 && m.contains(tab));
+        if last || !self.remove(tab) {
+            return;
+        }
+        self.add_window(vec![tab.clone()], Rect::from_min_size(Pos2::new(80.0, 80.0), screen.size()));
+        if let Some(w) = self.windows.last_mut() {
+            w.os = Some(screen);
+        }
+        self.focus(tab);
+    }
+
+    /// A window of its own comes back into the app's, as a window there.
+    pub fn put_back(&mut self, id: u64) {
+        if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
+            w.os = None;
+            w.pos = Pos2::new(80.0, 80.0);
+            w.move_to = Some(w.pos);
+        }
     }
 
     /// Where something let go of at `pos` would go (`dragged`: a tab of the
@@ -626,6 +658,52 @@ mod tests {
 
     fn areas(dock: &Dock<&'static str>) -> Vec<Vec<&'static str>> {
         dock.main.iter().flat_map(|m| m.leaves()).map(|l| l.tabs.clone()).collect()
+    }
+
+    /// A tab goes into a window of its own (outside the app's) and back: the
+    /// main area keeps its last tab, a window with only that tab goes out as
+    /// it is, and where windows of their own aren't possible it stays a
+    /// window inside the app.
+    #[test]
+    fn tabs_pop_out_into_windows_of_their_own_and_back() {
+        let screen = Rect::from_min_size(egui::pos2(2000.0, 100.0), egui::vec2(700.0, 500.0));
+        let mut dock = Dock::new(vec!["canvas", "console"]);
+        dock.pop_out(&"console", screen);
+        assert!(!dock.main.as_ref().unwrap().contains(&"console"));
+        assert_eq!((dock.windows.len(), dock.windows[0].os), (1, Some(screen)));
+        assert_eq!(dock.windows[0].size, screen.size());
+        dock.pop_out(&"canvas", screen);
+        assert!(dock.main.as_ref().unwrap().contains(&"canvas") && dock.windows.len() == 1, "the main area keeps its last tab");
+
+        // Back into the app's window, as a window there.
+        let id = dock.windows[0].id;
+        dock.put_back(id);
+        assert_eq!(dock.windows[0].os, None);
+        assert!(dock.windows[0].node.contains(&"console"));
+        // A window with only that tab goes out whole, not as a second one.
+        dock.pop_out(&"console", screen);
+        assert_eq!((dock.windows.len(), dock.windows[0].id, dock.windows[0].os), (1, id, Some(screen)));
+
+        // Without a way to open windows (here, no graphics), it shows inside the app.
+        struct Viewer;
+        impl DockViewer<&'static str> for Viewer {
+            fn title(&mut self, tab: &&'static str) -> String {
+                tab.to_string()
+            }
+            fn icon(&self, _: &&'static str) -> Option<std::path::PathBuf> {
+                None
+            }
+            fn ui(&mut self, _: &mut egui::Ui, _: &&'static str) {}
+        }
+        let ctx = egui::Context::default();
+        let theme = crate::ui::theme::Theme::fallback();
+        for _ in 0..2 {
+            let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1400.0, 900.0))), ..Default::default() };
+            let mut out = ctx.run_ui(raw, |ui| dock.show(ui, &theme, &mut Viewer));
+            out.textures_delta.clear();
+        }
+        assert_eq!(dock.windows[0].os, None);
+        assert!(dock.windows[0].node.contains(&"console"));
     }
 
     /// A window's left and top edges resize it too; its right and bottom edges stay.

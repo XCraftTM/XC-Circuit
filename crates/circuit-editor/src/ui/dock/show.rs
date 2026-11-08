@@ -46,6 +46,10 @@ enum Act<T> {
     Close(T),
     Focus(T),
     Drag(T),
+    /// Into a window of its own, outside the app's.
+    PopOut(T),
+    /// The window of its own with this id, back into the app's.
+    PutBack(u64),
 }
 
 /// What drawing one frame collects.
@@ -59,6 +63,11 @@ struct Pass<'t, T> {
     dragged: Option<T>,
     /// Windows dragged by their tab bar, and how far.
     moves: Vec<(u64, egui::Vec2)>,
+    /// Drawing a window of its own (outside the app's): its tabs don't drag
+    /// (the pointer there isn't the app window's), and it moves as the system's.
+    os: bool,
+    /// Windows of their own are possible (the system and graphics allow them).
+    can_pop: bool,
 }
 
 /// Paints an icon file (once its texture is loaded) into `rect`.
@@ -155,12 +164,48 @@ impl<T: Clone + PartialEq + Hash + std::fmt::Debug> Dock<T> {
             focused: self.focused().cloned(),
             dragged: self.drag.clone(),
             moves: Vec::new(),
+            os: false,
+            can_pop: !ctx.embed_viewports(),
         };
         if let Some(main) = &mut self.main {
             node_ui(ui, main, rect, &mut p, viewer, None, &mut Vec::new());
         }
         ui.allocate_rect(rect, Sense::hover());
+        // Where the app's window is on the screen: windows of their own are placed from it.
+        let screen = ctx.input(|i| i.viewport().inner_rect).map_or(egui::Vec2::ZERO, |r| r.min.to_vec2());
+        let mut back = Vec::new();
         for w in &mut self.windows {
+            if let Some(first) = w.os {
+                if !p.can_pop {
+                    w.os = None;
+                    continue;
+                }
+                let need = w.node.leaves().iter().flat_map(|l| l.tabs.iter()).map(|t| viewer.min_size(t)).fold(vec2(320.0, 240.0), |a, b| a.max(b + vec2(0.0, p.bar_h)));
+                let title = w.node.leaves().first().and_then(|l| l.active_tab()).map(|t| viewer.title(t)).unwrap_or_default();
+                // Where it first went, and how big: the system keeps it after.
+                let builder = egui::ViewportBuilder::default().with_title(format!("{title} · XC Circuit")).with_position(first.min).with_inner_size(first.size()).with_min_inner_size(need);
+                let id = w.id;
+                let node = &mut w.node;
+                let before = p.places.len();
+                p.os = true;
+                let (closed, inner) = ctx.show_viewport_immediate(egui::ViewportId::from_hash_of(("dock-os-window", id)), builder, |ui, _| {
+                    let all = ui.max_rect();
+                    ui.painter().rect_filled(all, 0.0, theme.panel);
+                    node_ui(ui, node, all, &mut p, viewer, Some(id), &mut Vec::new());
+                    ui.allocate_rect(all, Sense::hover());
+                    ui.ctx().input(|i| (i.viewport().close_requested(), i.viewport().inner_rect))
+                });
+                p.os = false;
+                // Nothing is dropped into it from the app's window.
+                p.places.truncate(before);
+                if let Some(r) = inner {
+                    w.size = r.size();
+                }
+                if closed {
+                    back.push(id);
+                }
+                continue;
+            }
             let frame = egui::Frame::new().fill(theme.panel).stroke(Stroke::new(1.0, theme.line)).corner_radius(8).shadow(ctx.global_style().visuals.popup_shadow);
             // As big as the biggest its tabs need, and its tab bar.
             let need = w.node.leaves().iter().flat_map(|l| l.tabs.iter()).map(|t| viewer.min_size(t)).fold(vec2(320.0, 240.0), |a, b| a.max(b + vec2(0.0, p.bar_h)));
@@ -203,6 +248,10 @@ impl<T: Clone + PartialEq + Hash + std::fmt::Debug> Dock<T> {
         }
         let Pass { acts, places, moves, .. } = p;
         self.places = places;
+        // Closed by the system's ×: back into the app's window, nothing lost.
+        for id in back {
+            self.put_back(id);
+        }
         for (id, by) in moves {
             if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
                 w.move_to = Some(w.pos + by);
@@ -222,6 +271,13 @@ impl<T: Clone + PartialEq + Hash + std::fmt::Debug> Dock<T> {
                     self.focus(&tab);
                     self.drag = Some(tab);
                 }
+                Act::PopOut(tab) => {
+                    // Over where it was, a little down and right.
+                    let at = self.places.iter().find(|p| p.tabs.contains(&tab)).map_or(Rect::from_min_size(pos2(80.0, 80.0), vec2(640.0, 480.0)), |p| p.rect);
+                    let size = at.size().clamp(vec2(360.0, 260.0), vec2(1100.0, 800.0));
+                    self.pop_out(&tab, Rect::from_min_size(at.min + screen + vec2(40.0, 40.0), size));
+                }
+                Act::PutBack(id) => self.put_back(id),
             }
         }
         self.drag_ui(&ctx, theme, viewer);
@@ -244,6 +300,12 @@ impl<T: Clone + PartialEq + Hash + std::fmt::Debug> Dock<T> {
                 None if self.over(pos) => {}
                 None if viewer.take_drop(&tab, pos) => {
                     self.remove(&tab);
+                }
+                // Let go of outside the app's window: a window of its own there.
+                None if !ctx.content_rect().contains(pos) && !ctx.embed_viewports() => {
+                    let size = self.size_of(&tab).unwrap_or(vec2(480.0, 360.0)).clamp(vec2(360.0, 260.0), vec2(1100.0, 800.0));
+                    let screen = ctx.input(|i| i.viewport().inner_rect).map_or(egui::Vec2::ZERO, |r| r.min.to_vec2());
+                    self.pop_out(&tab, Rect::from_min_size(pos + screen - vec2(24.0, 12.0), size));
                 }
                 None => {
                     let size = self.size_of(&tab).unwrap_or(vec2(480.0, 360.0)).clamp(vec2(320.0, 240.0), vec2(900.0, 700.0));
@@ -336,7 +398,7 @@ fn leaf_ui<T: Clone + PartialEq + Hash + std::fmt::Debug, V: DockViewer<T>>(ui: 
     painter.rect_filled(body, bottom, t.panel);
     painter.hline(bar.x_range(), bar.bottom() - 0.5, Stroke::new(1.0, t.line));
     // A window moves by the empty part of its tab bar (the tabs come after, on top).
-    if let Some(id) = window {
+    if let Some(id) = window.filter(|_| !p.os) {
         let moved = ui.interact(bar, Id::unique(("dock-window-bar", id, leaf.tabs.first())), Sense::drag());
         if moved.dragged() {
             p.moves.push((id, moved.drag_delta()));
@@ -424,13 +486,26 @@ fn leaf_ui<T: Clone + PartialEq + Hash + std::fmt::Debug, V: DockViewer<T>>(ui: 
         if resp.middle_clicked() && closeable[i] {
             p.acts.push(Act::Close(tab.clone()));
         }
-        if resp.drag_started() {
+        if resp.drag_started() && !p.os {
             p.acts.push(Act::Drag(tab.clone()));
         }
         let mut close_it = false;
         resp.context_menu(|ui| {
             if closeable[i] && crate::ui::kit::menu_item(ui, t!("Close"), None, true).clicked() {
                 close_it = true;
+                ui.close();
+            }
+            // A window of its own goes back; anything else can get one.
+            let act = match window {
+                Some(id) if p.os => crate::ui::kit::menu_item(ui, t!("Back into the main window"), None, true).clicked().then_some(Act::PutBack(id)),
+                _ if p.can_pop => crate::ui::kit::menu_item(ui, t!("Open in its own window"), None, true)
+                    .on_hover_text(t!("A window outside the app's, to put on another monitor"))
+                    .clicked()
+                    .then(|| Act::PopOut(tab.clone())),
+                _ => None,
+            };
+            if let Some(act) = act {
+                p.acts.push(act);
                 ui.close();
             }
             viewer.tab_menu(ui, tab);
