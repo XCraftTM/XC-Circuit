@@ -1114,9 +1114,18 @@ fn preview_button(ui: &mut Ui, b: &Value) {
     let disabled = b.get("disabled").and_then(Value::as_bool).unwrap_or(false);
     let fill = discord::button(style);
     let fill = if disabled { fill.gamma_multiply(0.5) } else { fill };
-    Frame::new().fill(fill).corner_radius(4).inner_margin(Margin::symmetric(16, 7)).show(ui, |ui| {
-        ui.label(RichText::new(label).size(13.5).color(Color32::WHITE));
-    });
+    // Sized by its text on one line, as Discord does: in a row, a button that
+    // doesn't fit goes to the next line whole instead of wrapping its text.
+    // Only a label wider than the whole row wraps.
+    let font = FontId::proportional(13.5);
+    let row = ui.max_rect().width().max(60.0);
+    let mut galley = ui.painter().layout_no_wrap(label.clone(), font.clone(), Color32::WHITE);
+    if galley.size().x + 32.0 > row {
+        galley = ui.painter().layout(label, font, Color32::WHITE, row - 32.0);
+    }
+    let (rect, _) = ui.allocate_exact_size(vec2(galley.size().x + 32.0, galley.size().y + 14.0), egui::Sense::hover());
+    ui.painter().rect_filled(rect, 4.0, fill);
+    ui.painter().galley(rect.center() - galley.size() / 2.0, galley, Color32::WHITE);
 }
 
 fn preview_select(ui: &mut Ui, s: &Value, width: f32) {

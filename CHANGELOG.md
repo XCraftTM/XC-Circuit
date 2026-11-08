@@ -16,9 +16,11 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **Split Text**: takes a text apart at spaces, commas or any separator and gives the first part, the last, one by number (-1 is the last), everything after the first, and how many there are: no more list blocks to get one argument of a command.
 - **Dates made easy**: Date & Time adds any amount (`1d 2h`, `-30m`), writes your own pattern (`DD.MM.YYYY HH:mm`) in any time zone and gives every Discord timestamp style. **Read Date** turns typed text into a date (`24.12.2026 18:00`, `tomorrow 9:00`, `in 2h` …), and **Time Between** says how long lies between two dates, in days, hours and minutes or as text.
 - **AI agents get XC Circuit's tools as soon as it opens**: an AI client that started while XC Circuit was closed only saw `open_xc_circuit` until it reconnected. The MCP server now tells the client when XC Circuit opens or closes, so its tools appear (or go) by themselves within a few seconds.
+- **Make any block wider**: drag the small grip in a block's bottom-right corner sideways to make it wider or narrower (the project keeps it); double-click it to reset. Handy for a Build Layout with a row of buttons or a long text.
 - **Update the app from the Updates window**: when a new XC Circuit is out, Help › Check for Updates now has **Update and restart** right there: it downloads the update, installs it as XC Circuit closes (asking about unsaved changes first) and opens it again. **What's new…** shows the release notes.
 
 ### Fixed
+- **Buttons in a layout preview no longer squash**: in a row of buttons too wide for the block, the last button's text broke over several lines. Buttons keep their text on one line, as in Discord, and move to the next line when there's no room.
 - **Problems lists empty inputs a block adds itself**: inputs that appear from a block's settings, such as Send Message's Channel when sending to a channel or its Interaction when replying, weren't checked, so an empty one only glowed on the block. They're listed in Problems now too.
 - **Blocks see slash commands an AI agent adds**: after an agent saved slash commands, Slash Command blocks still showed them as "not in the builder" until the project was opened again.
 
