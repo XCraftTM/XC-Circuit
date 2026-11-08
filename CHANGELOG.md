@@ -2,11 +2,6 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## Unreleased
-
-### Fixed
-- **The freeze detector found the wrong freezes**: it could report a freeze "after its frame" when the window only wasn't drawing for a few seconds (held while moved, minimized, covered), and it could freeze along with the app when the app was stuck inside egui, so real freezes went unreported. It now counts a freeze only when Windows can't reach the window either (what makes Windows say "Not Responding"), never waits on the app itself, and says when the app was stuck inside egui (laying out a long text, say, or the window's accessibility tree).
-
 ## 0.2.4
 
 ### Added
@@ -17,7 +12,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **One Update button for everything**: in the update window (at start, or from Help › Check for Updates), the button at the bottom right now updates the blocks and the app together. XC Circuit restarts only when the app itself updates, after the blocks are in; blocks alone still update without a restart.
 - **Long wires**: holding a wire you're dragging at an edge of the canvas (or just past it) moves the canvas that way, faster the closer you get, so a wire can reach a block that's out of view.
 - **A lighter canvas background**: the dots are one repeated picture instead of a small circle each, which took up to a third of a canvas frame and 20,000 triangles. They look the same.
-- **A freeze detector**: when XC Circuit stops answering (Windows says "Not Responding") for three seconds or more, the Console says for how long and where it was stuck (a tab, saving, the Problems list, plugins, or after its frame: the graphics card, Windows or a tool reading the window), and freezes.log in the app's data folder keeps it, also while it's still stuck. It helps find what makes slower computers freeze.
+- **A freeze detector**: when XC Circuit stops answering (Windows says "Not Responding": it can't reach the window; one that only isn't drawing while it's moved or minimized doesn't count) for three seconds or more, the Console says for how long and where it was stuck (a tab, saving, the Problems list, plugins, or after its frame: the graphics card, Windows or a tool reading the window), and freezes.log in the app's data folder keeps it, also while it's still stuck. It also says when the app was stuck inside egui (laying out a long text, say, or the window's accessibility tree). It helps find what makes slower computers freeze.
 
 ## 0.2.3
 
