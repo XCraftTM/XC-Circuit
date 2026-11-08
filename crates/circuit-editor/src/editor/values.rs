@@ -26,6 +26,22 @@ use crate::ui::theme::Theme;
 
 /// The blocks that run before `node` on its action path, first to last
 /// (for a value block: before the blocks it feeds).
+/// Pin types an unconnected input takes from the event, when the event gives
+/// one by the same name (the runtime's `isContextType`): an interaction to
+/// answer, a server to act in. Never users, channels or messages.
+pub const CONTEXT_TYPES: [&str; 3] = ["discord.interaction", "discord.guild", "fluxer.server"];
+
+/// Whether `key` (of pin type `type_name`) of `node`, left unconnected, is
+/// filled from an event earlier on its action path.
+pub fn from_event(ws: &Workspace, node: &str, key: &str, type_name: &str, reg: &Registry) -> bool {
+    if !CONTEXT_TYPES.contains(&type_name.trim_end_matches('?')) {
+        return false;
+    }
+    upstream(ws, node, reg).iter().any(|id| {
+        ws.nodes.get(id).and_then(|n| reg.block(&n.block)).is_some_and(|d| d.kind == BlockKind::Event && d.outputs.get(key).is_some_and(|o| o.type_name.trim_end_matches('?') == type_name.trim_end_matches('?')))
+    })
+}
+
 pub fn upstream(ws: &Workspace, node: &str, reg: &Registry) -> Vec<String> {
     upstream_with(ws, node, reg, &Wiring::new(ws))
 }

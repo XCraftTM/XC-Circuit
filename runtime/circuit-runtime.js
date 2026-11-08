@@ -597,6 +597,13 @@ class GraphNode {
     // Values wired into a text field's {name} inputs (pins that aren't fields).
     const placed = {};
     for (const pin of wired) if (!(pin in (this.def.fields || {}))) placed[pin] = fields[pin];
+    // An interaction or server left unconnected is the event's own, like the
+    // editor shows it ("from the event"): no wire across the workspace for it.
+    if (run && run.event) {
+      for (const [k, f] of [...Object.entries(this.def.fields || {}), ...Object.entries(this.addedFields())]) {
+        if (f && !wired.has(k) && isContextType(f.type) && (fields[k] == null || fields[k] === "") && run.event[k] != null) fields[k] = run.event[k];
+      }
+    }
     for (const [k, f] of Object.entries(this.def.fields || {})) {
       if (!f) continue;
       if (f.templateParts && !wired.has(k) && typeof fields[k] === "string") {
@@ -671,6 +678,17 @@ class Run {
   setOutputs(nodeId, outputs) {
     this.outputs.set(nodeId, Object.assign(this.outputs.get(nodeId) || {}, outputs));
   }
+}
+
+/**
+ * Types an unconnected input takes from the event that started the run, when
+ * it gives one by the same name: how to answer (the interaction) and where
+ * (the server). Never users, members, channels or messages: an unconnected
+ * Ban or Delete Channel mustn't hit whoever started it.
+ */
+const CONTEXT_TYPES = ["discord.interaction", "discord.guild", "fluxer.server"];
+function isContextType(type) {
+  return CONTEXT_TYPES.includes(String(type || "").replace(/\?$/, ""));
 }
 
 /** Whether ${…} in a field is filled in: text fields and fields for any value, unless `template: false`. */
@@ -2649,4 +2667,4 @@ if (typeof __XC_BUNDLE__ !== "undefined") {
 }
 
 module.exports = {
-  isPrivateAddress, guardedFetch, start, ungroupBlock, fillTemplate, fillValue, templated, templateParts, snapshot, Timers, coerce, compare, preview, Store, DbStore, Database, Databases, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };
+  isPrivateAddress, guardedFetch, start, ungroupBlock, fillTemplate, fillValue, templated, isContextType, templateParts, snapshot, Timers, coerce, compare, preview, Store, DbStore, Database, Databases, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };

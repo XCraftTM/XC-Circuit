@@ -882,6 +882,10 @@ Every event starts its own **run**. If two people use a command at the same time
 
 A block's **fields** are what you fill in on it: a text, a number, a choice. Most fields can also become a **pin**: click the faint pin next to the field (or *pin* in the Inspector) and connect a value to it instead. Some fields are pins only, because a fixed value makes no sense there (a member to give a role to, for example).
 
+## Inputs the event fills in
+
+An **Interaction** or **Server** input left unconnected takes the one of the event that started the flow (Slash Command, Button Pressed, Member Joined …), when that event gives one: the block says **from the event** instead of *connect*, and it isn't a problem. So Send Message replying to a command needs no wire for the interaction. Users, members, channels and messages are never filled in like this: an unconnected Ban or Delete Channel must not hit whoever started it, so connect those.
+
 ## Why it's built this way
 
 - **Order you can see.** Bots are mostly "when X, do A, then B, then C". Action wires make that order visible and keep it unambiguous.

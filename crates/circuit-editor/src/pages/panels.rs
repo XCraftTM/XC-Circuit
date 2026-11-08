@@ -429,7 +429,7 @@ pub fn collect_problems(ed: &mut Editor) -> Vec<ProblemItem> {
                 for (k, f) in &fields {
                     let connected = ws.links_into(id, k).next().is_some();
                     let empty = node.values.get(k).or(f.default.as_ref()).is_none_or(|v| v.is_null() || *v == Value::String(String::new()));
-                    if f.required && !connected && empty {
+                    if f.required && !connected && empty && !crate::editor::values::from_event(ws, id, k, &f.type_name, &ed.reg) {
                         items.push((format!("{} › {}", ws.name, def.name), format!("`{}` needs a value", f.label(k)), Some((key.clone(), id.clone()))));
                     }
                 }
@@ -575,6 +575,25 @@ mod tests {
         assert_eq!(channel.len(), 1, "only the empty one: {items:?}");
         assert_eq!(channel[0].2.as_ref().map(|(_, b)| b.as_str()), Some("empty"));
         assert!(!items.iter().any(|(_, why, _)| why.contains("Interaction")), "sending to a channel needs no interaction: {items:?}");
+
+        // Replying: after a Slash Command, its interaction is taken without a wire;
+        // after On Start there is none to take.
+        let project = ed.project.as_mut().unwrap();
+        let mut ws = Workspace::new("Replies");
+        ws.nodes.insert("cmd".into(), Node { block: "discord.on_slash_command@1".into(), values: serde_json::json!({ "command": "ping" }).as_object().cloned().unwrap(), ..Default::default() });
+        ws.nodes.insert("answer".into(), send("reply", ""));
+        ws.nodes.insert("go".into(), Node { block: "core.on_start@1".into(), ..Default::default() });
+        ws.nodes.insert("lost".into(), send("reply", ""));
+        ws.links.push("cmd.next > answer.in".parse().unwrap());
+        ws.links.push("go.next > lost.in".parse().unwrap());
+        project.workspaces.clear();
+        project.workspaces.insert("replies".into(), ws);
+        let items = collect_problems(&mut ed);
+        let needs: Vec<_> = items.iter().filter(|(_, why, _)| why.contains("`Interaction` needs a value")).map(|(_, _, at)| at.as_ref().map(|(_, b)| b.clone())).collect();
+        assert_eq!(needs, [Some("lost".to_string())], "from the event after the command; missing after On Start: {items:?}");
+        let ws = ed.project.as_ref().unwrap().workspaces["replies"].clone();
+        assert!(crate::editor::values::from_event(&ws, "answer", "interaction", "discord.interaction", &ed.reg));
+        assert!(!crate::editor::values::from_event(&ws, "answer", "user", "discord.user", &ed.reg), "never users");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

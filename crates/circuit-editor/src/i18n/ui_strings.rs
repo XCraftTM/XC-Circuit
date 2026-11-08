@@ -765,6 +765,7 @@ pub const UI_STRINGS: &[&str] = &[
     "Open the builder for the rest",
     "Edit form…",
     "Edit layout…",
+    "from the event",
     "This would make a loop that never ends. To repeat blocks, use Repeat, Loop While or For Each.",
     "These blocks would wait for each other's values forever.",
     "Note",

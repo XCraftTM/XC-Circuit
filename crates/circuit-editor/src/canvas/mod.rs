@@ -747,7 +747,9 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     let connected = ws.is_connected(id, key);
                     let node_values = &ws.nodes[id].values;
                     let empty = node_values.get(key).or(f.default.as_ref()).is_none_or(|v| v.is_null() || v == &Value::String(String::new()));
-                    let missing = f.required && empty && !connected;
+                    // An unconnected interaction or server comes from the event.
+                    let from_event = !connected && empty && crate::editor::values::from_event(ws, id, key, &f.type_name, reg);
+                    let missing = f.required && empty && !connected && !from_event;
                     if missing {
                         missing_glow(&painter, theme, *r, ctx.input(|i| i.time));
                         ctx.request_repaint_after(std::time::Duration::from_millis(33));
@@ -760,7 +762,8 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     painter.text(pos2(r.left() + 16.0, label_y), Align2::LEFT_CENTER, &label, FontId::proportional(12.5), label_color);
                     if *pinned {
                         if !connected {
-                            painter.text(r.right_center() - vec2(16.0, 0.0), Align2::RIGHT_CENTER, "connect", FontId::proportional(11.0), with_alpha(theme.text_muted, 140));
+                            let hint = if from_event { t!("from the event") } else { "connect" };
+                            painter.text(r.right_center() - vec2(16.0, 0.0), Align2::RIGHT_CENTER, hint, FontId::proportional(11.0), with_alpha(theme.text_muted, 140));
                         }
                     } else if widgets::is_plain_text(f) {
                         // Free text: a box under the label, as tall as it was last resized to.
