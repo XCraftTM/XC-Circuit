@@ -2,7 +2,7 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## Unreleased
+## 0.2.1
 
 ### Changed
 - **The server console can go in the side bar**: drag its tab onto the activity bar or the side bar (either half), like the Console. In a narrow side bar its buttons go under the server's name.
