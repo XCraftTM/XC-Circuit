@@ -2,7 +2,7 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## Unreleased
+## 0.2.0
 
 ### Added
 - **A full ticket system to start from**: the Tickets starter (File › New Project) is now a ticket system with Components V2: /ticket-panel posts a panel with a menu, picking a kind opens a private ticket channel with Close ticket and Transcript buttons, closing asks first, keeps a transcript in #ticket-logs and deletes the channel. It needs no ids: make a ticket-logs channel and a Support role (or pick yours in Find Role).
