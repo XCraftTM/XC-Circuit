@@ -2,7 +2,7 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## Unreleased
+## 0.2.3
 
 ### Added
 - **Collections and Maps in ${…}**: after a dot, a Collection (a server's members.cache, a member's roles.cache, a message's attachments …) lists size, first(), last(), get(id), find(…), filter(…), random() and more, and after one that gives back an item, that item's members: ${server.members.cache.get(user.id).displayName}. Managers' caches now know what they hold. A Map lists size, get and has.
