@@ -359,6 +359,24 @@ pub(super) fn open_floating(dock: &mut Dock<Tab>, ctx: &egui::Context, tab: Tab,
     dock.focus(&tab);
 }
 
+/// Opens a tab in a window of its own at `rect`, moved and shrunk to stay
+/// inside the app's window (which may be smaller than when it was there).
+pub(super) fn open_floating_at(dock: &mut Dock<Tab>, ctx: &egui::Context, tab: Tab, rect: egui::Rect) {
+    let area = ctx.content_rect();
+    let rect = fit_inside(rect, area);
+    dock.add_window(vec![tab.clone()], rect);
+    dock.focus(&tab);
+}
+
+/// `rect` moved (and if it must, shrunk) to lie inside `area`, a little in
+/// from its edges.
+pub(super) fn fit_inside(rect: egui::Rect, area: egui::Rect) -> egui::Rect {
+    let room = area.shrink(8.0);
+    let size = rect.size().min(room.size()).max(egui::vec2(320.0, 240.0));
+    let min = rect.min.clamp(room.min, (room.max - size).max(room.min));
+    egui::Rect::from_min_size(min, size)
+}
+
 /// Opens a side panel next to the open tabs of its kind (the bottom panels
 /// together, Inspector with plugin panels, …). Only when none is open does it
 /// get a new area on its side.

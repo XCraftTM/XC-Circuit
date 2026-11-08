@@ -265,11 +265,18 @@ impl CircuitApp {
             (Tab::WorkspaceImport, self.ed.ws_import.is_some(), egui::vec2(660.0, 680.0)),
         ];
         for (tab, open, size) in wanted {
+            // As big as it was last time (when it was a window of its own).
+            let key = window_key(&tab);
             match (open, self.dock.contains(&tab)) {
-                (true, false) => open_floating(&mut self.dock, ctx, tab, size),
+                (true, false) => match self.ed.prefs.window_places.get(&key) {
+                    // Where it was last, and as big (kept inside the window).
+                    Some(r) => open_floating_at(&mut self.dock, ctx, tab, egui::Rect::from_min_size(egui::pos2(r[0], r[1]), egui::vec2(r[2], r[3]))),
+                    None => open_floating(&mut self.dock, ctx, tab, size),
+                },
                 (false, true) => {
                     self.dock.remove(&tab);
                 }
+                (true, true) => remember_place(&self.dock, &mut self.ed.prefs.window_places, &tab, key),
                 _ => {}
             }
         }
@@ -300,3 +307,19 @@ impl CircuitApp {
         self.drop_placeholder();
     }
 }
+
+/// The name a window's size is kept under: its tab's kind.
+pub(super) fn window_key(tab: &Tab) -> String {
+    format!("{tab:?}")
+}
+
+/// Keeps where `tab`'s window inside the app (one with only it) is and how
+/// big, for the next time it opens.
+pub(super) fn remember_place(dock: &crate::ui::dock::Dock<Tab>, places: &mut std::collections::BTreeMap<String, [f32; 4]>, tab: &Tab, key: String) {
+    let Some(w) = dock.windows.iter().find(|w| w.os.is_none() && w.node.leaves().len() == 1 && w.node.contains(tab)) else { return };
+    let place = [w.pos.x.round(), w.pos.y.round(), w.size.x.round(), w.size.y.round()];
+    if places.get(&key) != Some(&place) {
+        places.insert(key, place);
+    }
+}
+

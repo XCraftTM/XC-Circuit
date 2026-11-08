@@ -150,8 +150,16 @@ pub struct Dock<T> {
     /// Where each area was drawn last.
     #[serde(skip)]
     places: Vec<Place<T>>,
-    #[serde(skip)]
+    /// The next window's id. It starts somewhere new each run: egui keeps
+    /// windows' places by id between runs, and a new window must not take
+    /// the place of an old one that had its id.
+    #[serde(skip, default = "first_window_id")]
     next_window: u64,
+}
+
+/// A first window id for this run, unlike earlier runs' (see `next_window`).
+fn first_window_id() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.as_millis() as u64) * 1000
 }
 
 impl<T> Leaf<T> {
@@ -283,7 +291,7 @@ pub fn prune<T>(node: Node<T>) -> Option<Node<T>> {
 
 impl<T: Clone + PartialEq> Default for Dock<T> {
     fn default() -> Self {
-        Dock { main: None, windows: Vec::new(), focused: None, drag: None, places: Vec::new(), next_window: 1, keys: Vec::new() }
+        Dock { main: None, windows: Vec::new(), focused: None, drag: None, places: Vec::new(), next_window: first_window_id(), keys: Vec::new() }
     }
 }
 
@@ -712,6 +720,39 @@ mod tests {
         }
         assert_eq!(dock.windows[0].os, None);
         assert!(dock.windows[0].node.contains(&"console"));
+    }
+
+    /// A window opened at a size reports that size back once drawn, so a
+    /// remembered size opens the same next time (it doesn't creep).
+    #[test]
+    fn a_windows_size_reads_back_as_opened() {
+        struct Viewer;
+        impl DockViewer<&'static str> for Viewer {
+            fn title(&mut self, tab: &&'static str) -> String {
+                tab.to_string()
+            }
+            fn icon(&self, _: &&'static str) -> Option<std::path::PathBuf> {
+                None
+            }
+            fn ui(&mut self, _: &mut egui::Ui, _: &&'static str) {}
+        }
+        let ctx = egui::Context::default();
+        let theme = crate::ui::theme::Theme::fallback();
+        let mut size = egui::vec2(700.0, 520.0);
+        for _ in 0..3 {
+            let mut dock = Dock::new(vec!["canvas"]);
+            dock.add_window(vec!["builder"], Rect::from_min_size(egui::pos2(100.0, 80.0), size));
+            for _ in 0..3 {
+                let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1400.0, 900.0))), ..Default::default() };
+                let mut out = ctx.run_ui(raw, |ui| dock.show(ui, &theme, &mut Viewer));
+                out.textures_delta.clear();
+            }
+            let back = dock.windows[0].size;
+            assert!((back - size).length() < 0.5, "opened at {size:?}, drawn at {back:?}");
+            size = back;
+            // A new context each time, as after a restart.
+            ctx.memory_mut(|m| *m = Default::default());
+        }
     }
 
     /// A window's left and top edges resize it too; its right and bottom edges stay.
