@@ -71,22 +71,80 @@ pub fn version_of(path: &Path) -> Result<String> {
     Ok(version)
 }
 
-/// `check_node`, run at most every few seconds (or when the chosen Node.js
-/// changes): cheap enough to call while drawing.
-pub fn check_node_cached() -> std::result::Result<String, String> {
-    type Checked = (Instant, Option<PathBuf>, std::result::Result<String, String>);
-    static LAST: Mutex<Option<Checked>> = Mutex::new(None);
-    let path = node_path();
-    let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some((at, p, result)) = &*last
-        && *p == path
-        && at.elapsed() < Duration::from_secs(3)
-    {
-        return result.clone();
+/// How often [`check_node_cached`] asks Node.js again.
+const RECHECK_EVERY: Duration = Duration::from_secs(3);
+
+/// What [`check_node_cached`] knows: the last answer for the Node.js chosen,
+/// and whether a check is under way.
+struct NodeCheck {
+    path: Option<PathBuf>,
+    /// The last answer, and when it came.
+    last: Option<(Instant, std::result::Result<String, String>)>,
+    running: bool,
+    /// Raised when the answer being worked out no longer counts (another
+    /// Node.js was chosen, or [`forget_node_check`]).
+    generation: u64,
+}
+
+impl NodeCheck {
+    const fn new() -> NodeCheck {
+        NodeCheck { path: None, last: None, running: false, generation: 0 }
     }
-    let result = check_node().map_err(|e| format!("{e:#}"));
-    *last = Some((Instant::now(), path, result.clone()));
-    result
+}
+
+static NODE_CHECK: Mutex<NodeCheck> = Mutex::new(NodeCheck::new());
+
+/// `check_node`'s last answer, without waiting for it: safe to call while
+/// drawing. The check runs on a thread of its own, again every few seconds
+/// (or at once when the chosen Node.js changes); `None` until its first
+/// answer. Starting `node` can take long (the first start after installing
+/// it, a virus scanner looking at it, a slow virtual machine), and the
+/// window must not stop answering meanwhile.
+pub fn check_node_cached() -> Option<std::result::Result<String, String>> {
+    cached_check(&NODE_CHECK, node_path(), || check_node().map_err(|e| format!("{e:#}")))
+}
+
+/// Forgets the last answer, so [`check_node_cached`] asks again now (Check
+/// again in Settings).
+pub fn forget_node_check() {
+    forget_check(&NODE_CHECK);
+}
+
+/// [`check_node_cached`]'s workings, with the state and the check given.
+fn cached_check(
+    state: &'static Mutex<NodeCheck>,
+    path: Option<PathBuf>,
+    check: impl FnOnce() -> std::result::Result<String, String> + Send + 'static,
+) -> Option<std::result::Result<String, String>> {
+    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    if s.path != path {
+        s.path = path;
+        s.last = None;
+        s.generation += 1;
+    }
+    let stale = s.last.as_ref().is_none_or(|(at, _)| at.elapsed() >= RECHECK_EVERY);
+    if stale && !s.running {
+        s.running = true;
+        let generation = s.generation;
+        let spawned = std::thread::Builder::new().name("node-check".into()).spawn(move || {
+            let result = check();
+            let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+            s.running = false;
+            if s.generation == generation {
+                s.last = Some((Instant::now(), result));
+            }
+        });
+        if spawned.is_err() {
+            s.running = false;
+        }
+    }
+    s.last.as_ref().map(|(_, result)| result.clone())
+}
+
+fn forget_check(state: &Mutex<NodeCheck>) {
+    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+    s.last = None;
+    s.generation += 1;
 }
 
 /// The chosen Node.js's version, checked against the minimum.
@@ -221,5 +279,46 @@ mod tests {
         assert!(started.elapsed() < Duration::from_secs(5), "it didn't wait for npm");
         assert!(!dir.join("install/package.json").exists(), "the next start installs again");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Waits until `state` has an answer for `path` (no new check is started meanwhile).
+    fn answer(state: &'static Mutex<NodeCheck>, path: Option<PathBuf>) -> std::result::Result<String, String> {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while Instant::now() < deadline {
+            if let Some(result) = cached_check(state, path.clone(), || panic!("checked again")) {
+                return result;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        panic!("no answer");
+    }
+
+    /// Asking whether Node.js works never waits for it (the tour asks while
+    /// drawing): a slow answer comes later, from a thread of its own. Another
+    /// Node.js chosen meanwhile, or Check again, throws the old answer away.
+    #[test]
+    fn checking_node_never_waits() {
+        static STATE: Mutex<NodeCheck> = Mutex::new(NodeCheck::new());
+        let slow = |answer: std::result::Result<String, String>| {
+            move || {
+                std::thread::sleep(Duration::from_millis(300));
+                answer
+            }
+        };
+        let started = Instant::now();
+        assert_eq!(cached_check(&STATE, None, slow(Ok("v22.1.0".into()))), None, "not known yet");
+        assert!(started.elapsed() < Duration::from_millis(200), "it didn't wait");
+        assert_eq!(cached_check(&STATE, None, || panic!("one check at a time")), None);
+        assert_eq!(answer(&STATE, None), Ok("v22.1.0".into()));
+
+        // Another Node.js: the old answer doesn't count for it.
+        let other = Some(PathBuf::from("/somewhere/else/node"));
+        assert_eq!(cached_check(&STATE, other.clone(), slow(Err("too old".into()))), None);
+        assert_eq!(answer(&STATE, other.clone()), Err("too old".into()));
+
+        // Check again: asked anew.
+        forget_check(&STATE);
+        assert_eq!(cached_check(&STATE, other.clone(), slow(Ok("v24.0.0".into()))), None);
+        assert_eq!(answer(&STATE, other), Ok("v24.0.0".into()));
     }
 }

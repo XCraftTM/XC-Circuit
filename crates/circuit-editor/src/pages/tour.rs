@@ -505,7 +505,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor, tour: &mut Tour, bot_running: 
                                 ui.add_space(4.0);
                                 ui.label(RichText::new(oops).size(12.5).color(theme.warning));
                             }
-                            if step.wait == Some(Wait::Run) && circuit_runner::node::check_node_cached().is_err() {
+                            if step.wait == Some(Wait::Run) && matches!(circuit_runner::node::check_node_cached(), Some(Err(_))) {
                                 ui.add_space(4.0);
                                 ui.label(RichText::new(t!("Node.js isn't set up yet, so the bot can't start.")).size(12.5).color(theme.warning));
                                 if kit::button(ui, &theme, t!("Set up Node.js")).clicked() {
