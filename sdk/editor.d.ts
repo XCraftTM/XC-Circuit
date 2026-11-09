@@ -90,7 +90,8 @@ export interface Xc {
   activeWorkspace(): string | null;
   selection(): string[];
   select(workspace: string, blocks: string | string[]): void;
-  reveal(workspace: string, block: string): void;
+  /** Opens a workspace, selects a block and centres the canvas on it; `zoom` in percent (25 to 200) zooms it too. */
+  reveal(workspace: string, block: string, zoom?: number): void;
   /** Places a block and returns its id; it can be undone. */
   addBlock(workspace: string, type: string, options?: { x?: number; y?: number; values?: Record<string, unknown> }): string;
   blockName(type: string): string | null;

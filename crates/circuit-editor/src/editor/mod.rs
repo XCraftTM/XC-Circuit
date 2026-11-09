@@ -713,6 +713,14 @@ impl Editor {
         view.focus = Some(id.to_string());
     }
 
+    /// Zooms a workspace's canvas to `zoom` (1 is 100%, kept within what the
+    /// canvas allows) the next time it's drawn.
+    pub fn set_zoom(&mut self, ws_key: &str, zoom: f32) {
+        let (lo, hi) = crate::canvas::ZOOM_RANGE;
+        let view = self.views.entry(ws_key.to_string()).or_insert_with(CanvasView::at_full_size);
+        view.zoom_to = Some(zoom.clamp(lo, hi));
+    }
+
     pub fn clear_selection(&mut self) {
         self.selected = None;
         self.multi.clear();

@@ -2,6 +2,19 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
+## Unreleased
+
+### Added
+- **AI agents can zoom**: the `screenshot` and `show_in_editor` tools take a `zoom` in percent (25 to 200), so an agent can look closer, or see the canvas at the zoom you mention. Plugins get it through `xc.reveal(workspace, block, zoom)`.
+
+### Fixed
+- **The "connect" hint no longer vanishes at some zooms**: zoomed out to around 85%, the grey "connect" next to inputs such as Embeds and Components turned almost black, because making small grey text brighter counted its see-through-ness twice. It keeps its colour now, and gets brighter as meant when zoomed further out.
+- **One slow moment doesn't switch off a kind of block**: since 0.2.7, a block whose `define()` took over 50 ms even once (a virus scan or a busy computer can cause that) was skipped for the rest of the session, so all blocks of that kind (it could be Send Message) lost the fields and pins they add. Now that only happens after 3 times in a row, a call in time starts the count again, and a block that was stopped once is worked out again instead of kept without its pins.
+- **Save and close waits for the save**: since saving went into the background, a save that failed while closing went unnoticed and the changes were lost. XC Circuit now waits for the files, and if saving failed it stays open with your changes and says so in the Console.
+- **No false "it was frozen" after closing**: waiting while closing (for the save to be written, or the bot to stop) could be counted as a freeze, and the next start then said the run before ended stuck.
+- **Undo steps aren't lost while moving the slider**: dragging Settings › Editor › Undo steps down dropped the older undo steps at once, even when it went back up. They now go with the next change.
+- **Settings › Bot starts Node.js less often**: it asked Node.js for its version every 3 seconds while the page redrew; now once a minute (Check again asks at once).
+
 ## 0.2.7
 
 ### Fixed

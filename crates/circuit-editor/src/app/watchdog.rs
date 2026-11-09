@@ -42,6 +42,9 @@ const DUMPS_KEPT: usize = 3;
 static CLOCK: OnceLock<Instant> = OnceLock::new();
 static BEAT: AtomicU64 = AtomicU64::new(0);
 static FOCUSED: AtomicBool = AtomicBool::new(false);
+/// The app is closing: it no longer draws (it may wait for a save to be
+/// written, or the bot to stop), which isn't a freeze.
+static CLOSING: AtomicBool = AtomicBool::new(false);
 /// The main window (Windows: its handle), to ask whether it takes messages.
 static WINDOW: AtomicIsize = AtomicIsize::new(0);
 /// A frame is being asked for and egui hasn't taken the request yet: its
@@ -94,7 +97,14 @@ fn describe_start(graphics: &str, software: bool, build: &str, processor: Option
 /// Whether the window has the focus: only then is a missing frame a freeze
 /// (a minimized or hidden window may get none).
 pub fn focused(on: bool) {
-    FOCUSED.store(on, Ordering::Relaxed);
+    FOCUSED.store(on && !CLOSING.load(Ordering::Relaxed), Ordering::Relaxed);
+}
+
+/// The app is closing: from now on a missing frame isn't a freeze, so the
+/// next start doesn't say the run before ended stuck.
+pub fn closing() {
+    CLOSING.store(true, Ordering::Relaxed);
+    FOCUSED.store(false, Ordering::Relaxed);
 }
 
 /// The main window, so the watching can ask Windows whether it answers.
@@ -549,6 +559,18 @@ mod tests {
         assert_eq!(dump_process(&[]), 2, "no process id or file");
         assert_eq!(dump_process(&["not a number".into(), "x.dmp".into()]), 2);
         assert_eq!(dump_process(&[std::process::id().to_string(), dir.join("x.dmp").display().to_string()]), 1);
+    }
+
+    /// Closing, the app no longer draws (waiting for a save, or the bot):
+    /// not a freeze, whatever the window said last.
+    #[test]
+    fn closing_is_not_a_freeze() {
+        focused(true);
+        closing();
+        focused(true);
+        assert!(!FOCUSED.load(Ordering::Relaxed));
+        let mut w = Watch::default();
+        assert_eq!(w.look(9000, 0, FOCUSED.load(Ordering::Relaxed), || Some(false)), Step::Nothing);
     }
 
     #[test]

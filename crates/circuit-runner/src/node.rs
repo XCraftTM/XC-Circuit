@@ -101,7 +101,14 @@ static NODE_CHECK: Mutex<NodeCheck> = Mutex::new(NodeCheck::new());
 /// it, a virus scanner looking at it, a slow virtual machine), and the
 /// window must not stop answering meanwhile.
 pub fn check_node_cached() -> Option<std::result::Result<String, String>> {
-    cached_check(&NODE_CHECK, node_path(), || check_node().map_err(|e| format!("{e:#}")))
+    check_node_every(RECHECK_EVERY)
+}
+
+/// [`check_node_cached`], asked again only after `every`: for a page that
+/// shows it (Settings › Bot), where starting `node` every few seconds while
+/// it redraws would cost more than it tells (Check again asks at once).
+pub fn check_node_every(every: Duration) -> Option<std::result::Result<String, String>> {
+    cached_check(&NODE_CHECK, node_path(), every, || check_node().map_err(|e| format!("{e:#}")))
 }
 
 /// Forgets the last answer, so [`check_node_cached`] asks again now (Check
@@ -114,6 +121,7 @@ pub fn forget_node_check() {
 fn cached_check(
     state: &'static Mutex<NodeCheck>,
     path: Option<PathBuf>,
+    every: Duration,
     check: impl FnOnce() -> std::result::Result<String, String> + Send + 'static,
 ) -> Option<std::result::Result<String, String>> {
     let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -122,7 +130,7 @@ fn cached_check(
         s.last = None;
         s.generation += 1;
     }
-    let stale = s.last.as_ref().is_none_or(|(at, _)| at.elapsed() >= RECHECK_EVERY);
+    let stale = s.last.as_ref().is_none_or(|(at, _)| at.elapsed() >= every);
     if stale && !s.running {
         s.running = true;
         let generation = s.generation;
@@ -285,7 +293,7 @@ mod tests {
     fn answer(state: &'static Mutex<NodeCheck>, path: Option<PathBuf>) -> std::result::Result<String, String> {
         let deadline = Instant::now() + Duration::from_secs(10);
         while Instant::now() < deadline {
-            if let Some(result) = cached_check(state, path.clone(), || panic!("checked again")) {
+            if let Some(result) = cached_check(state, path.clone(), RECHECK_EVERY, || panic!("checked again")) {
                 return result;
             }
             std::thread::sleep(Duration::from_millis(10));
@@ -306,19 +314,19 @@ mod tests {
             }
         };
         let started = Instant::now();
-        assert_eq!(cached_check(&STATE, None, slow(Ok("v22.1.0".into()))), None, "not known yet");
+        assert_eq!(cached_check(&STATE, None, RECHECK_EVERY, slow(Ok("v22.1.0".into()))), None, "not known yet");
         assert!(started.elapsed() < Duration::from_millis(200), "it didn't wait");
-        assert_eq!(cached_check(&STATE, None, || panic!("one check at a time")), None);
+        assert_eq!(cached_check(&STATE, None, RECHECK_EVERY, || panic!("one check at a time")), None);
         assert_eq!(answer(&STATE, None), Ok("v22.1.0".into()));
 
         // Another Node.js: the old answer doesn't count for it.
         let other = Some(PathBuf::from("/somewhere/else/node"));
-        assert_eq!(cached_check(&STATE, other.clone(), slow(Err("too old".into()))), None);
+        assert_eq!(cached_check(&STATE, other.clone(), RECHECK_EVERY, slow(Err("too old".into()))), None);
         assert_eq!(answer(&STATE, other.clone()), Err("too old".into()));
 
         // Check again: asked anew.
         forget_check(&STATE);
-        assert_eq!(cached_check(&STATE, other.clone(), slow(Ok("v24.0.0".into()))), None);
+        assert_eq!(cached_check(&STATE, other.clone(), RECHECK_EVERY, slow(Ok("v24.0.0".into()))), None);
         assert_eq!(answer(&STATE, other), Ok("v24.0.0".into()));
     }
 }

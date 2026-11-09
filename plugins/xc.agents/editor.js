@@ -399,14 +399,15 @@ tool({
 
 tool({
   name: "show_in_editor",
-  description: "Opens a workspace in the editor and, with a block, selects it and centres the canvas on it: shows the user what you mean.",
-  input: schema({ workspace: workspaceArg, block: blockArg }, ["workspace"]),
-  run({ workspace, block }) {
+  description: "Opens a workspace in the editor and, with a block, selects it and centres the canvas on it: shows the user what you mean. zoom sets the canvas's zoom too.",
+  input: schema({ workspace: workspaceArg, block: blockArg, zoom: { type: "number", description: "The zoom in percent, as the canvas toolbar shows it (25 to 200, 100 is full size)." } }, ["workspace"]),
+  run({ workspace, block, zoom }) {
     needProject();
     const { key, ws } = load(workspace);
     const id = block ? needBlock(ws, key, block) : Object.keys(ws.nodes || {})[0];
-    if (id) xc.reveal(key, id);
-    return "Shown.";
+    if (zoom != null && !(typeof zoom === "number" && zoom > 0)) throw new Error(`zoom is a percentage such as 85, not ${JSON.stringify(zoom)}`);
+    if (id) xc.reveal(key, id, zoom);
+    return zoom != null ? `Shown at ${Math.round(Math.min(200, Math.max(25, zoom)))}%.` : "Shown.";
   },
 });
 

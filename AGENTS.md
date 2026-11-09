@@ -35,8 +35,8 @@ Tools, and how to use them well:
 | `connect` · `disconnect` | Wires, checked like drawn ones. Flow: `<block>.next` (or another flow such as `failed`) to `<block>.in`. Value: `<block>.<output>` to `<block>.<field>`; the field becomes a pin. |
 | `add_note` · `set_note` · `delete_note` | Notes: framed areas with a title and text; `around: [block ids]` frames blocks. |
 | `create_workspace` · `get_slash_commands` · `set_slash_commands` | Workspaces and the project's slash commands (`set` replaces the whole list). |
-| `open_builder` · `show_in_editor` | Show the user: open the Embed/Layout/Canvas Builder or Slash Commands, or centre the canvas on a block. |
-| `screenshot` | See the canvas as the user does (a workspace fitted to view, or centred on a block). Check layouts with it: blocks with previews (embeds, layouts, pictures) are tall. |
+| `open_builder` · `show_in_editor` | Show the user: open the Embed/Layout/Canvas Builder or Slash Commands, or centre the canvas on a block (at a `zoom` in percent, if given). |
+| `screenshot` | See the canvas as the user does (a workspace fitted to view, or centred on a block), at a `zoom` in percent (25 to 200) when given. Check layouts with it: blocks with previews (embeds, layouts, pictures) are tall. |
 | `get_problems` · `get_console` | What's wrong; what the bot logged (with the block that wrote it). |
 | `list_block_types` · `get_block_source` · `list_plugins` | Every block type by category; a block type's source code (its JavaScript file), to see exactly what it does; the plugins and their blocks. |
 | `get_app_settings` · `get_bot_settings` · `set_bot_settings` | The app's settings (reading only); Bot › Settings, changed with checks like the page's. Secrets only say whether one is saved and can't be set. |

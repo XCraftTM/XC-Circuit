@@ -58,7 +58,7 @@ Types for your code editor: `/// <reference types="@xc-circuit/sdk/editor" />` (
 | `xc.fieldValue(type, field, value)` | a value as the block keeps it: embeds, layouts and canvases as the builders save them |
 | `xc.openBuilder(workspace, id, field)` | open the Embed, Layout or Canvas Builder on a block's field |
 | `xc.blockRects(workspace)` | where its blocks are and how big, as drawn: `{ id: [x, y, width, height] }` |
-| `xc.select(workspace, ids)` · `xc.reveal(workspace, id)` | select · go to a block |
+| `xc.select(workspace, ids)` · `xc.reveal(workspace, id, zoom?)` | select · go to a block (at `zoom` percent, 25 to 200, when given) |
 | `xc.data.set(key, value)` · `xc.storage.set(key, value)` | save data |
 | `xc.log(…)` · `xc.success(…)` · `xc.warn(…)` · `xc.error(…)` | write to the Console |
 | `xc.setBotSettings({ key: value })` | change Bot › Settings (not secrets), checked against each setting's type and choices; returns the keys changed |

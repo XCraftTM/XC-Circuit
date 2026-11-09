@@ -60,7 +60,7 @@ const LAYOUT_PREVIEW_GUESS: f32 = 90.0;
 const GRID: f32 = 22.0;
 /// How far outside the view a block still counts as in view.
 const OFF_SCREEN_MARGIN: f32 = 48.0;
-const ZOOM_RANGE: (f32, f32) = (0.25, 2.0);
+pub(crate) const ZOOM_RANGE: (f32, f32) = (0.25, 2.0);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Dir {
@@ -97,6 +97,9 @@ pub struct CanvasView {
     pub pointer: Option<Pos2>,
     /// A block to center on the next time this canvas is drawn.
     pub focus: Option<String>,
+    /// A zoom to take the next time this canvas is drawn (after fitting it,
+    /// before centring on `focus`), around the middle of the canvas.
+    pub zoom_to: Option<f32>,
     /// Zone outlines from when the current block drag started.
     pub drag_zones: Vec<(String, Rect)>,
     /// Screen rectangles of the text boxes drawn last frame: (block, field) → box.
@@ -347,6 +350,13 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
 
     if !view.initialized {
         fit_view(view, outer, &layouts[..node_count], ws);
+    }
+    if let Some(z) = view.zoom_to.take() {
+        // Exactly that zoom, around the middle of the canvas.
+        let middle = outer.center() - outer.min;
+        let scene = (middle - view.offset) / view.zoom.max(0.01);
+        view.zoom = z.clamp(ZOOM_RANGE.0, ZOOM_RANGE.1);
+        view.offset = middle - scene * view.zoom;
     }
     if let Some(id) = view.focus.take()
         && let Some(l) = layouts.iter().find(|l| l.id == id)

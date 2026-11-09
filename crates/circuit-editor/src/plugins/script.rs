@@ -548,7 +548,9 @@ fn host_call(h: &mut dyn Host, method: &str, args: &str) -> Result<Value, String
         "activeWorkspace" => json!(h.active_workspace()),
         "selection" => json!(h.selection()),
         "reveal" => {
-            h.reveal(&s(0), &s(1));
+            // The zoom in percent, as the canvas toolbar shows it.
+            let zoom = a.get(2).and_then(Value::as_f64).filter(|p| p.is_finite() && *p > 0.0).map(|p| p as f32 / 100.0);
+            h.reveal(&s(0), &s(1), zoom);
             Value::Null
         }
         "blockName" => json!(h.block_name(&s(0))),
@@ -1121,7 +1123,7 @@ mod tests {
         fn selection(&self) -> Vec<String> {
             vec!["b".into()]
         }
-        fn reveal(&mut self, workspace: &str, node: &str) {
+        fn reveal(&mut self, workspace: &str, node: &str, _zoom: Option<f32>) {
             self.revealed.push((workspace.into(), node.into()));
         }
         fn block_name(&self, block: &str) -> Option<String> {

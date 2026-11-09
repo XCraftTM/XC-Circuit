@@ -321,8 +321,9 @@ fn saving_happens_on_its_own_thread() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// A block whose define() never ends is stopped once, then skipped for its
-/// kind: many of them can't freeze the window. Reloading plugins tries again.
+/// A block whose define() never ends is stopped a few times, then skipped
+/// for its kind: many of them can't freeze the window. Reloading plugins
+/// tries again.
 #[test]
 fn a_define_that_has_to_be_stopped_is_not_run_again() {
     let dir = std::env::temp_dir().join(format!("xc-slow-define-{}", std::process::id()));
@@ -347,14 +348,50 @@ fn a_define_that_has_to_be_stopped_is_not_run_again() {
         assert!(shape.fields.iter().any(|(k, _)| k == "a"), "with its fixed fields");
     }
     let took = start.elapsed();
-    assert!(took < circuit_plugins::engine::BUDGET * 4, "stopped once, not ten times: {took:?}");
+    assert!(took < circuit_plugins::engine::BUDGET * (shapes::STOPPED_TIMES + 3), "stopped a few times, not ten: {took:?}");
     let reports = ed.shapes.take_reports();
     assert_eq!(reports.len(), 1, "said once: {reports:?}");
-    assert!(reports[0].starts_with("Slow: its define() took longer than 50 ms"));
+    assert!(reports[0].starts_with("Slow: its define() took longer than 50 ms 3 times in a row"));
 
     ed.reload_plugins();
     ed.shapes.begin();
-    shapes::node_shape(&ed.reg, &ed.engine, &mut ed.shapes, "w", &ws, "0", &ed.define_ctx);
+    for _ in 0..shapes::STOPPED_TIMES {
+        shapes::node_shape(&ed.reg, &ed.engine, &mut ed.shapes, "w", &ws, "0", &ed.define_ctx);
+    }
     assert_eq!(ed.shapes.take_reports().len(), 1, "tried again after a reload");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// One define() that has to be stopped (the computer busy for a moment) only
+/// counts towards stopping its kind: a call in time starts the count again,
+/// and the block's shape is worked out anew, not kept without its pins.
+#[test]
+fn one_slow_define_doesnt_stop_its_kind() {
+    let dir = std::env::temp_dir().join(format!("xc-hiccup-define-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let plugin = dir.join("plugins").join("t.hiccup");
+    std::fs::create_dir_all(plugin.join("blocks")).unwrap();
+    std::fs::write(plugin.join("plugin.toml"), "id = \"t.hiccup\"\nname = \"Hiccup\"\nversion = \"1.0.0\"\n\n[contributes]\nblocks = [\"blocks/*.js\"]\n").unwrap();
+    // Slow only when told: its value `slow` is true.
+    std::fs::write(
+        plugin.join("blocks").join("hiccup.js"),
+        "module.exports = { id: 't.hiccup', kind: 'action', info: { name: 'Hiccup', version: '1.0.0' }, fields: { slow: { type: 'boolean', default: false } }, define({ values }) { if (values.slow) { while (true) {} } return { add: { extra: { type: 'text', default: '' } } }; }, run() {} };",
+    )
+    .unwrap();
+    let mut ed = Editor::new(vec![dir.join("plugins")], None).unwrap();
+    let mut ws = Workspace::new("W");
+    let node = |slow: bool| Node { block: "t.hiccup@1".into(), values: serde_json::json!({ "slow": slow }).as_object().cloned().unwrap(), ..Default::default() };
+    ws.nodes.insert("a".into(), node(true));
+    ws.nodes.insert("b".into(), node(false));
+    let has_extra = |ed: &mut Editor, id: &str| {
+        ed.shapes.begin();
+        shapes::node_shape(&ed.reg, &ed.engine, &mut ed.shapes, "w", &ws, id, &ed.define_ctx).unwrap().fields.iter().any(|(k, _)| k == "extra")
+    };
+    for _ in 0..shapes::STOPPED_TIMES - 1 {
+        assert!(!has_extra(&mut ed, "a"), "stopped: no pins of its own this time");
+        assert!(has_extra(&mut ed, "b"), "one in time: the count starts again");
+    }
+    assert!(has_extra(&mut ed, "b"));
+    assert!(ed.shapes.take_reports().is_empty(), "never stopped {} times in a row", shapes::STOPPED_TIMES);
     let _ = std::fs::remove_dir_all(&dir);
 }

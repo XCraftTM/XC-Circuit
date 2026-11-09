@@ -131,6 +131,7 @@ pub const UI_STRINGS: &[&str] = &[
     "Save and close",
     "Don't save",
     "Cancel",
+    "The project couldn't be saved, so XC Circuit stays open: your changes are still here. Save again, or close without saving.",
     "The blocks are up to date",
     "You have XC Circuit {version}.",
     "XC Circuit {version} is available.",

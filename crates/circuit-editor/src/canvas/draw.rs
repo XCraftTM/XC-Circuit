@@ -211,16 +211,19 @@ fn readable(job: &mut egui::text::LayoutJob, how: f32, text: Color32, bold: bool
 
 /// A grey `color` moved towards `text` by up to 60% (`how` from 0 to 1);
 /// colours (accents, errors) and the placeholder stay as they are.
-fn brighter(color: Color32, text: Color32, how: f32) -> Color32 {
+pub(super) fn brighter(color: Color32, text: Color32, how: f32) -> Color32 {
     if color == Color32::PLACEHOLDER {
         return color;
     }
-    let [r, g, b, a] = color.to_array();
+    // Color32 keeps its alpha multiplied in: the colour itself comes first,
+    // or a see-through grey (the "connect" hint) would get darker, not
+    // brighter, and all but vanish.
+    let [r, g, b, a] = color.to_srgba_unmultiplied();
     let grey = r.max(g).max(b) - r.min(g).min(b) < 32;
     if !grey {
         return color;
     }
-    let mixed = crate::ui::theme::mix(color, text, how.clamp(0.0, 1.0) * 0.6);
+    let mixed = crate::ui::theme::mix(Color32::from_rgb(r, g, b), text, how.clamp(0.0, 1.0) * 0.6);
     Color32::from_rgba_unmultiplied(mixed.r(), mixed.g(), mixed.b(), a)
 }
 

@@ -479,7 +479,8 @@ fn bot(ui: &mut Ui, ed: &mut Editor, theme: &Theme, asks: &mut Vec<Ask>) {
         toggle(ui, theme, &mut ed.prefs.auto_restart);
     });
     // Asked on a thread of its own: starting node can take long.
-    let node = circuit_runner::node::check_node_cached();
+    // Once a minute is plenty here (Check again asks at once).
+    let node = circuit_runner::node::check_node_every(std::time::Duration::from_secs(60));
     if node.is_none() {
         ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
     }

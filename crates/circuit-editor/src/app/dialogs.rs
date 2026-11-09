@@ -586,13 +586,22 @@ impl CircuitApp {
                     }
                 },
             );
-            if save || discard {
-                if save {
-                    self.ed.save();
+            if save {
+                // Written before closing: if it fails, the window stays open
+                // with the changes, and the Console says why.
+                self.ed.save();
+                watchdog::mark("saving before closing");
+                self.ed.finish_saving();
+                if self.ed.unsaved() {
+                    self.confirm_close = false;
+                    self.ed.log(Level::Error, t!("The project couldn't be saved, so XC Circuit stays open: your changes are still here. Save again, or close without saving."));
                 } else {
-                    // Chosen on purpose: no recovery offer next time.
-                    self.ed.clear_recovery();
+                    self.allow_close = true;
+                    ctx.send_viewport_cmd(ViewportCommand::Close);
                 }
+            } else if discard {
+                // Chosen on purpose: no recovery offer next time.
+                self.ed.clear_recovery();
                 self.allow_close = true;
                 ctx.send_viewport_cmd(ViewportCommand::Close);
             } else if cancel || close {

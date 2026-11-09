@@ -106,7 +106,8 @@ pub trait Host {
     /// Selected block ids in the active workspace.
     fn selection(&self) -> Vec<String>;
     /// Opens a workspace, selects a block and centers the canvas on it.
-    fn reveal(&mut self, workspace: &str, node: &str);
+    /// Opens a workspace and centres it on a block, at `zoom` (1 is 100%) when given.
+    fn reveal(&mut self, workspace: &str, node: &str, zoom: Option<f32>);
     /// The display name of a block type such as `discord.send_message`.
     fn block_name(&self, block: &str) -> Option<String>;
     /// A value from the project's `data` section, as JSON.

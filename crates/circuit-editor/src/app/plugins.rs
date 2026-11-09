@@ -173,25 +173,33 @@ impl CircuitApp {
             None => self.ed.active_workspace.clone().filter(|k| project.workspaces.contains_key(k)).or_else(|| project.workspaces.keys().next().cloned()).ok_or("The project has no workspaces.")?,
         };
         let name = project.workspaces[&key].name.clone();
-        match args["block"].as_str().map(str::trim).filter(|b| !b.is_empty()) {
+        let zoom = shot_zoom(&args["zoom"])?;
+        let at = zoom.map(|z| format!(" at {}%", (z * 100.0).round())).unwrap_or_default();
+        let about = match args["block"].as_str().map(str::trim).filter(|b| !b.is_empty()) {
             Some(block) => {
                 if !project.workspaces[&key].nodes.contains_key(block) {
                     return Err(format!("Workspace {key} has no block \"{block}\"."));
                 }
                 self.ed.reveal(&key, block);
-                Ok(format!("Workspace \"{name}\" ({key}), centred on block {block}."))
+                format!("Workspace \"{name}\" ({key}), centred on block {block}{at}.")
             }
             None => {
                 self.ed.actions.push(crate::editor::Action::OpenWorkspace(key.clone()));
-                if args["fit"].as_bool() != Some(false) {
-                    // Fitted when it's drawn next.
+                // Fitted (when it's drawn next) unless told not to, or given a zoom.
+                if args["fit"].as_bool().unwrap_or(zoom.is_none()) {
                     if let Some(view) = self.ed.views.get_mut(&key) {
                         view.initialized = false;
                     }
+                    format!("Workspace \"{name}\" ({key}), fitted to show every block{}.", if at.is_empty() { String::new() } else { format!(", then zoomed to{at}") })
+                } else {
+                    format!("Workspace \"{name}\" ({key}){}.", if at.is_empty() { String::from(", as it was") } else { at.clone() })
                 }
-                Ok(format!("Workspace \"{name}\" ({key}), fitted to show every block."))
             }
+        };
+        if let Some(z) = zoom {
+            self.ed.set_zoom(&key, z);
         }
+        Ok(about)
     }
 
     /// Asks for the window's picture once the canvas has settled, and answers
@@ -296,9 +304,24 @@ fn screenshot_tool() -> serde_json::Value {
         "inputSchema": { "type": "object", "properties": {
             "workspace": { "type": "string", "description": "The workspace's key or name." },
             "block": { "type": "string", "description": "A block id to centre on (instead of fitting everything)." },
-            "fit": { "type": "boolean", "description": "Fit every block and note into view (the default without a block); false keeps the zoom." },
+            "fit": { "type": "boolean", "description": "Fit every block and note into view (the default without a block or zoom); false keeps the zoom." },
+            "zoom": { "type": "number", "description": "The zoom in percent, as the canvas toolbar shows it (25 to 200, 100 is full size): to see how the canvas looks at a zoom, or to look closer. Around a block when one is given, else around the middle of the canvas." },
         } },
     })
+}
+
+/// A screenshot's `zoom` (percent) as a scale; none when not given.
+fn shot_zoom(v: &serde_json::Value) -> Result<Option<f32>, String> {
+    match v {
+        serde_json::Value::Null => Ok(None),
+        v => match v.as_f64() {
+            Some(p) if p.is_finite() && p > 0.0 => {
+                let (lo, hi) = crate::canvas::ZOOM_RANGE;
+                Ok(Some((p as f32 / 100.0).clamp(lo, hi)))
+            }
+            _ => Err(format!("zoom is a percentage such as 85, not {v}.")),
+        },
+    }
 }
 
 /// An agent's screenshot on its way.

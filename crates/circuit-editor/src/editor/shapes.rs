@@ -12,9 +12,14 @@ pub struct ShapeCache {
     pub(super) known: HashMap<String, Known>,
     /// Counts passes over the blocks; see `begin`.
     pub(super) pass: u64,
-    /// Block types whose `define()` had to be stopped: it isn't run for them
-    /// again until plugins reload, so many such blocks can't freeze the window.
+    /// Block types whose `define()` had to be stopped again and again: it
+    /// isn't run for them until plugins reload, so many such blocks can't
+    /// freeze the window.
     too_slow: HashSet<String>,
+    /// How many times in a row a block type's `define()` had to be stopped.
+    /// Once is often a hiccup (a virus scan, the computer busy for a moment),
+    /// not the block: a call that finishes in time starts the count again.
+    stopped: HashMap<String, u32>,
     /// What to tell in the Console about them.
     reports: Vec<String>,
 }
@@ -34,6 +39,7 @@ impl ShapeCache {
     /// After plugins reload: every block's `define()` gets a new chance.
     pub fn forget_too_slow(&mut self) {
         self.too_slow.clear();
+        self.stopped.clear();
     }
 
     /// What to say about blocks whose `define()` was stopped, once each.
@@ -257,17 +263,27 @@ pub fn node_shape(reg: &Registry, engine: &BlockEngine, cache: &mut ShapeCache, 
         }
     }
     let known: HashSet<String> = cache.known.get(ws_key).and_then(|k| k.names.get(node_id)).map(|(v, _)| v.iter().cloned().collect()).unwrap_or_default();
+    let mut timed_out = false;
     let define = if def.has_define && !cache.too_slow.contains(&def.id) {
         let engine_key = reg.engine_keys.get(&def.id)?;
         let start = std::time::Instant::now();
         let result = engine.define(engine_key, &node.values, &connected, project);
         if result.is_err() && start.elapsed() >= circuit_plugins::engine::BUDGET {
-            cache.too_slow.insert(def.id.clone());
-            cache.reports.push(format!(
-                "{}: its define() took longer than {} ms, so it was stopped. Blocks of this kind show only their fixed fields and pins until its plugin is reloaded.",
-                def.name,
-                circuit_plugins::engine::BUDGET.as_millis()
-            ));
+            let times = cache.stopped.entry(def.id.clone()).or_insert(0);
+            *times += 1;
+            if *times >= STOPPED_TIMES {
+                cache.too_slow.insert(def.id.clone());
+                cache.reports.push(format!(
+                    "{}: its define() took longer than {} ms {STOPPED_TIMES} times in a row, so it was stopped. Blocks of this kind show only their fixed fields and pins until its plugin is reloaded.",
+                    def.name,
+                    circuit_plugins::engine::BUDGET.as_millis()
+                ));
+            } else {
+                // Worked out again next time, not kept like this.
+                timed_out = true;
+            }
+        } else {
+            cache.stopped.remove(&def.id);
         }
         result.ok()
     } else {
@@ -279,6 +295,12 @@ pub fn node_shape(reg: &Registry, engine: &BlockEngine, cache: &mut ShapeCache, 
         reg.mark_id_field(f);
     }
     let shape = Arc::new(shape);
-    cache.blocks.entry(ws_key.to_string()).or_default().insert(node_id.to_string(), (hash, shape.clone()));
+    if !timed_out {
+        cache.blocks.entry(ws_key.to_string()).or_default().insert(node_id.to_string(), (hash, shape.clone()));
+    }
     Some(shape)
 }
+
+/// How many times in a row a block type's `define()` is stopped before it's
+/// no longer run (until plugins reload).
+pub const STOPPED_TIMES: u32 = 3;

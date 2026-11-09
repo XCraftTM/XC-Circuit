@@ -353,8 +353,11 @@ impl api::Host for EditorHost<'_> {
         self.ed.active_workspace.as_ref().map(|k| self.ed.selection(k)).unwrap_or_default()
     }
 
-    fn reveal(&mut self, workspace: &str, node: &str) {
+    fn reveal(&mut self, workspace: &str, node: &str, zoom: Option<f32>) {
         self.ed.reveal(workspace, node);
+        if let Some(z) = zoom {
+            self.ed.set_zoom(workspace, z);
+        }
     }
 
     fn block_name(&self, block: &str) -> Option<String> {

@@ -148,7 +148,7 @@
     /** The selected block ids in the active workspace. */
     selection: () => host("selection"),
     /** Opens a workspace, selects a block and centres the canvas on it. */
-    reveal: (workspace, block) => host("reveal", workspace, block),
+    reveal: (workspace, block, zoom) => host("reveal", workspace, block, zoom ?? null),
     /** Selects blocks of a workspace. */
     select: (workspace, blocks) => host("select", workspace, Array.isArray(blocks) ? blocks.map(String) : [String(blocks)]),
     /** Places a block ("core.log") on a workspace's canvas: { x, y, values }. Returns its id. It can be undone. */

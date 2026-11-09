@@ -619,3 +619,44 @@ fn tidy_example_layouts() {
         }
     }
 }
+
+/// Small grey text zoomed out gets brighter, never darker: a see-through
+/// grey (the "connect" hint) kept its colour at 85% only by luck before, as
+/// its alpha was counted twice and it all but vanished.
+#[test]
+fn small_grey_text_never_gets_darker() {
+    let text = egui::Color32::from_rgb(230, 232, 235);
+    let hint = crate::ui::theme::with_alpha(egui::Color32::from_rgb(160, 166, 175), 140);
+    assert_eq!(super::draw::brighter(hint, text, 0.0), hint, "not brighter yet: just the same");
+    let more = super::draw::brighter(hint, text, 1.0);
+    assert!(more.r() > hint.r() && more.a() == hint.a(), "brighter, as see-through as before: {more:?}");
+    let solid = egui::Color32::from_rgb(120, 120, 120);
+    assert_eq!(super::draw::brighter(solid, text, 0.0), solid);
+}
+
+/// A zoom asked for (by an agent's screenshot or show_in_editor) is taken
+/// the next time the canvas is drawn, kept within the canvas's range, and
+/// a block asked for at the same time ends up in the middle at that zoom.
+#[test]
+fn a_zoom_asked_for_is_taken_when_drawn() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+    ed.open_project(&root.join("examples/DemoBot"));
+    let ctx = egui::Context::default();
+    for _ in 0..3 {
+        frame(&ctx, &mut ed, "rank-command", vec![]);
+    }
+    ed.set_zoom("rank-command", 0.85);
+    frame(&ctx, &mut ed, "rank-command", vec![]);
+    assert!((ed.views["rank-command"].zoom - 0.85).abs() < 1e-4, "{}", ed.views["rank-command"].zoom);
+    ed.reveal("rank-command", "4");
+    ed.set_zoom("rank-command", 9.0);
+    frame(&ctx, &mut ed, "rank-command", vec![]);
+    let view = &ed.views["rank-command"];
+    assert_eq!(view.zoom, ZOOM_RANGE.1, "kept within the range");
+    let rect = view.block_rects().into_iter().find(|(id, _)| id == "4").unwrap().1;
+    // The canvas is the whole window here (`frame`'s 1400 × 900).
+    let canvas = Rect::from_min_size(Pos2::ZERO, vec2(1400.0, 900.0));
+    let on_screen = view.to_global(canvas.min) * rect.center();
+    assert!((on_screen - canvas.center()).length() < 2.0, "the block in the middle: {on_screen:?} vs {:?}", canvas.center());
+}

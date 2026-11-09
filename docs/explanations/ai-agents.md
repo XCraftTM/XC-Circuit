@@ -41,7 +41,7 @@ What the agent can do:
 | `create_workspace` · `get_slash_commands` · `set_slash_commands` | workspaces and commands |
 | `add_note` · `set_note` · `delete_note` | notes on the canvas, also framing blocks you name |
 | `open_builder` | opens the Embed, Layout or Canvas Builder (or Slash Commands) on a block, to show you |
-| `screenshot` | a picture of the canvas (a workspace fitted to view, or centred on a block), so the agent sees what it built |
+| `screenshot` | a picture of the canvas (a workspace fitted to view, or centred on a block, at a zoom it picks if it likes), so the agent sees what it built |
 | `get_problems` · `get_console` | what's wrong, and what the bot logged |
 | `list_block_types` · `get_block_source` · `list_plugins` | every block, a block's code (to see exactly what it does), the plugins |
 | `get_app_settings` · `get_bot_settings` · `set_bot_settings` | XC Circuit's settings (to read), and Bot › Settings (to read and change; never the token) |

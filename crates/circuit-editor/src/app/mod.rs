@@ -777,6 +777,8 @@ impl eframe::App for CircuitApp {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        // Waiting from here on (the save, the bot stopping) isn't a freeze.
+        watchdog::closing();
         // A save (Save and close) may still be being written.
         self.ed.finish_saving();
         self.bot.stop(&mut self.ed);

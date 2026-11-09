@@ -148,17 +148,10 @@ impl Histories {
     /// Keeps at most `limit` steps per workspace (and for the project's
     /// settings) from now on: Settings › Editor. Fewer than before forgets
     /// the oldest steps at once, and the memory their copies took.
+    /// How many steps to keep. Older ones go with the next change, not at
+    /// once: dragging Settings' slider down and up again loses nothing.
     pub fn set_limit(&mut self, limit: usize) {
-        if limit == self.limit {
-            return;
-        }
         self.limit = limit;
-        for h in self.workspaces.values_mut() {
-            h.keep(limit);
-        }
-        if let Some(h) = &mut self.project {
-            h.keep(limit);
-        }
     }
 
     /// Takes the recorded state as saved; `track` it first.
@@ -250,10 +243,17 @@ mod tests {
         }
         assert_eq!(undos(&mut h, &mut p), 3, "the newest three");
         assert_eq!(p.workspaces["main"].nodes.len(), 5, "redone again");
+        // Settings' slider dragged down and back up: nothing lost.
         h.set_limit(2);
+        h.set_limit(3);
+        assert_eq!(undos(&mut h, &mut p), 3, "kept while the slider moves");
+        // Fewer: the oldest go with the next change.
+        h.set_limit(2);
+        p.workspaces.get_mut("main").unwrap().nodes.clear();
+        h.track(&p, true);
         assert_eq!(undos(&mut h, &mut p), 2, "fewer: the oldest are forgotten");
         h.set_limit(10);
-        p.workspaces.get_mut("main").unwrap().nodes.clear();
+        p.workspaces.get_mut("main").unwrap().nodes.insert("x".into(), Default::default());
         h.track(&p, true);
         assert_eq!(undos(&mut h, &mut p), 3, "more: room for new steps");
         let _ = std::fs::remove_dir_all(&dir);
