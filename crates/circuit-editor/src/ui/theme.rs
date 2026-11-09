@@ -247,12 +247,41 @@ pub fn hex_color(s: &str) -> Option<Color32> {
     parse_hex(s).map(|[r, g, b, a]| Color32::from_rgba_unmultiplied(r, g, b, a))
 }
 
+/// `c` as see-through as `alpha` says. A colour is kept with its alpha
+/// already counted into its red, green and blue; they are read without it
+/// here, or a colour that is see-through already would get darker.
 pub fn with_alpha(c: Color32, alpha: u8) -> Color32 {
-    Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), alpha)
+    let [r, g, b, _] = c.to_srgba_unmultiplied();
+    Color32::from_rgba_unmultiplied(r, g, b, alpha)
 }
 
-/// Blends `a` toward `b` by `t` (0..1).
+/// Blends `a` toward `b` by `t` (0..1), their alpha too.
 pub fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
-    let l = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
-    Color32::from_rgba_unmultiplied(l(a.r(), b.r()), l(a.g(), b.g()), l(a.b(), b.b()), l(a.a(), b.a()))
+    let (a, b) = (a.to_srgba_unmultiplied(), b.to_srgba_unmultiplied());
+    let l = |i: usize| (a[i] as f32 + (b[i] as f32 - a[i] as f32) * t).round() as u8;
+    Color32::from_rgba_unmultiplied(l(0), l(1), l(2), l(3))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Colours that are see-through keep their colour when mixed or made
+    /// more or less see-through (they got darker: their alpha counted twice).
+    #[test]
+    fn see_through_colours_keep_their_colour() {
+        let accent = Color32::from_rgb(0x00, 0xD8, 0xF0);
+        let action = Color32::from_rgb(0x3D, 0xFF, 0x6E);
+        let half = with_alpha(accent, 150);
+        assert_eq!(mix(half, action, 0.0), half, "not mixed at all: as it was");
+        assert_eq!(with_alpha(half, 150), half);
+        let near = |a: Color32, b: Color32| a.to_array().iter().zip(b.to_array()).all(|(x, y)| x.abs_diff(y) <= 1);
+        assert!(near(with_alpha(half, 255), accent), "{:?}", with_alpha(half, 255));
+        assert!(near(mix(half, action, 1.0), action));
+        // Colours that aren't see-through mix as before.
+        assert_eq!(mix(accent, action, 0.0), accent);
+        assert_eq!(mix(accent, action, 1.0), action);
+        assert_eq!(mix(Color32::from_rgb(0, 0, 0), Color32::from_rgb(200, 100, 50), 0.5), Color32::from_rgb(100, 50, 25));
+        assert_eq!(with_alpha(accent, 255), accent);
+    }
 }
