@@ -109,8 +109,14 @@ jobs:
           node runtime/test/captcha.js
           node runtime/test/transcript.js
 
+      # On Windows also a .pdb with line numbers next to the program (not in
+      # the .exe): it turns the freeze detector's dumps (freezes/*.dmp) into
+      # functions and lines. Kept with the run below, not released.
       - name: Release build
-        run: cargo build -p circuit-editor --release --target ${{ matrix.target }}
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then export CARGO_PROFILE_RELEASE_DEBUG=line-tables-only; fi
+          cargo build -p circuit-editor --release --target ${{ matrix.target }}
 
       # The program finds plugins/ and examples/ next to itself. The licences
       # go along: the app's own, the crates built into it, and the font's.
@@ -185,6 +191,15 @@ jobs:
           name: XC-Circuit-${{ matrix.name }}
           path: dist/*
 
+      # The .pdb, to read a freeze dump from this build with (open the .dmp
+      # in Visual Studio or WinDbg and point it at this folder).
+      - uses: actions/upload-artifact@v7
+        if: runner.os == 'Windows'
+        with:
+          name: symbols-${{ matrix.name }}
+          path: target/${{ matrix.target }}/release/xc_circuit.pdb
+          retention-days: 90
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [plan, build]
@@ -218,6 +233,8 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           path: dist
+          # The downloads only (not the symbols).
+          pattern: XC-Circuit-*
           merge-multiple: true
       # The notes are the version's part of CHANGELOG.md.
       - name: Release notes
