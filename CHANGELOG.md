@@ -52,6 +52,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **Canvas Builder: the preview reads a colour of digits as the bot does**: a colour written as six digits without `#` (such as `112233`, from a preview value) was shown as another colour than the bot draws, because the preview took it for a plain number. It's read as hex, like the bot does.
 - **Layout Builder and Modal Builder: a new part's custom id isn't one that's taken**: new buttons, menus and questions were numbered by how many parts there were, so after removing one the next got an id another already had, and "used twice" showed up right away. They're numbered one above the highest now.
 - **Stored Data doesn't save over a store.json it couldn't read**: when the bot's `store.json` was there but couldn't be read (held by another program for a moment, or cut off), the panel showed "Nothing stored yet", and adding a value then saved a file with only that value over everything the bot had stored. The panel now says the file can't be read and changes nothing until it can.
+- **The colour picker remembers a colour also when closed with its own button**: a colour showed up under Recent when the picker was closed with Escape or a click elsewhere, but not with a click on the swatch that opened it.
 
 ## 0.2.9
 

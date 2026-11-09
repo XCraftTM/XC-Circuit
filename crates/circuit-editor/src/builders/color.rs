@@ -94,7 +94,11 @@ pub fn color_button(ui: &mut Ui, id: Id, color: &mut Color32, theme: &Theme, wid
 
     if resp.clicked() {
         open = match open {
-            Some(_) => None,
+            // Closed by its own button: remembered like any other way of closing it.
+            Some(_) => {
+                remember(ui.ctx(), *color);
+                None
+            }
             None => Some(Open { hsva: Hsva::from(*color), hex: hex.clone(), fresh: true }),
         };
     }
@@ -341,6 +345,15 @@ mod tests {
         run(vec![], &mut color);
         assert!(ctx.data(|d| d.get_temp::<Open>(Id::unique("c").with("open"))).is_none(), "Escape closes it");
         assert_eq!(recent(&ctx).first(), Some(&[color.r(), color.g(), color.b()]), "the picked color is remembered");
+
+        // Closed with a click on the swatch itself, it is remembered too.
+        let mut other = Color32::from_rgb(1, 2, 3);
+        run(click(pos2(20.0, 10.0)), &mut other);
+        run(vec![], &mut other);
+        run(click(pos2(20.0, 10.0)), &mut other);
+        run(vec![], &mut other);
+        assert!(ctx.data(|d| d.get_temp::<Open>(Id::unique("c").with("open"))).is_none());
+        assert_eq!(recent(&ctx).first(), Some(&[1, 2, 3]));
     }
 
     #[test]
