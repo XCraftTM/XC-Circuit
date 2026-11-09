@@ -163,7 +163,7 @@ The tools of every plugin that is on are offered together; the bundled AI agents
 
 **Errors** name the file and line: in the Console for commands and events, in the Problems panel for checks, in the panel itself for panels.
 
-**Modules.** `require("./lib/util.js")` loads another file of the plugin (`.js`, `.ts`, `.json`). Only the plugin's own files.
+**Modules.** `require("./lib/util.js")` loads another file of the plugin (`.js`, `.ts`, `.json`). Only the plugin's own files: not one a link in its folder points to elsewhere, and no name with a colon in it.
 
 **State.** Variables at the top of the script live until the script reloads. Use `xc.storage` for what should last, `xc.data` for what belongs to the project. Keys in `xc.data` are shared, so prefix yours: `"acme.notes"`.
 

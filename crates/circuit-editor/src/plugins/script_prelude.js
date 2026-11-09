@@ -2,6 +2,11 @@
 // plugin's script (`__xc`). Everything crosses to the editor as JSON text.
 "use strict";
 (() => {
+  // The editor's own functions are kept here and taken off the global
+  // object: a plugin's code (and what an AI agent runs in it) reaches the
+  // editor only through `xc` and `require`.
+  const { __host, __self, __read, __compile } = globalThis;
+  for (const name of ["__host", "__self", "__read", "__compile"]) delete globalThis[name];
   const host = (method, ...args) => {
     const r = JSON.parse(__host(method, JSON.stringify(args)));
     if (r.error !== undefined) throw new Error(r.error);

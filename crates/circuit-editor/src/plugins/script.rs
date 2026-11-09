@@ -501,7 +501,7 @@ fn plain_path(p: PathBuf) -> PathBuf {
 
 /// A file inside the plugin's folder, if it is one.
 fn plugin_file(root: &Path, name: &str) -> Option<PathBuf> {
-    inside(root, Path::new(name)).filter(|p| p.is_file())
+    inside(root, Path::new(name)).filter(|p| p.is_file() && really_inside(root, p))
 }
 
 fn reply(result: Result<Value, String>) -> String {
@@ -629,11 +629,19 @@ fn inside(root: &Path, path: &Path) -> Option<PathBuf> {
             Component::ParentDir if out.components().count() > depth => {
                 out.pop();
             }
-            Component::Normal(part) => out.push(part),
+            // Never a name with a colon: on Windows `C:` is a drive, and
+            // adding one to a path replaces the whole path with it.
+            Component::Normal(part) if !part.to_string_lossy().contains(':') => out.push(part),
             _ => return None,
         }
     }
-    Some(out)
+    out.starts_with(root).then_some(out)
+}
+
+/// Whether a file found by [`inside`] really is in the plugin's folder: a
+/// link in the folder may point anywhere.
+fn really_inside(root: &Path, file: &Path) -> bool {
+    file.canonicalize().is_ok_and(|real| plain_path(real).starts_with(root))
 }
 
 /// A file for `require(name)` from a module in the plugin folder `from`
@@ -645,6 +653,9 @@ fn read_module(root: &Path, from: &str, name: &str) -> Result<(PathBuf, String, 
     let base = inside(root, &Path::new(from).join(name)).ok_or_else(|| format!("require(\"{name}\"): that's outside the plugin's folder"))?;
     let candidates = [base.clone(), base.with_extension("js"), base.with_extension("ts"), base.join("index.js")];
     let path = candidates.into_iter().find(|p| p.is_file()).ok_or_else(|| format!("require(\"{name}\"): no such file in the plugin"))?;
+    if !really_inside(root, &path) {
+        return Err(format!("require(\"{name}\"): that's outside the plugin's folder"));
+    }
     let text = std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
     let source = match path.extension().and_then(|e| e.to_str()) {
         Some("ts") => circuit_plugins::ts::to_javascript(&path, &text).map_err(|e| format!("{}: {e}", path.display()))?,
@@ -1391,7 +1402,54 @@ mod tests {
         let root = Path::new("/plugins/demo");
         assert_eq!(inside(root, Path::new("lib/../util.js")), Some(PathBuf::from("/plugins/demo/util.js")));
         assert_eq!(inside(root, Path::new("../../etc/passwd")), None);
+        // A drive in a name would replace the whole path on Windows
+        // ("C:Windows\win.ini", a file outside the plugin).
+        for name in ["./C:/Windows/win.ini", "./C:Windows/win.ini", "./D:/secret.txt", "lib/C:.ssh/config", "util.js:other"] {
+            assert_eq!(inside(root, Path::new(name)), None, "{name}");
+        }
         let err = read_module(root, "", "fs").unwrap_err();
         assert!(err.contains("only load their own files"), "{err}");
+
+        // With real files: the plugin's own load, a drive's don't, and neither
+        // does what a link in the plugin points to outside it.
+        let dir = plugin_dir(&[("editor.js", ""), ("lib/util.js", "module.exports = 1;")]);
+        let root = plain_path(dir.canonicalize().unwrap());
+        assert!(read_module(&root, "", "./lib/util").is_ok());
+        assert!(plugin_file(&root, "lib/util.js").is_some());
+        let err = read_module(&root, "lib", "./C:/Windows/win.ini").unwrap_err();
+        assert!(err.contains("outside the plugin's folder"), "{err}");
+        assert!(plugin_file(&root, "C:/Windows/win.ini").is_none());
+        let outside = dir.with_extension("outside.js");
+        std::fs::write(&outside, "module.exports = 'secret';").unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&outside, root.join("link.js")).unwrap();
+        #[cfg(windows)]
+        let linked = std::os::windows::fs::symlink_file(&outside, root.join("link.js")).is_ok();
+        #[cfg(unix)]
+        let linked = true;
+        // Windows only lets some users make links: without one, nothing to check.
+        if linked {
+            let err = read_module(&root, "", "./link.js").unwrap_err();
+            assert!(err.contains("outside the plugin's folder"), "{err}");
+            assert!(plugin_file(&root, "link.js").is_none());
+        }
+        let _ = std::fs::remove_file(outside);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A plugin's code reaches the editor through `xc` and `require` only:
+    /// the functions behind them aren't there for it to call.
+    #[test]
+    fn scripts_cannot_reach_the_editor_s_own_functions() {
+        let dir = plugin_dir(&[(
+            "editor.js",
+            "xc.command({ id: 't.look', title: 'Look', run() { xc.log(['__host', '__read', '__self', '__compile'].map((n) => typeof globalThis[n]).join(' ')); xc.log(typeof xc.project, typeof require) } });",
+        )]);
+        let mut p = load("P", &dir, "editor.js").0.unwrap();
+        let mut h = host();
+        p.run_command("t.look", &mut h).unwrap();
+        assert_eq!(h.log[0].1, "undefined undefined undefined undefined");
+        assert_eq!(h.log[1].1, "function function");
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
