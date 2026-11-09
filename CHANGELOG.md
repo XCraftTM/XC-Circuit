@@ -2,7 +2,7 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## Unreleased
+## 0.2.9
 
 ### Added
 - **Channel Info** (Discord and Fluxer): reads one thing about a channel, as Role Info and Server Info do for roles and servers: its name, id, mention, kind, topic, creation date, server, category, position, age restriction, slowmode, the channels in a category, its last message and pinned messages, and a voice channel's bitrate and user limit. On Discord also its link, members, active threads and forum tags, and for a thread the channel it's in, who started it, and whether it's archived or locked.
