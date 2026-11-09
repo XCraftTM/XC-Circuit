@@ -246,6 +246,15 @@ fn colour(s: &str, samples: &IndexMap<String, String>, fallback: Color32) -> Col
     if s.is_empty() {
         return fallback;
     }
+    // As the bot reads it: hex first, with or without its # (so 112233 is
+    // #112233), and only other whole numbers as a colour's number.
+    let digits = s.trim_start_matches('#');
+    if matches!(digits.len(), 3 | 6 | 8)
+        && digits.chars().all(|c| c.is_ascii_hexdigit())
+        && let Some(c) = hex_color(s)
+    {
+        return c;
+    }
     if let Ok(n) = s.parse::<u32>() {
         return Color32::from_rgb((n >> 16) as u8, (n >> 8) as u8, n as u8);
     }
@@ -1064,6 +1073,22 @@ fn gradient(ui: &mut Ui, theme: &Theme, l: &mut Layer, id: Id) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The preview reads a colour as the bot does: six digits are hex, with
+    /// or without #; another whole number is the colour's number.
+    #[test]
+    fn colours_are_read_as_the_bot_reads_them() {
+        let none = IndexMap::new();
+        let read = |s: &str| colour(s, &none, Color32::BLACK);
+        assert_eq!(read("112233"), Color32::from_rgb(0x11, 0x22, 0x33));
+        assert_eq!(read("#112233"), Color32::from_rgb(0x11, 0x22, 0x33));
+        assert_eq!(read("FF5CA8"), Color32::from_rgb(0xFF, 0x5C, 0xA8));
+        assert_eq!(read("5793266"), Color32::from_rgb(0x58, 0x65, 0xF2), "a number, as Discord gives a role's colour");
+        assert_eq!(read(""), Color32::BLACK);
+        let mut samples = IndexMap::new();
+        samples.insert("role.color".to_string(), "5793266".to_string());
+        assert_eq!(colour("${role.color}", &samples, Color32::BLACK), Color32::from_rgb(0x58, 0x65, 0xF2));
+    }
 
     #[test]
     fn finds_and_fills_in_expressions() {

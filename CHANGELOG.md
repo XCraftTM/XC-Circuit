@@ -49,6 +49,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **A wire picked up and dropped on a pin it doesn't fit goes back**: it was deleted, as if dropped on empty canvas. Dropped on empty canvas it is still deleted.
 - **New Project reads its starters once**: while the window was open, every starter's files were read from the disk again for each frame drawn (60 times a second), and the folder the project goes in was looked up as often, which could hold the window up with a location on a slow or unplugged network drive. The starters are read when the window opens, the folder when you change the name or location and about once a second.
 - **A very long line in the Console no longer slows the app down**: a line of hundreds of thousands of characters (a big JSON printed by the bot, say) was measured again from its start for each row it wraps into, for every frame the Console was drawn. With a line of a million characters that took a tenth of a second per frame. It's done in one pass now.
+- **Canvas Builder: the preview reads a colour of digits as the bot does**: a colour written as six digits without `#` (such as `112233`, from a preview value) was shown as another colour than the bot draws, because the preview took it for a plain number. It's read as hex, like the bot does.
 
 ## 0.2.9
 
