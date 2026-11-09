@@ -22,6 +22,8 @@ const ANSWER_WITHIN: Duration = Duration::from_secs(60);
 pub struct Pending {
     pub request: Value,
     reply: Sender<Value>,
+    /// The agent was told it took too long, so it must not be done after all.
+    given_up: Arc<AtomicBool>,
 }
 
 impl Pending {
@@ -73,7 +75,7 @@ impl Bridge {
 
     /// The requests that came in since the last call.
     pub fn poll(&self) -> Vec<Pending> {
-        self.rx.try_iter().collect()
+        waiting(&self.rx)
     }
 
     /// How many agents are connected.
@@ -114,14 +116,10 @@ fn serve(stream: TcpStream, token: &str, tx: &Sender<Pending>, stop: &AtomicBool
             break;
         }
         let answer = match serde_json::from_str::<Value>(&line) {
-            Ok(request) => {
-                let (reply, wait) = channel();
-                if tx.send(Pending { request, reply }).is_err() {
-                    break;
-                }
-                ctx.request_repaint();
-                wait.recv_timeout(ANSWER_WITHIN).unwrap_or_else(|_| json!({ "error": "XC Circuit didn't answer in time (is a dialog open?)" }))
-            }
+            Ok(request) => match ask(tx, request, ANSWER_WITHIN, || ctx.request_repaint()) {
+                Some(answer) => answer,
+                None => break,
+            },
             Err(e) => json!({ "error": format!("not JSON: {e}") }),
         };
         if writeln!(out, "{answer}").is_err() {
@@ -130,6 +128,26 @@ fn serve(stream: TcpStream, token: &str, tx: &Sender<Pending>, stop: &AtomicBool
     }
     agents.fetch_sub(1, Ordering::Relaxed);
     ctx.request_repaint();
+}
+
+/// Queues a request for the app (woken with `wake`) and waits for its answer,
+/// at most `within`. None when the app is gone. A request the app didn't get
+/// to in time is given up: the agent hears that it failed and may ask again,
+/// so doing it later as well would do it twice.
+fn ask(tx: &Sender<Pending>, request: Value, within: Duration, wake: impl Fn()) -> Option<Value> {
+    let (reply, wait) = channel();
+    let given_up = Arc::new(AtomicBool::new(false));
+    tx.send(Pending { request, reply, given_up: given_up.clone() }).ok()?;
+    wake();
+    Some(wait.recv_timeout(within).unwrap_or_else(|_| {
+        given_up.store(true, Ordering::Relaxed);
+        json!({ "error": "XC Circuit didn't answer in time (is a dialog open?). It wasn't done: try again." })
+    }))
+}
+
+/// The requests waiting for the app, without the ones given up meanwhile.
+fn waiting(rx: &Receiver<Pending>) -> Vec<Pending> {
+    rx.try_iter().filter(|p| !p.given_up.load(Ordering::Relaxed)).collect()
 }
 
 /// A secret for the connection: 128 random bits as hex.
@@ -143,4 +161,39 @@ fn new_token() -> String {
         h.finish()
     };
     format!("{:016x}{:016x}", part(1), part(2))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A request the app answers in time gets its answer; one it didn't get
+    /// to (a dialog was open) is told so and is not done later.
+    #[test]
+    fn a_request_given_up_is_not_done_later() {
+        let (tx, rx) = channel();
+        let app = std::thread::spawn(move || {
+            let pending: Pending = rx.recv().unwrap();
+            assert_eq!(pending.request["op"], "list");
+            pending.answer(json!({ "tools": [] }));
+            rx
+        });
+        let woken = AtomicBool::new(false);
+        let answer = ask(&tx, json!({ "op": "list" }), Duration::from_secs(10), || woken.store(true, Ordering::Relaxed));
+        assert_eq!(answer, Some(json!({ "tools": [] })));
+        assert!(woken.load(Ordering::Relaxed), "the app is woken for it");
+        let rx = app.join().unwrap();
+
+        // Nobody answers: the agent hears it failed, and the app never sees it.
+        let late = ask(&tx, json!({ "op": "call", "name": "add_block" }), Duration::from_millis(20), || {}).unwrap();
+        assert!(late["error"].as_str().unwrap().contains("wasn't done"), "{late}");
+        tx.send(Pending { request: json!({ "op": "list" }), reply: channel().0, given_up: Arc::default() }).unwrap();
+        let left = waiting(&rx);
+        assert_eq!(left.len(), 1, "only the one still waited for");
+        assert_eq!(left[0].request["op"], "list");
+
+        // The app closed: nothing to wait for.
+        drop(rx);
+        assert_eq!(ask(&tx, json!({}), Duration::from_secs(10), || {}), None);
+    }
 }
