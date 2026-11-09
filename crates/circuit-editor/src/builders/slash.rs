@@ -1232,8 +1232,12 @@ fn choices(ui: &mut Ui, theme: &Theme, o: &mut SlashOption, numeric: bool) {
             ui.set_min_height(crate::ui::kit::input_height(ui));
             let field_w = ((w - 230.0) / 2.0).max(120.0);
             ui.add(crate::ui::kit::TextLine::new(&mut ch.name).hint(t!("Name people see")).width(field_w));
-            let mut value = crate::ui::widgets::as_text(&ch.value);
-            if ui.add(crate::ui::kit::TextLine::new(&mut value).hint(t!("Value the bot gets")).width(field_w)).changed() {
+            // A number as it is typed (1, not 1.0).
+            let shown = match ch.value.as_f64() {
+                Some(n) if numeric => n.to_string(),
+                _ => crate::ui::widgets::as_text(&ch.value),
+            };
+            if let Some(value) = typed_box(ui, shown, t!("Value the bot gets"), field_w) {
                 ch.value = if numeric { value.trim().parse::<f64>().map(Value::from).unwrap_or(Value::from(value)) } else { Value::from(value) };
             }
             let label = if ch.locales.is_empty() { t!("Translations").to_string() } else { tf!("Translations · {count}", count = ch.locales.len()) };
@@ -1257,9 +1261,31 @@ fn choices(ui: &mut Ui, theme: &Theme, o: &mut SlashOption, numeric: bool) {
     }
 }
 
+/// A text box for a value kept as something else (a number): while it has
+/// the text cursor it shows what was typed, not the value written out again
+/// after each key, which would take "-" and the point of "1." away before
+/// the number is whole. Returns the text when it changed.
+fn typed_box(ui: &mut Ui, shown: String, hint: &str, width: f32) -> Option<String> {
+    // The id the box gets (see `TextLine`).
+    let id = ui.next_auto_id();
+    let key = id.with("typed");
+    let mut text = ui.data(|d| d.get_temp::<String>(key)).filter(|_| ui.memory(|m| m.has_focus(id))).unwrap_or(shown);
+    let resp = ui.add(crate::ui::kit::TextLine::new(&mut text).hint(hint).width(width));
+    let changed = resp.changed();
+    let typing = resp.has_focus();
+    ui.data_mut(|d| {
+        if typing {
+            d.insert_temp(key, text.clone());
+        } else {
+            d.remove::<String>(key);
+        }
+    });
+    changed.then_some(text)
+}
+
 fn number_box(ui: &mut Ui, label: &str, v: &mut Option<f64>) {
-    let mut text = v.map(|n| n.to_string()).unwrap_or_default();
-    if ui.add(crate::ui::kit::TextLine::new(&mut text).hint(label).width(96.0)).changed() {
+    let shown = v.map(|n| n.to_string()).unwrap_or_default();
+    if let Some(text) = typed_box(ui, shown, label, 96.0) {
         *v = text.trim().parse().ok();
     }
 }
@@ -1421,6 +1447,32 @@ fn discord_preview(ui: &mut Ui, theme: &Theme, cmd: &SlashCommand, eye: Option<&
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Smallest and Largest take a number typed key by key, with its minus
+    /// and its point (-5.2 used to end up as 52).
+    #[test]
+    fn a_number_is_typed_with_its_minus_and_point() {
+        let ctx = egui::Context::default();
+        crate::ui::fonts::install(&ctx);
+        let mut v: Option<f64> = None;
+        let run = |events: Vec<egui::Event>, v: &mut Option<f64>| {
+            let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(400.0, 200.0))), events, ..Default::default() };
+            let mut out = ctx.run_ui(raw, |ui| number_box(ui, "Smallest", v));
+            out.textures_delta.clear();
+        };
+        let p = egui::pos2(30.0, 14.0);
+        let press = |pressed: bool| egui::Event::PointerButton { pos: p, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+        run(vec![], &mut v);
+        run(vec![egui::Event::PointerMoved(p), press(true), press(false)], &mut v);
+        run(vec![], &mut v);
+        let mut seen = Vec::new();
+        for key in ["-", "5", ".", "2"] {
+            run(vec![egui::Event::Text(key.into())], &mut v);
+            run(vec![], &mut v);
+            seen.push(v);
+        }
+        assert_eq!(seen, [None, Some(-5.0), Some(-5.0), Some(-5.2)]);
+    }
 
     /// A command edited as JSON stays in its side bar folder, and turned off
     /// when it was: Discord's JSON has neither.
