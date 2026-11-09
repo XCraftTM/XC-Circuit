@@ -816,7 +816,7 @@ fn preview(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit, height: f32) {
         }
     }
     if let Some(p) = resp.hover_pos() {
-        let on_handle = edit.selected.filter(|&i| i < boxes.len()).is_some_and(|i| handle_of(boxes[i]).expand(2.0).contains(p));
+        let on_handle = edit.selected.filter(|&i| i < boxes.len() && !d.layers[i].locked).is_some_and(|i| handle_of(boxes[i]).expand(2.0).contains(p));
         if on_handle {
             ui.ctx().set_cursor_icon(CursorIcon::ResizeNwSe);
         } else if hit(p).is_some() {
@@ -831,7 +831,8 @@ fn preview(ui: &mut Ui, theme: &Theme, edit: &mut CanvasEdit, height: f32) {
     if resp.drag_started()
         && let Some(p) = resp.interact_pointer_pos()
     {
-        let on_handle = edit.selected.filter(|&i| i < boxes.len()).filter(|&i| handle_of(boxes[i]).expand(2.0).contains(p));
+        // A locked layer has no handle: it isn't resized by dragging either.
+        let on_handle = edit.selected.filter(|&i| i < boxes.len() && !d.layers[i].locked).filter(|&i| handle_of(boxes[i]).expand(2.0).contains(p));
         let (target, kind) = match on_handle {
             Some(i) => (Some(i), Drag::Resize),
             None => (hit(p), Drag::Move),
