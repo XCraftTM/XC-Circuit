@@ -8,6 +8,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **The bot's output no longer stops at an odd character**: a line that wasn't UTF-8 (a program the bot starts answering in Windows' own encoding, with an umlaut in it) ended the reading of everything the bot wrote, so the Console stayed empty from there on, blocks stopped lighting up, and the bot could end with a write error. Such characters now show as `�` and the rest is read as before. The same goes for npm's output while packages install, and for the database helper.
 - **Installing Node.js can't hang on a talkative installer**: winget's or the installer's output and errors were read one after the other, so one that wrote much to its errors first waited forever. Both are read at the same time now.
 - **An AI agent's request that took too long isn't done later after all**: while a dialog was open (a file picker, say), an agent's tool call waited, and after a minute the agent was told it failed. The call still ran once the dialog closed, so an agent that had tried again got its block twice. A call that was given up is now dropped, and the agent is told nothing was done.
+- **Workspaces named Con, Nul, Aux, Prn, Com1 or Lpt1 can be saved**: Windows keeps those names for devices, so the workspace's file (`con.json`) couldn't be written and saving failed. Such a workspace now gets a file name of its own (`con-workspace.json`); its name in the side bar stays as typed.
 
 ## 0.2.9
 

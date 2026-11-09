@@ -183,6 +183,9 @@ impl Project {
             .collect::<Vec<_>>()
             .join("-");
         let base = if base.is_empty() { "workspace".to_string() } else { base };
+        // Windows keeps some names for devices, with any ending: con.json
+        // can't be written there (and what's written to nul.json is gone).
+        let base = if is_device_name(&base) { format!("{base}-workspace") } else { base };
         // Case-insensitive, like file names on Windows, and never the file of a
         // workspace that couldn't be read or is about to be deleted.
         let taken = |k: &str| {
@@ -193,6 +196,12 @@ impl Project {
         }
         (2..).map(|i| format!("{base}-{i}")).find(|k| !taken(k)).expect("unbounded range")
     }
+}
+
+/// Whether Windows keeps this file name (without its ending) for a device.
+fn is_device_name(stem: &str) -> bool {
+    let s = stem.to_ascii_lowercase();
+    matches!(s.as_str(), "con" | "prn" | "aux" | "nul") || (s.len() == 4 && (s.starts_with("com") || s.starts_with("lpt")) && s.as_bytes()[3].is_ascii_digit())
 }
 
 /// Writes pretty JSON through a temporary file, so a crash never leaves half a file.
@@ -253,5 +262,25 @@ mod tests {
         p.workspaces.insert("Rank".into(), Workspace::new("Rank"));
         assert_eq!(p.new_workspace_key("rank"), "rank-2", "rank.json would overwrite Rank.json on Windows");
         assert_eq!(p.new_workspace_key("../../etc/passwd"), "etc-passwd");
+    }
+
+    /// A workspace named after one of Windows' devices gets a file name that
+    /// can be written there, and saves.
+    #[test]
+    fn workspace_keys_avoid_device_names() {
+        let dir = temp("devices");
+        let mut p = Project::create(&dir, "Test", "none").unwrap();
+        for (name, key) in [("Con", "con-workspace"), ("NUL", "nul-workspace"), ("Aux", "aux-workspace"), ("COM1", "com1-workspace"), ("lpt9", "lpt9-workspace")] {
+            assert_eq!(p.new_workspace_key(name), key);
+        }
+        // Names that only look alike stay as they are.
+        for name in ["console", "com", "com10", "comx", "null"] {
+            assert_eq!(p.new_workspace_key(name), name);
+        }
+        let key = p.new_workspace_key("Nul");
+        p.workspaces.insert(key.clone(), Workspace::new("Nul"));
+        p.save().unwrap();
+        assert_eq!(Project::load(&dir).unwrap().workspaces[&key].name, "Nul");
+        assert_eq!(p.new_workspace_key("nul"), "nul-workspace-2");
     }
 }
