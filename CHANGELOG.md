@@ -38,6 +38,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **A power cut right after saving can't leave an empty file**: a saved project file took the old one's place before its contents were surely on the disk, so a power cut at that moment could leave it empty. It's written to the disk first now. The same goes for backups and the crash recovery copy.
 - **Block source shows the file instead of running it**: the Inspector's Block source opened a block's `.js` file with whatever Windows opens such files with, which is its script host unless you chose an editor: an error box at best. It now shows the file in its folder, to open with the editor you like.
 - **Message previews: a link without a text is no link**: `[](http://…)` was shown as a link (an empty one) while `[](https://…)` stayed as typed. Both stay as typed now, as in Discord.
+- **Slash Commands: a pasted command for administrators only stays one**: in Discord's JSON, `"default_member_permissions": "0"` means nobody but administrators can use the command. Pasted into the builder it became a command for everyone. It now comes in with Administrator ticked, which says the same.
 
 ## 0.2.9
 

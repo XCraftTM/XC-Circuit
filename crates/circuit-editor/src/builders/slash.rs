@@ -546,6 +546,13 @@ pub fn from_discord(v: &Value) -> Result<Vec<SlashCommand>, String> {
             Some(Value::Number(n)) => n.as_u64().unwrap_or(0),
             _ => 0,
         };
+        // "0" is Discord's "nobody but administrators", not "everyone" (which
+        // is the key left out): kept as Administrator, which says the same.
+        let admins_only = match item.get("default_member_permissions") {
+            Some(Value::String(s)) => s.trim() == "0",
+            Some(Value::Number(n)) => n.as_u64() == Some(0),
+            _ => false,
+        };
         let contexts = match ints("contexts") {
             Some(c) => CONTEXTS.iter().filter(|x| c.contains(&x.1)).map(|x| x.0.to_string()).collect(),
             None if item.get("dm_permission").and_then(Value::as_bool) == Some(false) => vec!["guild".to_string()],
@@ -555,7 +562,7 @@ pub fn from_discord(v: &Value) -> Result<Vec<SlashCommand>, String> {
             name: root.clone(),
             description: text(item, "description"),
             locales: locales::from_discord(item.get("name_localizations"), item.get("description_localizations")),
-            permissions: PERMISSIONS.iter().filter(|p| bits & (1u64 << p.2) != 0).map(|p| p.0.to_string()).collect(),
+            permissions: if admins_only { vec!["Administrator".to_string()] } else { PERMISSIONS.iter().filter(|p| bits & (1u64 << p.2) != 0).map(|p| p.0.to_string()).collect() },
             contexts,
             installs: ints("integration_types").map(|c| INSTALLS.iter().filter(|x| c.contains(&x.1)).map(|x| x.0.to_string()).collect()).unwrap_or_default(),
             nsfw: item.get("nsfw").and_then(Value::as_bool).unwrap_or(false),
@@ -1407,6 +1414,22 @@ fn discord_preview(ui: &mut Ui, theme: &Theme, cmd: &SlashCommand, eye: Option<&
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `"default_member_permissions": "0"` means nobody but administrators:
+    /// a command pasted with it doesn't become one for everyone.
+    #[test]
+    fn a_command_for_admins_only_stays_one() {
+        for zero in [json!("0"), json!(0)] {
+            let cmds = from_discord(&json!({ "name": "secret", "description": "d", "default_member_permissions": zero })).unwrap();
+            assert_eq!(cmds[0].permissions, ["Administrator"]);
+            assert_eq!(root_json(&cmds, "secret")["default_member_permissions"], "8");
+        }
+        // Left out is everyone, as before; other bits are kept.
+        let open = from_discord(&json!({ "name": "open", "description": "d" })).unwrap();
+        assert!(open[0].permissions.is_empty() && root_json(&open, "open").get("default_member_permissions").is_none());
+        let some = from_discord(&json!({ "name": "mod", "description": "d", "default_member_permissions": "6" })).unwrap();
+        assert_eq!(some[0].permissions, ["KickMembers", "BanMembers"]);
+    }
 
     /// Commands move in the side bar as a whole, subcommands included, and
     /// turned-off ones aren't registered.
