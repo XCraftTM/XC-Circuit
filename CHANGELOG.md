@@ -11,6 +11,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **Workspaces named Con, Nul, Aux, Prn, Com1 or Lpt1 can be saved**: Windows keeps those names for devices, so the workspace's file (`con.json`) couldn't be written and saving failed. Such a workspace now gets a file name of its own (`con-workspace.json`); its name in the side bar stays as typed.
 - **Replacing a plugin can't lose it**: installing a plugin's zip over an installed version (or a block update) deleted the old version first; if the new one then couldn't be moved into place, the plugin was gone. The old version now steps aside and comes back when that happens. A folder an interrupted install left behind is no longer taken for a plugin.
 - **Stop doesn't leave the bot's helpers running** (Windows): a bot that didn't stop within a moment was ended, but programs it had started (a player or converter for music, say) kept running. They're ended with it now.
+- **A power cut right after saving can't leave an empty file**: a saved project file took the old one's place before its contents were surely on the disk, so a power cut at that moment could leave it empty. It's written to the disk first now. The same goes for backups and the crash recovery copy.
 
 ## 0.2.9
 

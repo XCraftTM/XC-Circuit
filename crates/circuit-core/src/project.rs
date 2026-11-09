@@ -209,7 +209,13 @@ pub(crate) fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     let mut text = serde_json::to_string_pretty(value)?;
     text.push('\n');
     let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, text).with_context(|| format!("writing {}", tmp.display()))?;
+    // On the disk before it takes the old file's place: after a power cut
+    // the file is the old one or the new one, never an empty one.
+    let written = fs::File::create(&tmp).and_then(|mut f| {
+        std::io::Write::write_all(&mut f, text.as_bytes())?;
+        f.sync_all()
+    });
+    written.with_context(|| format!("writing {}", tmp.display()))?;
     fs::rename(&tmp, path).with_context(|| format!("replacing {}", path.display()))?;
     Ok(())
 }
