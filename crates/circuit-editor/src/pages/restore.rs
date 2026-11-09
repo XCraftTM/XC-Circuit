@@ -347,11 +347,13 @@ mod tests {
         rename(&mut ed, "Second");
         ed.project.as_mut().unwrap().workspaces.insert("extra".into(), circuit_core::Workspace::new("Extra"));
         ed.save();
+        ed.finish_saving();
         let list = ed.backups.list(&root);
         assert_eq!(list.len(), 2);
 
         // The whole project, as it was at the first save.
         ed.restore_project(&list[1]).unwrap();
+        ed.finish_saving();
         let p = ed.project.as_ref().unwrap();
         assert_eq!(p.workspaces["main"].name, "First");
         assert!(!p.workspaces.contains_key("extra"));
@@ -367,6 +369,7 @@ mod tests {
 
         // Restoring over unsaved changes backs them up first.
         ed.restore_project(&list[1]).unwrap();
+        ed.finish_saving();
         let before = ed.backups.list(&root).into_iter().find(|s| s.info.reason == "Before restore").expect("unsaved changes were backed up");
         assert!(before.info.workspaces.iter().any(|(k, _)| k == "extra"));
     }

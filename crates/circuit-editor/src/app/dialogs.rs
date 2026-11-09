@@ -88,9 +88,7 @@ impl CircuitApp {
             self.ed.apply_recovery(rec);
         } else if discard {
             self.ed.recovery_offer = None;
-            if let Some(p) = &self.ed.project {
-                self.ed.backups.clear_recovery(&p.root);
-            }
+            self.ed.clear_recovery();
         }
     }
 
@@ -591,9 +589,9 @@ impl CircuitApp {
             if save || discard {
                 if save {
                     self.ed.save();
-                } else if let Some(p) = &self.ed.project {
+                } else {
                     // Chosen on purpose: no recovery offer next time.
-                    self.ed.backups.clear_recovery(&p.root);
+                    self.ed.clear_recovery();
                 }
                 self.allow_close = true;
                 ctx.send_viewport_cmd(ViewportCommand::Close);

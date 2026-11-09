@@ -755,17 +755,16 @@ impl eframe::App for CircuitApp {
         let recovery_every = self.ed.prefs.recovery_every();
         if self.ed.unsaved() && settled && self.tour.is_none() && self.last_recovery.elapsed() >= recovery_every {
             self.last_recovery = std::time::Instant::now();
-            if let Some(p) = &self.ed.project
-                && let Err(e) = {
-                    watchdog::mark("writing the recovery copy");
-                    self.ed.backups.write_recovery(p)
-                }
-            {
-                self.ed.log(Level::Warn, format!("Couldn't keep a recovery copy of your unsaved changes: {e:#}"));
-            }
+            watchdog::mark("copying the project for crash recovery");
+            self.ed.keep_recovery();
         }
         if self.ed.unsaved() {
             ctx.request_repaint_after(recovery_every);
+        }
+        // Saves, backups and recovery copies are written on a thread of their own.
+        self.ed.poll_saving();
+        if self.ed.saver.busy() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
         watchdog::mark(watchdog::AFTER_FRAME);
     }
@@ -775,6 +774,8 @@ impl eframe::App for CircuitApp {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        // A save (Save and close) may still be being written.
+        self.ed.finish_saving();
         self.bot.stop(&mut self.ed);
         // A downloaded update: installed now, and it starts the new version.
         if let Some(file) = self.updater.ready.take()

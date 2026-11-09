@@ -1086,11 +1086,13 @@ mod tests {
         assert_eq!(settings_of(&ed), h, "kept in the project");
         let said = |ed: &Editor| ed.log.iter().any(|l| l.text.starts_with("Not uploaded: Fill in the password."));
         ed.save();
+        ed.finish_saving();
         ui.poll(&mut ed, &ctx);
         assert!(!said(&ed), "not without Upload after every save");
         let h = Hosting { auto_upload: true, ..h };
         ed.project.as_mut().unwrap().meta.data.insert(DATA_KEY.into(), serde_json::to_value(&h).unwrap());
         ed.save();
+        ed.finish_saving();
         ui.poll(&mut ed, &ctx);
         assert!(said(&ed), "{:?}", ed.log.iter().map(|l| &l.text).collect::<Vec<_>>());
         let _ = std::fs::remove_dir_all(&dir);

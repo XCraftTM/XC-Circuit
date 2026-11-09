@@ -2,6 +2,11 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
+## Unreleased
+
+### Fixed
+- **Saving no longer freezes the window**: saving, the backup made with each save and the crash recovery copy (every 30 seconds while there are unsaved changes) were written while the window waited. On a slow or busy disk, or with a virus scanner checking each new file, that could make Windows say "Not Responding". They're now written in the background: the status bar says "Saving…" until the files are written, and if saving fails, the project shows as unsaved again.
+
 ## 0.2.6
 
 ### Added

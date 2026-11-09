@@ -6,6 +6,7 @@ pub mod folders;
 pub mod history;
 pub mod keymap;
 pub mod prefs;
+pub mod saver;
 pub mod custom_ids;
 pub mod values;
 
@@ -134,8 +135,13 @@ pub struct Editor {
     pub backups: circuit_core::backup::Backups,
     /// Unsaved changes found when the project opened (left by a crash).
     pub recovery_offer: Option<circuit_core::backup::Recovery>,
-    /// Successful saves so far, so others can react to a save.
+    /// Successful saves so far, so others can react to a save. Counted once
+    /// the files are written.
     pub saves: u64,
+    /// Writes saves, backups and recovery copies on a thread of its own.
+    pub saver: saver::Saver,
+    /// The newest save given to `saver`.
+    last_save: u64,
     /// What blocks see as `project` in `define()`: `{ data, settings }` of the open project.
     pub define_ctx: Value,
     pub embed_edit: Option<crate::builders::embed::EmbedEdit>,
@@ -201,6 +207,8 @@ impl Editor {
             backups: circuit_core::backup::Backups::new(crate::bot::app_data_dir().join("backups")),
             recovery_offer: None,
             saves: 0,
+            saver: saver::Saver::default(),
+            last_save: 0,
             define_ctx: Value::Object(Map::new()),
             embed_edit: None,
             layout_edit: None,
@@ -300,6 +308,8 @@ impl Editor {
     }
 
     pub fn open_project(&mut self, root: &Path) {
+        // Its files may still be being written.
+        self.finish_saving();
         match Project::load(root) {
             Ok(project) => {
                 self.log(Level::Success, format!("Opened {}", project.root.display()));
@@ -359,34 +369,90 @@ impl Editor {
         self.refresh_define_ctx();
     }
 
+    /// Saves the project as it is now. The files are written on the saving
+    /// thread; the project counts as saved at once, and as unsaved again if
+    /// writing fails ([`Editor::poll_saving`] says so).
     pub fn save(&mut self) {
         crate::app::watchdog::mark("saving the project");
         let Some(project) = self.project.as_mut() else { return };
-        match project.save() {
-            Ok(()) => {
-                self.history.track(project, true);
-                self.history.mark_saved();
-                self.edited = false;
-                self.saves += 1;
-                let msg = format!("Saved {}", project.meta.name);
-                self.backups.clear_recovery(&project.root);
-                let backup = self.prefs.backups.then(|| {
-                    let made = self.backups.snapshot(project, "Saved");
-                    self.backups.prune(&project.root, self.prefs.backup_keep, self.prefs.backup_days, circuit_core::backup::now_ms());
-                    made
-                });
-                self.log(Level::Success, msg);
-                if let Some(Err(e)) = backup {
-                    self.log(Level::Warn, format!("Saved, but the backup couldn't be made: {e:#}"));
+        let copy = project.take_save();
+        self.history.track(project, true);
+        self.history.mark_saved();
+        self.edited = false;
+        let id = self.saver.next_id();
+        self.last_save = id;
+        let backup = self.prefs.backups.then_some((self.prefs.backup_keep, self.prefs.backup_days));
+        self.saver.send(saver::Job::Save { id, project: copy, backups: self.backups.clone(), backup });
+    }
+
+    /// Keeps a copy of the unsaved changes for after a crash (on the saving thread).
+    pub fn keep_recovery(&mut self) {
+        if let Some(p) = &self.project {
+            self.saver.send(saver::Job::Recovery { project: p.clone(), backups: self.backups.clone() });
+        }
+    }
+
+    /// Deletes the crash recovery copy of the open project (on the saving thread).
+    pub fn clear_recovery(&mut self) {
+        if let Some(p) = &self.project {
+            self.saver.send(saver::Job::ClearRecovery { root: p.root.clone(), backups: self.backups.clone() });
+        }
+    }
+
+    /// Takes in what the saving thread has finished.
+    pub fn poll_saving(&mut self) {
+        for done in self.saver.finished() {
+            self.saving_done(done);
+        }
+    }
+
+    /// Waits for everything given to the saving thread to be written: before
+    /// reading the project's files or backups, and before the app ends.
+    pub fn finish_saving(&mut self) {
+        if !self.saver.busy() {
+            return;
+        }
+        crate::app::watchdog::mark("waiting for saving to finish");
+        for done in self.saver.wait() {
+            self.saving_done(done);
+        }
+    }
+
+    fn saving_done(&mut self, done: saver::Done) {
+        match done {
+            saver::Done::Saved { id, root, name, removed, result, backup } => match result {
+                Ok(()) => {
+                    self.saves += 1;
+                    self.log(Level::Success, format!("Saved {name}"));
+                    if let Some(Err(e)) = backup {
+                        self.log(Level::Warn, format!("Saved, but the backup couldn't be made: {e}"));
+                    }
                 }
-            }
-            Err(e) => self.log(Level::Error, format!("Save failed: {e:#}")),
+                Err(e) => {
+                    if let Some(p) = self.project.as_mut().filter(|p| p.root == root) {
+                        // Their files are still there: deleted with the next save.
+                        for stem in removed {
+                            if !p.workspaces.contains_key(&stem) && !p.removed.contains(&stem) {
+                                p.removed.push(stem);
+                            }
+                        }
+                        // Unless a newer save follows, what's open isn't saved.
+                        if id == self.last_save {
+                            self.history.forget_saved();
+                        }
+                    }
+                    self.log(Level::Error, format!("Save failed: {e}"));
+                }
+            },
+            saver::Done::Recovery(Err(e)) => self.log(Level::Warn, format!("Couldn't keep a recovery copy of your unsaved changes: {e}")),
+            saver::Done::Recovery(Ok(())) | saver::Done::Cleared => {}
         }
     }
 
     /// Puts the whole project back as it was in a snapshot and saves it. The
     /// current version is backed up first, so this can be undone.
     pub fn restore_project(&mut self, snap: &circuit_core::backup::Snapshot) -> anyhow::Result<()> {
+        self.finish_saving();
         let (meta, workspaces) = self.backups.load(snap)?;
         let Some(project) = self.project.as_mut() else { anyhow::bail!("no project is open") };
         self.backups.snapshot(project, "Before restore")?;

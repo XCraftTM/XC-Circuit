@@ -282,3 +282,41 @@ fn get_property_lists_the_connected_values_properties() {
     assert!(!plain.is_select() && !plain.custom);
     assert_ne!(plain.pin, circuit_core::PinMode::Inline, "Property can be connected");
 }
+
+/// Saving writes on the saving thread: the project counts as saved at once,
+/// and a save that fails makes it unsaved again, keeping the workspace files
+/// it was to delete for the next save.
+#[test]
+fn saving_happens_on_its_own_thread() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let dir = std::env::temp_dir().join(format!("xc-saving-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let mut p = Project::create(dir.join("bot"), "S", "discord-bot").unwrap();
+    p.workspaces.insert("other".into(), Workspace::new("Other"));
+    p.save().unwrap();
+    let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+    ed.backups = circuit_core::backup::Backups::new(dir.join("backups"));
+    ed.open_project(&dir.join("bot"));
+    let other = ed.project.as_ref().unwrap().workspace_path("other");
+
+    // Something in the way of circuit.json: the save fails.
+    let meta = dir.join("bot").join("circuit.json");
+    std::fs::remove_file(&meta).unwrap();
+    std::fs::create_dir(&meta).unwrap();
+    ed.project.as_mut().unwrap().remove_workspace("other");
+    ed.save();
+    assert!(!ed.unsaved_now(), "saved as far as the window knows, while it's written");
+    ed.finish_saving();
+    assert!(ed.unsaved_now(), "unsaved again once writing failed");
+    assert!(ed.log.iter().any(|l| l.text.starts_with("Save failed")));
+    assert_eq!(ed.project.as_ref().unwrap().removed, vec!["other".to_string()], "still to be deleted");
+    assert!(other.exists() && ed.saves == 0);
+
+    std::fs::remove_dir(&meta).unwrap();
+    ed.save();
+    ed.finish_saving();
+    assert!(!ed.unsaved_now() && ed.saves == 1);
+    assert!(meta.is_file() && !other.exists(), "written, and the removed workspace's file is gone");
+    assert_eq!(ed.backups.list(&dir.join("bot")).len(), 1, "with a backup");
+    let _ = std::fs::remove_dir_all(&dir);
+}

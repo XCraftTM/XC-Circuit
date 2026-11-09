@@ -35,6 +35,7 @@ pub const UI_STRINGS: &[&str] = &[
     "Upload failed",
     "Upload to the server",
     "Unsaved changes",
+    "Saving…",
     "Saved",
     "Save (Ctrl+S)",
     "{plugins} plugins · {blocks} blocks",

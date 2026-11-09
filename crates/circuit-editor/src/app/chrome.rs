@@ -202,7 +202,13 @@ impl CircuitApp {
                 self.bot.hosting.open(&self.ed);
             }
         }
-        let saved = if self.ed.unsaved() { t!("Unsaved changes") } else { t!("Saved") };
+        let saved = if self.ed.unsaved() {
+            t!("Unsaved changes")
+        } else if self.ed.saver.busy() {
+            t!("Saving…")
+        } else {
+            t!("Saved")
+        };
         if status_item(&mut right, &t, None, saved).on_hover_text(t!("Save (Ctrl+S)")).clicked() && has_project {
             self.ed.save();
             self.bot.restart_if_running(&mut self.ed, &ctx);

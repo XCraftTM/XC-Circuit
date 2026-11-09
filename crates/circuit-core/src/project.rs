@@ -130,6 +130,16 @@ impl Project {
         Ok(project)
     }
 
+    /// A copy to save elsewhere (on another thread): as `save` would write
+    /// it, with the workspaces to delete. Those are no longer this one's to
+    /// delete; give them back with [`Project::removed`] if that save fails.
+    pub fn take_save(&mut self) -> Project {
+        self.meta.order = self.order_to_save();
+        let copy = self.clone();
+        self.removed.clear();
+        copy
+    }
+
     pub fn save(&mut self) -> Result<()> {
         fs::create_dir_all(self.root.join(WORKSPACE_DIR))?;
         self.meta.order = self.order_to_save();

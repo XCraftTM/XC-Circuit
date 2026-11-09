@@ -167,6 +167,12 @@ impl Histories {
         self.saved = Some((workspaces, self.project.as_ref().map_or(0, |h| h.version)));
     }
 
+    /// Forgets which state is saved: everything counts as unsaved (after a
+    /// save that failed).
+    pub fn forget_saved(&mut self) {
+        self.saved = None;
+    }
+
     /// Whether the recorded state differs from the saved one.
     pub fn unsaved(&self) -> bool {
         let Some((workspaces, project)) = &self.saved else { return true };

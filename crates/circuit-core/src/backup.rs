@@ -87,6 +87,7 @@ fn dir_size(dir: &Path) -> u64 {
         .sum()
 }
 
+#[derive(Clone)]
 pub struct Backups {
     base: PathBuf,
 }
