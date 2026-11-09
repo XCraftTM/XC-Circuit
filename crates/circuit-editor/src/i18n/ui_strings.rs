@@ -578,6 +578,7 @@ pub const UI_STRINGS: &[&str] = &[
     "Clear",
     "Empty the box, to paste other JSON in",
     "Applied",
+    "Paste JSON here",
     "Line {line}, column {column}: {problem}",
     "Components V2 messages have no content or embeds: put text in Text components",
     "a layout needs \"components\": [ … ]",

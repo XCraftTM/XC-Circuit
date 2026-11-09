@@ -120,6 +120,8 @@ pub fn editor(ui: &mut Ui, theme: &Theme, id: egui::Id, jt: &mut JsonText, help:
     let mut parsed = None;
     ui.label(RichText::new(help).size(12.0).color(theme.text_muted));
     ui.add_space(4.0);
+    // Before the buttons: Format and Clear change the text too.
+    let before = jt.text.clone();
     ui.horizontal(|ui| {
         if kit::button(ui, theme, t!("Format")).on_hover_text(t!("Indent the JSON neatly")).clicked()
             && let Ok(v) = serde_json::from_str::<Value>(&jt.text)
@@ -138,7 +140,6 @@ pub fn editor(ui: &mut Ui, theme: &Theme, id: egui::Id, jt: &mut JsonText, help:
         };
     });
     ui.add_space(6.0);
-    let before = jt.text.clone();
     // Less the frame's margins and line.
     let height = crate::ui::dialog::remaining_height(ui, 220.0) - 18.0;
     let font = egui::TextStyle::Monospace.resolve(ui.style());
@@ -187,24 +188,41 @@ pub fn editor(ui: &mut Ui, theme: &Theme, id: egui::Id, jt: &mut JsonText, help:
         });
     });
     if jt.text != before {
-        match serde_json::from_str::<Value>(&jt.text) {
-            Ok(v) => {
-                jt.error = None;
-                jt.error_line = None;
-                parsed = Some(v);
-            }
-            Err(e) => {
-                jt.error = Some(tf!("Line {line}, column {column}: {problem}", line = e.line(), column = e.column(), problem = e.to_string().split(" at line").next().unwrap_or_default()));
-                jt.error_line = Some(e.line());
-            }
-        }
+        (jt.error, jt.error_line, parsed) = check(&jt.text);
     }
     parsed
+}
+
+/// What an edit to the JSON text gives: why it doesn't apply (and on which
+/// line), or its value. An empty box asks for JSON instead of naming a
+/// mistake: it was emptied to paste something in.
+fn check(text: &str) -> (Option<String>, Option<usize>, Option<Value>) {
+    if text.trim().is_empty() {
+        return (Some(t!("Paste JSON here").to_string()), None, None);
+    }
+    {
+        match serde_json::from_str::<Value>(text) {
+            Ok(v) => (None, None, Some(v)),
+            Err(e) => (Some(tf!("Line {line}, column {column}: {problem}", line = e.line(), column = e.column(), problem = e.to_string().split(" at line").next().unwrap_or_default())), Some(e.line()), None),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An emptied box doesn't say "Applied": it asks for JSON, and holds
+    /// Apply back until there is some.
+    #[test]
+    fn an_empty_box_asks_for_json() {
+        let (error, line, value) = check("  ");
+        assert!(error.is_some() && line.is_none() && value.is_none());
+        let (error, line, value) = check("{ \"a\": 1 }");
+        assert_eq!((error, line, value), (None, None, Some(serde_json::json!({ "a": 1 }))));
+        let (error, line, value) = check("{\n  \"a\": \n}");
+        assert!(error.is_some_and(|e| e.starts_with("Line 3")) && line == Some(3) && value.is_none());
+    }
 
     #[test]
     fn colors_each_part() {
