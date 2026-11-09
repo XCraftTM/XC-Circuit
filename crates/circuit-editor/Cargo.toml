@@ -50,7 +50,10 @@ serde_json.workspace = true
 raw-window-handle = "0.6"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_UI_WindowsAndMessaging"] }
+# Diagnostics_Debug (with Storage_FileSystem, System_Kernel and System_Memory,
+# which its MiniDumpWriteDump needs) and System_Threading: the freeze
+# detector's dumps.
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_UI_WindowsAndMessaging", "Win32_System_Diagnostics_Debug", "Win32_Storage_FileSystem", "Win32_System_Kernel", "Win32_System_Memory", "Win32_System_Threading"] }
 
 [build-dependencies]
 png = "0.18"
