@@ -65,6 +65,13 @@ impl Registry {
 
     /// [`Self::load`], leaving out the plugins with these ids (turned off).
     pub fn load_except(dirs: &[PathBuf], engine: &BlockEngine, disabled: &[String]) -> Registry {
+        Self::load_without(dirs, engine, disabled, &[])
+    }
+
+    /// [`Self::load_except`], also leaving out the plugins in the folders
+    /// `skip`: a project's own plugins the user hasn't said yes to. They
+    /// aren't read at all.
+    pub fn load_without(dirs: &[PathBuf], engine: &BlockEngine, disabled: &[String], skip: &[PathBuf]) -> Registry {
         let mut reg = Registry::default();
         let mut found = Vec::new();
         for dir in dirs {
@@ -73,7 +80,7 @@ impl Registry {
                 let path = entry.path();
                 // A folder starting with a dot is an install under way (or
                 // what one left behind), not a plugin.
-                if entry.file_name().to_string_lossy().starts_with('.') {
+                if entry.file_name().to_string_lossy().starts_with('.') || skip.contains(&path) {
                     continue;
                 }
                 if path.join("plugin.toml").is_file() {
@@ -521,6 +528,10 @@ version = \"{version}\"
         assert!(said.iter().any(|m| m.contains("../elsewhere/*.js") && m.contains("leads out of the plugin's folder")), "{said:?}");
         assert!(said.iter().any(|m| m.contains("secret.txt") && m.contains("outside the plugin's folder")), "{said:?}");
         assert!(leaves_folder("/etc/*.js") && leaves_folder("C:/Users/*.js") && leaves_folder("blocks/../../x.js") && !leaves_folder("blocks/**/*.{js,ts}"));
+
+        // A folder to leave out isn't read at all.
+        let reg = Registry::load_without(std::slice::from_ref(&update), &engine, &[], &[update.join("acme.tools")]);
+        assert!(reg.plugins.is_empty() && reg.problems.is_empty());
 
         // What an install left behind (its folder starts with a dot) isn't a plugin.
         let left = base.join("updates").join(".replaced-acme.tools");

@@ -415,3 +415,88 @@ fn only_web_pages_count_as_links() {
         assert!(!is_web_link(url), "{url}");
     }
 }
+
+/// A project's own plugins load once the user said yes to them, for this
+/// folder: not before, not in place of one of the app's plugins, and the
+/// app's own examples need no asking.
+#[test]
+fn a_project_s_own_plugins_wait_for_a_yes() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let dir = std::env::temp_dir().join(format!("xc-own-plugins-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let bot = dir.join("bot");
+    Project::create(&bot, "Own", "none").unwrap();
+    let plugin = |folder: &str, id: &str, name: &str, version: &str, block: &str| {
+        let p = bot.join("plugins").join(folder);
+        std::fs::create_dir_all(p.join("blocks")).unwrap();
+        std::fs::write(p.join("plugin.toml"), format!("id = \"{id}\"\nname = \"{name}\"\nversion = \"{version}\"\n\n[contributes]\nblocks = [\"blocks/*.js\"]\n")).unwrap();
+        std::fs::write(p.join("blocks").join("a.js"), format!("module.exports = {{ id: '{block}', kind: 'action', info: {{ name: 'A', version: '1.0.0' }}, run() {{}} }};")).unwrap();
+    };
+    plugin("t.own", "t.own", "Own Blocks", "1.0.0", "t.own_block");
+
+    let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+    ed.open_project(&bot);
+    let waiting = |ed: &Editor| ed.plugins_waiting.iter().map(|o| o.name.clone()).collect::<Vec<_>>();
+    assert!(ed.reg.block("t.own_block").is_none(), "not loaded before the yes");
+    assert!(ed.reg.plugins.iter().all(|p| p.manifest.id != "t.own"), "not read at all");
+    assert_eq!(waiting(&ed), ["Own Blocks"]);
+    assert!(ed.plugin_ask, "the question is open");
+    assert!(crate::pages::panels::collect_problems(&mut ed).iter().any(|(_, m, _)| m.contains("aren't loaded: Own Blocks")));
+    // Not now: reloading plugins doesn't ask again, and still doesn't load them.
+    ed.plugin_ask = false;
+    ed.reload_plugins();
+    assert!(!ed.plugin_ask && ed.reg.block("t.own_block").is_none());
+
+    // Yes: they load, and stay loaded when the project opens again.
+    ed.trust_own_plugins();
+    ed.reload_plugins();
+    assert!(ed.reg.block("t.own_block").is_some());
+    assert!(waiting(&ed).is_empty() && !ed.plugin_ask);
+    ed.close_project();
+    ed.open_project(&bot);
+    assert!(ed.reg.block("t.own_block").is_some() && !ed.plugin_ask);
+
+    // One that arrives later (a pull) is asked about; the others stay loaded.
+    plugin("t.later", "t.later", "Later Blocks", "1.0.0", "t.later_block");
+    ed.reload_plugins();
+    assert_eq!(waiting(&ed), ["Later Blocks"]);
+    assert!(ed.plugin_ask && ed.reg.block("t.own_block").is_some() && ed.reg.block("t.later_block").is_none());
+
+    // One with the id of a plugin that comes with the app never loads.
+    ed.bundled_plugins = vec!["xc.core".into()];
+    plugin("core-copy", "xc.core", "Core Copy", "99.0.0", "t.fake_core_block");
+    ed.trust_own_plugins();
+    ed.reload_plugins();
+    assert_eq!(ed.plugins_refused.iter().map(|o| o.name.as_str()).collect::<Vec<_>>(), ["Core Copy"]);
+    assert!(ed.reg.block("t.fake_core_block").is_none() && ed.reg.block("t.later_block").is_some());
+    assert!(ed.reg.plugins.iter().any(|p| p.manifest.id == "xc.core" && p.manifest.version != "99.0.0"), "the app's own Core is the one loaded");
+    assert!(ed.reg.problems.iter().any(|p| p.message.contains("can't take the place of one of the app's")), "{:?}", ed.reg.problems);
+
+    // Another folder with the same plugins has to be said yes to itself.
+    let copy = dir.join("copy");
+    std::fs::create_dir_all(&copy).unwrap();
+    for part in ["circuit.json", "workspaces", "plugins"] {
+        copy_all(&bot.join(part), &copy.join(part));
+    }
+    ed.open_project(&copy);
+    assert!(ed.plugin_ask && ed.reg.block("t.own_block").is_none());
+
+    // The app's own examples came with the app: DemoBot's plugin just loads.
+    let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+    ed.open_project(&root.join("examples/DemoBot"));
+    assert!(ed.plugins_waiting.is_empty() && !ed.plugin_ask);
+    assert!(ed.reg.plugins.iter().any(|p| p.manifest.id == "demo.custom"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Copies a file, or a folder with what's in it.
+fn copy_all(from: &std::path::Path, to: &std::path::Path) {
+    if from.is_dir() {
+        std::fs::create_dir_all(to).unwrap();
+        for e in std::fs::read_dir(from).unwrap().flatten() {
+            copy_all(&e.path(), &to.join(e.file_name()));
+        }
+    } else {
+        std::fs::copy(from, to).unwrap();
+    }
+}

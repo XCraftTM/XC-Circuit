@@ -1465,7 +1465,7 @@ XC Circuit loads plugins from:
 - Folders listed in the `XC_CIRCUIT_PLUGINS` environment variable (handy while developing plugins).
 - The **app's own** `plugins/` folder (Circuit Core, Discord Bot, Fluxer Bot).
 - **Your plugins folder**: `%APPDATA%\XC Circuit\plugins` on Windows, `~/.local/share/xc-circuit/plugins` on Linux. Plugins › Open folder opens it.
-- The open **project's** `plugins/` folder: plugins that belong to one bot and travel with it.
+- The open **project's** `plugins/` folder: plugins that belong to one bot and travel with it. XC Circuit asks before it loads them, once for each project folder and plugin: **Load this project's plugins?** lists them. Say yes for a project of your own or from someone you trust. With **Not now** the project opens without them (their blocks show as not installed), and Plugins › *Load This Project's Plugins…* asks again. A project's plugin can't take the place of one that comes with XC Circuit.
 
 **Installing a plugin someone shared:** Plugins › *Install from Zip…* (or drop the `.zip` on the window). It goes into your plugins folder and loads right away. A zip holds the plugin folder: `plugin.toml` at its top, or in one folder at its top, as GitHub's *Download ZIP* makes them.
 
@@ -1705,7 +1705,11 @@ The passwords and API keys for uploading the bot to its server (Bot › Server�
 - They have **no** access to files, the network, other programs or your secrets.
 - Each call has a **time limit** (an endless loop is stopped) and each plugin a **memory limit**.
 
-That's why they start without asking.
+That's why installed plugins' scripts start without asking. A script of a plugin that doesn't come with XC Circuit can start the bot, or upload it, only when you click one of its buttons or pick one of its commands, not by itself.
+
+## Plugins that come with a project
+
+A project can bring plugins of its own, in its `plugins/` folder: handy for blocks made for one bot, but with a project from someone else that is their code. XC Circuit asks before it loads them (**Load this project's plugins?**), once for each project folder and plugin, and remembers the answer on your computer, not in the project. Until you say yes, nothing of those plugins is read or run. A project's plugin never replaces one that comes with XC Circuit, such as Discord Bot, which handles your token.
 
 ## What bot code can do
 
@@ -2767,7 +2771,7 @@ Types for your code editor: `/// <reference types="@xc-circuit/sdk/editor" />` (
 | `xc.data.set(key, value)` · `xc.storage.set(key, value)` | save data (not the key `hosting`: the bot's server is the user's to set, in Bot › Server…) |
 | `xc.log(…)` · `xc.success(…)` · `xc.warn(…)` · `xc.error(…)` | write to the Console |
 | `xc.setBotSettings({ key: value })` | change Bot › Settings (not secrets), checked against each setting's type and choices; returns the keys changed |
-| `xc.run(id)` | run a command: a plugin's, or `"bot.run"`, `"bot.stop"`, `"file.save"`, `"server.upload"`, `"server.start"`, `"server.restart"`, `"server.stop"`, `"server.kill"`, `"run.local"`, `"run.server"` |
+| `xc.run(id)` | run a command: a plugin's, or `"bot.run"`, `"bot.stop"`, `"file.save"`, `"server.upload"`, `"server.start"`, `"server.restart"`, `"server.stop"`, `"server.kill"`, `"run.local"`, `"run.server"`. Starting the bot or acting on its server (`bot.run`, `server.*`, `run.*`) only works from a command or a click (a button, a link, an overlay's `onClick`) or an agent's tool, not from a timer, a check or `render`: it throws there |
 | `xc.moveOverlay(id, x, y)` · `xc.overlayPosition(id)` | move an overlay |
 
 Every change can be undone with Ctrl+Z, like your own edits.

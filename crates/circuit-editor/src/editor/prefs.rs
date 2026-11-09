@@ -80,6 +80,9 @@ pub struct Prefs {
     /// on this computer. A project's server settings travel with its files;
     /// its password, API key and the bot token only go to the one kept here.
     pub approved_servers: std::collections::BTreeMap<String, String>,
+    /// The plugins of each project's own `plugins/` folder (by the project's
+    /// folder) that the user said may load: their ids.
+    pub trusted_plugins: std::collections::BTreeMap<String, Vec<String>>,
     /// The builders' and editors' windows (Embed Builder, Bot settings …)
     /// where they were last and as big: x, y, width and height, by kind.
     pub window_places: std::collections::BTreeMap<String, [f32; 4]>,
@@ -185,7 +188,7 @@ impl SideView {
 
 impl Default for Prefs {
     fn default() -> Self {
-        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), activity: SideView::ALL.iter().map(|v| v.key().to_string()).collect(), side_shown: Some(SideView::Workspaces.key().into()), side_lower: None, side_split: 0.5, disabled_plugins: Vec::new(), removed_plugins: Vec::new(), console_font: None, console_font_size: CONSOLE_FONT_SIZE, console_line_spacing: CONSOLE_LINE_SPACING, new_project_location: None, recent_projects: Vec::new(), check_updates: true, skipped_update: None, snap_to_grid: false, recent_blocks: Vec::new(), favorite_blocks: Vec::new(), shortcuts: Default::default(), last_crash_seen: 0, remote_bots: Vec::new(), approved_servers: Default::default(), window_places: Default::default(), lighter_parts: Default::default(), lighter_auto: true, accessibility: true, settings_save_after_secs: SETTINGS_SAVE_AFTER_SECS, recovery_secs: RECOVERY_SECS, undo_steps: UNDO_STEPS }
+        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), activity: SideView::ALL.iter().map(|v| v.key().to_string()).collect(), side_shown: Some(SideView::Workspaces.key().into()), side_lower: None, side_split: 0.5, disabled_plugins: Vec::new(), removed_plugins: Vec::new(), console_font: None, console_font_size: CONSOLE_FONT_SIZE, console_line_spacing: CONSOLE_LINE_SPACING, new_project_location: None, recent_projects: Vec::new(), check_updates: true, skipped_update: None, snap_to_grid: false, recent_blocks: Vec::new(), favorite_blocks: Vec::new(), shortcuts: Default::default(), last_crash_seen: 0, remote_bots: Vec::new(), approved_servers: Default::default(), trusted_plugins: Default::default(), window_places: Default::default(), lighter_parts: Default::default(), lighter_auto: true, accessibility: true, settings_save_after_secs: SETTINGS_SAVE_AFTER_SECS, recovery_secs: RECOVERY_SECS, undo_steps: UNDO_STEPS }
     }
 }
 

@@ -22,7 +22,7 @@ XC Circuit loads plugins from:
 - Folders listed in the `XC_CIRCUIT_PLUGINS` environment variable (handy while developing plugins).
 - The **app's own** `plugins/` folder (Circuit Core, Discord Bot, Fluxer Bot).
 - **Your plugins folder**: `%APPDATA%\XC Circuit\plugins` on Windows, `~/.local/share/xc-circuit/plugins` on Linux. Plugins › Open folder opens it.
-- The open **project's** `plugins/` folder: plugins that belong to one bot and travel with it.
+- The open **project's** `plugins/` folder: plugins that belong to one bot and travel with it. XC Circuit asks before it loads them, once for each project folder and plugin: **Load this project's plugins?** lists them. Say yes for a project of your own or from someone you trust. With **Not now** the project opens without them (their blocks show as not installed), and Plugins › *Load This Project's Plugins…* asks again. A project's plugin can't take the place of one that comes with XC Circuit.
 
 **Installing a plugin someone shared:** Plugins › *Install from Zip…* (or drop the `.zip` on the window). It goes into your plugins folder and loads right away. A zip holds the plugin folder: `plugin.toml` at its top, or in one folder at its top, as GitHub's *Download ZIP* makes them.
 

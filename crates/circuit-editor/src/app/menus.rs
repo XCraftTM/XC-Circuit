@@ -239,6 +239,10 @@ impl CircuitApp {
                     ui.label(RichText::new(t!("No plugin adds commands or panels")).color(theme.text_muted));
                     ui.separator();
                 }
+                // The project's own plugins that wait for a yes: the question again.
+                if !self.ed.plugins_waiting.is_empty() && kit::menu_item(ui, t!("Load This Project's Plugins…"), None, true).clicked() {
+                    self.ed.plugin_ask = true;
+                }
                 if kit::menu_item(ui, t!("Install from Zip…"), None, true).clicked() {
                     self.pick_plugin_zip(ui.ctx());
                 }

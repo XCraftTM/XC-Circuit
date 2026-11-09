@@ -44,6 +44,44 @@ impl CircuitApp {
     }
 
     /// After a crash: offers the unsaved changes that were left behind.
+    /// Asks before the open project's own plugins load (see `editor::trust`).
+    pub(super) fn own_plugins_dialog(&mut self, ctx: &egui::Context, theme: &crate::ui::theme::Theme) {
+        if !self.ed.plugin_ask || self.ed.plugins_waiting.is_empty() {
+            return;
+        }
+        let names: Vec<String> = self.ed.plugins_waiting.iter().map(|o| if o.name == o.id { o.id.clone() } else { format!("{} ({})", o.name, o.id) }).collect();
+        let icon = self.ed.reg.icons.get("alert").cloned();
+        let (mut load, mut later) = (false, false);
+        let close = dialog::show(
+            ctx,
+            theme,
+            dialog::Spec { id: "own-plugins", title: t!("Load this project's plugins?"), subtitle: None, icon: icon.as_deref(), width: 480.0 },
+            |ui, part| match part {
+                dialog::Part::Body => {
+                    ui.label(RichText::new(t!("This project brings its own plugins:")).size(13.5).color(theme.text));
+                    ui.add_space(4.0);
+                    for name in &names {
+                        ui.label(RichText::new(format!("· {name}")).size(13.0).strong().color(theme.text));
+                    }
+                    ui.add_space(8.0);
+                    ui.label(RichText::new(t!("Plugins hold code that runs on your computer: their blocks run in your bot, with the same access as any program. Load them only if you trust where this project comes from.")).size(12.5).color(theme.text_muted));
+                    ui.add_space(4.0);
+                    ui.label(RichText::new(t!("Without them the project opens as usual; blocks from these plugins show as not installed.")).size(12.5).color(theme.text_muted));
+                }
+                dialog::Part::Footer => {
+                    load = kit::primary_button(ui, theme, t!("Load them")).clicked();
+                    later = kit::secondary_button(ui, theme, t!("Not now")).clicked();
+                }
+            },
+        );
+        if load {
+            self.ed.trust_own_plugins();
+            self.reload_plugins(ctx);
+        } else if later || close {
+            self.ed.plugin_ask = false;
+        }
+    }
+
     pub(super) fn recovery_dialog(&mut self, ctx: &egui::Context, theme: &crate::ui::theme::Theme) {
         let Some(rec) = &self.ed.recovery_offer else { return };
         let Some(project) = &self.ed.project else { return };
@@ -500,6 +538,7 @@ impl CircuitApp {
         let theme = self.ed.theme.clone();
         if self.setup.is_none() && self.tour.is_none() {
             self.recovery_dialog(ctx, &theme);
+            self.own_plugins_dialog(ctx, &theme);
         }
         self.new_project_chooser(ctx, &theme);
         if self.show_about {

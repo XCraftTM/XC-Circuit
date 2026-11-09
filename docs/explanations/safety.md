@@ -21,7 +21,11 @@ The passwords and API keys for uploading the bot to its server (Bot â€º Serverâ€
 - They have **no** access to files, the network, other programs or your secrets.
 - Each call has a **time limit** (an endless loop is stopped) and each plugin a **memory limit**.
 
-That's why they start without asking.
+That's why installed plugins' scripts start without asking. A script of a plugin that doesn't come with XC Circuit can start the bot, or upload it, only when you click one of its buttons or pick one of its commands, not by itself.
+
+## Plugins that come with a project
+
+A project can bring plugins of its own, in its `plugins/` folder: handy for blocks made for one bot, but with a project from someone else that is their code. XC Circuit asks before it loads them (**Load this project's plugins?**), once for each project folder and plugin, and remembers the answer on your computer, not in the project. Until you say yes, nothing of those plugins is read or run. A project's plugin never replaces one that comes with XC Circuit, such as Discord Bot, which handles your token.
 
 ## What bot code can do
 

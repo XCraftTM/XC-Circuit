@@ -379,6 +379,11 @@ pub type ProblemItem = (String, String, Option<(String, String)>);
 /// Plugin problems plus checks of every workspace in the open project.
 pub fn collect_problems(ed: &mut Editor) -> Vec<ProblemItem> {
     let mut items: Vec<ProblemItem> = ed.reg.problems.iter().map(|p| (p.source.clone(), p.message.clone(), None)).collect();
+    // The project's own plugins that wait for the user's yes.
+    if !ed.plugins_waiting.is_empty() {
+        let names = ed.plugins_waiting.iter().map(|o| o.name.as_str()).collect::<Vec<_>>().join(", ");
+        items.push(("plugins".to_string(), tf!("This project's own plugins aren't loaded: {names}. Plugins › Load This Project's Plugins… loads them.", names = names), None));
+    }
     // Custom ids: events waiting for an id nothing gives, and buttons nothing handles.
     let id_problems = crate::editor::custom_ids::collect_for(ed).problems();
     if let Some(project) = &ed.project {

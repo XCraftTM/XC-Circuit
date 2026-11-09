@@ -7,6 +7,7 @@ pub mod history;
 pub mod keymap;
 pub mod prefs;
 pub mod saver;
+pub mod trust;
 pub mod custom_ids;
 pub mod values;
 
@@ -79,6 +80,12 @@ pub struct Editor {
     pub bundled_plugins: Vec<String>,
     /// Plugins that come with the app but can be turned off and removed: (id, name).
     pub optional_plugins: Vec<(String, String)>,
+    /// The open project's own plugins that aren't loaded: waiting for the
+    /// user's yes, and refused (they have the id of one of the app's).
+    pub plugins_waiting: Vec<trust::OwnPlugin>,
+    pub plugins_refused: Vec<trust::OwnPlugin>,
+    /// The question about `plugins_waiting` is open.
+    pub plugin_ask: bool,
     /// Text a plugin put on the clipboard, for the app to copy.
     pub copy_out: Option<String>,
     /// The MCP server for AI agents: { listening, agents }, kept by the app.
@@ -178,6 +185,9 @@ impl Editor {
             plugin_dirs,
             bundled_plugins: Vec::new(),
             optional_plugins: Vec::new(),
+            plugins_waiting: Vec::new(),
+            plugins_refused: Vec::new(),
+            plugin_ask: false,
             copy_out: None,
             agent_link: serde_json::Value::Null,
             theme: Theme::fallback(),
@@ -299,7 +309,25 @@ impl Editor {
         }
         // The app's own plugins load even if a preference says otherwise.
         let off: Vec<String> = self.prefs.disabled_plugins.iter().chain(&self.prefs.removed_plugins).filter(|id| !self.bundled_plugins.contains(id)).cloned().collect();
-        self.reg = Registry::load_except(&dirs, &self.engine, &off);
+        // The project's own plugins load once the user said yes to them, and
+        // never in place of one of the app's (see `trust`).
+        let (waiting, refused) = self.sort_own_plugins();
+        let skip: Vec<PathBuf> = waiting.iter().chain(&refused).map(|o| o.dir.clone()).collect();
+        self.reg = Registry::load_without(&dirs, &self.engine, &off, &skip);
+        for o in &refused {
+            self.reg.problems.push(circuit_plugins::registry::Problem {
+                source: o.dir.join("plugin.toml").display().to_string(),
+                message: format!("{} has the id of a plugin that comes with XC Circuit ({}), so it isn't loaded: a project's plugin can't take the place of one of the app's", o.name, o.id),
+            });
+        }
+        // Asked when there are new ones to ask about, not at every reload.
+        if !waiting.is_empty() && waiting.iter().any(|o| !self.plugins_waiting.contains(o)) {
+            self.plugin_ask = true;
+        }
+        if waiting.is_empty() {
+            self.plugin_ask = false;
+        }
+        (self.plugins_waiting, self.plugins_refused) = (waiting, refused);
         self.apply_language();
         self.shapes.clear();
         self.shapes.forget_too_slow();
@@ -327,6 +355,9 @@ impl Editor {
                 self.views.clear();
                 self.ws_export = None;
                 self.ws_import = None;
+                // Another project: its own plugins are asked about anew.
+                self.plugins_waiting.clear();
+                self.plugin_ask = false;
                 self.reload_plugins();
                 self.refresh_define_ctx();
                 self.upgrade_blocks();
@@ -349,6 +380,9 @@ impl Editor {
     pub fn close_project(&mut self) {
         let Some(project) = self.project.take() else { return };
         self.log(Level::Info, format!("Closed {}", project.meta.name));
+        self.plugins_waiting.clear();
+        self.plugins_refused.clear();
+        self.plugin_ask = false;
         self.history.clear();
         self.recovery_offer = None;
         self.edited = false;
