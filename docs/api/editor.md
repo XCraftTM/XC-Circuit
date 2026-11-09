@@ -62,7 +62,7 @@ Types for your code editor: `/// <reference types="@xc-circuit/sdk/editor" />` (
 | `xc.data.set(key, value)` · `xc.storage.set(key, value)` | save data (not the key `hosting`: the bot's server is the user's to set, in Bot › Server…) |
 | `xc.log(…)` · `xc.success(…)` · `xc.warn(…)` · `xc.error(…)` | write to the Console |
 | `xc.setBotSettings({ key: value })` | change Bot › Settings (not secrets), checked against each setting's type and choices; returns the keys changed |
-| `xc.run(id)` | run a command: a plugin's, or `"bot.run"`, `"bot.stop"`, `"file.save"`, `"server.upload"`, `"server.start"`, `"server.restart"`, `"server.stop"`, `"server.kill"`, `"run.local"`, `"run.server"` |
+| `xc.run(id)` | run a command: a plugin's, or `"bot.run"`, `"bot.stop"`, `"file.save"`, `"server.upload"`, `"server.start"`, `"server.restart"`, `"server.stop"`, `"server.kill"`, `"run.local"`, `"run.server"`. Starting the bot or acting on its server (`bot.run`, `server.*`, `run.*`) only works from a command or a click (a button, a link, an overlay's `onClick`) or an agent's tool, not from a timer, a check or `render`: it throws there |
 | `xc.moveOverlay(id, x, y)` · `xc.overlayPosition(id)` | move an overlay |
 
 Every change can be undone with Ctrl+Z, like your own edits.

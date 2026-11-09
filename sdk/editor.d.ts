@@ -104,7 +104,9 @@ export interface Xc {
   warn(...parts: unknown[]): void;
   error(...parts: unknown[]): void;
   /** Runs a command after this handler: a plugin's, or "bot.run", "bot.stop", "file.save",
-   * "server.upload", "server.start", "server.restart", "server.stop", "server.kill", "run.local", "run.server". */
+   * "server.upload", "server.start", "server.restart", "server.stop", "server.kill", "run.local", "run.server".
+   * Starting the bot or acting on its server ("bot.run", "server.*", "run.*") only works from a command, a
+   * click (a button, a link, an overlay's onClick) or an agent's tool; from a timer, a check or render it throws. */
   run(id: string): void;
   botRunning(): boolean;
   /** A block type's source file. */

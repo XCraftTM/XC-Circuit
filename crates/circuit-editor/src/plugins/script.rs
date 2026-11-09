@@ -9,8 +9,9 @@
 //!
 //! Each plugin gets its own QuickJS sandbox with a time and memory limit. It
 //! reaches the app only through `xc` (no files, network or processes), so
-//! scripts need no approval. They run in the editor only; bot code never
-//! runs here.
+//! an installed plugin's script needs no approval. (A project's own plugins
+//! are asked about before they load at all: see `editor::trust`.) They run
+//! in the editor only; bot code never runs here.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -306,6 +307,9 @@ pub struct ScriptPlugin {
     context: Context,
     deadline: Arc<Mutex<Option<Instant>>>,
     host: HostPtr,
+    /// The call under way was asked for by the user (a command, a click) or
+    /// an agent (a tool), not made by the script on its own.
+    by_user: Rc<Cell<bool>>,
     registered: Registered,
     commands: Vec<Command>,
     panels: Vec<PanelInfo>,
@@ -338,6 +342,8 @@ impl ScriptPlugin {
         let root = plain_path(dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf()));
         let state: Rc<RefCell<State>> = Rc::default();
         let slot = host.clone();
+        let by_user: Rc<Cell<bool>> = Rc::default();
+        let asked = by_user.clone();
         let (own_state, own_root) = (state.clone(), root.clone());
         let plugin_root = root.clone();
         context
@@ -348,7 +354,7 @@ impl ScriptPlugin {
                     Function::new(ctx.clone(), move |method: String, args: String| -> String {
                         let result = match slot.get() {
                             // SAFETY: see `Lend`: set only while the editor waits for this script.
-                            Some(ptr) => host_call(unsafe { &mut *ptr }, &method, &args),
+                            Some(ptr) => host_call(unsafe { &mut *ptr }, &method, &args, asked.get()),
                             None => Err("the app can only be used from a command, panel, check or event handler, not while the script loads".into()),
                         };
                         reply(result)
@@ -385,6 +391,7 @@ impl ScriptPlugin {
             context,
             deadline,
             host,
+            by_user,
             registered: Registered::default(),
             commands: Vec::new(),
             panels: Vec::new(),
@@ -404,6 +411,7 @@ impl ScriptPlugin {
     /// Calls `__xc[method](...args)`, lending the editor when there is one.
     fn run(&self, host: Option<&mut dyn Host>, budget: Duration, method: &str, args: Vec<Value>) -> Result<Value, String> {
         let _lent = host.map(|h| Lend::new(&self.host, h));
+        self.by_user.set(matches!(method, "command" | "event" | "overlayClick" | "tool"));
         let end = Instant::now() + budget;
         self.set_deadline(Some(end));
         let text = self.context.with(|ctx| {
@@ -526,7 +534,7 @@ fn parsed(text: Option<String>) -> Value {
 }
 
 /// What `xc.*` does in the editor. `args` is a JSON array.
-fn host_call(h: &mut dyn Host, method: &str, args: &str) -> Result<Value, String> {
+fn host_call(h: &mut dyn Host, method: &str, args: &str, by_user: bool) -> Result<Value, String> {
     let a: Vec<Value> = serde_json::from_str(args).map_err(|e| e.to_string())?;
     let s = |i: usize| match a.get(i) {
         Some(Value::String(s)) => s.clone(),
@@ -564,7 +572,7 @@ fn host_call(h: &mut dyn Host, method: &str, args: &str) -> Result<Value, String
             Value::Null
         }
         "run" => {
-            h.run_command(&s(0));
+            h.run_command(&s(0), by_user)?;
             Value::Null
         }
         "botRunning" => json!(h.bot_running()),
@@ -1109,6 +1117,8 @@ mod tests {
         log: Vec<(api::Level, String)>,
         revealed: Vec<(String, String)>,
         ran: Vec<String>,
+        /// For each of `ran`: whether the user asked for it.
+        by_user: Vec<bool>,
     }
 
     impl Host for FakeHost {
@@ -1150,8 +1160,10 @@ mod tests {
         fn log(&mut self, level: api::Level, text: &str) {
             self.log.push((level, text.into()));
         }
-        fn run_command(&mut self, id: &str) {
+        fn run_command(&mut self, id: &str, by_user: bool) -> Result<(), String> {
             self.ran.push(id.into());
+            self.by_user.push(by_user);
+            Ok(())
         }
         fn bot_running(&self) -> bool {
             false
@@ -1434,6 +1446,27 @@ mod tests {
             assert!(plugin_file(&root, "link.js").is_none());
         }
         let _ = std::fs::remove_file(outside);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// The editor is told whether a command a script runs was asked for by
+    /// the user (a command of the plugin, a click) or comes from the script
+    /// itself (a timer): the bot isn't started by the latter.
+    #[test]
+    fn the_editor_knows_who_asked_for_a_command() {
+        let dir = plugin_dir(&[(
+            "editor.js",
+            "xc.command({ id: 't.go', title: 'Go', run() { xc.run('bot.run') } });\nxc.after(0, () => xc.run('bot.run'));\nxc.panel({ id: 'p', title: 'P', render(ui) { ui.button('Run', () => xc.run('bot.run')) } });",
+        )]);
+        let mut p = load("P", &dir, "editor.js").0.unwrap();
+        let mut h = host();
+        p.run_command("t.go", &mut h).unwrap();
+        std::thread::sleep(Duration::from_millis(30));
+        p.tick(&mut h).unwrap();
+        p.run(Some(&mut h), QUICK, "render", vec![json!("p")]).unwrap();
+        p.run(Some(&mut h), SLOW, "event", vec![json!("p"), json!(0), Value::Null]).unwrap();
+        assert_eq!(h.ran, ["bot.run", "bot.run", "bot.run"]);
+        assert_eq!(h.by_user, [true, false, true], "the command, the timer, the click");
         let _ = std::fs::remove_dir_all(dir);
     }
 

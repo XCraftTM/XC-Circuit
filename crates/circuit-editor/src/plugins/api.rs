@@ -114,8 +114,11 @@ pub trait Host {
     fn project_data(&self, key: &str) -> Option<String>;
     fn set_project_data(&mut self, key: &str, json: &str) -> Result<(), String>;
     fn log(&mut self, level: Level, text: &str);
-    /// Runs an editor command (`bot.run`, `bot.stop`, `file.save`) or another plugin's command.
-    fn run_command(&mut self, id: &str);
+    /// Runs an editor command (`bot.run`, `bot.stop`, `file.save`) or another
+    /// plugin's command. `by_user`: asked for from a command, a click or an
+    /// agent's tool, not by the script on its own (a timer, a check, while
+    /// drawing or loading). An error when it isn't allowed that way.
+    fn run_command(&mut self, id: &str, by_user: bool) -> Result<(), String>;
     fn bot_running(&self) -> bool;
     /// This plugin's own small key-value store, kept between sessions.
     fn storage_get(&self, key: &str) -> Option<String>;

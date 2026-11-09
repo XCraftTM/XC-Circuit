@@ -201,7 +201,7 @@ impl PluginHost {
         let p = &mut self.plugins[index];
         let inst = p.instance.as_mut()?;
         let storage = self.storage.entry(p.id.clone()).or_default();
-        let mut host = EditorHost { ed, storage, stored: &mut self.stored, queued: &mut self.queued, bot_running };
+        let mut host = EditorHost { ed, storage, stored: &mut self.stored, queued: &mut self.queued, bot_running, bundled: p.bundled };
         // Its panics are caught and reported here, not crashes of the app.
         let call = || std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(inst.obj.as_mut(), &mut host))).unwrap_or_else(|p| Err(panic_message(&*p)));
         match crate::app::crash::plugin_call(call) {
@@ -332,6 +332,8 @@ struct EditorHost<'a> {
     stored: &'a mut bool,
     queued: &'a mut Vec<String>,
     bot_running: bool,
+    /// The plugin came with the app.
+    bundled: bool,
 }
 
 impl api::Host for EditorHost<'_> {
@@ -408,8 +410,16 @@ impl api::Host for EditorHost<'_> {
         self.ed.log(map_level(level), text);
     }
 
-    fn run_command(&mut self, id: &str) {
+    fn run_command(&mut self, id: &str, by_user: bool) -> Result<(), String> {
+        // Starting the bot, or sending it to its server, runs code and uses
+        // the token. A plugin that didn't come with the app does that when
+        // the user clicked something of it, never by itself.
+        let starts_the_bot = matches!(id, "bot.run" | "run.local" | "run.server") || id.starts_with("server.");
+        if starts_the_bot && !by_user && !self.bundled {
+            return Err(format!("xc.run(\"{id}\") only works from a command or a click (a button, a link, an overlay), not from a timer, a check or while drawing"));
+        }
         self.queued.push(id.to_string());
+        Ok(())
     }
 
     fn bot_running(&self) -> bool {
@@ -958,6 +968,44 @@ mod tests {
         let errors = ed.log.len();
         host.sync(&mut ed, None);
         assert_eq!(ed.log.len(), errors);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// A plugin that didn't come with the app starts the bot (or sends it to
+    /// its server) when the user clicked something of it, never by itself;
+    /// other commands, and the app's own plugins, aren't held back.
+    #[test]
+    fn only_the_user_starts_the_bot_through_a_plugin() {
+        let tmp = std::env::temp_dir().join(format!("xc-script-run-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let dir = tmp.join("plugins").join("t.runner");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("plugin.toml"), "id = \"t.runner\"\nname = \"Runner\"\nversion = \"1.0.0\"\n\n[editor]\nscript = \"editor.js\"\n").unwrap();
+        std::fs::write(dir.join("editor.js"), "xc.command({ id: 't.go', title: 'Go', run() { xc.run('bot.run') } });\nxc.after(0, () => { xc.run('file.save'); xc.run('server.upload') });\nxc.after(0, () => xc.run('bot.run'));").unwrap();
+        let ctx = egui::Context::default();
+        let mut ed = Editor::new(vec![tmp.join("plugins")], None).unwrap();
+        let mut host = PluginHost::new(BTreeMap::new());
+        host.sync(&mut ed, None);
+        assert_eq!(host.plugins[0].status, Status::Loaded, "{:?}", ed.log);
+        assert!(!host.plugins[0].bundled);
+        // Its command, which the user picked: the bot starts.
+        assert!(host.run_command(&mut ed, "t.go", false));
+        assert_eq!(host.queued, ["bot.run"]);
+        // Its timers: saving is fine, starting the bot and uploading aren't.
+        std::thread::sleep(Duration::from_millis(40));
+        host.frame(&ctx, &mut ed, false);
+        assert_eq!(host.queued, ["bot.run", "file.save"]);
+        let said: Vec<&str> = ed.log.iter().map(|l| l.text.as_str()).filter(|t| t.contains("only works from a command or a click")).collect();
+        assert_eq!(said.len(), 2, "{:?}", ed.log.iter().map(|l| &l.text).collect::<Vec<_>>());
+        assert!(said[0].contains("server.upload") && said[1].contains("bot.run"), "{said:?}");
+
+        // The same script as one of the app's own plugins isn't held back.
+        let mut host = PluginHost::new(BTreeMap::new());
+        host.sync(&mut ed, Some(&tmp.join("plugins")));
+        assert!(host.plugins[0].bundled);
+        std::thread::sleep(Duration::from_millis(40));
+        host.frame(&ctx, &mut ed, false);
+        assert_eq!(host.queued, ["file.save", "server.upload", "bot.run"]);
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
