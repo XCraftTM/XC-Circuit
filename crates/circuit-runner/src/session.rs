@@ -14,7 +14,7 @@ use anyhow::Result;
 use indexmap::IndexMap;
 use serde_json::Value;
 
-use crate::node::{check_node, ensure_packages, lines_lossy, quiet};
+use crate::node::{check_node, ensure_shared_packages, lines_lossy, quiet};
 use crate::protocol::{BotEvent, parse_line};
 
 /// How long a bot gets to stop by itself before it is ended.
@@ -158,7 +158,7 @@ fn prepare_and_spawn(cfg: &SessionConfig, send: &dyn Fn(Msg), stopping: &dyn Fn(
     let version = check_node()?;
     send(Msg::Info(format!("Using Node.js {version}")));
     // Stopping while packages install ends npm instead of waiting for it.
-    ensure_packages(&cfg.packages_dir, "xc-circuit-bot-packages", &cfg.dependencies, &mut |line| send(Msg::Info(line)), stopping)?;
+    ensure_shared_packages(&cfg.packages_dir, &cfg.dependencies, &mut |line| send(Msg::Info(line)), stopping)?;
 
     fs::create_dir_all(&cfg.run_dir)?;
     fs::create_dir_all(&cfg.data_dir)?;

@@ -6,6 +6,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 
 ### Changed
 - **Saving writes only the files that changed**: every save wrote every workspace's file again, also the ones nothing had changed in. Those are left alone now, so saving a big project is quicker, and tools that go by a file's date (Git, backups, sync folders) see only what really changed.
+- **npm packages stay installed when you switch bots**: all bots share one packages folder, and it held only the packages of the bot that ran last. Running another bot with other packages (a Fluxer bot after a Discord bot, one with a database, one with music) removed the first one's, and going back installed them again, every time. Packages now stay once installed; where two bots ask for different versions of one package, the bot that runs gets its own.
 
 ### Fixed
 - **The bot's output no longer stops at an odd character**: a line that wasn't UTF-8 (a program the bot starts answering in Windows' own encoding, with an umlaut in it) ended the reading of everything the bot wrote, so the Console stayed empty from there on, blocks stopped lighting up, and the bot could end with a write error. Such characters now show as `�` and the rest is read as before. The same goes for npm's output while packages install, and for the database helper.

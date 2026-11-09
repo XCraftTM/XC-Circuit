@@ -15,7 +15,7 @@ use indexmap::IndexMap;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::node::{check_node, ensure_packages, quiet};
+use crate::node::{check_node, ensure_shared_packages, quiet};
 
 /// What a test found.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
@@ -89,7 +89,7 @@ impl DbHelper {
     /// Starts it for the connection in `cfg.spec`.
     pub fn start(cfg: &TestConfig, log: &mut dyn FnMut(String)) -> Result<DbHelper> {
         check_node()?;
-        ensure_packages(cfg.packages_dir, "xc-circuit-bot-packages", cfg.dependencies, log, &|| false)?;
+        ensure_shared_packages(cfg.packages_dir, cfg.dependencies, log, &|| false)?;
         fs::create_dir_all(cfg.data_dir)?;
         let runtime = crate::write_runtime(cfg.run_dir)?;
         let mut cmd = crate::node::node_command();
@@ -190,7 +190,7 @@ impl Drop for DbHelper {
 /// gives what it printed and its errors.
 fn run_runtime(cfg: &TestConfig, flag: &str, (env_key, env_value): (&str, String), log: &mut dyn FnMut(String)) -> Result<(String, String)> {
     check_node()?;
-    ensure_packages(cfg.packages_dir, "xc-circuit-bot-packages", cfg.dependencies, log, &|| false)?;
+    ensure_shared_packages(cfg.packages_dir, cfg.dependencies, log, &|| false)?;
     fs::create_dir_all(cfg.run_dir)?;
     fs::create_dir_all(cfg.data_dir)?;
     let runtime = crate::write_runtime(cfg.run_dir)?;

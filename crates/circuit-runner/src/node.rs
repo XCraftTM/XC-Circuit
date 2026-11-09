@@ -231,21 +231,62 @@ pub fn npm_overrides() -> serde_json::Value {
 /// list changed or a package is missing. Output lines go to `log`. When
 /// `cancel` turns true, npm is ended and this returns an error.
 pub fn ensure_packages(dir: &Path, name: &str, deps: &IndexMap<String, String>, log: &mut dyn FnMut(String), cancel: &dyn Fn() -> bool) -> Result<()> {
+    install(dir, name, deps, deps, log, cancel)
+}
+
+/// What the folder all bots share is called in its package.json.
+pub const SHARED_PACKAGES: &str = "xc-circuit-bot-packages";
+
+/// [`ensure_packages`] for the folder all bots share. Packages another bot
+/// had installed there stay listed, so they stay installed: going from one
+/// bot to another with other packages (or to a database page) and back
+/// doesn't install them all over again each time. Where two bots ask for
+/// different versions of a package, this bot's is installed.
+pub fn ensure_shared_packages(dir: &Path, deps: &IndexMap<String, String>, log: &mut dyn FnMut(String), cancel: &dyn Fn() -> bool) -> Result<()> {
+    let listed = with_others(fs::read_to_string(dir.join("package.json")).ok().as_deref(), deps);
+    match install(dir, SHARED_PACKAGES, &listed, deps, log, cancel) {
+        // It may be another bot's package that can't be installed (any
+        // more): this bot's alone, then.
+        Err(_) if listed.len() > deps.len() && !cancel() => {
+            log("Installing again, with only this bot's packages …".into());
+            install(dir, SHARED_PACKAGES, deps, deps, log, cancel)
+        }
+        done => done,
+    }
+}
+
+/// `deps` and the other packages a package.json (`old`) lists, by name: the
+/// same list whichever bot ran last.
+fn with_others(old: Option<&str>, deps: &IndexMap<String, String>) -> IndexMap<String, String> {
+    let listed = old.and_then(|text| serde_json::from_str::<serde_json::Value>(text).ok()).and_then(|v| v.get("dependencies")?.as_object().cloned()).unwrap_or_default();
+    let mut all: std::collections::BTreeMap<String, String> = listed.into_iter().filter_map(|(name, version)| Some((name, version.as_str()?.to_string()))).collect();
+    all.extend(deps.iter().map(|(name, version)| (name.clone(), version.clone())));
+    all.into_iter().collect()
+}
+
+/// Makes sure `dir/node_modules` has the `needed` packages, with `listed`
+/// (those and perhaps more) in its package.json.
+fn install(dir: &Path, name: &str, listed: &IndexMap<String, String>, needed: &IndexMap<String, String>, log: &mut dyn FnMut(String), cancel: &dyn Fn() -> bool) -> Result<()> {
     fs::create_dir_all(dir)?;
-    let manifest = json!({ "name": name, "private": true, "dependencies": deps, "overrides": npm_overrides() });
+    let manifest = json!({ "name": name, "private": true, "dependencies": listed, "overrides": npm_overrides() });
     let text = serde_json::to_string_pretty(&manifest)? + "\n";
     let manifest_path = dir.join("package.json");
-    if deps.is_empty() {
-        fs::write(&manifest_path, &text)?;
+    // The same packages as last time: in whatever order, and whatever else
+    // the file says (an exported bot's has more in it).
+    let old: Option<serde_json::Value> = fs::read_to_string(&manifest_path).ok().and_then(|t| serde_json::from_str(&t).ok());
+    let unchanged = old.is_some_and(|o| o.get("dependencies") == manifest.get("dependencies") && o.get("overrides") == manifest.get("overrides"));
+    if needed.is_empty() {
+        if !unchanged {
+            fs::write(&manifest_path, &text)?;
+        }
         return Ok(());
     }
-    let unchanged = fs::read_to_string(&manifest_path).is_ok_and(|old| old == text);
-    let all_present = deps.keys().all(|d| dir.join("node_modules").join(d).join("package.json").is_file());
+    let all_present = needed.keys().all(|d| dir.join("node_modules").join(d).join("package.json").is_file());
     if unchanged && all_present {
         return Ok(());
     }
     fs::write(&manifest_path, &text)?;
-    log(format!("Installing {} …", deps.keys().cloned().collect::<Vec<_>>().join(", ")));
+    log(format!("Installing {} …", needed.keys().cloned().collect::<Vec<_>>().join(", ")));
     let mut child = quiet(npm().args(["install", "--no-audit", "--no-fund", "--loglevel=error"]).current_dir(dir))
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -326,6 +367,63 @@ mod tests {
         }
         assert!(!runs(started), "what the process started ended with it");
         assert!(!runs(parent.id()));
+    }
+
+    /// The shared folder's list: this bot's packages and the others listed
+    /// before, by name, this bot's version where both name one.
+    #[test]
+    fn other_bots_packages_stay_listed() {
+        let deps = |list: &[(&str, &str)]| -> IndexMap<String, String> { list.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect() };
+        let old = r#"{ "name": "xc-circuit-bot-packages", "dependencies": { "pg": "^8.0.0", "discord.js": "^14.0.0", "odd": 1 } }"#;
+        let all = with_others(Some(old), &deps(&[("discord.js", "^15.0.0"), ("@napi-rs/canvas", "^1.0.0")]));
+        assert_eq!(all, deps(&[("@napi-rs/canvas", "^1.0.0"), ("discord.js", "^15.0.0"), ("pg", "^8.0.0")]));
+        assert_eq!(all.keys().collect::<Vec<_>>(), ["@napi-rs/canvas", "discord.js", "pg"], "by name, whichever bot ran last");
+        // No list yet, or one that can't be read: this bot's alone.
+        assert_eq!(with_others(None, &deps(&[("pg", "^8.0.0")])), deps(&[("pg", "^8.0.0")]));
+        assert_eq!(with_others(Some("not json"), &deps(&[])), deps(&[]));
+    }
+
+    /// Going from one bot to another and back installs each bot's packages
+    /// once: the other's stay. A package of another bot that can't be
+    /// installed any more doesn't keep this one from running.
+    #[test]
+    fn the_shared_folder_keeps_other_bots_packages() {
+        if check_node().is_err() {
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("xc-npm-shared-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let local = |name: &str| {
+            let folder = dir.join(name);
+            fs::create_dir_all(&folder).unwrap();
+            fs::write(folder.join("package.json"), format!(r#"{{ "name": "{name}", "version": "1.0.0" }}"#)).unwrap();
+            let deps: IndexMap<String, String> = [(name.to_string(), format!("file:{}", folder.display()))].into();
+            deps
+        };
+        let (first, second) = (local("first-bot-package"), local("second-bot-package"));
+        let shared = dir.join("packages");
+        let present = |name: &str| shared.join("node_modules").join(name).join("package.json").is_file();
+        let run = |deps: &IndexMap<String, String>| {
+            let mut said = Vec::new();
+            ensure_shared_packages(&shared, deps, &mut |line| said.push(line), &|| false).unwrap();
+            said
+        };
+        assert!(run(&first).iter().any(|l| l.starts_with("Installing first-bot-package")));
+        assert!(run(&second).iter().any(|l| l.starts_with("Installing second-bot-package")));
+        assert!(present("first-bot-package") && present("second-bot-package"), "the first bot's package stayed");
+        assert_eq!(run(&first), Vec::<String>::new(), "nothing to install on the way back");
+        assert_eq!(run(&IndexMap::new()), Vec::<String>::new(), "nor for a bot without packages");
+        assert!(present("first-bot-package") && present("second-bot-package"));
+
+        // Another bot's package that is gone: this bot's are installed without it.
+        let mut listed: serde_json::Value = serde_json::from_str(&fs::read_to_string(shared.join("package.json")).unwrap()).unwrap();
+        listed["dependencies"]["gone-package"] = json!(format!("file:{}", dir.join("gone-package-1.0.0.tgz").display()));
+        fs::write(shared.join("package.json"), listed.to_string()).unwrap();
+        fs::remove_dir_all(shared.join("node_modules")).unwrap();
+        assert!(run(&first).iter().any(|l| l.contains("only this bot's packages")));
+        assert!(present("first-bot-package"));
+        assert!(!fs::read_to_string(shared.join("package.json")).unwrap().contains("gone-package"));
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// Stopping while npm installs ends it right away.

@@ -1507,7 +1507,7 @@ Blocks and runtime libraries don't run in the editor; they run in your **bot**, 
 Your bot is a Node.js program. When you press **Run** (F5), XC Circuit:
 
 1. Makes sure **Node.js 22 or newer** is there (the first start page sets it up).
-2. Installs the npm packages the build mode and its blocks need (discord.js, @fluxerjs/core, and any a block lists in `requires.dependencies`), once, into a shared packages folder.
+2. Installs the npm packages the build mode and its blocks need (discord.js, @fluxerjs/core, and any a block lists in `requires.dependencies`), once, into a shared packages folder. Packages your other bots installed there stay, so going from one bot to another doesn't install them again.
 3. Bundles the runtime, your project and the blocks it uses into a run folder in the project's `.circuit/` folder.
 4. Starts Node.js with the bot token from the credential store, and stays connected to it.
 
