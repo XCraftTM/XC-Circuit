@@ -125,21 +125,24 @@ impl Session {
     }
 
     /// Asks the bot to stop, so it can write its saved data, and ends it after
-    /// a moment if it hasn't.
+    /// a moment if it hasn't: with the processes it started (on Windows), so
+    /// none of them (a player, a converter) stays behind. A bot that can't be
+    /// asked is ended at once.
     pub fn stop(&self) {
         *self.stopping.lock().unwrap() = true;
-        let mut guard = self.child.lock().unwrap();
-        let Some(c) = guard.as_mut() else { return };
-        let asked = c.stdin.as_mut().is_some_and(|i| i.write_all(b"stop\n").and_then(|_| i.flush()).is_ok());
-        if !asked {
-            let _ = c.kill();
-            return;
-        }
+        let asked = {
+            let mut guard = self.child.lock().unwrap();
+            let Some(c) = guard.as_mut() else { return };
+            c.stdin.as_mut().is_some_and(|i| i.write_all(b"stop\n").and_then(|_| i.flush()).is_ok())
+        };
+        // On a thread of its own: ending the processes takes a moment too.
         let child = self.child.clone();
         thread::spawn(move || {
-            thread::sleep(STOP_GRACE);
+            if asked {
+                thread::sleep(STOP_GRACE);
+            }
             if let Some(c) = child.lock().unwrap().as_mut() {
-                let _ = c.kill();
+                crate::node::end_tree(c);
             }
         });
     }

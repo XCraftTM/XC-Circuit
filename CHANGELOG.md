@@ -10,6 +10,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **An AI agent's request that took too long isn't done later after all**: while a dialog was open (a file picker, say), an agent's tool call waited, and after a minute the agent was told it failed. The call still ran once the dialog closed, so an agent that had tried again got its block twice. A call that was given up is now dropped, and the agent is told nothing was done.
 - **Workspaces named Con, Nul, Aux, Prn, Com1 or Lpt1 can be saved**: Windows keeps those names for devices, so the workspace's file (`con.json`) couldn't be written and saving failed. Such a workspace now gets a file name of its own (`con-workspace.json`); its name in the side bar stays as typed.
 - **Replacing a plugin can't lose it**: installing a plugin's zip over an installed version (or a block update) deleted the old version first; if the new one then couldn't be moved into place, the plugin was gone. The old version now steps aside and comes back when that happens. A folder an interrupted install left behind is no longer taken for a plugin.
+- **Stop doesn't leave the bot's helpers running** (Windows): a bot that didn't stop within a moment was ended, but programs it had started (a player or converter for music, say) kept running. They're ended with it now.
 
 ## 0.2.9
 

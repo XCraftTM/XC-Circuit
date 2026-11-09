@@ -190,8 +190,9 @@ pub fn check_node() -> Result<String> {
     Ok(version)
 }
 
-/// Ends a process and the ones it started (npm runs node under a shell on Windows).
-fn end_tree(child: &mut std::process::Child) {
+/// Ends a process and, on Windows, the ones it started (npm runs node under a
+/// shell there; a bot may have started a player or a converter).
+pub(crate) fn end_tree(child: &mut std::process::Child) {
     #[cfg(windows)]
     {
         let ended = quiet(Command::new("taskkill").args(["/T", "/F", "/PID", &child.id().to_string()])).stdout(Stdio::null()).stderr(Stdio::null()).status();
@@ -299,6 +300,32 @@ mod tests {
         let lines: Vec<String> = lines_lossy(bytes).collect();
         assert_eq!(lines, ["first", "f\u{fffd}r", "last"]);
         assert_eq!(lines_lossy(&b""[..]).count(), 0);
+    }
+
+    /// Ending a process ends what it started too: a bot that didn't stop in
+    /// time doesn't leave its helpers (ffmpeg …) running.
+    #[cfg(windows)]
+    #[test]
+    fn ending_a_process_ends_what_it_started() {
+        if check_node().is_err() {
+            return;
+        }
+        let script = "const c = require('child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' }); console.log(c.pid); setInterval(() => {}, 1000);";
+        let mut parent = quiet(node_command().args(["-e", script])).stdout(Stdio::piped()).spawn().unwrap();
+        let mut out = lines_lossy(parent.stdout.take().unwrap());
+        let started: u32 = out.next().expect("the started process's id").trim().parse().unwrap();
+        let runs = |pid: u32| {
+            let list = quiet(Command::new("tasklist").args(["/FI", &format!("PID eq {pid}"), "/NH", "/FO", "CSV"])).output().unwrap();
+            String::from_utf8_lossy(&list.stdout).contains(&format!("\"{pid}\""))
+        };
+        assert!(runs(started), "it runs before");
+        end_tree(&mut parent);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while runs(started) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        assert!(!runs(started), "what the process started ended with it");
+        assert!(!runs(parent.id()));
     }
 
     /// Stopping while npm installs ends it right away.
