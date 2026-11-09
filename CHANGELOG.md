@@ -42,6 +42,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **Slash Commands: editing a command as JSON keeps its folder and its switch**: a command changed in the JSON view left its side bar folder, and one that was turned off was on again, with the first valid edit. Both stay as they were.
 - **Slash Commands: Smallest and Largest take negative numbers and decimals**: the boxes wrote the number out again after every key, so a minus typed first vanished and so did the point: `-5.2` ended up as 52. They now keep what you type until the number is whole. A choice's number shows as typed, too (1, not 1.0).
 - **Embed Builder: "When it's sent" is no longer lost after another embed had a set time**: once "A set time" was picked for one embed's timestamp, the next embed opened showed "A set time" too, with an empty box, and its own "When it's sent" was gone when you pressed Apply. Each embed keeps its own now.
+- **Layout Builder and Modal Builder no longer stop the app on parts that aren't objects**: a message whose media gallery listed its pictures as plain addresses (`"items": ["https://…"]`), or a select menu whose options were plain texts, closed XC Circuit as soon as the builder showed it. Pasted JSON like that is now refused with what's wrong. A block that already holds such a layout (put there by hand or by an AI agent) opens in the JSON view with the same note, instead of an empty builder.
 
 ## 0.2.9
 

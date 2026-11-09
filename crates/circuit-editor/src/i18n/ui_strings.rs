@@ -670,6 +670,7 @@ pub const UI_STRINGS: &[&str] = &[
     "Buy",
     "Make a selection",
     "every component needs a \"type\": {json}",
+    "every part must be an object, not {json}",
     "{count} components: Discord allows {max}.",
     "{count} characters of text: Discord allows {max}.",
     "Two options of a select menu have the value “{value}”: each needs its own.",

@@ -85,6 +85,9 @@ pub fn from_json(v: &Value) -> Result<Value, String> {
         }
         out.push(c);
     }
+    if let Some(why) = crate::builders::layout::shape_problem(&out) {
+        return Err(why);
+    }
     form["components"] = Value::Array(out);
     for (key, fallback) in [("title", "Tell us more"), ("custom_id", "my-form")] {
         if !form.get(key).is_some_and(Value::is_string) {
@@ -234,8 +237,14 @@ pub struct ModalEdit {
 
 impl ModalEdit {
     pub fn new(ws: &str, node: &str, key: &str, value: &Value) -> ModalEdit {
-        let draft = from_json(value).unwrap_or_else(|_| from_json(&json!([])).unwrap());
-        ModalEdit { ws: ws.into(), node: node.into(), key: key.into(), draft, json: None }
+        let empty = || from_json(&json!([])).unwrap();
+        let (draft, json) = match from_json(value) {
+            Ok(draft) => (draft, None),
+            // Parts the builder can't show: as JSON, with what's wrong (see `LayoutEdit::new`).
+            Err(why) if value.is_array() || value.get("components").is_some_and(Value::is_array) => (empty(), Some(JsonText { error: Some(why), ..JsonText::new(value) })),
+            Err(_) => (empty(), None),
+        };
+        ModalEdit { ws: ws.into(), node: node.into(), key: key.into(), draft, json }
     }
 }
 
@@ -628,6 +637,17 @@ fn input_preview(ui: &mut Ui, input: &Value, width: f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A question whose menu lists its options as texts is refused, not
+    /// handed to the builder (which writes into each option).
+    #[test]
+    fn parts_that_are_not_objects_are_refused() {
+        let form = json!({ "title": "T", "custom_id": "f", "components": [{ "type": 18, "label": "Pick", "component": { "type": 3, "custom_id": "c", "options": ["a", "b"] } }] });
+        assert!(from_json(&form).unwrap_err().contains("must be an object"));
+        assert!(from_json(&json!({ "components": [{ "type": 18, "label": "Q", "component": "box" }] })).is_err());
+        let edit = ModalEdit::new("w", "n", "k", &form);
+        assert!(edit.json.is_some_and(|j| j.error.is_some()));
+    }
 
     #[test]
     fn forms_are_read_and_checked() {

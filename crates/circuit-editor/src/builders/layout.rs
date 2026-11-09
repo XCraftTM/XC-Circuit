@@ -119,7 +119,39 @@ pub fn from_json(v: &Value) -> Result<Value, String> {
     if let Some(bad) = list.iter().find(|c| ty(c) == 0) {
         return Err(tf!("every component needs a \"type\": {json}", json = bad.to_string().chars().take(60).collect::<String>()));
     }
+    if let Some(why) = shape_problem(&list) {
+        return Err(why);
+    }
     Ok(json!({ "components": list }))
+}
+
+/// What's wrong with the shape of `list`'s parts, if anything: a part, and
+/// each thing in it the builder has controls for (its accessory, pictures,
+/// options, the parts inside it), is an object. The builder writes into
+/// them, which can't be done to a text or a number.
+pub(crate) fn shape_problem(list: &[Value]) -> Option<String> {
+    let bad = |v: &Value| Some(tf!("every part must be an object, not {json}", json = v.to_string().chars().take(60).collect::<String>()));
+    for c in list {
+        if !c.is_object() {
+            return bad(c);
+        }
+        for key in ["accessory", "media", "file", "component"] {
+            if let Some(v) = c.get(key) {
+                if !v.is_object() || v.get("media").is_some_and(|m| !m.is_object()) {
+                    return bad(v);
+                }
+                if let Some(why) = shape_problem(list_of(v, "options")).or_else(|| shape_problem(list_of(v, "components"))) {
+                    return Some(why);
+                }
+            }
+        }
+        for key in ["items", "options", "components"] {
+            if let Some(why) = shape_problem(list_of(c, key)) {
+                return Some(why);
+            }
+        }
+    }
+    None
 }
 
 /// How many components Discord counts: every one, nested ones included.
@@ -373,8 +405,16 @@ pub struct LayoutEdit {
 
 impl LayoutEdit {
     pub fn new(ws: &str, node: &str, key: &str, value: &Value) -> LayoutEdit {
-        let draft = from_json(value).unwrap_or_else(|_| json!({ "components": [] }));
-        LayoutEdit { ws: ws.into(), node: node.into(), key: key.into(), draft, json: None }
+        let empty = || json!({ "components": [] });
+        let (draft, json) = match from_json(value) {
+            Ok(draft) => (draft, None),
+            // Parts the builder can't show (put on the block by hand or by an
+            // agent): as JSON, with what's wrong, instead of an empty builder
+            // whose Apply would throw them away.
+            Err(why) if value.is_array() || value.get("components").is_some_and(Value::is_array) => (empty(), Some(JsonText { error: Some(why), ..JsonText::new(value) })),
+            Err(_) => (empty(), None),
+        };
+        LayoutEdit { ws: ws.into(), node: node.into(), key: key.into(), draft, json }
     }
 }
 
@@ -1264,6 +1304,43 @@ fn preview_select(ui: &mut Ui, s: &Value, width: f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Parts that aren't objects (a gallery's picture given as its address)
+    /// are refused when pasted, and the builder draws what it is given: it
+    /// used to stop the app on them.
+    #[test]
+    fn parts_that_are_not_objects_are_refused() {
+        let bad = [
+            json!([{ "type": 12, "items": ["https://x.example/a.png"] }]),
+            json!([{ "type": 12, "items": [{ "media": "https://x.example/a.png" }] }]),
+            json!([{ "type": 1, "components": ["button"] }]),
+            json!([{ "type": 17, "components": [{ "type": 9, "components": [5], "accessory": { "type": 11 } }] }]),
+            json!([{ "type": 9, "components": [], "accessory": "picture" }]),
+            json!([{ "type": 1, "components": [{ "type": 3, "custom_id": "m", "options": ["a"] }] }]),
+        ];
+        for v in &bad {
+            let why = from_json(v).unwrap_err();
+            assert!(why.contains("must be an object"), "{v}: {why}");
+        }
+        // On a block already: shown as JSON with what's wrong, nothing thrown away.
+        let stored = json!({ "components": bad[0] });
+        let mut edit = LayoutEdit::new("w", "n", "k", &stored);
+        assert!(edit.json.as_ref().is_some_and(|j| j.error.is_some() && j.text.contains("a.png")));
+        let ctx = egui::Context::default();
+        crate::ui::fonts::install(&ctx);
+        let theme = Theme::fallback();
+        for _ in 0..2 {
+            let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(1200.0, 900.0))), ..Default::default() };
+            let mut out = ctx.run_ui(raw, |ui| form(ui, &theme, &mut edit, None));
+            out.textures_delta.clear();
+        }
+        // A whole layout draws in the builder.
+        let mut fine = LayoutEdit::new("w", "n", "k", &json!({ "components": [new_component("section", 1), new_component("gallery", 2), new_component("buttons", 3), new_component("select", 4), new_component("file", 5)] }));
+        assert!(fine.json.is_none());
+        let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(1200.0, 900.0))), ..Default::default() };
+        let mut out = ctx.run_ui(raw, |ui| form(ui, &theme, &mut fine, None));
+        out.textures_delta.clear();
+    }
 
     #[test]
     fn pasted_layouts_are_read_and_checked() {
