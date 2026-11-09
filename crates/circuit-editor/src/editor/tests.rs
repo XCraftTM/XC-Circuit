@@ -320,3 +320,41 @@ fn saving_happens_on_its_own_thread() {
     assert_eq!(ed.backups.list(&dir.join("bot")).len(), 1, "with a backup");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A block whose define() never ends is stopped once, then skipped for its
+/// kind: many of them can't freeze the window. Reloading plugins tries again.
+#[test]
+fn a_define_that_has_to_be_stopped_is_not_run_again() {
+    let dir = std::env::temp_dir().join(format!("xc-slow-define-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let plugin = dir.join("plugins").join("t.slow");
+    std::fs::create_dir_all(plugin.join("blocks")).unwrap();
+    std::fs::write(plugin.join("plugin.toml"), "id = \"t.slow\"\nname = \"Slow\"\nversion = \"1.0.0\"\n\n[contributes]\nblocks = [\"blocks/*.js\"]\n").unwrap();
+    std::fs::write(
+        plugin.join("blocks").join("slow.js"),
+        "module.exports = { id: 't.slow', kind: 'action', info: { name: 'Slow', version: '1.0.0' }, fields: { a: { type: 'text', default: '' } }, define() { while (true) {} }, run() {} };",
+    )
+    .unwrap();
+    let mut ed = Editor::new(vec![dir.join("plugins")], None).unwrap();
+    assert!(ed.reg.block("t.slow").is_some_and(|d| d.has_define), "{:?}", ed.log.iter().map(|l| &l.text).collect::<Vec<_>>());
+    let mut ws = Workspace::new("W");
+    for i in 0..10 {
+        ws.nodes.insert(format!("{i}"), Node { block: "t.slow@1".into(), at: [0.0, i as f32 * 100.0], ..Default::default() });
+    }
+    let start = std::time::Instant::now();
+    for id in ws.nodes.keys() {
+        let shape = shapes::node_shape(&ed.reg, &ed.engine, &mut ed.shapes, "w", &ws, id, &ed.define_ctx).expect("a shape all the same");
+        assert!(shape.fields.iter().any(|(k, _)| k == "a"), "with its fixed fields");
+    }
+    let took = start.elapsed();
+    assert!(took < circuit_plugins::engine::BUDGET * 4, "stopped once, not ten times: {took:?}");
+    let reports = ed.shapes.take_reports();
+    assert_eq!(reports.len(), 1, "said once: {reports:?}");
+    assert!(reports[0].starts_with("Slow: its define() took longer than 50 ms"));
+
+    ed.reload_plugins();
+    ed.shapes.begin();
+    shapes::node_shape(&ed.reg, &ed.engine, &mut ed.shapes, "w", &ws, "0", &ed.define_ctx);
+    assert_eq!(ed.shapes.take_reports().len(), 1, "tried again after a reload");
+    let _ = std::fs::remove_dir_all(&dir);
+}

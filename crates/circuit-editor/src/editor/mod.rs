@@ -302,6 +302,7 @@ impl Editor {
         self.reg = Registry::load_except(&dirs, &self.engine, &off);
         self.apply_language();
         self.shapes.clear();
+        self.shapes.forget_too_slow();
         let theme = self.theme.id.clone();
         self.set_theme(&theme);
         self.log_plugin_summary();

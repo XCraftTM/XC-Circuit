@@ -12,6 +12,11 @@ pub struct ShapeCache {
     pub(super) known: HashMap<String, Known>,
     /// Counts passes over the blocks; see `begin`.
     pub(super) pass: u64,
+    /// Block types whose `define()` had to be stopped: it isn't run for them
+    /// again until plugins reload, so many such blocks can't freeze the window.
+    too_slow: HashSet<String>,
+    /// What to tell in the Console about them.
+    reports: Vec<String>,
 }
 
 impl ShapeCache {
@@ -24,6 +29,16 @@ impl ShapeCache {
     pub fn clear(&mut self) {
         self.blocks.clear();
         self.known.clear();
+    }
+
+    /// After plugins reload: every block's `define()` gets a new chance.
+    pub fn forget_too_slow(&mut self) {
+        self.too_slow.clear();
+    }
+
+    /// What to say about blocks whose `define()` was stopped, once each.
+    pub fn take_reports(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.reports)
     }
 
     pub fn forget_workspace(&mut self, key: &str) {
@@ -242,9 +257,19 @@ pub fn node_shape(reg: &Registry, engine: &BlockEngine, cache: &mut ShapeCache, 
         }
     }
     let known: HashSet<String> = cache.known.get(ws_key).and_then(|k| k.names.get(node_id)).map(|(v, _)| v.iter().cloned().collect()).unwrap_or_default();
-    let define = if def.has_define {
+    let define = if def.has_define && !cache.too_slow.contains(&def.id) {
         let engine_key = reg.engine_keys.get(&def.id)?;
-        engine.define(engine_key, &node.values, &connected, project).ok()
+        let start = std::time::Instant::now();
+        let result = engine.define(engine_key, &node.values, &connected, project);
+        if result.is_err() && start.elapsed() >= circuit_plugins::engine::BUDGET {
+            cache.too_slow.insert(def.id.clone());
+            cache.reports.push(format!(
+                "{}: its define() took longer than {} ms, so it was stopped. Blocks of this kind show only their fixed fields and pins until its plugin is reloaded.",
+                def.name,
+                circuit_plugins::engine::BUDGET.as_millis()
+            ));
+        }
+        result.ok()
     } else {
         None
     };

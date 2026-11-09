@@ -2,6 +2,7 @@
 //! editor-only hooks (`define()`). Bot code never runs here.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -12,8 +13,12 @@ use serde::Deserialize;
 use serde_json::{Map, Value};
 
 /// How long one call into a block file may run.
-const BUDGET: Duration = Duration::from_millis(50);
+pub const BUDGET: Duration = Duration::from_millis(50);
 const MEMORY_LIMIT: usize = 64 * 1024 * 1024;
+/// Calls between full garbage collections. QuickJS also collects by itself
+/// as memory grows; a full one after every call took longer than most
+/// `define()`s (about 0.35 ms with the bundled blocks loaded).
+const GC_EVERY: u32 = 64;
 
 /// Sets up `module`/`require` shims and the helpers blocks may use in `define()`.
 const PRELUDE: &str = r#"
@@ -138,6 +143,8 @@ pub struct BlockEngine {
     runtime: Runtime,
     context: Context,
     deadline: Arc<Mutex<Option<Instant>>>,
+    /// Calls since the last full garbage collection.
+    calls: AtomicU32,
 }
 
 impl BlockEngine {
@@ -151,7 +158,7 @@ impl BlockEngine {
         })));
         let context = Context::full(&runtime)?;
         context.with(|ctx| ctx.eval::<(), _>(PRELUDE))?;
-        Ok(Self { runtime, context, deadline })
+        Ok(Self { runtime, context, deadline, calls: AtomicU32::new(0) })
     }
 
     /// Loads a block file. `key` identifies it for later `define()` calls.
@@ -212,7 +219,11 @@ impl BlockEngine {
             f.call(args)
         });
         self.set_deadline(None);
-        self.runtime.run_gc();
+        // Also after a call that was stopped or threw, which may leave much behind.
+        if text.is_err() || self.calls.fetch_add(1, Ordering::Relaxed) + 1 >= GC_EVERY {
+            self.calls.store(0, Ordering::Relaxed);
+            self.runtime.run_gc();
+        }
         let text = text.map_err(|e| match e {
             rquickjs::Error::Exception => anyhow!("took longer than {} ms or threw outside the sandbox", BUDGET.as_millis()),
             other => anyhow!(other),
@@ -337,5 +348,15 @@ mod tests {
             .load_block("loop", "module.exports = { define() { while (true) {} } }")
             .unwrap();
         assert!(engine.define("loop", &Map::new(), &Map::new(), &json!({})).is_err());
+    }
+
+    #[test]
+    fn memory_from_earlier_calls_is_freed() {
+        let engine = BlockEngine::new().unwrap();
+        // 8 MB each time: far more than the memory limit over all the calls.
+        engine.load_block("big", "module.exports = { define() { const a = new Array(1024 * 1024).fill(1.5); return { outputs: { n: { type: 'number', label: String(a.length) } } }; } }").unwrap();
+        for i in 0..40 {
+            engine.define("big", &Map::new(), &Map::new(), &json!({})).unwrap_or_else(|e| panic!("call {i}: {e}"));
+        }
     }
 }

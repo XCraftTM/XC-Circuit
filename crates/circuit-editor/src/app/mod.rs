@@ -763,6 +763,9 @@ impl eframe::App for CircuitApp {
         }
         // Saves, backups and recovery copies are written on a thread of their own.
         self.ed.poll_saving();
+        for report in self.ed.shapes.take_reports() {
+            self.ed.log(Level::Warn, report);
+        }
         if self.ed.saver.busy() {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
