@@ -390,6 +390,9 @@ impl eframe::App for CircuitApp {
     /// draws no text cursor, and the focus event it waits for can be missed
     /// while the window is still hidden at startup.
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        // Called just before egui begins a frame: what follows until the
+        // frame's own marks is egui's (input, and loading fonts when they changed).
+        watchdog::mark("before its frame: egui getting ready (input, fonts)");
         if let Some(front) = self.reveal.is_foreground() {
             raw_input.focused = front;
         }
@@ -405,6 +408,9 @@ impl eframe::App for CircuitApp {
         watchdog::mark("at the frame's start (updates, the start page)");
         for f in watchdog::take_found() {
             self.ed.log(Level::Warn, tf!("XC Circuit didn't answer for {seconds} s: it was stuck {phase}. This is kept in freezes.log in the app's data folder.", seconds = format!("{:.1}", f.seconds), phase = f.phase));
+        }
+        if let Some(phase) = watchdog::take_ended_stuck() {
+            self.ed.log(Level::Warn, tf!("Last time, XC Circuit stopped answering and was closed while it was stuck {phase}. freezes.log in the app's data folder says more.", phase = phase));
         }
         if let Some(mut run) = self.fps.take()
             && run.frame(self, &ctx, frame.info().cpu_usage)
@@ -778,6 +784,15 @@ impl eframe::App for CircuitApp {
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        // eframe saves every 30 seconds, after a frame (egui's memory just before this).
+        watchdog::mark("saving the window's layout and settings (every 30 seconds)");
+        self.save_settings(storage);
+        watchdog::mark(watchdog::AFTER_FRAME);
+    }
+}
+
+impl CircuitApp {
+    fn save_settings(&mut self, storage: &mut dyn eframe::Storage) {
         // Mid-tour, keep the user's own layout and project.
         let dock = self.dock_before_tour.as_ref().filter(|_| self.tour.is_some()).or(self.dock_before_start.as_ref()).unwrap_or(&self.dock);
         eframe::set_value(storage, KEY_LAYOUT, dock);

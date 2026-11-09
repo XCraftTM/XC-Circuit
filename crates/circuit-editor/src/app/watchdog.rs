@@ -14,8 +14,15 @@
 //! The thread itself never waits on the app: it asks for frames from a
 //! helper thread, so a freeze inside egui (its lock held) is still found,
 //! and said.
+//!
+//! A freeze shows in the Console once the app answers again. One it never
+//! comes back from (closed by hand, or ended by Windows) is said at the next
+//! start, from the log. After ten seconds stuck, the log says so again and,
+//! on Windows, a dump of the app (every thread's stack: exactly where it's
+//! stuck) is kept in `freezes/` next to the log, the last three.
 
 use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -27,6 +34,10 @@ pub const AFTER_FRAME: &str = "after its frame: drawing on the graphics card, or
 const STUCK_MS: u64 = 3000;
 /// How long without a frame before one is asked for.
 const ASK_AFTER_MS: u64 = 1000;
+/// How long stuck before the log says so again, with a dump on Windows.
+const DUMP_AFTER_MS: u64 = 10_000;
+/// Dumps kept, the newest.
+const DUMPS_KEPT: usize = 3;
 
 static CLOCK: OnceLock<Instant> = OnceLock::new();
 static BEAT: AtomicU64 = AtomicU64::new(0);
@@ -42,6 +53,8 @@ static PHASE: Mutex<String> = Mutex::new(String::new());
 static FOUND: Mutex<Vec<Freeze>> = Mutex::new(Vec::new());
 /// What this start runs on, said in the log before its first freeze.
 static ABOUT: Mutex<String> = Mutex::new(String::new());
+/// Where the run before this one was stuck when it ended, for the Console.
+static ENDED_STUCK: Mutex<Option<String>> = Mutex::new(None);
 
 fn now_ms() -> u64 {
     CLOCK.get_or_init(Instant::now).elapsed().as_millis() as u64
@@ -138,6 +151,20 @@ pub fn take_found() -> Vec<Freeze> {
     FOUND.lock().map(|mut f| std::mem::take(&mut *f)).unwrap_or_default()
 }
 
+/// Where the run before this one was stuck when it ended (it was closed, or
+/// ended, while not answering), once; for the Console.
+pub fn take_ended_stuck() -> Option<String> {
+    ENDED_STUCK.lock().ok()?.take()
+}
+
+/// The place a log's last freeze was stuck in, when it never answered again:
+/// the log ends with its "not answering" line (and maybe "still not answering").
+fn ended_stuck(log: &str) -> Option<String> {
+    let last = log.lines().rev().map(str::trim).filter(|l| !l.is_empty()).find(|l| !l.contains(" · still not answering after "))?;
+    let (_, rest) = last.split_once(" · not answering for ")?;
+    Some(rest.split_once("stuck in: ").map(|(_, p)| p.trim().to_string()).unwrap_or_default())
+}
+
 /// What the watching thread decides on one look.
 #[derive(Debug, PartialEq)]
 enum Step {
@@ -207,12 +234,19 @@ pub fn start(ctx: egui::Context, log: std::path::PathBuf) {
         return;
     }
     mark("while starting");
+    if let Some(phase) = note_ended_stuck(&log)
+        && let Ok(mut e) = ENDED_STUCK.lock()
+    {
+        *e = Some(phase);
+    }
     std::thread::Builder::new()
         .name("freeze-detector".into())
         .spawn(move || {
             let mut watch = Watch::default();
             let mut phase_then = String::new();
             let mut said_about = false;
+            // This freeze was said again after ten seconds (and dumped).
+            let mut said_long = false;
             loop {
                 std::thread::sleep(Duration::from_millis(200));
                 let now = now_ms();
@@ -239,12 +273,138 @@ pub fn start(ctx: egui::Context, log: std::path::PathBuf) {
                         if let Ok(mut f) = FOUND.lock() {
                             f.push(Freeze { phase: std::mem::take(&mut phase_then), seconds: ms as f64 / 1000.0 });
                         }
+                        said_long = false;
                         ask_for_frame(&ctx);
                     }
+                }
+                // Stuck for long: said again, with where exactly (a dump on Windows).
+                if let Some(since) = watch.stuck
+                    && !said_long
+                    && now.saturating_sub(since) >= DUMP_AFTER_MS
+                {
+                    said_long = true;
+                    let seconds = now.saturating_sub(since) / 1000;
+                    let text = match log.parent().map(|d| keep_dump(&d.join("freezes"))) {
+                        Some(Ok(path)) => format!("still not answering after {seconds} s; a dump of where it's stuck: {}", path.display()),
+                        Some(Err(e)) if cfg!(windows) => format!("still not answering after {seconds} s; no dump of where it's stuck: {e}"),
+                        _ => format!("still not answering after {seconds} s"),
+                    };
+                    write_line(&log, &text);
                 }
             }
         })
         .ok();
+}
+
+/// Where the run before was stuck, if it ended while not answering (from
+/// the log at `log`); noted in the log, so the next start doesn't say it again.
+fn note_ended_stuck(log: &Path) -> Option<String> {
+    let phase = ended_stuck(&std::fs::read_to_string(log).ok()?)?;
+    write_line(log, "the run before ended while it wasn't answering (closed by hand, or ended by Windows)");
+    Some(phase)
+}
+
+/// Writes a dump of the app into `dir` (as freeze-<time>.dmp), keeping the
+/// newest [`DUMPS_KEPT`]: every thread's stack, so it shows exactly where
+/// the app is stuck. Open it in Visual Studio or WinDbg. Windows only.
+fn keep_dump(dir: &Path) -> Result<PathBuf, String> {
+    if !cfg!(windows) {
+        return Err("dumps are only kept on Windows".into());
+    }
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let mut old: Vec<PathBuf> = std::fs::read_dir(dir)
+        .map_err(|e| e.to_string())?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with("freeze-") && n.ends_with(".dmp")))
+        .collect();
+    // The names hold the time, so they sort oldest first.
+    old.sort();
+    for p in old.iter().take((old.len() + 1).saturating_sub(DUMPS_KEPT)) {
+        let _ = std::fs::remove_file(p);
+    }
+    let path = dir.join(format!("freeze-{}.dmp", chrono::Local::now().format("%Y%m%d-%H%M%S")));
+    write_dump(&path)?;
+    Ok(path)
+}
+
+/// `xc-circuit --dump-process <pid> <file>`: the helper that writes a dump.
+pub const DUMP_ARG: &str = "--dump-process";
+
+/// A dump of this process, written by a helper process ([`DUMP_ARG`]): as
+/// Windows advises, since a process that's stuck can also get its own dump
+/// stuck (holding a lock the dump needs), and the dump pauses every thread.
+#[cfg(windows)]
+fn write_dump(path: &Path) -> Result<(), String> {
+    /// How long the helper may take before it's ended.
+    const DUMP_WITHIN: Duration = Duration::from_secs(60);
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let mut helper = std::process::Command::new(exe).arg(DUMP_ARG).arg(std::process::id().to_string()).arg(path).spawn().map_err(|e| e.to_string())?;
+    let started = Instant::now();
+    loop {
+        match helper.try_wait() {
+            Ok(Some(status)) if status.success() => return Ok(()),
+            Ok(Some(status)) => return Err(format!("the dump helper ended with {status}")),
+            Ok(None) if started.elapsed() > DUMP_WITHIN => {
+                let _ = helper.kill();
+                let _ = std::fs::remove_file(path);
+                return Err("the dump took over a minute".into());
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(100)),
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn write_dump(_path: &Path) -> Result<(), String> {
+    Err("dumps are only kept on Windows".into())
+}
+
+/// The helper ([`DUMP_ARG`]): `args` are the process id and the file. The
+/// exit code says whether it worked; why not goes to stderr.
+pub fn dump_process(args: &[String]) -> i32 {
+    let (Some(pid), Some(path)) = (args.first().and_then(|p| p.parse::<u32>().ok()), args.get(1)) else {
+        eprintln!("usage: xc-circuit {DUMP_ARG} <process id> <file>");
+        return 2;
+    };
+    match dump_of(pid, Path::new(path)) {
+        Ok(()) => 0,
+        Err(e) => {
+            eprintln!("{e}");
+            1
+        }
+    }
+}
+
+/// Writes a dump of process `pid` (its threads' stacks and loaded modules) to `path`.
+#[cfg(windows)]
+fn dump_of(pid: u32, path: &Path) -> Result<(), String> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Diagnostics::Debug::{MiniDumpWithThreadInfo, MiniDumpWithUnloadedModules, MiniDumpWriteDump};
+    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
+    // SAFETY: plain arguments; a null handle means it couldn't be opened.
+    let process = unsafe { OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, 0, pid) };
+    if process.is_null() {
+        return Err(format!("couldn't open process {pid}: {}", std::io::Error::last_os_error()));
+    }
+    let result = std::fs::File::create(path).map_err(|e| e.to_string()).and_then(|file| {
+        // SAFETY: an open process handle and a file open for writing; no
+        // exception, extra streams or callback (null is allowed for each).
+        let written = unsafe { MiniDumpWriteDump(process, pid, file.as_raw_handle(), MiniDumpWithThreadInfo | MiniDumpWithUnloadedModules, std::ptr::null(), std::ptr::null(), std::ptr::null()) };
+        if written == 0 { Err(std::io::Error::last_os_error().to_string()) } else { Ok(()) }
+    });
+    // SAFETY: the handle opened above, closed once.
+    unsafe { CloseHandle(process) };
+    if result.is_err() {
+        let _ = std::fs::remove_file(path);
+    }
+    result
+}
+
+#[cfg(not(windows))]
+fn dump_of(_pid: u32, _path: &Path) -> Result<(), String> {
+    Err("dumps are only made on Windows".into())
 }
 
 /// A line in the log, with the time and the app's version; kept short (the
@@ -351,6 +511,44 @@ mod tests {
             "x86_64 build, graphics: DirectX 12 · Microsoft Basic Render Driver (in software), processor: ARMv8 (64-bit) Family 8"
         );
         assert_eq!(describe_start("Vulkan · AMD Radeon", false, "x86_64", None), "x86_64 build, graphics: Vulkan · AMD Radeon");
+    }
+
+    /// A log ending with "not answering" (and maybe "still not answering")
+    /// is from a run that ended stuck, which the next start says. One that
+    /// answered again, or was said already, isn't.
+    #[test]
+    fn a_run_that_ended_stuck_is_said_at_the_next_start() {
+        let stuck = "2026-11-08 23:14:20 · XC Circuit 0.2.5 · not answering for 3.2 s, stuck in: after its frame: drawing\n";
+        assert_eq!(ended_stuck(stuck).as_deref(), Some("after its frame: drawing"));
+        let long = format!("{stuck}2026-11-08 23:14:27 · XC Circuit 0.2.5 · still not answering after 10 s; a dump of where it's stuck: C:\\freeze.dmp\n\n");
+        assert_eq!(ended_stuck(&long).as_deref(), Some("after its frame: drawing"));
+        let back = format!("{stuck}2026-11-08 23:14:30 · XC Circuit 0.2.5 · answered again after 10.0 s, stuck in: after its frame\n");
+        assert_eq!(ended_stuck(&back), None);
+        assert_eq!(ended_stuck(""), None);
+
+        // Said once: the start notes it in the log.
+        let dir = std::env::temp_dir().join(format!("xc-ended-stuck-{}", std::process::id()));
+        let log = dir.join("freezes.log");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(&log, &long).unwrap();
+        assert_eq!(note_ended_stuck(&log).as_deref(), Some("after its frame: drawing"));
+        assert_eq!(note_ended_stuck(&log), None, "not again at the next start");
+        assert!(std::fs::read_to_string(&log).unwrap().contains("still not answering"), "the log is kept");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Dumps are only kept on Windows; elsewhere the log just says the app is still stuck.
+    #[test]
+    #[cfg(not(windows))]
+    fn no_dumps_elsewhere() {
+        let dir = std::env::temp_dir().join(format!("xc-no-dumps-{}", std::process::id()));
+        assert!(keep_dump(&dir).is_err());
+        assert!(!dir.exists(), "nothing made");
+        // The helper: its arguments are checked, and it says it can't here.
+        assert_eq!(dump_process(&[]), 2, "no process id or file");
+        assert_eq!(dump_process(&["not a number".into(), "x.dmp".into()]), 2);
+        assert_eq!(dump_process(&[std::process::id().to_string(), dir.join("x.dmp").display().to_string()]), 1);
     }
 
     #[test]

@@ -22,6 +22,10 @@ fn main() -> eframe::Result {
     if args.get(1).map(String::as_str) == Some("--mcp") {
         std::process::exit(mcp::stdio::run());
     }
+    // `xc-circuit --dump-process <pid> <file>`: the freeze detector's helper (see app/watchdog.rs).
+    if args.get(1).map(String::as_str) == Some(app::watchdog::DUMP_ARG) {
+        std::process::exit(app::watchdog::dump_process(&args[2..]));
+    }
     if args.get(1).map(String::as_str) == Some("--export-icon") {
         let dir = std::path::PathBuf::from(args.get(2).map(String::as_str).unwrap_or("."));
         if let Err(e) = export_icon(&dir) {
