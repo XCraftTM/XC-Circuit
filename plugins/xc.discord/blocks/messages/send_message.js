@@ -19,6 +19,18 @@ const FORMATS = { text: "Text and embeds", layout: "Layout (Components V2)" };
 const MENTIONS = { all: "Everyone mentioned", users: "Only users", usersRoles: "Users and roles (not @everyone)", none: "Nobody" };
 
 /**
+ * What a mode sends to: the input define() adds for it, and the one run()
+ * reads (with what it says when nothing is connected). One place for both,
+ * so the block and what it does can't disagree.
+ */
+function targetOf(mode) {
+  if (INTERACTION_MODES.includes(mode)) return { key: "interaction", type: "discord.interaction", description: "The command use or button press to answer.", missing: "Connect the interaction to answer" };
+  if (mode === "dm") return { key: "user", type: "discord.user", description: "Who gets the direct message (a member works too).", missing: "Connect the user to send the message to" };
+  if (mode === "send") return { key: "channel", type: "discord.channel", description: "Where to send the message.", missing: "Connect the channel to send to" };
+  return { key: "message", type: "discord.message", description: "The message to reply to or edit.", missing: "Connect the message" };
+}
+
+/**
  * The channel to send to: a channel, or its id (typed into the block, or a
  * text wired in, also as <#id>). Newer apps look ids up before the block
  * runs; this does it for those that don't.
@@ -110,16 +122,8 @@ module.exports = {
   },
   define({ values }) {
     const mode = values.mode || "reply";
-    const add = {};
-    if (INTERACTION_MODES.includes(mode)) {
-      add.interaction = { type: "discord.interaction", pin: "only", required: true, after: "", description: "The command use or button press to answer." };
-    } else if (mode === "dm") {
-      add.user = { type: "discord.user", pin: "only", required: true, after: "", description: "Who gets the direct message (a member works too)." };
-    } else if (mode === "send") {
-      add.channel = { type: "discord.channel", pin: "only", required: true, after: "", description: "Where to send the message." };
-    } else {
-      add.message = { type: "discord.message", pin: "only", required: true, after: "", description: "The message to reply to or edit." };
-    }
+    const target = targetOf(mode);
+    const add = { [target.key]: { type: target.type, pin: "only", required: true, after: "", description: target.description } };
     const hide = DEFERS.includes(mode) ? ["text", "embeds", "components", "split", "files"] : [];
     const set = {};
     if (mode === "deferDelete") {
@@ -176,12 +180,11 @@ module.exports = {
     // What the mode sends with, and nothing else: a wire left from another
     // mode (an interaction from when it replied) is not used.
     const mode = fields.mode || "reply";
-    const answers = INTERACTION_MODES.includes(mode);
-    const interaction = answers ? fields.interaction : undefined;
-    const target = answers ? interaction : mode === "send" ? await channelOf(fields.channel, ctx) : mode === "dm" ? (fields.user?.user ?? fields.user) : fields.message;
-    if (!target) {
-      throw new Error({ send: "Connect the channel to send to", dm: "Connect the user to send the message to" }[mode] ?? (answers ? "Connect the interaction to answer" : "Connect the message"));
-    }
+    const wanted = targetOf(mode);
+    const interaction = wanted.key === "interaction" ? fields.interaction : undefined;
+    const given = fields[wanted.key];
+    const target = wanted.key === "channel" ? await channelOf(given, ctx) : wanted.key === "user" ? (given?.user ?? given) : given;
+    if (!target) throw new Error(wanted.missing);
     // A channel that takes no messages (a category, a forum: messages go in its posts).
     if ((mode === "send" || mode === "dm") && typeof target.send !== "function") {
       const name = target.name ? ` "${target.name}"` : "";

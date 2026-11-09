@@ -338,6 +338,18 @@ const log = (name) => (...args) => {
   assert.deepStrictEqual(rows[2].items, [b1]);
   Module._load = realLoad;
 
+  // Send Message: in every mode, the input define() adds is the one run() asks for.
+  {
+    const b = load("messages/send_message.js");
+    const modes = Object.values(b.fields.mode.choices).flatMap((group) => Object.keys(group));
+    assert.strictEqual(modes.length, 10);
+    for (const mode of modes) {
+      const added = Object.keys(b.define({ values: { mode } }).add);
+      assert.strictEqual(added.length, 1, `${mode}: one input to send to`);
+      await assert.rejects(b.run({ fields: { mode, text: "x" }, ctx: {} }), (e) => e.message.includes(added[0]), `${mode}: asks for its ${added[0]}`);
+    }
+  }
+
   console.log("discord actions test passed");
 })().catch((e) => {
   console.error(e);
