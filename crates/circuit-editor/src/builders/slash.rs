@@ -209,8 +209,13 @@ const KINDS: [(&str, &str, u64); 9] = [
     ("attachment", n("File"), 11),
 ];
 
+#[derive(Default)]
 pub struct SlashEdit {
     pub(crate) commands: Vec<SlashCommand>,
+    /// The project's commands when the draft was read, last saved or last
+    /// brought up to date (see `follow_project`), and as they are kept there.
+    loaded: Vec<SlashCommand>,
+    seen: Option<Value>,
     selected: usize,
     /// A command was picked: in a narrow tab the list then folds into a bar.
     picked: bool,
@@ -245,8 +250,55 @@ pub fn load(ed: &Editor) -> Vec<SlashCommand> {
     list
 }
 
+/// Opens Slash Commands. Open already, it stays as it is: its draft may
+/// hold changes that aren't saved yet.
 pub fn open(ed: &mut Editor) {
-    ed.slash_edit = Some(SlashEdit { commands: load(ed), selected: 0, picked: false, list_open: false, json: None });
+    if ed.slash_edit.is_some() {
+        return;
+    }
+    let commands = load(ed);
+    let seen = ed.project.as_ref().and_then(|p| p.meta.data.get(DATA_KEY)).cloned();
+    ed.slash_edit = Some(SlashEdit { loaded: commands.clone(), commands, seen, ..Default::default() });
+}
+
+/// Brings the open builder's draft up to date when the project's commands
+/// changed outside it: in the side bar (a command turned off, moved to a
+/// folder or to another place), by Undo, or by an AI agent. A draft without
+/// changes of its own becomes the project's commands; one with changes keeps
+/// them and takes what the side bar decides: each command's folder, whether
+/// it's on, and the order. Without this, Save wrote the older draft over
+/// what the side bar had done.
+pub fn follow_project(ed: &mut Editor) {
+    let Some(edit) = &ed.slash_edit else { return };
+    let now = ed.project.as_ref().and_then(|p| p.meta.data.get(DATA_KEY));
+    if now == edit.seen.as_ref() {
+        return;
+    }
+    let seen = now.cloned();
+    let project = load(ed);
+    let Some(edit) = &mut ed.slash_edit else { return };
+    let shown = edit.commands.get(edit.selected).map(|c| c.name.clone());
+    if edit.commands == edit.loaded {
+        edit.commands = project.clone();
+    } else {
+        for c in &mut edit.commands {
+            if let Some(p) = project.iter().find(|p| root_of(&p.name) == root_of(&c.name)) {
+                (c.folder, c.disabled) = (p.folder.clone(), p.disabled);
+            }
+        }
+        // The project's order; commands only the draft has stay after them, in theirs.
+        let order = roots(&project);
+        edit.commands.sort_by_key(|c| order.iter().position(|r| r == root_of(&c.name)).unwrap_or(usize::MAX));
+    }
+    (edit.loaded, edit.seen) = (project, seen);
+    // The command that was shown stays the one shown.
+    edit.selected = shown.and_then(|n| edit.commands.iter().position(|c| c.name == n)).unwrap_or(edit.selected).min(edit.commands.len().saturating_sub(1));
+    // Its JSON is written again (unless one with a mistake is being fixed).
+    if let Some((root, jt)) = &mut edit.json
+        && jt.error.is_none()
+    {
+        root.clear();
+    }
 }
 
 /// Opens Slash Commands on a command (its first word).
@@ -772,6 +824,7 @@ fn problems(cmds: &[SlashCommand]) -> Vec<String> {
 
 /// The Slash Commands tab.
 pub fn tab(ui: &mut Ui, ed: &mut Editor) {
+    follow_project(ed);
     let Some(edit) = &mut ed.slash_edit else { return };
     let theme = ed.theme.clone();
     let icon = ed.reg.icons.get("slash").cloned();
@@ -817,7 +870,11 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
             ed.slash_edit = None;
         }
         if let Some(p) = ed.project.as_mut() {
-            p.meta.data.insert(DATA_KEY.into(), serde_json::to_value(&commands).unwrap_or(Value::Null));
+            let value = serde_json::to_value(&commands).unwrap_or(Value::Null);
+            if let Some(edit) = &mut ed.slash_edit {
+                (edit.loaded, edit.seen) = (commands.clone(), Some(value.clone()));
+            }
+            p.meta.data.insert(DATA_KEY.into(), value);
             ed.edited = true;
         }
         ed.refresh_define_ctx();
@@ -1448,6 +1505,48 @@ fn discord_preview(ui: &mut Ui, theme: &Theme, cmd: &SlashCommand, eye: Option<&
 mod tests {
     use super::*;
 
+    /// The builder, open with changes that aren't saved: a click on a command
+    /// in the side bar shows that command and keeps the changes, and what the
+    /// side bar does meanwhile (a command turned off, moved) isn't undone by Save.
+    #[test]
+    fn the_open_builder_keeps_its_draft_and_follows_the_side_bar() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let dir = std::env::temp_dir().join(format!("xc-slash-follow-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        circuit_core::Project::create(&dir, "S", "discord-bot").unwrap();
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&dir);
+        let saved = json!([{ "name": "ping", "description": "Pong", "options": [] }, { "name": "help", "description": "Help", "options": [] }]);
+        ed.project.as_mut().unwrap().meta.data.insert(DATA_KEY.into(), saved);
+        open(&mut ed);
+        ed.slash_edit.as_mut().unwrap().commands[0].description = "Changed".into();
+        open_at(&mut ed, "help");
+        let edit = ed.slash_edit.as_ref().unwrap();
+        assert_eq!((edit.commands[0].description.as_str(), edit.selected), ("Changed", 1), "the draft stays, and help is shown");
+
+        // The side bar: ping turned off, help into a folder and above ping.
+        let project = ed.project.as_mut().unwrap();
+        let mut commands = commands_of(project);
+        commands[0].disabled = true;
+        place(&mut commands, "help", Some("Info".into()), Some(("ping", true)));
+        assert!(save_to(project, &commands, &["Info".to_string()]));
+        follow_project(&mut ed);
+        let edit = ed.slash_edit.as_ref().unwrap();
+        let names: Vec<&str> = edit.commands.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, ["help", "ping"]);
+        assert_eq!(edit.selected, 0, "help is still the one shown");
+        assert_eq!(edit.commands[0].folder.as_deref(), Some("Info"));
+        assert!(edit.commands[1].disabled && edit.commands[1].description == "Changed", "turned off, with the draft's change");
+
+        // A draft without changes of its own takes the project's commands whole.
+        ed.slash_edit = None;
+        open(&mut ed);
+        ed.project.as_mut().unwrap().meta.data.insert(DATA_KEY.into(), json!([{ "name": "only", "description": "One", "options": [] }]));
+        follow_project(&mut ed);
+        assert_eq!(ed.slash_edit.as_ref().unwrap().commands.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["only"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Smallest and Largest take a number typed key by key, with its minus
     /// and its point (-5.2 used to end up as 52).
     #[test]
@@ -1480,7 +1579,7 @@ mod tests {
     fn json_edits_keep_the_folder_and_the_switch() {
         let cmd = |name: &str| SlashCommand { name: name.into(), description: "d".into(), folder: Some("Fun".into()), disabled: true, contexts: vec!["guild".into()], ..Default::default() };
         let other = SlashCommand { name: "help".into(), description: "d".into(), contexts: vec!["guild".into()], ..Default::default() };
-        let mut edit = SlashEdit { commands: vec![other, cmd("game start"), cmd("game stop")], selected: 1, picked: true, list_open: false, json: None };
+        let mut edit = SlashEdit { commands: vec![other, cmd("game start"), cmd("game stop")], selected: 1, picked: true, ..Default::default() };
         let mut v = root_json(&edit.commands, "game");
         v["name"] = json!("play");
         assert_eq!(apply_json(&mut edit, "game", &v).unwrap(), "play");
@@ -1554,7 +1653,7 @@ mod tests {
     #[test]
     fn pasting_one_command_replaces_it() {
         let input: Vec<SlashCommand> = serde_json::from_value(fixture("slash-input.json")).unwrap();
-        let mut edit = SlashEdit { commands: input, selected: 2, picked: true, list_open: false, json: None };
+        let mut edit = SlashEdit { commands: input, selected: 2, picked: true, ..Default::default() };
         let pasted = json!({ "name": "support", "description": "Get help", "options": [{ "type": 5, "name": "urgent", "description": "Is it urgent?" }] });
         assert_eq!(apply_json(&mut edit, "ticket", &pasted).unwrap(), "support");
         let names: Vec<&str> = edit.commands.iter().map(|c| c.name.as_str()).collect();

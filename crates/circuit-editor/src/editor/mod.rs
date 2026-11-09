@@ -795,9 +795,7 @@ impl Editor {
         let done = if redo { self.history.redo_project(meta) } else { self.history.undo_project(meta) };
         if done {
             // Open editors show the data as it is now.
-            if self.slash_edit.is_some() {
-                crate::builders::slash::open(self);
-            }
+            crate::builders::slash::follow_project(self);
             self.shapes.clear();
             self.refresh_define_ctx();
             self.edited = true;
