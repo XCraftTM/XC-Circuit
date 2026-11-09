@@ -46,6 +46,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **Slash Commands and the side bar no longer undo each other**: with Slash Commands open, a click on a command in the side bar read every command afresh and threw away changes you hadn't saved yet. And a command turned off, moved to a folder or dragged elsewhere in the side bar while the builder was open came back as it was with the builder's next Save. Now the click only shows that command, and the open builder takes over what the side bar changes.
 - **Block picker: the keyboard works while the mouse rests on the list**: the row under the pointer took the highlight back in every frame. With the pointer over the list (where the picker often opens), the arrow keys did nothing, and Enter after typing a search placed the block under the pointer instead of the best match. A row is now highlighted when the pointer moves onto it.
 - **Canvas Builder: a locked layer can't be resized by dragging**: its corner handle was hidden, but dragging where it would be still resized the layer.
+- **A wire picked up and dropped on a pin it doesn't fit goes back**: it was deleted, as if dropped on empty canvas. Dropped on empty canvas it is still deleted.
 
 ## 0.2.9
 

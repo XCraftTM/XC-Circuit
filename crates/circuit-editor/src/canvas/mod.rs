@@ -1146,9 +1146,14 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     connect(ws, &d, &node, &spot);
                     *edited = true;
                 }
+                // On a pin that refuses it, a picked-up wire goes back where it was.
+                None if on_pin => {
+                    if let Some(link) = d.picked_up.clone() {
+                        ws.links.push(link);
+                    }
+                }
                 // A picked-up wire dropped on nothing is deleted.
                 None if d.picked_up.is_some() => {}
-                None if on_pin => {}
                 None if over_canvas => {
                     let p = pointer.unwrap();
                     *picker = Some(Picker::new(ws_key, p, to_global.inverse() * p, Some(PendingWire::from(&d))));
