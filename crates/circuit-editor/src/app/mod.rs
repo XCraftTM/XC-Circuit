@@ -38,6 +38,7 @@ mod plugins;
 mod projects;
 #[cfg(test)]
 mod a11y;
+mod memory;
 #[cfg(test)]
 mod tests;
 
@@ -203,6 +204,8 @@ pub struct CircuitApp {
     /// The panels and tabs while no project is open (only the start page
     /// shows then); back when a project opens.
     dock_before_start: Option<Dock<Tab>>,
+    /// For saving what egui remembers (see `memory`).
+    egui: egui::Context,
 }
 
 impl CircuitApp {
@@ -343,6 +346,7 @@ impl CircuitApp {
         watcher.watch(&ed.watch_dirs());
         let setup = (!ed.prefs.setup_done).then(crate::pages::setup::Setup::new);
         CircuitApp {
+            egui: cc.egui_ctx.clone(),
             ed,
             dock,
             title: String::new(),
@@ -801,9 +805,15 @@ impl eframe::App for CircuitApp {
         self.ed.prefs.settings_save_every()
     }
 
+    /// egui's memory is saved here instead, the part worth keeping (see `memory`).
+    fn persist_egui_memory(&self) -> bool {
+        false
+    }
+
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        // eframe saves now and then (Settings › Editor), after a frame (egui's memory just before this).
+        // eframe saves now and then (Settings › Editor), after a frame.
         watchdog::mark("saving the window's layout and settings");
+        memory::save(&self.egui, storage);
         self.save_settings(storage);
         watchdog::mark(watchdog::AFTER_FRAME);
     }

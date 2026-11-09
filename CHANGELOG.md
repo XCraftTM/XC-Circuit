@@ -2,6 +2,11 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
+## Unreleased
+
+### Fixed
+- **No more short freezes every 30 seconds**: when it saved the window's layout and settings (every 30 seconds, Settings › Editor), XC Circuit also saved everything egui, which draws the window, remembers, with the window locked meanwhile. That included the place of every popup, menu and window ever shown, start after start, so it grew into thousands and the window could stop answering for a few seconds each time ("XC Circuit didn't answer for 3.6 s … inside egui" in the Console). It now keeps only what's worth remembering (which sections are open, a text field's height …) and writes it with the window free.
+
 ## 0.2.8
 
 ### Added
