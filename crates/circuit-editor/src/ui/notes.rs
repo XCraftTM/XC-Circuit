@@ -119,7 +119,13 @@ fn bullet(ui: &mut Ui, theme: &Theme, indent: f32, mark: &str, item: &str, size:
     ui.horizontal_top(|ui| {
         ui.add_space(indent + 4.0);
         ui.add_sized(egui::vec2(14.0, size + 4.0), egui::Label::new(RichText::new(mark).size(size).color(theme.text_muted)));
-        ui.vertical(|ui| inline(ui, theme, item, size, false));
+        ui.vertical(|ui| {
+            // A point less than there is: the text starts between two pixels
+            // and is moved onto one, so a line that just fits would end a
+            // pixel past the edge.
+            ui.set_max_width((ui.available_width() - 1.0).max(0.0));
+            inline(ui, theme, item, size, false)
+        });
     });
 }
 
@@ -176,5 +182,22 @@ mod tests {
         out.textures_delta.clear();
         let widest = out.shapes.iter().map(|s| s.shape.visual_bounding_rect().right()).fold(0.0, f32::max);
         assert!(widest <= 480.5, "drawn up to x = {widest}");
+    }
+
+    /// A list item whose bold start just fits its line stays inside too, at
+    /// every width (it used to end a pixel past the edge at some).
+    #[test]
+    fn a_line_that_just_fits_stays_inside() {
+        let theme = Theme::from_def(&circuit_plugins::ThemeDef::default());
+        let notes = "- **HTTP Request's \"public web only\" can't be talked round with an IPv6 address**: an address from somewhere.\n";
+        let ctx = egui::Context::default();
+        crate::ui::fonts::install(&ctx);
+        for width in (420..=540).map(|w| w as f32) {
+            let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 4000.0));
+            let mut out = ctx.run_ui(egui::RawInput { screen_rect: Some(screen), ..Default::default() }, |ui| show(ui, &theme, notes, 12.5));
+            out.textures_delta.clear();
+            let widest = out.shapes.iter().map(|s| s.shape.visual_bounding_rect().right()).fold(0.0, f32::max);
+            assert!(widest <= width + 0.5, "{width} wide: drawn up to x = {widest}");
+        }
     }
 }
