@@ -457,6 +457,8 @@ impl Editor {
 
     /// Records changes made since the last settled frame right away.
     pub fn check_changes(&mut self) {
+        // As many undo steps as Settings › Editor says.
+        self.history.set_limit(self.prefs.undo_limit());
         if let Some(p) = &self.project {
             self.history.track(p, true);
         }

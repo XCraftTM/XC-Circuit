@@ -293,6 +293,10 @@ fn editor(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView, 
             asks.push(Ask::ResetLayout);
         }
     });
+    kit::setting_row(ui, theme, t!("Save layout and settings every"), t!("While XC Circuit runs, it saves the panel layout, the open project's place and these settings this often (and always when it closes). Less often is lighter on slower computers."), |ui| {
+        let range = crate::editor::prefs::SAVE_SECS_RANGE;
+        kit::Slider::new(&mut ed.prefs.settings_save_secs, range).step(5.0).suffix(" s").width(140.0).show(ui, theme);
+    });
     // For older computers: lighter drawing, and another way to draw.
     let software = crate::editor::prefs::software_drawing();
     // A card, not a row: the list goes under the text.
@@ -360,6 +364,11 @@ fn editor(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView, 
         });
     });
     console_font(ui, ed, theme, view, asks);
+    kit::group(ui, theme, t!("Undo"));
+    kit::setting_row(ui, theme, t!("Undo steps"), t!("How many changes each workspace can undo. Every step keeps a copy of the workspace, so fewer steps use less memory on big projects."), |ui| {
+        let range = crate::editor::prefs::UNDO_STEPS_RANGE;
+        kit::Slider::new(&mut ed.prefs.undo_steps, range).step(10.0).width(140.0).show(ui, theme);
+    });
     kit::group(ui, theme, t!("Startup"));
     kit::setting_row(ui, theme, t!("Reopen last project"), t!("Open the project you had open last time. When off, XC Circuit starts with the example."), |ui| {
         toggle(ui, theme, &mut ed.prefs.reopen_last_project);
@@ -541,7 +550,10 @@ fn backups(ui: &mut Ui, ed: &mut Editor, theme: &Theme, asks: &mut Vec<Ask>) {
         }
     });
     kit::group(ui, theme, t!("Unsaved changes"));
-    kit::setting_row(ui, theme, t!("Crash recovery"), t!("While you have unsaved changes, a copy is kept every 30 seconds. If XC Circuit or your computer stops, you're offered your changes back the next time you open the project."), |_| {});
+    kit::setting_row(ui, theme, t!("Crash recovery"), t!("While you have unsaved changes, a copy of them is kept this often. If XC Circuit or your computer stops, you're offered your changes back the next time you open the project."), |ui| {
+        let range = crate::editor::prefs::SAVE_SECS_RANGE;
+        kit::Slider::new(&mut ed.prefs.recovery_secs, range).step(5.0).suffix(" s").width(140.0).show(ui, theme);
+    });
     kit::group(ui, theme, t!("The bot's saved data"));
     kit::setting_row(ui, theme, t!("Backups by the bot"), t!("Every bot backs up its saved data each time it starts and every 6 hours, keeping the newest 10. If the data is ever empty, it asks whether to restore a backup."), |_| {});
 }

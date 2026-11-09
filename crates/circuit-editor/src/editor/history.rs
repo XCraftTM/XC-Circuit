@@ -11,7 +11,8 @@ use std::collections::HashMap;
 use circuit_core::project::ProjectMeta;
 use circuit_core::{Project, Workspace};
 
-const LIMIT: usize = 200;
+/// The steps kept, until [`Histories::set_limit`] says otherwise (Settings › Editor).
+const LIMIT: usize = crate::editor::prefs::UNDO_STEPS;
 
 /// The states of one thing (a workspace, or the project's settings and data).
 struct History<T> {
@@ -27,24 +28,29 @@ impl<T: Clone + PartialEq> History<T> {
         History { undo: Vec::new(), redo: Vec::new(), last: now.clone(), version }
     }
 
-    /// Records `now` as a step if it changed. Returns whether it did.
-    fn record(&mut self, now: &T, next: &mut u64) -> bool {
+    /// Records `now` as a step if it changed, keeping the newest `limit`
+    /// steps. Returns whether it did.
+    fn record(&mut self, now: &T, next: &mut u64, limit: usize) -> bool {
         if *now == self.last {
             return false;
         }
         *next += 1;
         let prev = std::mem::replace(&mut self.last, now.clone());
         self.undo.push((prev, std::mem::replace(&mut self.version, *next)));
-        if self.undo.len() > LIMIT {
-            self.undo.remove(0);
-        }
+        self.keep(limit);
         self.redo.clear();
         true
     }
 
-    fn undo(&mut self, now: &mut T, next: &mut u64) -> bool {
+    /// Forgets the oldest steps beyond `limit`.
+    fn keep(&mut self, limit: usize) {
+        let extra = self.undo.len().saturating_sub(limit);
+        self.undo.drain(..extra);
+    }
+
+    fn undo(&mut self, now: &mut T, next: &mut u64, limit: usize) -> bool {
         // An edit that has not settled yet is undone first.
-        self.record(now, next);
+        self.record(now, next, limit);
         let Some((prev, version)) = self.undo.pop() else { return false };
         self.redo.push((std::mem::replace(now, prev.clone()), self.version));
         (self.last, self.version) = (prev, version);
@@ -63,7 +69,6 @@ impl<T: Clone + PartialEq> History<T> {
 /// slash commands) in undo and redo.
 pub const PROJECT: &str = "@project";
 
-#[derive(Default)]
 pub struct Histories {
     workspaces: HashMap<String, History<Workspace>>,
     project: Option<History<ProjectMeta>>,
@@ -75,12 +80,20 @@ pub struct Histories {
     /// Counts recorded changes, undos and redos, so others can tell the
     /// project changed without comparing it.
     revision: u64,
+    /// How many steps each workspace (and the project's settings) keeps.
+    limit: usize,
+}
+
+impl Default for Histories {
+    fn default() -> Self {
+        Histories { workspaces: HashMap::new(), project: None, next: 0, saved: None, revision: 0, limit: LIMIT }
+    }
 }
 
 impl Histories {
     /// Forgets every step; what is open now counts as unsaved.
     pub fn clear(&mut self) {
-        *self = Histories { next: self.next, revision: self.revision + 1, ..Default::default() };
+        *self = Histories { next: self.next, revision: self.revision + 1, limit: self.limit, ..Default::default() };
     }
 
     /// Changes whenever the recorded project does (a change, undo, redo, or
@@ -105,7 +118,7 @@ impl Histories {
         for (key, ws) in &project.workspaces {
             match self.workspaces.get_mut(key) {
                 Some(h) if settled => {
-                    changed |= h.record(ws, next);
+                    changed |= h.record(ws, next, self.limit);
                 }
                 Some(_) => {}
                 None => {
@@ -120,7 +133,7 @@ impl Histories {
         }
         match &mut self.project {
             Some(h) if settled => {
-                if h.record(&project.meta, next) {
+                if h.record(&project.meta, next, self.limit) {
                     self.revision += 1;
                 }
             }
@@ -129,6 +142,22 @@ impl Histories {
                 *next += 1;
                 self.project = Some(History::new(&project.meta, *next));
             }
+        }
+    }
+
+    /// Keeps at most `limit` steps per workspace (and for the project's
+    /// settings) from now on: Settings › Editor. Fewer than before forgets
+    /// the oldest steps at once, and the memory their copies took.
+    pub fn set_limit(&mut self, limit: usize) {
+        if limit == self.limit {
+            return;
+        }
+        self.limit = limit;
+        for h in self.workspaces.values_mut() {
+            h.keep(limit);
+        }
+        if let Some(h) = &mut self.project {
+            h.keep(limit);
         }
     }
 
@@ -149,7 +178,7 @@ impl Histories {
     pub fn undo(&mut self, key: &str, ws: &mut Workspace) -> bool {
         let Some(h) = self.workspaces.get_mut(key) else { return false };
         self.revision += 1;
-        h.undo(ws, &mut self.next)
+        h.undo(ws, &mut self.next, self.limit)
     }
 
     pub fn redo(&mut self, key: &str, ws: &mut Workspace) -> bool {
@@ -162,7 +191,7 @@ impl Histories {
     pub fn undo_project(&mut self, meta: &mut ProjectMeta) -> bool {
         let Some(h) = self.project.as_mut() else { return false };
         self.revision += 1;
-        h.undo(meta, &mut self.next)
+        h.undo(meta, &mut self.next, self.limit)
     }
 
     pub fn redo_project(&mut self, meta: &mut ProjectMeta) -> bool {
@@ -190,6 +219,39 @@ impl Histories {
 mod tests {
     use super::*;
     use circuit_core::Node;
+
+    /// The steps kept follow Settings › Editor: only the newest ones, and
+    /// fewer chosen later forgets the oldest at once.
+    #[test]
+    fn keeps_as_many_steps_as_chosen() {
+        let dir = std::env::temp_dir().join(format!("xc-history-limit-{}", std::process::id()));
+        let mut p = Project::create(&dir, "H", "m").unwrap();
+        let mut h = Histories::default();
+        h.set_limit(3);
+        h.reset_saved(&p);
+        let undos = |h: &mut Histories, p: &mut Project| {
+            let ws = p.workspaces.get_mut("main").unwrap();
+            let mut n = 0;
+            while h.undo("main", ws) {
+                n += 1;
+            }
+            while h.redo("main", ws) {}
+            n
+        };
+        for i in 0..5 {
+            p.workspaces.get_mut("main").unwrap().nodes.insert(format!("n{i}"), Node { block: "x@1".into(), ..Default::default() });
+            h.track(&p, true);
+        }
+        assert_eq!(undos(&mut h, &mut p), 3, "the newest three");
+        assert_eq!(p.workspaces["main"].nodes.len(), 5, "redone again");
+        h.set_limit(2);
+        assert_eq!(undos(&mut h, &mut p), 2, "fewer: the oldest are forgotten");
+        h.set_limit(10);
+        p.workspaces.get_mut("main").unwrap().nodes.clear();
+        h.track(&p, true);
+        assert_eq!(undos(&mut h, &mut p), 3, "more: room for new steps");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn records_settled_steps_and_restores_them() {

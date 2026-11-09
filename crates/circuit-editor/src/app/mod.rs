@@ -751,8 +751,9 @@ impl eframe::App for CircuitApp {
             self.ed.check_changes();
             self.last_check = std::time::Instant::now();
         }
-        // Unsaved changes are copied every 30 seconds, for crash recovery.
-        if self.ed.unsaved() && settled && self.tour.is_none() && self.last_recovery.elapsed() >= RECOVERY_EVERY {
+        // Unsaved changes are copied for crash recovery, as often as Settings › Backups says.
+        let recovery_every = self.ed.prefs.recovery_every();
+        if self.ed.unsaved() && settled && self.tour.is_none() && self.last_recovery.elapsed() >= recovery_every {
             self.last_recovery = std::time::Instant::now();
             if let Some(p) = &self.ed.project
                 && let Err(e) = {
@@ -764,7 +765,7 @@ impl eframe::App for CircuitApp {
             }
         }
         if self.ed.unsaved() {
-            ctx.request_repaint_after(RECOVERY_EVERY);
+            ctx.request_repaint_after(recovery_every);
         }
         watchdog::mark(watchdog::AFTER_FRAME);
     }
@@ -783,9 +784,14 @@ impl eframe::App for CircuitApp {
         }
     }
 
+    /// How often eframe saves the window's layout and settings: Settings › Editor.
+    fn auto_save_interval(&self) -> std::time::Duration {
+        self.ed.prefs.settings_save_every()
+    }
+
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        // eframe saves every 30 seconds, after a frame (egui's memory just before this).
-        watchdog::mark("saving the window's layout and settings (every 30 seconds)");
+        // eframe saves now and then (Settings › Editor), after a frame (egui's memory just before this).
+        watchdog::mark("saving the window's layout and settings");
         self.save_settings(storage);
         watchdog::mark(watchdog::AFTER_FRAME);
     }
@@ -809,8 +815,6 @@ impl CircuitApp {
 }
 
 const ACTIVITY_W: f32 = 44.0;
-/// How often unsaved changes are copied for crash recovery.
-const RECOVERY_EVERY: std::time::Duration = std::time::Duration::from_secs(30);
 /// How often changes are looked for without an edit or input.
 const CHECK_EVERY: std::time::Duration = std::time::Duration::from_secs(1);
 
