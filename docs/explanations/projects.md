@@ -39,4 +39,4 @@ File › New Project can start from a working bot (welcome and auto role, modera
 
 - **Undo/redo** per workspace (Ctrl+Z / Ctrl+Y).
 - **Backups**: every save keeps a snapshot outside the project (the newest 20, plus one a day for 14 days). File › Restore from backup… compares them with now and restores the whole project or one workspace.
-- **Crash recovery**: unsaved changes are copied every 30 seconds and offered back after a crash.
+- **Crash recovery**: unsaved changes are copied every 30 seconds (Settings › Backups changes how often) and offered back after a crash.

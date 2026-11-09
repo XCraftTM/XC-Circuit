@@ -87,6 +87,14 @@ pub struct Prefs {
     /// Every option shows on the blocks, advanced ones too (off: those stay
     /// in the Inspector under Advanced until they're made pins).
     pub show_advanced: bool,
+    /// How often the window's layout and settings are saved, in seconds
+    /// (they're always saved when the app closes too).
+    pub settings_save_secs: u32,
+    /// How often unsaved changes are copied for crash recovery, in seconds.
+    pub recovery_secs: u32,
+    /// How many steps each workspace (and the project's settings) can undo.
+    /// Every step keeps a copy of the workspace.
+    pub undo_steps: usize,
 }
 
 /// How many projects File › Open Recent and the start page remember.
@@ -104,6 +112,21 @@ impl Prefs {
     /// Takes a project off the recent list.
     pub fn forget_project(&mut self, root: &str) {
         self.recent_projects.retain(|p| !same_folder(p, root));
+    }
+
+    /// How often the window's layout and settings are saved.
+    pub fn settings_save_every(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(self.settings_save_secs.clamp(*SAVE_SECS_RANGE.start(), *SAVE_SECS_RANGE.end()).into())
+    }
+
+    /// How often unsaved changes are copied for crash recovery.
+    pub fn recovery_every(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(self.recovery_secs.clamp(*SAVE_SECS_RANGE.start(), *SAVE_SECS_RANGE.end()).into())
+    }
+
+    /// How many steps each workspace can undo.
+    pub fn undo_limit(&self) -> usize {
+        self.undo_steps.clamp(*UNDO_STEPS_RANGE.start(), *UNDO_STEPS_RANGE.end())
     }
 }
 
@@ -157,7 +180,7 @@ impl SideView {
 
 impl Default for Prefs {
     fn default() -> Self {
-        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), activity: SideView::ALL.iter().map(|v| v.key().to_string()).collect(), side_shown: Some(SideView::Workspaces.key().into()), side_lower: None, side_split: 0.5, disabled_plugins: Vec::new(), removed_plugins: Vec::new(), console_font: None, console_font_size: CONSOLE_FONT_SIZE, console_line_spacing: CONSOLE_LINE_SPACING, new_project_location: None, recent_projects: Vec::new(), check_updates: true, skipped_update: None, snap_to_grid: false, recent_blocks: Vec::new(), favorite_blocks: Vec::new(), shortcuts: Default::default(), last_crash_seen: 0, remote_bots: Vec::new(), window_places: Default::default(), lighter_parts: Default::default(), lighter_auto: true, show_advanced: true }
+        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), activity: SideView::ALL.iter().map(|v| v.key().to_string()).collect(), side_shown: Some(SideView::Workspaces.key().into()), side_lower: None, side_split: 0.5, disabled_plugins: Vec::new(), removed_plugins: Vec::new(), console_font: None, console_font_size: CONSOLE_FONT_SIZE, console_line_spacing: CONSOLE_LINE_SPACING, new_project_location: None, recent_projects: Vec::new(), check_updates: true, skipped_update: None, snap_to_grid: false, recent_blocks: Vec::new(), favorite_blocks: Vec::new(), shortcuts: Default::default(), last_crash_seen: 0, remote_bots: Vec::new(), window_places: Default::default(), lighter_parts: Default::default(), lighter_auto: true, show_advanced: true, settings_save_secs: SETTINGS_SAVE_SECS, recovery_secs: RECOVERY_SECS, undo_steps: UNDO_STEPS }
     }
 }
 
@@ -178,6 +201,17 @@ pub const CONSOLE_FONT_SIZE: f32 = 13.0;
 
 /// Room between the Console's lines to start with.
 pub const CONSOLE_LINE_SPACING: f32 = 2.0;
+
+/// How often the window's layout and settings are saved, to start with (eframe's own).
+pub const SETTINGS_SAVE_SECS: u32 = 30;
+/// How often unsaved changes are copied for crash recovery, to start with.
+pub const RECOVERY_SECS: u32 = 30;
+/// The seconds Settings offers for both.
+pub const SAVE_SECS_RANGE: std::ops::RangeInclusive<u32> = 10..=600;
+/// How many steps each workspace can undo, to start with.
+pub const UNDO_STEPS: usize = 200;
+/// The undo steps Settings offers.
+pub const UNDO_STEPS_RANGE: std::ops::RangeInclusive<usize> = 10..=1000;
 
 /// Interface sizes offered on the Settings page.
 pub const UI_SCALES: [f32; 6] = [0.8, 0.9, 1.0, 1.1, 1.25, 1.5];
