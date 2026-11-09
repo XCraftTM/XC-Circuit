@@ -265,6 +265,11 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
         picker.highlighted = shown.iter().copied().find(|&i| i >= picker.highlighted).or(shown.last().copied()).unwrap_or(0);
     }
 
+    // The row under the pointer is highlighted when the pointer moves there,
+    // not while it rests: resting on the list (the picker opens under it),
+    // it took the highlight back each frame, so the arrow keys did nothing
+    // and Enter after a search placed the block under the pointer.
+    let pointer_moved = ctx.input(|i| i.pointer.delta() != egui::Vec2::ZERO);
     let (up, down, enter, escape) = ctx.input(|i| (i.key_pressed(Key::ArrowUp), i.key_pressed(Key::ArrowDown), i.key_pressed(Key::Enter), i.key_pressed(Key::Escape)));
     let at = shown.iter().position(|&i| i == picker.highlighted);
     if up && let Some(at) = at {
@@ -425,7 +430,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
                                 if ed.tour_parts && ui.clip_rect().intersects(rect) {
                                     ed.ui_rects.insert(format!("picker:{}", def.id), rect.intersect(ui.clip_rect()));
                                 }
-                                if resp.hovered() {
+                                if resp.hovered() && pointer_moved {
                                     picker.highlighted = i;
                                 }
                                 if resp.clicked() {
@@ -660,6 +665,44 @@ fn place(ed: &mut Editor, picker: &Picker, block_id: &str, pin: Option<String>) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// With the pointer resting on the list, the arrow keys move the
+    /// highlight and a search highlights its best match.
+    #[test]
+    fn keys_work_while_the_pointer_rests_on_the_list() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&root.join("examples/DemoBot"));
+        ed.tour_parts = true;
+        ed.picker = Some(Picker::new("rank-command", egui::pos2(100.0, 100.0), egui::pos2(0.0, 0.0), None));
+        let ctx = egui::Context::default();
+        crate::ui::fonts::install(&ctx);
+        let run = |ed: &mut Editor, events: Vec<egui::Event>| {
+            let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(1200.0, 900.0))), events, ..Default::default() };
+            let mut out = ctx.run_ui(raw, |ui| show(ui.ctx(), ed));
+            out.textures_delta.clear();
+        };
+        let highlighted = |ed: &Editor| ed.picker.as_ref().unwrap().highlighted;
+        for _ in 0..4 {
+            run(&mut ed, vec![]);
+        }
+        // Onto the third row drawn: moving there highlights it.
+        let mut rows: Vec<egui::Rect> = ed.ui_rects.iter().filter(|(k, _)| k.starts_with("picker:")).map(|(_, r)| *r).collect();
+        rows.sort_by(|a, b| a.top().total_cmp(&b.top()));
+        run(&mut ed, vec![egui::Event::PointerMoved(egui::pos2(10.0, 10.0))]);
+        run(&mut ed, vec![egui::Event::PointerMoved(rows[2].center())]);
+        run(&mut ed, vec![]);
+        let at = highlighted(&ed);
+        assert!(at > 0);
+        let key = |key: Key| egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() };
+        run(&mut ed, vec![key(Key::ArrowDown)]);
+        run(&mut ed, vec![]);
+        assert_eq!(highlighted(&ed), at + 1, "Down moves on, and stays there");
+        run(&mut ed, vec![egui::Event::Text("send".into())]);
+        run(&mut ed, vec![]);
+        run(&mut ed, vec![]);
+        assert_eq!(highlighted(&ed), 0, "the best match, not the row under the pointer");
+    }
 
     #[test]
     fn other_names_count_like_the_name() {
