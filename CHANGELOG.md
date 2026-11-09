@@ -2,7 +2,7 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## Unreleased
+## 0.2.8
 
 ### Added
 - **More options on blocks**: options used less often (Delay, Get Rows' Sort by, Get Stored Value's If missing …) fold away below a **More options** row at the bottom of a block's fields; click it to open them, and each block remembers. Folded, an option that's in use (connected, a pin, or set to something) still shows, so nothing set is hidden. This replaces 0.2.5's Settings › Editor › Advanced options on blocks; the Inspector lists them under More options.
