@@ -16,6 +16,7 @@ Wire events, actions and values on a canvas, run your bot with one click, and ex
 ![Early Access](https://img.shields.io/badge/status-Early%20Access-00E5FF)
 ![Windows · Linux](https://img.shields.io/badge/Windows%20%C2%B7%20Linux-x64%20%7C%20ARM64-3DFF6E)
 [![Latest release](https://img.shields.io/github/v/release/XCraftTM/XC-Circuit?label=release&color=00E5FF)](https://github.com/XCraftTM/XC-Circuit/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/XCraftTM/XC-Circuit/total?label=downloads&color=3DFF6E)](https://github.com/XCraftTM/XC-Circuit/releases)
 
 ![XC Circuit's editor with a /count command](docs/public/screens/hero.png)
 
