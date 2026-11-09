@@ -24,7 +24,7 @@ dirs.workspace = true
 eframe.workspace = true
 # The fonts installed on the computer, for the Console's (already in the
 # build through eframe's system fonts), and reading whether one is monospaced.
-fontique = { version = "0.11", default-features = false, features = ["system"] }
+fontique = { version = "0.12", default-features = false, features = ["system"] }
 skrifa = { version = "0.44", default-features = false, features = ["std"] }
 # The symbol and emoji fonts (⚠, ✓, ▶ …) egui bundled up to 0.36; from 0.37
 # on they come only with this feature.
