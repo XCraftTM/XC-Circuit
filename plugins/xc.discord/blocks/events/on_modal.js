@@ -59,13 +59,13 @@ module.exports = {
     interaction: { type: "discord.interaction", description: "The form submission. Connect it to Send Message to answer." },
     user: { type: "discord.user", description: "Who sent it." },
     member: { type: "discord.member?", description: "Who sent it, as a server member. Empty in DMs." },
+    channel: { type: "discord.channel", description: "Where the form was sent from." },
+    server: { type: "discord.guild?", description: "The server it was sent in. Empty in DMs." },
     answers: { type: "object", description: "Every answer, by input id: the text, the chosen values of a menu, or the files of an upload." },
     files: { type: "list<object>", description: "Every uploaded file (name, url, size, contentType)." },
     picked: { type: "object", description: "For user, role, channel and mentionable menus: what was picked (the users, roles or channels), by input id." },
     customId: { type: "text", label: "Custom id", description: "The modal's full id." },
     rest: { type: "text", label: "Rest of id", description: "With Starts with: what comes after the prefix (vote:42 gives 42). With a pattern: its first group." },
-    channel: { type: "discord.channel", description: "Where the form was sent from." },
-    server: { type: "discord.guild?", description: "The server it was sent in. Empty in DMs." },
   },
   define({ values, project }) {
     const outputs = {};

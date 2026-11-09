@@ -23,11 +23,11 @@ module.exports = {
   },
   outputs: {
     message: { type: "discord.message", description: "The message." },
-    content: { type: "text", description: "The message text." },
     author: { type: "discord.user", description: "Who sent it." },
     member: { type: "discord.member?", description: "Who sent it, as a server member. Empty in DMs." },
     channel: { type: "discord.channel", description: "Where it was sent." },
     server: { type: "discord.guild?", description: "The server it was sent in. Empty in DMs." },
+    content: { type: "text", description: "The message text." },
   },
   listen(ctx, emit) {
     ctx.discord.client.on("messageCreate", (message) => {

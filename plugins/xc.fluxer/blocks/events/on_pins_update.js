@@ -16,10 +16,10 @@ module.exports = {
   },
   fields: {},
   outputs: {
+    server: { type: "fluxer.server?", description: "The server it happened in. Empty in direct messages." },
     channelId: { type: "text", label: "Channel id", description: "Where the pins changed." },
     serverId: { type: "text", label: "Server id", description: "The server. Empty in direct messages." },
     lastPin: { type: "date?", label: "Last pin", description: "When the newest pin was made, when known." },
-    server: { type: "fluxer.server?", description: "The server it happened in. Empty in direct messages." },
   },
   listen(ctx, emit) {
     // The server itself, found in the bot's servers by its id.

@@ -16,11 +16,11 @@ module.exports = {
   },
   fields: {},
   outputs: {
+    server: { type: "fluxer.server?", description: "The server the member is in." },
     userId: { type: "text", label: "User id", description: "Who." },
     status: { type: "text", description: "online, idle, dnd or offline." },
     activity: { type: "text", description: "What they're doing, when shown (a game, a custom status …)." },
     serverId: { type: "text", label: "Server id", description: "The server it was seen in." },
-    server: { type: "fluxer.server?", description: "The server the member is in." },
   },
   listen(ctx, emit) {
     // The server itself, found in the bot's servers by its id.

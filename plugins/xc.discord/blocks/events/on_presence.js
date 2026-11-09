@@ -23,11 +23,11 @@ module.exports = {
   },
   outputs: {
     member: { type: "discord.member?", description: "Who changed." },
+    server: { type: "discord.guild?", description: "The server the member is in." },
     before: { type: "text", description: "Their status before: online, idle, dnd or offline." },
     status: { type: "text", description: "Their status now." },
     activity: { type: "text", description: "What they're doing now, such as a game's name." },
     streaming: { type: "boolean", description: "Whether they are streaming." },
-    server: { type: "discord.guild?", description: "The server the member is in." },
   },
   listen(ctx, emit) {
     ctx.discord.client.on("presenceUpdate", (old, now) => {

@@ -22,8 +22,8 @@ module.exports = {
   outputs: {
     role: { type: "fluxer.role?", description: "The role (as it is now). Empty when a deleted role wasn't known." },
     before: { type: "fluxer.role?", description: "For changes: the role as it was, when known." },
-    roleId: { type: "text", label: "Role id", description: "The role's id." },
     server: { type: "fluxer.server?", description: "The server." },
+    roleId: { type: "text", label: "Role id", description: "The role's id." },
   },
   listen(ctx, emit) {
     const client = ctx.fluxer.client;

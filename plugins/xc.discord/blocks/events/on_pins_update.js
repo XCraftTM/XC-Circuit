@@ -21,8 +21,8 @@ module.exports = {
   fields: {},
   outputs: {
     channel: { type: "discord.channel", description: "The channel." },
-    lastPin: { type: "text", label: "Last pin", description: "When the newest pin was made (ISO date), empty when none is left." },
     server: { type: "discord.guild?", description: "The server." },
+    lastPin: { type: "text", label: "Last pin", description: "When the newest pin was made (ISO date), empty when none is left." },
   },
   listen(ctx, emit) {
     ctx.discord.client.on("channelPinsUpdate", (channel, time) => emit({ channel, lastPin: time ? new Date(time).toISOString() : "", server: channel.guild ?? null }));

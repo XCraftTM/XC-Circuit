@@ -317,6 +317,15 @@ const message = (content, extra = {}) => ({
   assert.strictEqual(run("fluxer.mention", { target: { id: "r1", guildId: "g1", position: 1 } }).text, "<@&r1>");
   assert.strictEqual(run("fluxer.mention", { target: "123", kind: "role" }).text, "<@&123>");
 
+  // Events give their Discord/Fluxer objects (interaction, user, member,
+  // channel, message, server …) first, plain values (texts, ids, lists) after.
+  {
+    const isObject = (t) => /^(discord|fluxer)\.[a-z_]+\??$/.test(String(t)) && !/component|embed|layout/.test(t);
+    for (const block of Object.values(all).filter((b) => b.kind === "event")) {
+      const kinds = Object.values(block.outputs || {}).map((o) => isObject(o.type));
+      assert.ok(kinds.indexOf(false) < 0 || !kinds.slice(kinds.indexOf(false)).includes(true), `${block.id}: objects come before plain values in its outputs`);
+    }
+  }
   console.log(`${Object.keys(all).length} Fluxer blocks checked`);
   console.log("fluxer blocks test passed");
 })().catch((e) => {

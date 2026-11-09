@@ -24,11 +24,11 @@ module.exports = {
     kind: { type: "select", pin: false, default: "created", label: "When", choices: KINDS, description: "Which event runs it." },
   },
   outputs: {
+    server: { type: "discord.guild", description: "The server." },
     name: { type: "text", description: "The rule's name." },
     enabled: { type: "boolean", description: "Whether the rule is on." },
     rule: { type: "object", description: "The rule (as it is now, or was before deleting)." },
     before: { type: "object", description: "For changes: the rule before." },
-    server: { type: "discord.guild", description: "The server." },
   },
   listen(ctx, emit) {
     const c = ctx.discord.client;

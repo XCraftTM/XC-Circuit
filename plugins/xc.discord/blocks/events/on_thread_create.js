@@ -24,9 +24,9 @@ module.exports = {
   outputs: {
     thread: { type: "discord.thread", description: "The new thread." },
     parent: { type: "discord.channel?", description: "The channel or forum it is in." },
+    server: { type: "discord.guild?", description: "The server it was made in." },
     ownerId: { type: "text", label: "Creator id", description: "Who created it." },
     name: { type: "text", description: "Its name." },
-    server: { type: "discord.guild?", description: "The server it was made in." },
   },
   listen(ctx, emit) {
     const only = String(ctx.fields.parent || "").trim();

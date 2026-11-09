@@ -18,11 +18,11 @@ module.exports = {
   outputs: {
     member: { type: "fluxer.member", description: "The member, as they are now." },
     before: { type: "fluxer.member?", description: "The member as they were, when known." },
+    server: { type: "fluxer.server?", description: "The server." },
     rolesAdded: { type: "list<text>", label: "Roles added", description: "Ids of roles they got." },
     rolesRemoved: { type: "list<text>", label: "Roles removed", description: "Ids of roles taken away." },
     nicknameBefore: { type: "text", label: "Nickname before", description: "Their nickname before (empty = none or not known)." },
     nickname: { type: "text", description: "Their nickname now (empty = none)." },
-    server: { type: "fluxer.server?", description: "The server." },
   },
   listen(ctx, emit) {
     const ids = (m) => (m?.roles?.roleIds ? [...m.roles.roleIds] : []);

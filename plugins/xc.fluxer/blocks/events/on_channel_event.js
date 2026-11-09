@@ -22,8 +22,8 @@ module.exports = {
   outputs: {
     channel: { type: "fluxer.channel", description: "The channel (as it is now, or was before deleting)." },
     before: { type: "fluxer.channel?", description: "For changes: the channel as it was." },
-    name: { type: "text", description: "Its name." },
     server: { type: "fluxer.server?", description: "The server." },
+    name: { type: "text", description: "Its name." },
   },
   listen(ctx, emit) {
     const client = ctx.fluxer.client;

@@ -42,14 +42,14 @@ module.exports = {
     interaction: { type: "discord.interaction", description: "The menu use. Connect it to Send Message (Update message changes the menu's message)." },
     user: { type: "discord.user", description: "Who picked." },
     member: { type: "discord.member?", description: "Who picked, as a server member. Empty in DMs." },
+    channel: { type: "discord.channel", description: "Where it was used." },
+    message: { type: "discord.message", description: "The message the menu is on." },
+    server: { type: "discord.guild?", description: "The server it was used in. Empty in DMs." },
     value: { type: "text", description: "The first picked value." },
     values: { type: "list<text>", description: "Every picked value (ids for user, role and channel menus)." },
     picked: { type: "list<any>", description: "The picked users, roles or channels themselves (for those menus)." },
     customId: { type: "text", label: "Custom id", description: "The menu's full id." },
     rest: { type: "text", label: "Rest of id", description: "With Starts with: what comes after the prefix (vote:42 gives 42). With a pattern: its first group." },
-    channel: { type: "discord.channel", description: "Where it was used." },
-    message: { type: "discord.message", description: "The message the menu is on." },
-    server: { type: "discord.guild?", description: "The server it was used in. Empty in DMs." },
   },
   listen(ctx, emit) {
     const test = matcher(ctx.fields.match, ctx.fields.customId);

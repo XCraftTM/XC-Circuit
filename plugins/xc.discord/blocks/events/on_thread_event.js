@@ -25,12 +25,12 @@ module.exports = {
   },
   outputs: {
     thread: { type: "discord.thread", description: "The thread (as it is now, or was before deleting)." },
+    server: { type: "discord.guild", description: "The server." },
     beforeName: { type: "text", label: "Name before", description: "Its name before a change." },
     archived: { type: "boolean", description: "Whether it is archived now." },
     locked: { type: "boolean", description: "Whether it is locked now." },
     joined: { type: "list<discord.user>", description: "For member changes: who joined." },
     left: { type: "list<discord.user>", description: "For member changes: who left." },
-    server: { type: "discord.guild", description: "The server." },
   },
   listen(ctx, emit) {
     const c = ctx.discord.client;

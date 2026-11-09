@@ -31,11 +31,11 @@ module.exports = {
   outputs: {
     user: { type: "discord.user?", description: "For used sounds: who played it." },
     channel: { type: "discord.channel?", description: "For used sounds: the voice channel." },
+    server: { type: "discord.guild?", description: "The server." },
     name: { type: "text", description: "The sound's name (when known)." },
     soundId: { type: "text", label: "Sound id", description: "The sound's id, empty for an emoji effect." },
     emoji: { type: "text", description: "The sound's or effect's emoji." },
     sound: { type: "object", description: "The sound, when known." },
-    server: { type: "discord.guild?", description: "The server." },
   },
   listen(ctx, emit) {
     const c = ctx.discord.client;

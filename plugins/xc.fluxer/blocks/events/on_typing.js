@@ -18,11 +18,11 @@ module.exports = {
     ignoreBots: { type: "boolean", pin: false, default: true, label: "Ignore bots", description: "Skip bots, including this one." },
   },
   outputs: {
-    userId: { type: "text", label: "User id", description: "Who is typing." },
     member: { type: "fluxer.member?", description: "Who is typing, as a server member. Empty in direct messages." },
+    server: { type: "fluxer.server?", description: "The server it happened in. Empty in direct messages." },
+    userId: { type: "text", label: "User id", description: "Who is typing." },
     channelId: { type: "text", label: "Channel id", description: "Where." },
     serverId: { type: "text", label: "Server id", description: "The server. Empty in direct messages." },
-    server: { type: "fluxer.server?", description: "The server it happened in. Empty in direct messages." },
   },
   listen(ctx, emit) {
     // The server itself, found in the bot's servers by its id.

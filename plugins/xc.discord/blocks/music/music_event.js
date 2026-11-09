@@ -55,13 +55,13 @@ module.exports = {
   },
   outputs: {
     server: { type: "discord.guild", description: "The server." },
+    requestedBy: { type: "discord.user?", label: "Requested by", description: "Who asked for the track." },
+    channel: { type: "discord.channel?", label: "Text channel", description: "The text channel Play Music was given, to post in." },
+    voiceChannel: { type: "discord.voice_channel?", label: "Voice channel", description: "Where the bot plays." },
     track: { type: "object", description: "The track (title, author, url, duration, thumbnail, source, requestedBy), when there is one." },
     title: { type: "text", description: "The track's title." },
     url: { type: "text", description: "Its link." },
     count: { type: "number", description: "For playlists: how many tracks were added." },
-    requestedBy: { type: "discord.user?", label: "Requested by", description: "Who asked for the track." },
-    channel: { type: "discord.channel?", label: "Text channel", description: "The text channel Play Music was given, to post in." },
-    voiceChannel: { type: "discord.voice_channel?", label: "Voice channel", description: "Where the bot plays." },
     error: { type: "text", description: "For failures: what went wrong." },
   },
   listen(ctx, emit) {

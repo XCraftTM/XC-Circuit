@@ -24,10 +24,10 @@ module.exports = {
     kind: { type: "select", pin: false, default: "started", label: "When", choices: KINDS, description: "Which event runs it." },
   },
   outputs: {
-    event: { type: "object", description: "The scheduled event." },
-    name: { type: "text", description: "Its name." },
     user: { type: "discord.user?", description: "Who marked interest (for those)." },
     server: { type: "discord.guild", description: "The server." },
+    event: { type: "object", description: "The scheduled event." },
+    name: { type: "text", description: "Its name." },
   },
   listen(ctx, emit) {
     const c = ctx.discord.client;

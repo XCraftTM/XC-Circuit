@@ -26,14 +26,14 @@ module.exports = {
   },
   outputs: {
     message: { type: "fluxer.message", description: "The message with the command." },
-    args: { type: "list<text>", label: "Arguments", description: "The words after the command: !ban @a spam gives [@a, spam]." },
-    rest: { type: "text", label: "Text after", description: "Everything after the command, as one text." },
-    first: { type: "text", label: "First argument", description: "The first word after the command, such as the @someone in !kick @someone being rude." },
-    more: { type: "text", label: "Text after the first", description: "Everything after the first argument, such as the reason in !kick @someone being rude." },
     author: { type: "fluxer.user", description: "Who used the command." },
     member: { type: "fluxer.member?", description: "Who used it, as a server member. Empty in direct messages." },
     channel: { type: "fluxer.channel", description: "Where it was used." },
     server: { type: "fluxer.server?", description: "The server it was used in. Empty in direct messages." },
+    args: { type: "list<text>", label: "Arguments", description: "The words after the command: !ban @a spam gives [@a, spam]." },
+    rest: { type: "text", label: "Text after", description: "Everything after the command, as one text." },
+    first: { type: "text", label: "First argument", description: "The first word after the command, such as the @someone in !kick @someone being rude." },
+    more: { type: "text", label: "Text after the first", description: "Everything after the first argument, such as the reason in !kick @someone being rude." },
   },
   listen(ctx, emit) {
     const names = String(ctx.fields.command || "")

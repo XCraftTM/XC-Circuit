@@ -25,9 +25,9 @@ module.exports = {
   },
   outputs: {
     role: { type: "discord.role", description: "The role." },
+    server: { type: "discord.guild", description: "The server." },
     beforeName: { type: "text", label: "Name before", description: "Its name before a change." },
     permissionsChanged: { type: "boolean", label: "Permissions changed", description: "For changes: whether its permissions changed." },
-    server: { type: "discord.guild", description: "The server." },
   },
   listen(ctx, emit) {
     const c = ctx.discord.client;

@@ -25,8 +25,8 @@ module.exports = {
   },
   outputs: {
     channel: { type: "discord.channel", description: "The channel (as it is now, or was before deleting)." },
-    beforeName: { type: "text", label: "Name before", description: "Its name before a change." },
     server: { type: "discord.guild?", description: "The server." },
+    beforeName: { type: "text", label: "Name before", description: "Its name before a change." },
   },
   listen(ctx, emit) {
     const c = ctx.discord.client;

@@ -23,11 +23,11 @@ module.exports = {
   },
   outputs: {
     message: { type: "discord.message", description: "The message as it is now." },
-    before: { type: "text", description: "The text before the edit (empty when the message was sent before the bot started)." },
-    after: { type: "text", description: "The text now." },
     author: { type: "discord.user", description: "Who wrote it." },
     channel: { type: "discord.channel", description: "Where it is." },
     server: { type: "discord.guild?", description: "The server it was edited in. Empty in DMs." },
+    before: { type: "text", description: "The text before the edit (empty when the message was sent before the bot started)." },
+    after: { type: "text", description: "The text now." },
   },
   listen(ctx, emit) {
     ctx.discord.client.on("messageUpdate", async (old, now) => {

@@ -25,13 +25,13 @@ module.exports = {
   },
   outputs: {
     member: { type: "discord.member", description: "The member, as they are now." },
+    server: { type: "discord.guild", description: "The server." },
     rolesAdded: { type: "list<discord.role>", label: "Roles added", description: "Roles they got." },
     rolesRemoved: { type: "list<discord.role>", label: "Roles removed", description: "Roles they lost." },
     oldNickname: { type: "text", label: "Old nickname", description: "The nickname before (empty = none)." },
     nickname: { type: "text", description: "The nickname now (empty = none)." },
     timedOut: { type: "boolean", label: "Timed out", description: "Whether they are timed out now." },
     boosting: { type: "boolean", description: "Whether they boost the server now." },
-    server: { type: "discord.guild", description: "The server." },
   },
   listen(ctx, emit) {
     ctx.discord.client.on("guildMemberUpdate", (old, now) => {

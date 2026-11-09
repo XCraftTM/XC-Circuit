@@ -28,10 +28,10 @@ module.exports = {
   },
   outputs: {
     server: { type: "discord.guild", description: "The server (as it is now)." },
+    channel: { type: "discord.channel?", description: "For webhooks: the channel whose webhooks changed." },
     beforeName: { type: "text", label: "Name before", description: "For settings: its name before." },
     changed: { type: "list<text>", description: "For settings: what changed, such as name or icon." },
     changes: { type: "list<object>", description: "For settings: each change with its old and new value." },
-    channel: { type: "discord.channel?", description: "For webhooks: the channel whose webhooks changed." },
   },
   listen(ctx, emit) {
     const c = ctx.discord.client;

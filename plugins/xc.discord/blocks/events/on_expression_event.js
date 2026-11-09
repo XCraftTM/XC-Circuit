@@ -31,13 +31,13 @@ module.exports = {
     kind: { type: "select", pin: false, default: "emojiCreate", label: "When", choices: KINDS, description: "Which event runs it." },
   },
   outputs: {
+    server: { type: "discord.guild", description: "The server." },
     name: { type: "text", description: "The emoji's or sticker's name (now)." },
     beforeName: { type: "text", label: "Name before", description: "Its name before a change." },
     id: { type: "text", description: "Its id." },
     text: { type: "text", description: "For emojis: the emoji, ready for messages." },
     url: { type: "text", description: "Its picture." },
     item: { type: "object", description: "The emoji or sticker object." },
-    server: { type: "discord.guild", description: "The server." },
   },
   listen(ctx, emit) {
     const kind = ctx.fields.kind;

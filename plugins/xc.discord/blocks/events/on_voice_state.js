@@ -28,10 +28,10 @@ module.exports = {
     member: { type: "discord.member", description: "Who changed." },
     before: { type: "discord.voice_channel?", description: "The voice channel they were in (empty when joining)." },
     after: { type: "discord.voice_channel?", description: "The voice channel they are in now (empty when leaving)." },
+    server: { type: "discord.guild", description: "The server." },
     muted: { type: "boolean", description: "Whether they are muted now (by themselves or the server)." },
     deafened: { type: "boolean", description: "Whether they are deafened now." },
     streaming: { type: "boolean", description: "Whether they are streaming now." },
-    server: { type: "discord.guild", description: "The server." },
   },
   listen(ctx, emit) {
     // The ticked changes: a list, or (older projects) one name or names with commas. None: any.

@@ -25,10 +25,10 @@ module.exports = {
   },
   outputs: {
     message: { type: "discord.message", description: "The message." },
-    emoji: { type: "text", description: "For one emoji: the emoji as text." },
-    count: { type: "number", description: "How many different emojis were removed." },
     channel: { type: "discord.channel", description: "Where the message is." },
     server: { type: "discord.guild?", description: "The server it happened in. Empty in DMs." },
+    emoji: { type: "text", description: "For one emoji: the emoji as text." },
+    count: { type: "number", description: "How many different emojis were removed." },
   },
   listen(ctx, emit) {
     const c = ctx.discord.client;

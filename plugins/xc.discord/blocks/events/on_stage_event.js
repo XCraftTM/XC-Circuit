@@ -24,11 +24,11 @@ module.exports = {
     kind: { type: "select", pin: false, default: "created", label: "When", choices: KINDS, description: "Which event runs it." },
   },
   outputs: {
+    channel: { type: "discord.voice_channel?", description: "The stage channel." },
+    server: { type: "discord.guild?", description: "The server." },
     topic: { type: "text", description: "The stage's topic." },
     beforeTopic: { type: "text", label: "Topic before", description: "For changes: the topic before." },
-    channel: { type: "discord.voice_channel?", description: "The stage channel." },
     stage: { type: "object", description: "The stage instance." },
-    server: { type: "discord.guild?", description: "The server." },
   },
   listen(ctx, emit) {
     const c = ctx.discord.client;

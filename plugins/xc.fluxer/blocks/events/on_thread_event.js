@@ -22,10 +22,10 @@ module.exports = {
   outputs: {
     thread: { type: "fluxer.thread", description: "The thread (as it is now, or was before deleting)." },
     before: { type: "fluxer.channel?", description: "For changes: the thread as it was." },
+    server: { type: "fluxer.server?", description: "The server the thread is in." },
     name: { type: "text", description: "Its name." },
     parentId: { type: "text", label: "Parent id", description: "The channel or forum it is in." },
     serverId: { type: "text", label: "Server id", description: "The server the thread is in." },
-    server: { type: "fluxer.server?", description: "The server the thread is in." },
   },
   listen(ctx, emit) {
     // The server itself, found in the bot's servers by its id.

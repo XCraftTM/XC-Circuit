@@ -20,14 +20,14 @@ module.exports = {
     when: { type: "select", pin: false, default: "join", choices: WHEN, label: "When", description: "Which change." },
   },
   outputs: {
-    userId: { type: "text", label: "User id", description: "Who." },
     member: { type: "fluxer.member?", description: "Who, as a server member, when known." },
+    server: { type: "fluxer.server?", description: "The server of the voice channel." },
+    userId: { type: "text", label: "User id", description: "Who." },
     channelId: { type: "text", label: "Channel id", description: "The voice channel they are in now (empty when they left)." },
     beforeChannelId: { type: "text", label: "Channel before", description: "The voice channel they were in (empty when they joined)." },
     serverId: { type: "text", label: "Server id", description: "The server." },
     muted: { type: "boolean", description: "Whether they are muted." },
     deafened: { type: "boolean", description: "Whether they are deafened." },
-    server: { type: "fluxer.server?", description: "The server of the voice channel." },
   },
   listen(ctx, emit) {
     // The server itself, found in the bot's servers by its id.

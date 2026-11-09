@@ -22,13 +22,13 @@ module.exports = {
   },
   outputs: {
     message: { type: "fluxer.message?", description: "The message as it is now (edits). Empty for deleted messages." },
+    author: { type: "fluxer.user?", description: "Who wrote it, when known." },
+    server: { type: "fluxer.server?", description: "The server it happened in. Empty in direct messages." },
     before: { type: "text", description: "Its text before the edit, or the deleted text, when the bot had seen it. Otherwise empty." },
     after: { type: "text", description: "Its text after the edit. Empty for deleted messages." },
     messageId: { type: "text", label: "Message id", description: "The message's id." },
-    author: { type: "fluxer.user?", description: "Who wrote it, when known." },
     channelId: { type: "text", label: "Channel id", description: "Where it was." },
     serverId: { type: "text", label: "Server id", description: "The server it was in. Empty in direct messages." },
-    server: { type: "fluxer.server?", description: "The server it happened in. Empty in direct messages." },
   },
   listen(ctx, emit) {
     // The server itself, found in the bot's servers by its id.

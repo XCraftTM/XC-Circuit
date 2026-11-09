@@ -41,11 +41,11 @@ module.exports = {
     interaction: { type: "discord.interaction", description: "The button press. Connect it to Send Message." },
     user: { type: "discord.user", description: "Who pressed it." },
     member: { type: "discord.member?", description: "Who pressed it, as a server member. Empty in DMs." },
-    customId: { type: "text", label: "Custom id", description: "The full id of the pressed button." },
-    rest: { type: "text", label: "Rest of id", description: "With Starts with: what comes after the prefix (vote:42 gives 42). With a pattern: its first group." },
     channel: { type: "discord.channel", description: "Where it was used." },
     message: { type: "discord.message", description: "The message the button is on." },
     server: { type: "discord.guild?", description: "The server it was pressed in. Empty in DMs." },
+    customId: { type: "text", label: "Custom id", description: "The full id of the pressed button." },
+    rest: { type: "text", label: "Rest of id", description: "With Starts with: what comes after the prefix (vote:42 gives 42). With a pattern: its first group." },
   },
   listen(ctx, emit) {
     const test = matcher(ctx.fields.match, ctx.fields.customId);

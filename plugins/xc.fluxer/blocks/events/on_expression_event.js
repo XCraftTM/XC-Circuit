@@ -20,10 +20,10 @@ module.exports = {
     kind: { type: "select", pin: false, default: "emojis", choices: KINDS, label: "Of", description: "Emojis or stickers." },
   },
   outputs: {
+    server: { type: "fluxer.server?", description: "The server the emojis or stickers are in." },
     serverId: { type: "text", label: "Server id", description: "The server." },
     list: { type: "list<object>", description: "Every emoji or sticker now: id, name and more." },
     names: { type: "list<text>", description: "Their names." },
-    server: { type: "fluxer.server?", description: "The server the emojis or stickers are in." },
   },
   listen(ctx, emit) {
     // The server itself, found in the bot's servers by its id.

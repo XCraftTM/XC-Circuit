@@ -22,12 +22,12 @@ module.exports = {
     ignoreBots: { type: "boolean", pin: false, default: true, label: "Ignore bots", description: "Skip messages written by bots (when known)." },
   },
   outputs: {
-    content: { type: "text", description: "Its text, when it was sent while the bot was running." },
     author: { type: "discord.user?", description: "Who wrote it, when known." },
     channel: { type: "discord.channel", description: "Where it was." },
+    server: { type: "discord.guild?", description: "The server it was deleted in. Empty in DMs." },
+    content: { type: "text", description: "Its text, when it was sent while the bot was running." },
     id: { type: "text", label: "Message id", description: "The deleted message's id." },
     bulk: { type: "boolean", description: "True when it went in a bulk delete." },
-    server: { type: "discord.guild?", description: "The server it was deleted in. Empty in DMs." },
   },
   listen(ctx, emit) {
     const send = (m, bulk) => {

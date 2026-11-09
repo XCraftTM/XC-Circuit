@@ -28,14 +28,14 @@ module.exports = {
     },
   },
   outputs: {
-    action: { type: "text", description: "What happened, such as MemberKick." },
     executor: { type: "discord.user?", description: "Who did it." },
+    server: { type: "discord.guild", description: "The server." },
+    action: { type: "text", description: "What happened, such as MemberKick." },
     target: { type: "object", description: "What it was done to (a user, channel, role …), when known." },
     targetId: { type: "text", label: "Target id", description: "The id of what it was done to." },
     reason: { type: "text", description: "The reason given, if any." },
     changes: { type: "list<object>", description: "What changed: each key with its old and new value." },
     entry: { type: "object", description: "The whole audit log entry." },
-    server: { type: "discord.guild", description: "The server." },
   },
   listen(ctx, emit) {
     const { AuditLogEvent } = ctx.require("discord.js");

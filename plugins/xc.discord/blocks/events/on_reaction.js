@@ -25,9 +25,9 @@ module.exports = {
   outputs: {
     user: { type: "discord.user", description: "Who reacted." },
     message: { type: "discord.message", description: "The message." },
-    emoji: { type: "text", description: "The emoji as text." },
     channel: { type: "discord.channel", description: "Where the message is." },
     server: { type: "discord.guild?", description: "The server it happened in. Empty in DMs." },
+    emoji: { type: "text", description: "The emoji as text." },
   },
   listen(ctx, emit) {
     ctx.discord.client.on("messageReactionAdd", async (reaction, user) => {

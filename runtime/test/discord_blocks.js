@@ -23,6 +23,16 @@ for (const group of fs.readdirSync(dir)) {
   }
 }
 
+// Events give their Discord/Fluxer objects (interaction, user, member,
+// channel, message, server …) first, plain values (texts, ids, lists) after.
+{
+  const isObject = (t) => /^(discord|fluxer)\.[a-z_]+\??$/.test(String(t)) && !/component|embed|layout/.test(t);
+  for (const block of Object.values(all).filter((b) => b.kind === "event")) {
+    const kinds = Object.values(block.outputs || {}).map((o) => isObject(o.type));
+    assert.ok(kinds.indexOf(false) < 0 || !kinds.slice(kinds.indexOf(false)).includes(true), `${block.id}: objects come before plain values in its outputs`);
+  }
+}
+
 const run = (id, fields) => all[id].run({ fields: { ...defaults(id), ...fields }, ctx: {} });
 const defaults = (id) => Object.fromEntries(Object.entries(all[id].fields || {}).filter(([, f]) => "default" in f).map(([k, f]) => [k, f.default]));
 

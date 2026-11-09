@@ -26,12 +26,12 @@ module.exports = {
   },
   outputs: {
     interaction: { type: "discord.interaction", description: "Connect it to Respond to Autocomplete." },
-    option: { type: "text", description: "The option being typed into." },
-    typed: { type: "text", description: "What has been typed so far." },
     user: { type: "discord.user", description: "Who is typing." },
     member: { type: "discord.member?", description: "Who is typing, as a server member. Empty in DMs." },
     channel: { type: "discord.channel", description: "Where the command is being used." },
     server: { type: "discord.guild?", description: "The server it is used in. Empty in DMs." },
+    option: { type: "text", description: "The option being typed into." },
+    typed: { type: "text", description: "What has been typed so far." },
   },
   define({ values, project }) {
     const choices = Object.fromEntries(commandsOf(project).map((c) => [c.name, `/${c.name}`]));

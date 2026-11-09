@@ -23,14 +23,14 @@ module.exports = {
     ignoreBots: { type: "boolean", pin: false, default: true, label: "Ignore bots", description: "Skip reactions by bots, including this one." },
   },
   outputs: {
-    emoji: { type: "text", description: "The emoji: 👍, or <:name:id> for a custom one." },
     user: { type: "fluxer.user", description: "Who reacted." },
     member: { type: "fluxer.member?", description: "Who reacted, as a server member. Empty in direct messages." },
     message: { type: "fluxer.message?", description: "The message, when it could be loaded." },
+    server: { type: "fluxer.server?", description: "The server it happened in. Empty in direct messages." },
+    emoji: { type: "text", description: "The emoji: 👍, or <:name:id> for a custom one." },
     messageId: { type: "text", label: "Message id", description: "The message's id." },
     channelId: { type: "text", label: "Channel id", description: "Where the message is." },
     serverId: { type: "text", label: "Server id", description: "The server it happened in. Empty in direct messages." },
-    server: { type: "fluxer.server?", description: "The server it happened in. Empty in direct messages." },
   },
   listen(ctx, emit) {
     // The server itself, found in the bot's servers by its id.

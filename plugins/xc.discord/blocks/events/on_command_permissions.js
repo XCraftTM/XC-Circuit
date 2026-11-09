@@ -20,10 +20,10 @@ module.exports = {
   },
   fields: {},
   outputs: {
+    server: { type: "discord.guild?", description: "The server." },
     commandId: { type: "text", label: "Command id", description: "The command, or the bot's id when it is about all its commands." },
     command: { type: "text", description: "The command's name, when known." },
     permissions: { type: "list<object>", description: "Each rule: id (role, user or channel), type (role, user, channel) and allowed (yes/no)." },
-    server: { type: "discord.guild?", description: "The server." },
   },
   listen(ctx, emit) {
     const c = ctx.discord.client;

@@ -24,12 +24,12 @@ module.exports = {
     kind: { type: "select", pin: false, default: "add", label: "When", choices: KINDS, description: "Votes added or removed." },
   },
   outputs: {
-    answer: { type: "text", description: "The answer's text." },
-    userId: { type: "text", label: "User id", description: "Who voted." },
     message: { type: "discord.message", description: "The poll's message." },
     poll: { type: "discord.poll?", description: "The poll, with its answers and votes." },
     channel: { type: "discord.channel?", description: "Where the poll is." },
     server: { type: "discord.guild?", description: "The server the poll is in. Empty in DMs." },
+    answer: { type: "text", description: "The answer's text." },
+    userId: { type: "text", label: "User id", description: "Who voted." },
   },
   listen(ctx, emit) {
     const event = ctx.fields.kind === "remove" ? "messagePollVoteRemove" : "messagePollVoteAdd";

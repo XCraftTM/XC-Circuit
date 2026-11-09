@@ -21,11 +21,11 @@ module.exports = {
   },
   outputs: {
     invite: { type: "fluxer.invite?", description: "The new invite. Empty for deleted ones." },
-    code: { type: "text", description: "The invite's code." },
     inviter: { type: "fluxer.user?", description: "Who made it (for new invites)." },
+    server: { type: "fluxer.server?", description: "The server the invite is for." },
+    code: { type: "text", description: "The invite's code." },
     channelId: { type: "text", label: "Channel id", description: "The channel it leads to." },
     serverId: { type: "text", label: "Server id", description: "The server." },
-    server: { type: "fluxer.server?", description: "The server the invite is for." },
   },
   listen(ctx, emit) {
     // The server itself, found in the bot's servers by its id.

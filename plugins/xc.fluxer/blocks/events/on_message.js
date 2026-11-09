@@ -20,11 +20,11 @@ module.exports = {
   },
   outputs: {
     message: { type: "fluxer.message", description: "The message." },
-    content: { type: "text", description: "The message text." },
     author: { type: "fluxer.user", description: "Who sent it." },
     member: { type: "fluxer.member?", description: "Who sent it, as a server member. Empty in direct messages." },
     channel: { type: "fluxer.channel", description: "Where it was sent." },
     server: { type: "fluxer.server?", description: "The server it was sent in. Empty in direct messages." },
+    content: { type: "text", description: "The message text." },
   },
   listen(ctx, emit) {
     ctx.fluxer.client.on("messageCreate", (message) => {
