@@ -251,7 +251,7 @@ impl CircuitApp {
         }
         ed.log(Level::Info, format!("Graphics: {graphics}"));
         eprintln!("graphics: {graphics}");
-        watchdog::about(&graphics, software);
+        watchdog::about(&format!("{graphics}; accessibility {}", if ed.prefs.accessibility { "on" } else { "off" }), software);
         if software {
             ed.log(
                 Level::Warn,
@@ -389,10 +389,16 @@ impl eframe::App for CircuitApp {
     /// Whether the window has the focus, from Windows itself: without it egui
     /// draws no text cursor, and the focus event it waits for can be missed
     /// while the window is still hidden at startup.
-    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         // Called just before egui begins a frame: what follows until the
         // frame's own marks is egui's (input, and loading fonts when they changed).
         watchdog::mark("before its frame: egui getting ready (input, fonts)");
+        // Accessibility off: eframe turns AccessKit on when a program asks
+        // for the window's contents; it's turned off again before the frame
+        // begins (egui decides then), so they only get an empty window.
+        if !self.ed.prefs.accessibility {
+            ctx.disable_accesskit();
+        }
         if let Some(front) = self.reveal.is_foreground() {
             raw_input.focused = front;
         }

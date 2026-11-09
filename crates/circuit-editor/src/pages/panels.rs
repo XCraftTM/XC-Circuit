@@ -51,7 +51,6 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
         });
         return;
     };
-    let show_advanced = ed.prefs.show_advanced;
     let Editor { reg, engine, project, shapes, edited, define_ctx, ui_rects, tour_parts, .. } = ed;
     let mode = project.as_ref().and_then(|p| reg.mode(&p.meta.mode));
     let Some(ws) = project.as_mut().and_then(|p| p.workspaces.get_mut(&ws_key)) else { return };
@@ -81,11 +80,10 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
         ui.separator();
 
         let mut toggle: Option<String> = None;
-        // With every option on the blocks, the Inspector lists them all
-        // together; otherwise advanced ones fold away under Advanced.
-        let all_shown = show_advanced;
+        // The options used less often are listed under More options, as on
+        // the block (open here: the Inspector has room).
         let mut fields = |ui: &mut Ui, advanced: bool| {
-            for (key, f) in shape.visible_fields().filter(|(_, f)| all_shown || f.advanced == advanced) {
+            for (key, f) in shape.visible_fields().filter(|(_, f)| f.advanced == advanced) {
                 let node = &ws.nodes[&node_id];
                 let pinned = f.pin == PinMode::Only || node.pins.contains(key);
                 let shown_as_pin = node.pins.contains(key);
@@ -101,7 +99,7 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                             ui.label(RichText::new(t!("required")).size(10.0).color(theme.warning));
                         }
                         // An advanced field that can only be connected: the chip puts its pin on the block.
-                        let only_advanced = f.advanced && f.pin == PinMode::Only && !all_shown;
+                        let only_advanced = f.advanced && f.pin == PinMode::Only;
                         if (matches!(f.pin, PinMode::Auto | PinMode::Pin) || only_advanced) && source.is_none() {
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 // The chip shows whether it's on; the fonts have no filled circle.
@@ -164,8 +162,8 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
             }
         };
         fields(ui, false);
-        if !all_shown && shape.visible_fields().any(|(_, f)| f.advanced) {
-            egui::CollapsingHeader::new(t!("Advanced")).default_open(false).show(ui, |ui| fields(ui, true));
+        if shape.visible_fields().any(|(_, f)| f.advanced) {
+            egui::CollapsingHeader::new(t!("More options")).default_open(true).show(ui, |ui| fields(ui, true));
         }
         if let Some(key) = toggle {
             let n = ws.nodes.get_mut(&node_id).unwrap();

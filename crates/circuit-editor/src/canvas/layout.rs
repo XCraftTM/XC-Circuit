@@ -20,6 +20,9 @@ pub(super) enum RowKind {
     Flow(String),
     Field { key: String, pinned: bool },
     Output(String),
+    /// Folds the options used less often away, or opens them: `hidden` of
+    /// them aren't shown now.
+    More { open: bool, hidden: usize },
 }
 
 #[derive(Clone, Debug)]
@@ -39,7 +42,7 @@ pub(super) struct NodeLayout {
 /// label and pin are centered on it. `width` is the block's own width when it
 /// was resized.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], width: Option<f32>, def: Option<&BlockDef>, shape: Option<&BlockShape>, tall: &HashMap<String, f32>, fit: &HashMap<String, f32>, show_advanced: bool) -> NodeLayout {
+pub(super) fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], width: Option<f32>, def: Option<&BlockDef>, shape: Option<&BlockShape>, tall: &HashMap<String, f32>, fit: &HashMap<String, f32>, more: &More) -> NodeLayout {
     let (Some(def), Some(shape)) = (def, shape) else {
         let rect = Rect::from_min_size(pos2(at[0], at[1]), vec2(NODE_W, HEADER_H + ROW_H + PAD_BOTTOM));
         let header = Rect::from_min_size(rect.min, vec2(NODE_W, HEADER_H));
@@ -56,15 +59,20 @@ pub(super) fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], width: Opt
     if !single_next {
         rows.extend(shape.flows.iter().map(|f| RowKind::Flow(f.clone())));
     }
-    for (key, f) in shape.visible_fields() {
-        // Advanced fields show too (Settings › Editor › Advanced options on
-        // blocks); with that off, they stay in the Inspector unless they
-        // were made pins (there, or by connecting them).
-        if f.advanced && !show_advanced && !pins_on.contains(key) {
-            continue;
-        }
-        let pinned = f.pin == PinMode::Only || pins_on.contains(key);
-        rows.push(RowKind::Field { key: key.clone(), pinned });
+    let field_row = |key: &String, f: &circuit_core::FieldDef| RowKind::Field { key: key.clone(), pinned: f.pin == PinMode::Only || pins_on.contains(key) };
+    for (key, f) in shape.visible_fields().filter(|(_, f)| !f.advanced) {
+        rows.push(field_row(key, f));
+    }
+    // The options used less often go below More options: folded, only
+    // those in use show (made pins or connected, or set to something).
+    let advanced: Vec<(&String, &circuit_core::FieldDef)> = shape.visible_fields().filter(|(_, f)| f.advanced).collect();
+    let shown: Vec<_> = advanced.iter().filter(|(k, f)| more.open || pins_on.contains(*k) || more.is_set(k, f)).collect();
+    let hidden = advanced.len() - shown.len();
+    if hidden > 0 || (more.open && !advanced.is_empty()) {
+        rows.push(RowKind::More { open: more.open, hidden });
+    }
+    for (key, f) in shown {
+        rows.push(field_row(key, f));
     }
     rows.extend(shape.outputs.iter().map(|(k, _)| RowKind::Output(k.clone())));
 
@@ -137,6 +145,7 @@ pub(super) fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], width: Opt
                     });
                 }
             }
+            RowKind::More { .. } => {}
             RowKind::Output(k) => {
                 let o = shape.output(k).expect("output");
                 pins.push(PinSpot {
@@ -154,6 +163,26 @@ pub(super) fn layout_node(id: &str, at: [f32; 2], pins_on: &[String], width: Opt
         laid.push((row, r));
     }
     NodeLayout { id: id.into(), rect, header, value_block, rows: laid.into(), pins: pins.into() }
+}
+
+/// Whether a block's More options are open, and what its options are set
+/// to (an option used less often that's set to something shows folded too).
+pub(super) struct More<'a> {
+    pub(super) open: bool,
+    pub(super) values: &'a serde_json::Map<String, serde_json::Value>,
+}
+
+impl More<'_> {
+    /// Set to something other than its default (an empty text, a missing
+    /// value or `false` count as not set).
+    fn is_set(&self, key: &str, f: &circuit_core::FieldDef) -> bool {
+        use serde_json::Value;
+        match self.values.get(key) {
+            None | Some(Value::Null) | Some(Value::Bool(false)) => false,
+            Some(Value::String(s)) if s.is_empty() => false,
+            Some(v) => f.default.as_ref() != Some(v),
+        }
+    }
 }
 
 /// How wide a block is before it is resized.

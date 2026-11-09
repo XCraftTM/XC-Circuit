@@ -5,7 +5,12 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 ## Unreleased
 
 ### Added
+- **More options on blocks**: options used less often (Delay, Get Rows' Sort by, Get Stored Value's If missing …) fold away below a **More options** row at the bottom of a block's fields; click it to open them, and each block remembers. Folded, an option that's in use (connected, a pin, or set to something) still shows, so nothing set is hidden. This replaces 0.2.5's Settings › Editor › Advanced options on blocks; the Inspector lists them under More options.
+- **Settings › Window › Accessibility** (on to start with): screen readers and the touch keyboard can see what's in the window again. 0.2.6 left that out, as programs that read windows were suspected of making the app stop answering; if that happens, this turns it off while XC Circuit runs, and freezes.log says whether it was on.
 - **AI agents can zoom**: the `screenshot` and `show_in_editor` tools take a `zoom` in percent (25 to 200), so an agent can look closer, or see the canvas at the zoom you mention. Plugins get it through `xc.reveal(workspace, block, zoom)`.
+
+### Changed
+- **What a block needs comes first**: required inputs and options are at the top of a block, above the rest. Send Message's Interaction (when it replies) was at the bottom, where it was easy to miss.
 
 ### Fixed
 - **The "connect" hint no longer vanishes at some zooms**: zoomed out to around 85%, the grey "connect" next to inputs such as Embeds and Components turned almost black, because making small grey text brighter counted its see-through-ness twice. It keeps its colour now, and gets brighter as meant when zoomed further out.

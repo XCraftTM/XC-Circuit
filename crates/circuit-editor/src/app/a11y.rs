@@ -278,3 +278,28 @@ fn every_builder_names_its_controls() {
     look(&h, "Slash Commands", &mut missing);
     report(missing);
 }
+
+/// Settings › Window › Accessibility off: the app turns AccessKit off just
+/// before each frame begins (`raw_input_hook`; eframe turns it on when a
+/// program asks for the window's contents), and then the frame builds
+/// nothing for it.
+#[test]
+fn accessibility_can_be_turned_off() {
+    let frame = |ctx: &egui::Context, off: bool| {
+        if off {
+            ctx.disable_accesskit();
+        }
+        let mut out = ctx.run_ui(Default::default(), |ui| {
+            ui.label("Hello");
+        });
+        out.textures_delta.clear();
+        out.platform_output.accesskit_update.is_some()
+    };
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    assert!(frame(&ctx, false), "on: the window's contents are built");
+    // A program reading the window asks again (eframe turns it on), but it's off.
+    ctx.enable_accesskit();
+    assert!(!frame(&ctx, true), "off: nothing built, though it was asked for");
+    assert!(crate::editor::prefs::Prefs::default().accessibility, "on to start with");
+}

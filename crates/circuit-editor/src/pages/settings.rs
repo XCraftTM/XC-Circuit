@@ -230,9 +230,6 @@ fn appearance(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsVi
     kit::setting_row(ui, theme, t!("Snap to grid"), t!("Blocks and notes you drop line up with the grid. The magnet in the canvas toolbar switches it too."), |ui| {
         toggle(ui, theme, &mut ed.prefs.snap_to_grid);
     });
-    kit::setting_row(ui, theme, t!("Advanced options on blocks"), t!("Every option shows on the blocks. Off, the ones used less often stay in the Inspector under Advanced, so blocks are smaller."), |ui| {
-        toggle(ui, theme, &mut ed.prefs.show_advanced);
-    });
     let theme_wire = ed.reg.theme(&current).map(|d| d.shape.wire_width).unwrap_or(2.0);
     kit::setting_row(ui, theme, t!("Wire thickness"), t!("How thick the wires between blocks are drawn."), |ui| {
         if ed.prefs.wire_width.is_some() && crate::ui::kit::button(ui, theme, t!("Reset")).clicked() {
@@ -296,6 +293,9 @@ fn editor(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView, 
     kit::setting_row(ui, theme, t!("Save layout and settings every"), t!("While XC Circuit runs, it saves the panel layout, the open project's place and these settings this often (and always when it closes). Less often is lighter on slower computers."), |ui| {
         let range = crate::editor::prefs::SAVE_SECS_RANGE;
         kit::Slider::new(&mut ed.prefs.settings_save_secs, range).step(5.0).suffix(" s").width(140.0).show(ui, theme);
+    });
+    kit::setting_row(ui, theme, t!("Accessibility"), t!("Screen readers and the touch keyboard can see what's in the window. If XC Circuit stops answering while a program that reads windows runs (some password managers and writing helpers), try turning this off."), |ui| {
+        toggle(ui, theme, &mut ed.prefs.accessibility);
     });
     // For older computers: lighter drawing, and another way to draw.
     let software = crate::editor::prefs::software_drawing();

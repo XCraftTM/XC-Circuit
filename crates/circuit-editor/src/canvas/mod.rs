@@ -248,7 +248,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             (w, Some(&need)) if need > w.unwrap_or_else(|| def.map_or(NODE_W, default_width)) => Some(need),
             (w, _) => w,
         };
-        (node.at[0].to_bits(), node.at[1].to_bits(), width.map(f32::to_bits), &node.pins, text_scale, prefs.show_advanced).hash(&mut h);
+        (node.at[0].to_bits(), node.at[1].to_bits(), width.map(f32::to_bits), &node.pins, text_scale, node.more).hash(&mut h);
         for (k, v) in &node.heights {
             (k, v.to_bits()).hash(&mut h);
         }
@@ -307,7 +307,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                 fit.insert(key.to_string(), h + 8.0);
             }
         }
-        let layout = layout_node(id, node.at, &node.pins, width, def, shape.as_deref(), &tall, &fit, prefs.show_advanced);
+        let layout = layout_node(id, node.at, &node.pins, width, def, shape.as_deref(), &tall, &fit, &layout::More { open: node.more, values: &node.values });
         view.layout_cache.insert(id.clone(), (key, shape.clone(), layout.clone()));
         layouts.push(layout);
         if let Some(s) = shape {
@@ -721,19 +721,56 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         let mut open_canvas: Option<String> = None;
         for (row, r) in layout.rows.iter() {
             // Hovering a row's name shows what it is, like hovering its pin.
-            let (tip_key, tip_dir, tip_rect) = match row {
-                RowKind::Flow(f) => (f, Dir::Out, *r),
-                RowKind::Output(k) => (k, Dir::Out, *r),
+            let tip = match row {
+                RowKind::Flow(f) => Some((f, Dir::Out, *r)),
+                RowKind::Output(k) => Some((k, Dir::Out, *r)),
                 RowKind::Field { key, .. } => {
                     let label = shape.and_then(|s| s.field(key)).map(|f| f.label(key)).unwrap_or_else(|| key.clone());
                     let w = (r.width() * 0.4).min(label.len() as f32 * 7.0 + 8.0);
-                    (key, Dir::In, Rect::from_min_max(r.min, pos2(r.left() + 16.0 + w, r.bottom())))
+                    Some((key, Dir::In, Rect::from_min_max(r.min, pos2(r.left() + 16.0 + w, r.bottom()))))
                 }
+                RowKind::More { .. } => None,
             };
-            if let Some(spot) = layout.pins.iter().find(|p| p.pin == *tip_key && p.dir == tip_dir) {
+            if let Some((tip_key, tip_dir, tip_rect)) = tip
+                && let Some(spot) = layout.pins.iter().find(|p| p.pin == *tip_key && p.dir == tip_dir)
+            {
                 cui.interact(tip_rect, cui.scope_id().with(("row-tip", id, tip_key, tip_dir)), Sense::hover()).on_hover_ui(|ui| pin_tooltip(ui, spot, reg, theme));
             }
             match row {
+                RowKind::More { open, hidden } => {
+                    // Opens or folds the options used less often.
+                    let band = r.shrink2(vec2(10.0, 3.0));
+                    let resp = cui.interact(band, cui.scope_id().with(("more", id)), Sense::click()).on_hover_cursor(CursorIcon::PointingHand);
+                    let resp = if *open {
+                        resp.on_hover_text(t!("Folds the options used less often away; those in use stay."))
+                    } else {
+                        resp.on_hover_text(t!("Shows the options used less often. Those in use (connected, or set to something) show anyway."))
+                    };
+                    if resp.hovered() {
+                        painter.rect_filled(band, 6.0, with_alpha(theme.text_muted, 24));
+                    }
+                    let text = match (*open, *hidden) {
+                        (true, _) => t!("Fewer options").to_string(),
+                        (false, 1) => t!("1 more option").to_string(),
+                        (false, n) => tf!("{count} more options", count = n),
+                    };
+                    let color = if resp.hovered() { theme.text } else { theme.text_muted };
+                    // A small triangle (the fonts have no arrow): right when folded, down when open.
+                    let c = pos2(band.left() + 10.0, band.center().y);
+                    let points = if *open {
+                        vec![c + vec2(-4.0, -2.0), c + vec2(4.0, -2.0), c + vec2(0.0, 3.0)]
+                    } else {
+                        vec![c + vec2(-2.0, -4.0), c + vec2(3.0, 0.0), c + vec2(-2.0, 4.0)]
+                    };
+                    painter.add(Shape::convex_polygon(points, color, Stroke::NONE));
+                    painter.text(pos2(band.left() + 20.0, band.center().y), Align2::LEFT_CENTER, text, FontId::proportional(12.0), color);
+                    if resp.clicked() {
+                        if let Some(n) = ws.nodes.get_mut(id) {
+                            n.more = !*open;
+                        }
+                        *edited = true;
+                    }
+                }
                 RowKind::Flow(f) => {
                     painter.text(r.right_center() - vec2(16.0, 0.0), Align2::RIGHT_CENTER, circuit_core::block::title_case(f), FontId::proportional(12.5), theme.text);
                 }

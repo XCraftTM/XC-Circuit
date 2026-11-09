@@ -452,41 +452,59 @@ fn wire_hit_test() {
     assert_eq!(wire_distance(a, b, pos2(500.0, 500.0)), f32::INFINITY);
 }
 
-/// Send Message shows its Files on the block; with advanced options off, an
-/// advanced input shows there once it's a pin, so it can be connected, and
-/// with them on (the default), it always does.
+/// The options used less often fold away below More options; folded, those
+/// in use (made pins, connected, or set to something) still show. What a
+/// block needs comes first: Send Message's Interaction when it replies.
 #[test]
-fn files_and_pinned_advanced_inputs_show_on_the_block() {
+fn rarely_used_options_fold_and_needed_ones_come_first() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+    let rows = |block: &str, values: serde_json::Value, pins: &[&str], open: bool| {
+        let def = ed.reg.block(block).unwrap();
+        let values = values.as_object().cloned().unwrap_or_default();
+        let shape = circuit_core::BlockShape::build(def, &values, None);
+        let pins: Vec<String> = pins.iter().map(|p| p.to_string()).collect();
+        let l = layout::layout_node("1", [0.0, 0.0], &pins, None, Some(def), Some(&shape), &Default::default(), &Default::default(), &layout::More { open, values: &values });
+        l.rows
+            .iter()
+            .map(|(r, _)| match r {
+                layout::RowKind::Field { key, .. } => key.clone(),
+                layout::RowKind::More { open, hidden } => format!("more({open},{hidden})"),
+                layout::RowKind::Flow(f) => format!("flow:{f}"),
+                layout::RowKind::Output(o) => format!("out:{o}"),
+            })
+            .collect::<Vec<_>>()
+    };
+    // Get Stored Value: If missing is used less often.
+    let folded = rows("core.get_stored", serde_json::json!({}), &[], false);
+    assert!(!folded.contains(&"fallback".to_string()), "{folded:?}");
+    let more = folded.iter().find(|r| r.starts_with("more(false,")).expect("a More options row").clone();
+    let open = rows("core.get_stored", serde_json::json!({}), &[], true);
+    assert!(open.contains(&"fallback".to_string()) && open.iter().any(|r| r.starts_with("more(true,")), "{open:?}");
+    let i = |list: &[String], what: &str| list.iter().position(|r| r == what).unwrap();
+    assert!(i(&open, "fallback") > open.iter().position(|r| r.starts_with("more(")).unwrap(), "below More options");
+    // In use, it shows folded too: set to something, or made a pin.
+    let set = rows("core.get_stored", serde_json::json!({ "fallback": 5 }), &[], false);
+    assert!(set.contains(&"fallback".to_string()), "set: {set:?}");
+    assert!(rows("core.get_stored", serde_json::json!({}), &["fallback"], false).contains(&"fallback".to_string()), "a pin");
+    let hidden = |r: &str| r.trim_start_matches("more(false,").trim_end_matches(')').parse::<usize>().unwrap();
+    if let Some(m) = set.iter().find(|r| r.starts_with("more(false,")) {
+        assert_eq!(hidden(m), hidden(&more) - 1, "one fewer hidden");
+    }
+    // Show Modal's Inputs (used less often, only connected): a pin shows it.
+    assert!(!rows("discord.show_modal", serde_json::json!({}), &[], false).contains(&"inputs".to_string()));
+    assert!(rows("discord.show_modal", serde_json::json!({}), &["inputs"], false).contains(&"inputs".to_string()));
+    // Send Message: Files and Components stay; replying, Interaction comes first.
+    let send = rows("discord.send_message", serde_json::json!({ "mode": "send" }), &[], false);
+    assert!(send.contains(&"files".to_string()) && send.contains(&"components".to_string()), "{send:?}");
     let def = ed.reg.block("discord.send_message").unwrap();
-    let values = serde_json::json!({ "mode": "send" });
-    let shape = circuit_core::BlockShape::build(def, values.as_object().unwrap(), None);
-    let keys = |pins: &[String]| {
-        let l = layout::layout_node("1", [0.0, 0.0], pins, None, Some(def), Some(&shape), &Default::default(), &Default::default(), false);
-        l.rows.iter().filter_map(|(r, _)| if let layout::RowKind::Field { key, .. } = r { Some(key.clone()) } else { None }).collect::<Vec<_>>()
-    };
-    let plain = keys(&[]);
-    assert!(plain.contains(&"files".to_string()) && plain.contains(&"components".to_string()), "buttons and menus can be connected: {plain:?}");
-    // An advanced input shows once its pin is turned on: Show Modal's Inputs.
-    let def = ed.reg.block("discord.show_modal").unwrap();
-    let shape = circuit_core::BlockShape::build(def, &Default::default(), None);
-    let keys = |pins: &[String], all: bool| {
-        let l = layout::layout_node("1", [0.0, 0.0], pins, None, Some(def), Some(&shape), &Default::default(), &Default::default(), all);
-        l.rows.iter().filter_map(|(r, _)| if let layout::RowKind::Field { key, .. } = r { Some(key.clone()) } else { None }).collect::<Vec<_>>()
-    };
-    assert!(!keys(&[], false).contains(&"inputs".to_string()));
-    assert!(keys(&["inputs".to_string()], false).contains(&"inputs".to_string()));
-    assert!(keys(&[], true).contains(&"inputs".to_string()), "every option on the block");
-    // Every option a block has shows with them on.
-    let def = ed.reg.block("core.get_stored").unwrap();
-    let shape = circuit_core::BlockShape::build(def, &Default::default(), None);
-    let l = layout::layout_node("1", [0.0, 0.0], &[], None, Some(def), Some(&shape), &Default::default(), &Default::default(), true);
-    let shown: Vec<String> = l.rows.iter().filter_map(|(r, _)| if let layout::RowKind::Field { key, .. } = r { Some(key.clone()) } else { None }).collect();
-    let all: Vec<String> = shape.visible_fields().map(|(k, _)| k.clone()).collect();
-    assert_eq!(shown, all);
-    assert!(shown.contains(&"fallback".to_string()), "If missing is advanced");
-    assert!(crate::editor::prefs::Prefs::default().show_advanced, "on to start with");
+    let values = serde_json::json!({ "mode": "reply" });
+    let engine = &ed.engine;
+    let key = ed.reg.engine_keys.get(&def.id).unwrap();
+    let define = engine.define(key, values.as_object().unwrap(), &Default::default(), &serde_json::json!({})).unwrap();
+    let shape = circuit_core::BlockShape::build(def, values.as_object().unwrap(), Some(&define));
+    let first = shape.visible_fields().next().map(|(k, _)| k.clone());
+    assert_eq!(first.as_deref(), Some("interaction"), "what it needs comes first");
 }
 
 /// The glow of a missing required input pulses between faint and full, once every 1.5 seconds.

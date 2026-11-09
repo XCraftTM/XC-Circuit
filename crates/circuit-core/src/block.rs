@@ -413,6 +413,13 @@ impl BlockShape {
             }
         }
 
+        // What a block needs comes first: required fields (not advanced ones)
+        // above the rest, each keeping its place among its kind. A define()
+        // that adds a required input (Send Message's Interaction) adds it at
+        // the end, where it would be missed.
+        let (needed, rest): (Vec<_>, Vec<_>) = fields.into_iter().partition(|(_, f)| f.required && !f.advanced);
+        fields = needed.into_iter().chain(rest).collect();
+
         // Each name a ${…} in a text field uses (or in any text of a design such
         // as an embed) gets an input right below it, to connect its value,
         // unless the block gets that name from earlier blocks anyway.

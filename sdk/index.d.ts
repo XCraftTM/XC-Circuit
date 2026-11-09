@@ -12,7 +12,7 @@ export interface FieldDef {
   /** "auto" (default): inline with a pin toggle · true: starts as a pin · false: inline only · "only": must be connected. */
   pin?: boolean | "auto" | "only";
   multi?: boolean;
-  /** Used less often: on the block unless Settings › Editor › Advanced options on blocks is off (then in the Inspector under Advanced). */
+  /** Used less often: on the block below More options (folded, shown only while in use), in the Inspector under More options. */
   advanced?: boolean;
   /** Shown only when other fields have these values, e.g. { mode: ["edit", "reply"] }. */
   show?: Record<string, unknown>;

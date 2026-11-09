@@ -52,6 +52,10 @@ pub struct Node {
     /// The block's width, when a text box's grip made it wider or narrower.
     #[serde(skip_serializing_if = "Option::is_none", serialize_with = "round_width")]
     pub width: Option<f32>,
+    /// Its More options are open: every option shows, the ones used less
+    /// often too (folded, only those in use do).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub more: bool,
 }
 
 impl Node {

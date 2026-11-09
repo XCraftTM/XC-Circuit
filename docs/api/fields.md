@@ -21,10 +21,10 @@ fields: {
 | `label` | text | The name shown. Default: the key, in words (`deleteAfter` → *Delete after*). |
 | `description` | text | Help shown on hover and in the Inspector. |
 | `default` | any | The value of a new block. |
-| `required` | boolean | Empty is a problem (listed in Problems). |
+| `required` | boolean | Empty is a problem (listed in Problems). Required fields come first on the block, above the others (also ones a `define()` adds). |
 | `pin` | `"auto"` · `true` · `false` · `"only"` | `"auto"` (default): filled in on the block, with a pin toggle. `true`: starts as a pin. `false`: never a pin. `"only"`: must be connected (inputs whose pin type has [`fromId`](./pin-types#finding-values-by-id), such as channels, can still be switched to a box for an id). |
 | `multi` | boolean | The pin accepts several wires; the block gets their values as one list. |
-| `advanced` | boolean | An option used less often. It shows on the block like any other, unless the user turns off **Settings › Editor › Advanced options on blocks**: then it isn't on the block, and the Inspector lists it under *Advanced*; once it's a pin (with the **pin** chip there, also for `pin: "only"` fields, or by connecting it), it shows on the block too. |
+| `advanced` | boolean | An option used less often. On the block it goes below **More options**, folded to start with: folded, it shows only when it's in use (a pin, connected, or set to something other than its default). The Inspector lists it under *More options*; its **pin** chip (also for `pin: "only"` fields) puts its pin on the block. |
 | `show` | object | Shown only when other fields have one of these values: `{ mode: ["send", "edit"] }`. |
 | `choices` | object | For `select`: value → label. A nested object makes a group: `{ "Text": { plain: "Plain", bold: "Bold" } }`. |
 | `template` | boolean | Whether `${…}` in the text is filled in. Default: yes for text fields and colours. |
