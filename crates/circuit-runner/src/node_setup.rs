@@ -5,7 +5,7 @@
 
 use std::collections::HashSet;
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -13,7 +13,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
-use crate::node::{MIN_NODE_MAJOR, major_version, quiet, version_of};
+use crate::node::{MIN_NODE_MAJOR, lines_lossy, major_version, quiet, version_of};
 
 const DIST: &str = "https://nodejs.org/dist";
 /// Largest download accepted (the Windows installer is about 30 MB).
@@ -135,19 +135,19 @@ pub fn winget_available() -> bool {
 /// Runs a command, sending each output line to `log`.
 fn run_logged(cmd: &mut Command, log: &mut dyn FnMut(String)) -> Result<std::process::ExitStatus> {
     let mut child = quiet(cmd).stdout(Stdio::piped()).stderr(Stdio::piped()).stdin(Stdio::null()).spawn()?;
-    let err = child.stderr.take();
+    // Its errors are read while its output is: a program that writes much to
+    // one while only the other is read waits for room, and never ends.
+    let errors = child.stderr.take().map(|err| std::thread::spawn(move || lines_lossy(err).filter(|l| !l.trim().is_empty()).collect::<Vec<_>>()));
     if let Some(out) = child.stdout.take() {
-        for line in BufReader::new(out).lines().map_while(|l| l.ok()) {
+        for line in lines_lossy(out) {
             let line = line.trim().trim_matches(|c: char| "\\|/-".contains(c)).trim().to_string();
             if !line.is_empty() {
                 log(line);
             }
         }
     }
-    if let Some(err) = err {
-        for line in BufReader::new(err).lines().map_while(|l| l.ok()).filter(|l| !l.trim().is_empty()) {
-            log(line);
-        }
+    for line in errors.and_then(|e| e.join().ok()).unwrap_or_default() {
+        log(line);
     }
     Ok(child.wait()?)
 }
@@ -327,6 +327,22 @@ mod tests {
         assert_eq!(published_sum(sums, "node-v24.11.0-linux-x64.tar.gz").unwrap(), "bb22");
         assert!(published_sum(sums, "node-v24.11.0-arm64.msi").is_err());
         assert_eq!(sha256_hex(b"abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    }
+
+    /// A program that writes much to its errors before it says anything else
+    /// is still read to its end (read one after the other, it never ended).
+    #[test]
+    fn a_program_that_fills_its_errors_still_ends() {
+        if crate::node::check_node().is_err() {
+            return;
+        }
+        let mut cmd = crate::node::node_command();
+        cmd.args(["-e", "process.stderr.write('e'.repeat(1 << 20) + '\\n', () => console.log('done'))"]);
+        let mut lines = Vec::new();
+        let status = run_logged(&mut cmd, &mut |l| lines.push(l)).unwrap();
+        assert!(status.success());
+        assert_eq!(lines.first().map(String::as_str), Some("done"));
+        assert_eq!(lines.get(1).map(String::len), Some(1 << 20), "its errors follow, whole");
     }
 
     /// Talks to nodejs.org: run with `cargo test -- --ignored`.

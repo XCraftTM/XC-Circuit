@@ -4,7 +4,7 @@
 //! and tables.
 
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{Read, Write};
 use std::path::Path;
 use std::process::{Child, ChildStdin, Stdio};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, channel};
@@ -111,7 +111,7 @@ impl DbHelper {
         let (tx, lines) = channel();
         if let Some(out) = child.stdout.take() {
             std::thread::spawn(move || {
-                for line in BufReader::new(out).lines().map_while(Result::ok) {
+                for line in crate::node::lines_lossy(out) {
                     if tx.send(line).is_err() {
                         break;
                     }
@@ -123,7 +123,7 @@ impl DbHelper {
         if let Some(err) = child.stderr.take() {
             let keep = errors.clone();
             std::thread::spawn(move || {
-                for line in BufReader::new(err).lines().map_while(Result::ok) {
+                for line in crate::node::lines_lossy(err) {
                     if let Ok(mut e) = keep.lock() {
                         e.push_str(&line);
                         e.push('\n');

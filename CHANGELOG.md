@@ -2,6 +2,12 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
+## Unreleased
+
+### Fixed
+- **The bot's output no longer stops at an odd character**: a line that wasn't UTF-8 (a program the bot starts answering in Windows' own encoding, with an umlaut in it) ended the reading of everything the bot wrote, so the Console stayed empty from there on, blocks stopped lighting up, and the bot could end with a write error. Such characters now show as `�` and the rest is read as before. The same goes for npm's output while packages install, and for the database helper.
+- **Installing Node.js can't hang on a talkative installer**: winget's or the installer's output and errors were read one after the other, so one that wrote much to its errors first waited forever. Both are read at the same time now.
+
 ## 0.2.9
 
 ### Added

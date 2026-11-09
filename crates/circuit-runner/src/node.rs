@@ -24,6 +24,28 @@ pub fn quiet(cmd: &mut Command) -> &mut Command {
     cmd
 }
 
+/// What a process writes, line by line, until it closes its end. Bytes that
+/// aren't UTF-8 (a program answering in the console's own encoding, as
+/// Windows' commands do with umlauts) become `�`: stopping there instead
+/// would close the pipe, and everything the process says afterwards would be
+/// lost, or end it.
+pub(crate) fn lines_lossy(stream: impl std::io::Read) -> impl Iterator<Item = String> {
+    let mut reader = BufReader::new(stream);
+    let mut line = Vec::new();
+    std::iter::from_fn(move || {
+        line.clear();
+        match reader.read_until(b'\n', &mut line) {
+            Ok(0) | Err(_) => None,
+            Ok(_) => {
+                while matches!(line.last(), Some(b'\n' | b'\r')) {
+                    line.pop();
+                }
+                Some(String::from_utf8_lossy(&line).into_owned())
+            }
+        }
+    })
+}
+
 /// The Node.js chosen in setup or Settings; `None` uses `node` from the PATH.
 static NODE_PATH: RwLock<Option<PathBuf>> = RwLock::new(None);
 
@@ -236,7 +258,7 @@ pub fn ensure_packages(dir: &Path, name: &str, deps: &IndexMap<String, String>, 
         let Some(stream) = stream else { continue };
         let tx = tx.clone();
         std::thread::spawn(move || {
-            for line in BufReader::new(stream).lines().map_while(|l| l.ok()).filter(|l| !l.trim().is_empty()) {
+            for line in lines_lossy(stream).filter(|l| !l.trim().is_empty()) {
                 let _ = tx.send((is_err, line));
             }
         });
@@ -268,6 +290,16 @@ pub fn ensure_packages(dir: &Path, name: &str, deps: &IndexMap<String, String>, 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Output that isn't UTF-8 is still read to its end, line by line.
+    #[test]
+    fn output_that_is_not_utf8_is_read_on() {
+        // "für" as Windows' console writes it (code page 850), between two plain lines.
+        let bytes: &[u8] = b"first\r\nf\x81r\nlast";
+        let lines: Vec<String> = lines_lossy(bytes).collect();
+        assert_eq!(lines, ["first", "f\u{fffd}r", "last"]);
+        assert_eq!(lines_lossy(&b""[..]).count(), 0);
+    }
 
     /// Stopping while npm installs ends it right away.
     #[test]

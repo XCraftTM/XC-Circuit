@@ -2,7 +2,7 @@
 //! delivered as messages the editor polls each frame.
 
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, Stdio};
 use std::sync::mpsc::{Receiver, channel};
@@ -14,7 +14,7 @@ use anyhow::Result;
 use indexmap::IndexMap;
 use serde_json::Value;
 
-use crate::node::{check_node, ensure_packages, quiet};
+use crate::node::{check_node, ensure_packages, lines_lossy, quiet};
 use crate::protocol::{BotEvent, parse_line};
 
 /// How long a bot gets to stop by itself before it is ended.
@@ -85,7 +85,7 @@ impl Session {
                             let tx = tx.clone();
                             let wake = wake.clone();
                             thread::spawn(move || {
-                                for line in BufReader::new(stream).lines().map_while(|l| l.ok()) {
+                                for line in lines_lossy(stream) {
                                     let _ = tx.send(Msg::Bot(parse_line(&line)));
                                     wake();
                                 }
