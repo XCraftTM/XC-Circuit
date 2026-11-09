@@ -39,6 +39,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **Block source shows the file instead of running it**: the Inspector's Block source opened a block's `.js` file with whatever Windows opens such files with, which is its script host unless you chose an editor: an error box at best. It now shows the file in its folder, to open with the editor you like.
 - **Message previews: a link without a text is no link**: `[](http://…)` was shown as a link (an empty one) while `[](https://…)` stayed as typed. Both stay as typed now, as in Discord.
 - **Slash Commands: a pasted command for administrators only stays one**: in Discord's JSON, `"default_member_permissions": "0"` means nobody but administrators can use the command. Pasted into the builder it became a command for everyone. It now comes in with Administrator ticked, which says the same.
+- **Slash Commands: editing a command as JSON keeps its folder and its switch**: a command changed in the JSON view left its side bar folder, and one that was turned off was on again, with the first valid edit. Both stay as they were.
 
 ## 0.2.9
 

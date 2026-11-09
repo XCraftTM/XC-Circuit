@@ -831,7 +831,14 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
 /// showed (`root`), and of any command with the same name. Returns the first
 /// word of the first new command.
 fn apply_json(edit: &mut SlashEdit, root: &str, v: &Value) -> Result<String, String> {
-    let new = from_discord(v)?;
+    let mut new = from_discord(v)?;
+    // Its side bar folder and whether it's turned off aren't in Discord's
+    // JSON: the command keeps them.
+    if let Some(was) = edit.commands.iter().find(|c| root_of(&c.name) == root) {
+        for c in &mut new {
+            (c.folder, c.disabled) = (was.folder.clone(), was.disabled);
+        }
+    }
     let new_roots: Vec<String> = new.iter().map(|c| root_of(&c.name).to_string()).collect();
     let goes = |c: &SlashCommand| root_of(&c.name) == root || new_roots.iter().any(|r| r == root_of(&c.name));
     let at = edit.commands.iter().take_while(|c| root_of(&c.name) != root).filter(|c| !goes(c)).count();
@@ -1414,6 +1421,22 @@ fn discord_preview(ui: &mut Ui, theme: &Theme, cmd: &SlashCommand, eye: Option<&
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A command edited as JSON stays in its side bar folder, and turned off
+    /// when it was: Discord's JSON has neither.
+    #[test]
+    fn json_edits_keep_the_folder_and_the_switch() {
+        let cmd = |name: &str| SlashCommand { name: name.into(), description: "d".into(), folder: Some("Fun".into()), disabled: true, contexts: vec!["guild".into()], ..Default::default() };
+        let other = SlashCommand { name: "help".into(), description: "d".into(), contexts: vec!["guild".into()], ..Default::default() };
+        let mut edit = SlashEdit { commands: vec![other, cmd("game start"), cmd("game stop")], selected: 1, picked: true, list_open: false, json: None };
+        let mut v = root_json(&edit.commands, "game");
+        v["name"] = json!("play");
+        assert_eq!(apply_json(&mut edit, "game", &v).unwrap(), "play");
+        let names: Vec<&str> = edit.commands.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, ["help", "play", "play start", "play stop"]);
+        assert!(edit.commands[1..].iter().all(|c| c.folder.as_deref() == Some("Fun") && c.disabled), "{:?}", edit.commands);
+        assert!(edit.commands[0].folder.is_none() && !edit.commands[0].disabled);
+    }
 
     /// `"default_member_permissions": "0"` means nobody but administrators:
     /// a command pasted with it doesn't become one for everyone.
