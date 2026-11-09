@@ -96,6 +96,20 @@ pub struct StoredView {
     cell_edit: Option<(usize, String, String, Value)>,
     /// A row whose Delete was clicked once: a second click deletes it.
     confirm: Option<usize>,
+    /// Why store.json couldn't be read: nothing is changed then, as saving
+    /// would put what little is shown in place of the whole file.
+    unreadable: Option<String>,
+}
+
+/// store.json's values by bucket: none when the file isn't there yet (or is
+/// empty), and why when it is there and can't be read.
+fn read_store(file: &std::path::Path) -> Result<Map<String, Value>, String> {
+    match std::fs::read_to_string(file) {
+        Ok(text) if text.trim().is_empty() => Ok(Map::new()),
+        Ok(text) => serde_json::from_str(&text).map_err(|e| e.to_string()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Map::new()),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 fn file(ed: &Editor) -> Option<PathBuf> {
@@ -165,10 +179,12 @@ fn buckets(values: &Value) -> Map<String, Value> {
 
 impl StoredView {
     fn read_json(&mut self, ed: &Editor) {
-        self.data = file(ed)
-            .and_then(|f| std::fs::read_to_string(f).ok())
-            .and_then(|t| serde_json::from_str(&t).ok())
-            .unwrap_or_default();
+        match file(ed).map(|f| read_store(&f)) {
+            Some(Ok(data)) => (self.data, self.unreadable) = (data, None),
+            // Shown as it was last read; nothing is saved over it (see `unreadable`).
+            Some(Err(why)) => self.unreadable = Some(why),
+            None => (self.data, self.unreadable) = (Map::new(), None),
+        }
         self.loaded = Some(Instant::now());
     }
 
@@ -316,6 +332,7 @@ impl StoredView {
     /// Changes the stored values: in store.json right away, or in the database.
     fn change(&mut self, ed: &mut Editor, change: Change, ctx: &egui::Context) {
         match store_db(ed) {
+            None if self.unreadable.is_some() => {}
             None => {
                 match change {
                     Change::Set(bucket, name, value) => {
@@ -388,7 +405,8 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, view: &mut StoredView, bot_running: b
         _ => {}
     }
     // Stored values are read when the bot starts: changed while it runs, they'd be lost.
-    let values_locked = bot_running;
+    let unreadable = if view.show == Show::Values && store.is_none() { view.unreadable.clone() } else { None };
+    let values_locked = bot_running || unreadable.is_some();
 
     Frame::new().inner_margin(Margin::symmetric(12, 8)).show(ui, |ui| {
         if !dbs.is_empty() {
@@ -442,8 +460,11 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, view: &mut StoredView, bot_running: b
                     None => t!("Kept in the bot's data folder, in store.json.").to_string(),
                     Some(db) => tf!("Kept in the database {name}, in the table xc_store.", name = name_of(ed, db)),
                 };
-                let state = if values_locked { t!("Bot running: read-only.") } else { t!("Changes apply on the next run.") };
+                let state = if bot_running { t!("Bot running: read-only.") } else { t!("Changes apply on the next run.") };
                 kit::hint(ui, &theme, format!("{place} {state}"));
+                if let Some(why) = &unreadable {
+                    ui.add(egui::Label::new(RichText::new(tf!("store.json can't be read right now, so nothing can be changed here (saving would replace the whole file): {why}", why = why)).size(12.0).color(theme.error)).wrap());
+                }
             }
             Show::Tables(_) => {
                 let mut pick = None;
@@ -618,7 +639,7 @@ fn form_ui(ui: &mut Ui, theme: &Theme, ed: &mut Editor, view: &mut StoredView, c
 
 /// The stored values, by bucket: each with Edit and Delete.
 fn values_ui(ui: &mut Ui, theme: &Theme, ed: &mut Editor, view: &mut StoredView, locked: bool, ctx: &egui::Context) {
-    if view.data.is_empty() && view.loaded.is_some() {
+    if view.data.is_empty() && view.loaded.is_some() && view.unreadable.is_none() {
         ui.label(RichText::new(t!("Nothing stored yet. Blocks like Set Stored Value write here when the bot runs.")).color(theme.text_muted));
     }
     let filter = view.filter.to_lowercase();
@@ -833,5 +854,33 @@ fn rows_ui(ui: &mut Ui, theme: &Theme, ed: &mut Editor, view: &mut StoredView, b
             let request = json!({ "op": "row-update", "table": table, "key": key_of(&page.rows[i]), "values": { column: value } });
             view.ask(ed, &db, request, Then::Changed, ctx);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A store.json that is there but can't be read is told apart from one
+    /// that isn't there yet: only the second counts as "nothing stored", so
+    /// adding a value can't save an almost empty file over the bot's data.
+    #[test]
+    fn an_unreadable_store_is_not_an_empty_one() {
+        let dir = std::env::temp_dir().join(format!("xc-stored-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("store.json");
+        assert_eq!(read_store(&file), Ok(Map::new()), "not there yet");
+        std::fs::write(&file, "").unwrap();
+        assert_eq!(read_store(&file), Ok(Map::new()), "empty");
+        std::fs::write(&file, r#"{"global":{"score":3}}"#).unwrap();
+        assert_eq!(read_store(&file).unwrap()["global"]["score"], 3);
+        std::fs::write(&file, r#"{"global":{"score":3"#).unwrap();
+        assert!(read_store(&file).is_err(), "cut off");
+        // A folder in its place: there, and not readable.
+        std::fs::remove_file(&file).unwrap();
+        std::fs::create_dir_all(&file).unwrap();
+        assert!(read_store(&file).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

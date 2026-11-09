@@ -1461,6 +1461,7 @@ pub const UI_STRINGS: &[&str] = &[
     "Double-click to change",
     "{name} › tables",
     "Kept in the database {name}, in the table xc_store.",
+    "store.json can't be read right now, so nothing can be changed here (saving would replace the whole file): {why}",
     "Rows {from}–{to} of {total}",
     "Delete all {count} in {bucket}",
     "Click the glowing Add block button at the bottom of the canvas.",
