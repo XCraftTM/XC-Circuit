@@ -204,10 +204,16 @@ fn is_device_name(stem: &str) -> bool {
     matches!(s.as_str(), "con" | "prn" | "aux" | "nul") || (s.len() == 4 && (s.starts_with("com") || s.starts_with("lpt")) && s.as_bytes()[3].is_ascii_digit())
 }
 
-/// Writes pretty JSON through a temporary file, so a crash never leaves half a file.
+/// Writes pretty JSON through a temporary file, so a crash never leaves half
+/// a file. A file that already says the same is left alone: a save writes
+/// only what changed (the other workspaces keep their dates, and aren't
+/// waited for to reach the disk).
 pub(crate) fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     let mut text = serde_json::to_string_pretty(value)?;
     text.push('\n');
+    if fs::read_to_string(path).is_ok_and(|old| old == text) {
+        return Ok(());
+    }
     let tmp = path.with_extension("json.tmp");
     // On the disk before it takes the old file's place: after a power cut
     // the file is the old one or the new one, never an empty one.
@@ -268,6 +274,28 @@ mod tests {
         p.workspaces.insert("Rank".into(), Workspace::new("Rank"));
         assert_eq!(p.new_workspace_key("rank"), "rank-2", "rank.json would overwrite Rank.json on Windows");
         assert_eq!(p.new_workspace_key("../../etc/passwd"), "etc-passwd");
+    }
+
+    /// Saving writes the files that changed and leaves the others alone.
+    #[test]
+    fn saving_leaves_unchanged_files_alone() {
+        let dir = temp("unchanged");
+        let mut p = Project::create(&dir, "Test", "none").unwrap();
+        p.workspaces.insert("other".into(), Workspace::new("Other"));
+        p.save().unwrap();
+        let (main, other) = (p.workspace_path("main"), p.workspace_path("other"));
+        let written = |file: &Path| fs::metadata(file).unwrap().modified().unwrap();
+        let (main_before, other_before) = (written(&main), written(&other));
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        p.workspaces.get_mut("other").unwrap().name = "Renamed".into();
+        p.save().unwrap();
+        assert_eq!(written(&main), main_before, "the same as before: not written again");
+        assert!(written(&other) > other_before, "the changed one is");
+        assert!(fs::read_to_string(&other).unwrap().contains("Renamed"));
+        // A file that went missing is written again.
+        fs::remove_file(&main).unwrap();
+        p.save().unwrap();
+        assert!(main.is_file());
     }
 
     /// A workspace named after one of Windows' devices gets a file name that

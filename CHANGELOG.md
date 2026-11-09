@@ -4,6 +4,9 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 
 ## Unreleased
 
+### Changed
+- **Saving writes only the files that changed**: every save wrote every workspace's file again, also the ones nothing had changed in. Those are left alone now, so saving a big project is quicker, and tools that go by a file's date (Git, backups, sync folders) see only what really changed.
+
 ### Fixed
 - **The bot's output no longer stops at an odd character**: a line that wasn't UTF-8 (a program the bot starts answering in Windows' own encoding, with an umlaut in it) ended the reading of everything the bot wrote, so the Console stayed empty from there on, blocks stopped lighting up, and the bot could end with a write error. Such characters now show as `�` and the rest is read as before. The same goes for npm's output while packages install, and for the database helper.
 - **Installing Node.js can't hang on a talkative installer**: winget's or the installer's output and errors were read one after the other, so one that wrote much to its errors first waited forever. Both are read at the same time now.
