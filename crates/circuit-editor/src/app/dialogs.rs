@@ -502,8 +502,10 @@ impl CircuitApp {
     pub(super) fn new_project_chooser(&mut self, ctx: &egui::Context, theme: &crate::ui::theme::Theme) {
         use crate::pages::new_project::Outcome;
         let Some(mut state) = self.new_project.take() else { return };
-        let templates = crate::pages::new_project::templates(self.ed.examples_dir.as_deref(), &self.ed.reg);
+        // Read once, when the window opens.
+        let templates = state.starters.take().unwrap_or_else(|| crate::pages::new_project::templates(self.ed.examples_dir.as_deref(), &self.ed.reg));
         let outcome = crate::pages::new_project::show(ctx, theme, &mut state, &self.ed.reg, &templates);
+        state.starters = Some(templates);
         // A folder chosen with Browse… is where the next project goes too.
         if let Some(dir) = state.browsed.take() {
             self.ed.prefs.new_project_location = Some(dir);

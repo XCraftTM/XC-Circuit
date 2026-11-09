@@ -47,6 +47,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **Block picker: the keyboard works while the mouse rests on the list**: the row under the pointer took the highlight back in every frame. With the pointer over the list (where the picker often opens), the arrow keys did nothing, and Enter after typing a search placed the block under the pointer instead of the best match. A row is now highlighted when the pointer moves onto it.
 - **Canvas Builder: a locked layer can't be resized by dragging**: its corner handle was hidden, but dragging where it would be still resized the layer.
 - **A wire picked up and dropped on a pin it doesn't fit goes back**: it was deleted, as if dropped on empty canvas. Dropped on empty canvas it is still deleted.
+- **New Project reads its starters once**: while the window was open, every starter's files were read from the disk again for each frame drawn (60 times a second), and the folder the project goes in was looked up as often, which could hold the window up with a location on a slow or unplugged network drive. The starters are read when the window opens, the folder when you change the name or location and about once a second.
 
 ## 0.2.9
 

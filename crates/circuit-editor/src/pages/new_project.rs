@@ -15,6 +15,7 @@ use crate::editor::file_uri;
 use crate::ui::theme::{Theme, with_alpha};
 
 /// The window while it is open.
+#[derive(Default)]
 pub struct NewProject {
     pub mode: String,
     /// The starter: 0 = empty, then this kind's templates.
@@ -24,6 +25,12 @@ pub struct NewProject {
     /// A folder just chosen with Browse…, to be remembered for next time
     /// even if this project isn't made.
     pub browsed: Option<String>,
+    /// The starters, read from the disk once when the window opens (they
+    /// were read again for every frame it was drawn).
+    pub starters: Option<Vec<Template>>,
+    /// The last look at the folder the project goes in: for which name and
+    /// location, when, and what it found.
+    checked: Option<(String, String, std::time::Instant, Result<PathBuf, String>)>,
 }
 
 /// What the window asked for when it closed.
@@ -81,7 +88,7 @@ impl NewProject {
         let mode = reg.modes.first().map(|m| m.id.clone()).unwrap_or_default();
         // "New Project", or "New Project 2" … when that folder is taken.
         let name = (1..).map(|i| if i == 1 { "New Project".to_string() } else { format!("New Project {i}") }).find(|n| !location.join(n).exists()).expect("unbounded");
-        NewProject { mode, picked: 0, name, location: location.display().to_string(), browsed: None }
+        NewProject { mode, picked: 0, name, location: location.display().to_string(), ..Default::default() }
     }
 
     /// The folder the project goes in, or why it can't be made.
@@ -106,6 +113,22 @@ impl NewProject {
         }
         Ok(dir)
     }
+
+    /// [`Self::target`], looked up on the disk when the name or the location
+    /// changes and about once a second, not for every frame: a location on a
+    /// slow or missing network drive would hold the window up while typing.
+    fn target_now(&mut self) -> Result<PathBuf, String> {
+        if let Some((name, location, at, found)) = &self.checked
+            && *name == self.name
+            && *location == self.location
+            && at.elapsed() < std::time::Duration::from_secs(1)
+        {
+            return found.clone();
+        }
+        let found = self.target();
+        self.checked = Some((self.name.clone(), self.location.clone(), std::time::Instant::now(), found.clone()));
+        found
+    }
 }
 
 /// Where new projects go when none went anywhere yet: next to the open
@@ -124,7 +147,7 @@ const HEIGHT: f32 = 600.0;
 
 pub fn show(ctx: &egui::Context, theme: &Theme, state: &mut NewProject, reg: &Registry, templates: &[Template]) -> Option<Outcome> {
     let mut outcome = None;
-    let target = state.target();
+    let target = state.target_now();
     let close = dialog::show(
         ctx,
         theme,
@@ -343,8 +366,15 @@ mod tests {
         std::fs::create_dir_all(dir.join("Taken")).unwrap();
         std::fs::write(dir.join("Taken").join("x.txt"), "").unwrap();
         std::fs::create_dir_all(dir.join("Empty")).unwrap();
-        let mut p = NewProject { mode: "discord-bot".into(), picked: 0, name: "My Bot".into(), location: dir.display().to_string(), browsed: None };
+        let mut p = NewProject { mode: "discord-bot".into(), picked: 0, name: "My Bot".into(), location: dir.display().to_string(), ..Default::default() };
         assert_eq!(p.target(), Ok(dir.join("My Bot")));
+        // The window's own look is kept for a moment, and taken again when the name changes.
+        assert_eq!(p.target_now(), Ok(dir.join("My Bot")));
+        std::fs::create_dir_all(dir.join("My Bot")).unwrap();
+        std::fs::write(dir.join("My Bot").join("x.txt"), "").unwrap();
+        assert!(p.target().is_err() && p.target_now().is_ok(), "not looked up again within the second");
+        p.name = "My Bot 2".into();
+        assert_eq!(p.target_now(), Ok(dir.join("My Bot 2")));
         p.name = "Empty".into();
         assert!(p.target().is_ok(), "an empty folder is fine");
         p.name = "Taken".into();
