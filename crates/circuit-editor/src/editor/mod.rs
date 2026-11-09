@@ -923,6 +923,23 @@ pub fn file_uri(path: &Path) -> String {
     if p.starts_with('/') { format!("file://{p}") } else { format!("file:///{p}") }
 }
 
+/// Whether a text is a web page's address (`https://…` or `http://…`), and
+/// nothing else. Links that plugins give (a block's docs, a build mode's
+/// pages) are only opened when they are: the system would open any other
+/// text too, as a file or a program.
+pub fn is_web_link(url: &str) -> bool {
+    let lower = url.to_ascii_lowercase();
+    let rest = lower.strip_prefix("https://").or_else(|| lower.strip_prefix("http://"));
+    rest.is_some_and(|r| !r.is_empty() && !r.starts_with('/')) && !url.chars().any(|c| c.is_whitespace() || c.is_control())
+}
+
+/// Opens a web page in the browser; anything that isn't one is left alone.
+pub fn open_link(url: &str) {
+    if is_web_link(url) {
+        let _ = open::that(url);
+    }
+}
+
 /// Shows a file in the computer's file manager: selected in its folder on
 /// Windows, its folder elsewhere. The file itself is never opened: Windows
 /// would run a block's `.js` file with its script host, and takes `.ts` for

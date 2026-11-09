@@ -403,3 +403,15 @@ fn a_file_is_shown_in_its_folder_not_opened() {
     let args = explorer_args(std::path::Path::new("C:/Apps/XC Circuit/plugins/xc.core/blocks/log.js"));
     assert_eq!(args, ["/select,", r"C:\Apps\XC Circuit\plugins\xc.core\blocks\log.js"]);
 }
+
+/// Links that plugins give open only when they are web pages: the system
+/// would open a program or a file just as readily.
+#[test]
+fn only_web_pages_count_as_links() {
+    for url in ["https://discord.com/developers/applications/123/bot", "http://localhost:3000/docs", "HTTPS://Example.com"] {
+        assert!(is_web_link(url), "{url}");
+    }
+    for url in ["", "https://", "https:///etc/passwd", "calc.exe", "C:/Windows/System32/calc.exe", "file:///C:/Windows/System32/calc.exe", "//server/share/run.exe", "javascript:alert(1)", "ms-settings:privacy", "https://example.com/a b", " https://example.com"] {
+        assert!(!is_web_link(url), "{url}");
+    }
+}

@@ -2189,7 +2189,7 @@ The keys inside `info`, `search`, `look` and `requires` may also stand at the to
 | `description` | **Required.** One or two sentences: what it does, for someone who hasn't used it. |
 | `author` | **Required.** Who wrote it. |
 | `version` | **Required.** `major.minor.patch`. The **major** version is saved with every use of the block (`acme.shout@1`); raise it when old saved values need [`migrate`](#migrate). |
-| `docs` | A web address with more help. |
+| `docs` | A web address with more help (`https://…`): the Inspector's Docs button opens it, and nothing that isn't a web address. |
 | `deprecated` | `true` or a text saying what to use instead. The block stays usable, but the picker hides it. |
 
 ### search
@@ -3129,7 +3129,7 @@ prefix = { type = "text", group = "Messages", label = "Text command prefix", def
 | `tokenEnv` | The environment variable an exported bot reads its token from. Default `DISCORD_TOKEN`. |
 | `features` | What the mode's projects have. `"slashCommands"` shows the Slash Command Builder. |
 | `privilegedIntents` | A table of intents (as blocks name them) that must be turned on by hand, with what the platform calls each: Bot settings › Privileged intents lists the ones the project's blocks need. |
-| `intentsPage` | Where they are turned on; `{appId}` is the bot's application id (from its token). |
+| `intentsPage` | Where they are turned on; `{appId}` is the bot's application id (from its token). A web address (`https://…`), as `inviteUrl` is: nothing else is opened. |
 | `inviteUrl` | A link that adds the bot to a server, offered under the bot token once one is set: `{appId}` is the bot's application id, `{permissions}` the number picked from `invitePermissions`. |
 | `invitePermissions` | A table of the permissions to choose from for `inviteUrl`: name (translatable) → the permissions number. The first is picked at first. |
 

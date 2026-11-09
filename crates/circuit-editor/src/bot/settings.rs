@@ -653,8 +653,9 @@ fn invite_card(ui: &mut Ui, theme: &Theme, invite: &mut Invite, app_id: &str) {
                 kit::select(ui, "bot-invite-permissions", 220.0, &mut invite.picked, &invite.permissions);
             }
             let link = invite_link(&invite.url, app_id, &invite.picked);
-            if kit::button(ui, theme, t!("Open invite page")).on_hover_text(&link).clicked() {
-                let _ = open::that(&link);
+            // Only a web page: the build mode (a plugin) says what the link is.
+            if ui.add_enabled_ui(crate::editor::is_web_link(&link), |ui| kit::button(ui, theme, t!("Open invite page"))).inner.on_hover_text(&link).clicked() {
+                crate::editor::open_link(&link);
             }
             let copied = invite.copied.is_some_and(|t| t.elapsed() < COPIED_FOR);
             if kit::button(ui, theme, if copied { t!("Copied") } else { t!("Copy link") }).clicked() {
@@ -733,8 +734,8 @@ fn intents_page(ui: &mut Ui, theme: &Theme, intents: &[(String, Vec<String>)], p
     }
     if let Some(page) = portal {
         ui.add_space(4.0);
-        if kit::button(ui, theme, t!("Open the developer portal")).on_hover_text(page).clicked() {
-            let _ = open::that(page);
+        if ui.add_enabled_ui(crate::editor::is_web_link(page), |ui| kit::button(ui, theme, t!("Open the developer portal"))).inner.on_hover_text(page).clicked() {
+            crate::editor::open_link(page);
         }
     }
 }

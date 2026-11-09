@@ -200,10 +200,11 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
                 if crate::ui::kit::button(ui, &theme, t!("Block source")).on_hover_text(t!("Shows the block's file in its folder")).clicked() {
                     crate::editor::show_in_folder(&def.source);
                 }
+                // Only a web page: a block's file says where its docs are.
                 if let Some(docs) = &def.docs
-                    && crate::ui::kit::button(ui, &theme, t!("Docs")).clicked()
+                    && ui.add_enabled_ui(crate::editor::is_web_link(docs), |ui| crate::ui::kit::button(ui, &theme, t!("Docs"))).inner.on_hover_text(docs).clicked()
                 {
-                    let _ = open::that(docs);
+                    crate::editor::open_link(docs);
                 }
             });
         });

@@ -388,7 +388,7 @@ impl CircuitApp {
             },
         );
         if download {
-            let _ = open::that(&r.url);
+            crate::editor::open_link(&r.url);
         }
         if update && let Some(a) = &asset {
             // Newer blocks come along, before the app restarts.

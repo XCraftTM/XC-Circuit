@@ -53,7 +53,7 @@ The keys inside `info`, `search`, `look` and `requires` may also stand at the to
 | `description` | **Required.** One or two sentences: what it does, for someone who hasn't used it. |
 | `author` | **Required.** Who wrote it. |
 | `version` | **Required.** `major.minor.patch`. The **major** version is saved with every use of the block (`acme.shout@1`); raise it when old saved values need [`migrate`](#migrate). |
-| `docs` | A web address with more help. |
+| `docs` | A web address with more help (`https://…`): the Inspector's Docs button opens it, and nothing that isn't a web address. |
 | `deprecated` | `true` or a text saying what to use instead. The block stays usable, but the picker hides it. |
 
 ### search
