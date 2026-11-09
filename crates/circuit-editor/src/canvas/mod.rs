@@ -480,7 +480,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         // Left of the settings button, which is drawn on top in screen space.
         painter.text(layout.header.right_center() - vec2(14.0 + zone_button / view.zoom, 0.0), Align2::RIGHT_CENTER, extra.join(" · "), FontId::proportional(11.0), theme.text_muted);
         if let Some(err) = &failed {
-            painter.text(r.left_bottom() + vec2(14.0, -16.0), Align2::LEFT_CENTER, format!("Caught: {err}"), FontId::proportional(11.5), theme.error);
+            painter.text(r.left_bottom() + vec2(14.0, -16.0), Align2::LEFT_CENTER, tf!("Caught: {error}", error = err), FontId::proportional(11.5), theme.error);
         }
 
         let band = cui.interact(layout.header, cui.scope_id().with(("zone", &zid)), Sense::click_and_drag());
@@ -866,7 +866,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     painter.text(pos2(r.left() + 16.0, label_y), Align2::LEFT_CENTER, &label, FontId::proportional(12.5), label_color);
                     if *pinned {
                         if !connected {
-                            let hint = if from_event { t!("from the event") } else { "connect" };
+                            let hint = if from_event { t!("from the event") } else { t!("connect") };
                             painter.text(r.right_center() - vec2(16.0, 0.0), Align2::RIGHT_CENTER, hint, FontId::proportional(11.0), with_alpha(theme.text_muted, 140));
                         }
                     } else if widgets::is_plain_text(f) {

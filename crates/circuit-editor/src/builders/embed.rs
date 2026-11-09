@@ -567,7 +567,7 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData, set_time: &mut bool) {
         ui.add(crate::ui::kit::TextArea::new("embed-description", &mut e.description).hint(t!("You have **${xp} XP**…")).rows(5))
     });
 
-    kit::section(ui, theme, &format!("Fields · {} of 25", e.fields.len()));
+    kit::section(ui, theme, &tf!("Fields · {count} of 25", count = e.fields.len()));
     let mut remove = None;
     let mut swap = None;
     let count = e.fields.len();

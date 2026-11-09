@@ -54,6 +54,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **Stored Data doesn't save over a store.json it couldn't read**: when the bot's `store.json` was there but couldn't be read (held by another program for a moment, or cut off), the panel showed "Nothing stored yet", and adding a value then saved a file with only that value over everything the bot had stored. The panel now says the file can't be read and changes nothing until it can.
 - **The colour picker remembers a colour also when closed with its own button**: a colour showed up under Recent when the picker was closed with Escape or a click elsewhere, but not with a click on the swatch that opened it.
 - **Builders' JSON view: Clear no longer leaves "Applied" standing**: after Clear the box was empty, but the line above it still said "Applied" and Apply put the earlier design on the block. An empty box now says "Paste JSON here", and Apply waits for valid JSON.
+- **More of the interface is translated**: some texts stayed English in other languages: problems such as "needs a value" and "is not installed", the Backups page's first lines, the block picker's "by … · In: … · Out: …", the Slash Commands builder's notes on names and descriptions, "connect" and "Caught: …" on the canvas, and a few error lines in the Console. They're translated now (German comes with it).
 
 ## 0.2.9
 

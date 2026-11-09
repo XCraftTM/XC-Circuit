@@ -196,7 +196,7 @@ impl StoredView {
         let text = serde_json::to_string_pretty(&Value::Object(self.data.clone())).unwrap_or_default();
         match std::fs::write(&tmp, text).and_then(|_| std::fs::rename(&tmp, &f)) {
             Ok(()) => ed.log(Level::Success, t!("Stored data saved")),
-            Err(e) => ed.log(Level::Error, format!("Could not save stored data: {e}")),
+            Err(e) => ed.log(Level::Error, tf!("Could not save stored data: {error}", error = e)),
         }
     }
 

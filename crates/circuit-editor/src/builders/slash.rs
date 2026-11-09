@@ -743,7 +743,7 @@ fn problems(cmds: &[SlashCommand]) -> Vec<String> {
         }
     }
     for (i, c) in cmds.iter().enumerate() {
-        let label = if c.name.is_empty() { format!("Command {}", i + 1) } else { format!("/{}", c.name) };
+        let label = if c.name.is_empty() { tf!("Command {number}", number = i + 1) } else { format!("/{}", c.name) };
         if let Some(p) = command_name_problem(&c.name) {
             out.push(format!("{label}: {p}"));
         }
@@ -753,17 +753,17 @@ fn problems(cmds: &[SlashCommand]) -> Vec<String> {
             out.push(tf!("{command}: has subcommands, so its options belong to them", command = label));
         }
         if cmds.iter().filter(|o| o.name == c.name).count() > 1 && !c.name.is_empty() {
-            out.push(format!("{label}: the name is used twice"));
+            out.push(tf!("{command}: the name is used twice", command = label));
         }
         if c.description.trim().is_empty() || c.description.chars().count() > 100 {
-            out.push(format!("{label}: description must be 1–100 characters"));
+            out.push(tf!("{command}: description must be 1–100 characters", command = label));
         }
         if settings_holder(cmds, root_of(&c.name)) == Some(i) && c.contexts.is_empty() {
             out.push(tf!("{command}: pick at least one place where it works", command = label));
         }
         out.extend(locales::problems(&c.locales, true, 32, true).into_iter().map(|p| format!("{label}: {p}")));
         if c.options.len() > 25 {
-            out.push(format!("{label}: at most 25 options"));
+            out.push(tf!("{command}: at most 25 options", command = label));
         }
         // Discord wants the options people must fill in first.
         if c.options.iter().skip_while(|o| o.required).any(|o| o.required) {
@@ -969,7 +969,7 @@ fn command_list(ui: &mut Ui, theme: &Theme, edit: &mut SlashEdit, issues: &[Stri
     let width = (ui.available_width() - 46.0).max(150.0);
     for (i, c) in edit.commands.iter().enumerate() {
         let selected = i == edit.selected;
-        let label = if c.name.is_empty() { "/(no name)".to_string() } else { format!("/{}", c.name) };
+        let label = if c.name.is_empty() { t!("/(no name)").to_string() } else { format!("/{}", c.name) };
         let text = RichText::new(label).monospace().color(if selected { theme.text } else { theme.text_muted });
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 6.0;

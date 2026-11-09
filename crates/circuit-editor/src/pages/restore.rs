@@ -137,7 +137,7 @@ pub fn ui(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, bot_running: boo
             ui.label(RichText::new(t!("Backups")).size(22.0).strong().color(theme.text));
             ui.add_space(4.0);
             let note = if ed.prefs.backups {
-                format!("A copy of the project is kept each time you save: the newest {}, plus one a day for {} days. Change this in Settings › Backups.", ed.prefs.backup_keep, ed.prefs.backup_days)
+                tf!("A copy of the project is kept each time you save: the newest {count}, plus one a day for {days} days. Change this in Settings › Backups.", count = ed.prefs.backup_keep, days = ed.prefs.backup_days)
             } else {
                 t!("Backups on save are turned off in Settings › Backups.").to_string()
             };
@@ -156,7 +156,7 @@ fn heading(ui: &mut Ui, theme: &Theme, text: &str) {
 }
 
 fn project_backups(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, theme: &Theme, root: &Path) {
-    heading(ui, theme, "Project");
+    heading(ui, theme, t!("Project"));
     let list = view.lists(ed, root).project.clone();
     if list.is_empty() {
         ui.label(RichText::new(t!("No backups yet. One is made the next time you save.")).color(theme.text_muted));
@@ -192,7 +192,7 @@ fn project_backups(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, theme: 
                     ui.add_space(8.0);
                     match cmp {
                         Err(e) => {
-                            ui.label(RichText::new(format!("This backup can't be read: {e}")).color(theme.error));
+                            ui.label(RichText::new(tf!("This backup can't be read: {error}", error = e)).color(theme.error));
                         }
                         Ok(rows) => {
                             for (key, name, change) in rows {
@@ -260,12 +260,12 @@ fn project_backups(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, theme: 
         view.confirm = None;
         view.open = None;
         if let Err(e) = ed.restore_project(&snap) {
-            ed.log(Level::Error, format!("Couldn't restore: {e:#}"));
+            ed.log(Level::Error, tf!("Couldn't restore: {error}", error = format!("{e:#}")));
         }
     }
     if let Some((snap, key)) = restore_ws {
         if let Err(e) = ed.restore_workspace(&snap, &key) {
-            ed.log(Level::Error, format!("Couldn't restore the workspace: {e:#}"));
+            ed.log(Level::Error, tf!("Couldn't restore the workspace: {error}", error = format!("{e:#}")));
         }
         view.open = None;
     }
@@ -320,7 +320,7 @@ fn bot_data_backups(ui: &mut Ui, ed: &mut Editor, view: &mut RestoreView, theme:
         view.lists = None;
         match restore_bot_data(&store, &dir, &from) {
             Ok(()) => ed.log(Level::Success, t!("The bot's saved data was restored. It's used the next time the bot starts.")),
-            Err(e) => ed.log(Level::Error, format!("Couldn't restore the bot's saved data: {e:#}")),
+            Err(e) => ed.log(Level::Error, tf!("Couldn't restore the bot's saved data: {error}", error = format!("{e:#}"))),
         }
     }
 }

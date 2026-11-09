@@ -391,7 +391,7 @@ pub fn collect_problems(ed: &mut Editor) -> Vec<ProblemItem> {
     let id_problems = crate::editor::custom_ids::collect_for(ed).problems();
     if let Some(project) = &ed.project {
         for (stem, why) in &project.unreadable {
-            items.push((format!("workspaces/{stem}.json"), format!("couldn't be read, so it isn't open (the file is kept as it is): {why}"), None));
+            items.push((format!("workspaces/{stem}.json"), tf!("couldn't be read, so it isn't open (the file is kept as it is): {why}", why = why), None));
         }
         // Call blocks in workspaces that are on, whose When Called block is
         // only in workspaces that are off: the call would find nothing.
@@ -431,7 +431,7 @@ pub fn collect_problems(ed: &mut Editor) -> Vec<ProblemItem> {
         for (key, ws) in project.workspaces.iter().filter(|(_, ws)| !ws.disabled) {
             for (id, node) in &ws.nodes {
                 let Some(def) = ed.reg.block(&node.block) else {
-                    items.push((format!("{} › #{id}", ws.name), format!("block `{}` is not installed", node.block), Some((key.clone(), id.clone()))));
+                    items.push((format!("{} › #{id}", ws.name), tf!("block `{block}` is not installed", block = node.block), Some((key.clone(), id.clone()))));
                     continue;
                 };
                 if def.kind == circuit_core::BlockKind::Action && ws.links_into(id, ACTION_IN).next().is_none() {
@@ -448,7 +448,7 @@ pub fn collect_problems(ed: &mut Editor) -> Vec<ProblemItem> {
                     let connected = ws.links_into(id, k).next().is_some();
                     let empty = node.values.get(k).or(f.default.as_ref()).is_none_or(|v| v.is_null() || *v == Value::String(String::new()));
                     if f.required && !connected && empty && !crate::editor::values::from_event(ws, id, k, &f.type_name, &ed.reg) {
-                        items.push((format!("{} › {}", ws.name, def.name), format!("`{}` needs a value", f.label(k)), Some((key.clone(), id.clone()))));
+                        items.push((format!("{} › {}", ws.name, def.name), tf!("`{field}` needs a value", field = f.label(k)), Some((key.clone(), id.clone()))));
                     }
                     // An embed, layout or form Discord would refuse (a text
                     // over its limit, too many parts …), as its builder says.
@@ -497,7 +497,7 @@ pub fn collect_problems(ed: &mut Editor) -> Vec<ProblemItem> {
             for link in &ws.links {
                 let from_ok = ws.nodes.contains_key(&link.from.node) || ws.zones.contains_key(&link.from.node);
                 if !from_ok || !ws.nodes.contains_key(&link.to.node) {
-                    items.push((ws.name.clone(), format!("wire `{link}` points to a missing block"), None));
+                    items.push((ws.name.clone(), tf!("wire `{wire}` points to a missing block", wire = link), None));
                     continue;
                 }
                 // Action wires leave a Try Zone only through its Done / Error outputs.

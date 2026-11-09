@@ -761,7 +761,7 @@ fn about(ui: &mut Ui, ed: &Editor, theme: &Theme) {
         ui.add_space(8.0);
         ui.vertical(|ui| {
             ui.label(RichText::new(t!("XC™ Circuit")).size(20.0).strong().color(theme.text));
-            ui.label(RichText::new(format!("Version {}", env!("CARGO_PKG_VERSION"))).color(theme.text_muted));
+            ui.label(RichText::new(tf!("Version {version}", version = env!("CARGO_PKG_VERSION"))).color(theme.text_muted));
             ui.label(RichText::new(t!("Build bots by connecting blocks.")).color(theme.text));
         });
     });

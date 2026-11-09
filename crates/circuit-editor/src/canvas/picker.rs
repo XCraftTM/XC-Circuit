@@ -629,15 +629,15 @@ fn details(ui: &mut egui::Ui, def: &BlockDef, reg: &Registry, theme: &Theme) {
             kit::hint(ui, theme, if waits { t!("Async") } else { t!("Sync") }).on_hover_text(timing_text(waits));
         }
     });
-    ui.label(RichText::new(format!("by {} · v{} · {}", def.author, def.version, def.plugin)).size(12.0).color(theme.text_muted));
+    ui.label(RichText::new(tf!("by {author} · v{version} · {plugin}", author = def.author, version = def.version, plugin = def.plugin)).size(12.0).color(theme.text_muted));
     ui.label(&def.description);
     let fields: Vec<String> = def.fields.iter().filter(|(_, f)| !f.advanced).map(|(k, f)| f.label(k)).collect();
     let outputs: Vec<String> = def.outputs.iter().map(|(k, o)| format!("{} ({})", o.label(k), o.ty.display(reg))).collect();
     if !fields.is_empty() {
-        ui.label(RichText::new(format!("In: {}", fields.join(", "))).size(12.5).color(theme.text_muted));
+        ui.label(RichText::new(tf!("In: {list}", list = fields.join(", "))).size(12.5).color(theme.text_muted));
     }
     if !outputs.is_empty() {
-        ui.label(RichText::new(format!("Out: {}", outputs.join(", "))).size(12.5).color(theme.text_muted));
+        ui.label(RichText::new(tf!("Out: {list}", list = outputs.join(", "))).size(12.5).color(theme.text_muted));
     }
 }
 

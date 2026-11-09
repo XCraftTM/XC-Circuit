@@ -523,7 +523,7 @@ impl CircuitApp {
                 match made {
                     Ok(()) => self.switch_project(&dir),
                     Err(e) => {
-                        self.ed.log(Level::Error, format!("Could not create the project: {e:#}"));
+                        self.ed.log(Level::Error, tf!("Could not create the project: {error}", error = format!("{e:#}")));
                         self.new_project = Some(state);
                     }
                 }
