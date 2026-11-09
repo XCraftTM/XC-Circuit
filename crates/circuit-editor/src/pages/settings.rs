@@ -50,8 +50,6 @@ pub enum Ask {
 #[derive(Default)]
 pub struct SettingsView {
     pub section: Section,
-    /// The Node.js version check, once run.
-    node: Option<Result<String, String>>,
     /// "Create a translation": language code, name in that language, English name.
     new_translation: Option<[String; 3]>,
     /// The shortcut being recorded: its action and which of its shortcuts (or a new one).
@@ -134,7 +132,7 @@ pub fn ui(ui: &mut Ui, ed: &mut Editor, view: &mut SettingsView, asks: &mut Vec<
             match view.section {
                 Section::Appearance => appearance(ui, ed, &theme, view),
                 Section::Editor => editor(ui, ed, &theme, view, asks),
-                Section::Bot => bot(ui, ed, &theme, view, asks),
+                Section::Bot => bot(ui, ed, &theme, asks),
                 Section::Plugins => plugins(ui, ed, &theme, asks),
                 Section::Backups => backups(ui, ed, &theme, asks),
                 Section::Shortcuts => shortcuts(ui, ed, &theme, view),
@@ -466,15 +464,17 @@ fn console_font(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut Settings
     });
 }
 
-fn bot(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView, asks: &mut Vec<Ask>) {
+fn bot(ui: &mut Ui, ed: &mut Editor, theme: &Theme, asks: &mut Vec<Ask>) {
     kit::group(ui, theme, t!("Running"));
     kit::setting_row(ui, theme, t!("Restart on save"), t!("Saving restarts a running bot so it uses your changes."), |ui| {
         toggle(ui, theme, &mut ed.prefs.auto_restart);
     });
-    if view.node.is_none() {
-        view.node = Some(circuit_runner::node::check_node().map_err(|e| format!("{e:#}")));
+    // Asked on a thread of its own: starting node can take long.
+    let node = circuit_runner::node::check_node_cached();
+    if node.is_none() {
+        ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
     }
-    let (status, color) = match &view.node {
+    let (status, color) = match &node {
         Some(Ok(v)) => (format!("Node.js {v}"), theme.action),
         Some(Err(e)) => (e.clone(), theme.warning),
         None => (String::new(), theme.text_muted),
@@ -483,10 +483,10 @@ fn bot(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView, ask
     kit::setting_row(ui, theme, "Node.js", &format!("Bots run with Node.js 22 or newer. Using: {which}"), |ui| {
         if crate::ui::kit::button(ui, theme, t!("Set up…")).on_hover_text(t!("Find Node.js on this computer or install it")).clicked() {
             asks.push(Ask::NodeSetup);
-            view.node = None;
+            circuit_runner::node::forget_node_check();
         }
         if crate::ui::kit::button(ui, theme, t!("Check again")).clicked() {
-            view.node = None;
+            circuit_runner::node::forget_node_check();
         }
         ui.label(RichText::new(status).size(12.0).color(color));
     });

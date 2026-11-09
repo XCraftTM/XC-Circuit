@@ -3,7 +3,7 @@
 //! Node.js step also opens from Settings.
 
 use std::path::PathBuf;
-use std::sync::mpsc::{Receiver, channel};
+use std::sync::mpsc::{Receiver, TryRecvError, channel};
 use std::thread;
 
 use circuit_runner::node::MIN_NODE_MAJOR;
@@ -60,6 +60,9 @@ pub struct Setup {
     installs: Option<Vec<NodeInstall>>,
     scan: Option<Receiver<Vec<NodeInstall>>>,
     winget: Option<bool>,
+    /// The look for winget, under way: starting it can take long (the first
+    /// time on a fresh Windows, or in a virtual machine).
+    winget_scan: Option<Receiver<bool>>,
     job: Option<Job>,
     /// The last install's outcome.
     outcome: Option<Result<PathBuf, String>>,
@@ -67,7 +70,7 @@ pub struct Setup {
 
 impl Setup {
     pub fn new() -> Setup {
-        Setup { step: Step::Welcome, node_only: false, installs: None, scan: None, winget: None, job: None, outcome: None }
+        Setup { step: Step::Welcome, node_only: false, installs: None, scan: None, winget: None, winget_scan: None, job: None, outcome: None }
     }
 
     /// Just the Node.js step, from Settings.
@@ -111,8 +114,25 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, setup: &mut Setup) -> Option<Done> {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
     }
-    if setup.winget.is_none() && setup.step == Step::Node {
-        setup.winget = Some(node_setup::winget_available());
+    if setup.winget.is_none() && setup.winget_scan.is_none() && setup.step == Step::Node {
+        let (tx, rx) = channel();
+        thread::spawn(move || {
+            let _ = tx.send(node_setup::winget_available());
+        });
+        setup.winget_scan = Some(rx);
+    }
+    if let Some(rx) = &setup.winget_scan {
+        match rx.try_recv() {
+            Ok(found) => {
+                setup.winget = Some(found);
+                setup.winget_scan = None;
+            }
+            Err(TryRecvError::Disconnected) => {
+                setup.winget = Some(false);
+                setup.winget_scan = None;
+            }
+            Err(TryRecvError::Empty) => ctx.request_repaint_after(std::time::Duration::from_millis(100)),
+        }
     }
     let mut finished_job = None;
     if let Some(job) = &mut setup.job {

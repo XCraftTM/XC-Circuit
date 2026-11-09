@@ -2,6 +2,11 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
+## Unreleased
+
+### Fixed
+- **No more "Not Responding" during setup and the tour**: the first start page, the tour's Run step and Settings › Bot asked Node.js and winget for their version while drawing, and waited for the answer. Starting them can take a long time (the first time after installing, a virus scan, a slow virtual machine), and every 3 seconds in the tour, so the window froze for up to a minute at a time. They're now asked in the background, and the window keeps working.
+
 ## 0.2.5
 
 ### Added
