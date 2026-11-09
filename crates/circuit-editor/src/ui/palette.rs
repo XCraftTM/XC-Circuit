@@ -111,16 +111,26 @@ fn scope(query: &str) -> (Scope, &str) {
     }
 }
 
+/// `text` in lower case, for searching, with as many characters as it has:
+/// each one becomes the first character of its lower case. (`to_lowercase`
+/// makes two characters of some, such as the Turkish İ, so a place found in
+/// its result isn't the same place in the text, and typing `i` wouldn't find
+/// a word that starts with İ.)
+fn fold(text: &str) -> String {
+    text.chars().map(|c| c.to_lowercase().next().unwrap_or(c)).collect()
+}
+
 /// The text around the first of `words` found in the item's content, with its
 /// field: `Text: …GG ${user}! Here's your rank…`.
 fn snippet(item: &Item, words: &[String]) -> Option<String> {
     const BEFORE: usize = 18;
     const LENGTH: usize = 56;
     item.content.iter().find_map(|(field, text)| {
-        let lower = text.to_lowercase();
+        let lower = fold(text);
         let at = words.iter().filter_map(|w| lower.find(w.as_str())).min()?;
         let chars: Vec<char> = text.chars().map(|c| if c.is_whitespace() { ' ' } else { c }).collect();
-        let found = lower[..at].chars().count();
+        // As many characters into the text as into its lower case (see `fold`).
+        let found = lower[..at].chars().count().min(chars.len());
         let mut start = found.saturating_sub(BEFORE);
         // Begin at a word, not in the middle of one.
         if start > 0
@@ -149,12 +159,12 @@ fn score(item: &Item, query: &str) -> Option<(u32, Option<String>)> {
         Scope::Blocks if !matches!(item.cmd, Cmd::RevealBlock(..)) => return None,
         _ => {}
     }
-    let label = item.label.to_lowercase();
-    let hay = format!("{} {} {}", item.group, label, item.detail).to_lowercase();
-    let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
+    let label = fold(&item.label);
+    let hay = fold(&format!("{} {} {}", item.group, label, item.detail));
+    let words: Vec<String> = query.split_whitespace().map(fold).collect();
     if !words.iter().all(|w| hay.contains(w.as_str())) {
         // Each word in the name or in the block's texts.
-        let inside: Vec<String> = item.content.iter().map(|(_, t)| t.to_lowercase()).collect();
+        let inside: Vec<String> = item.content.iter().map(|(_, t)| fold(t)).collect();
         let found = |w: &String| hay.contains(w.as_str()) || inside.iter().any(|t| t.contains(w.as_str()));
         if item.content.is_empty() || !words.iter().all(found) {
             return None;
@@ -162,7 +172,7 @@ fn score(item: &Item, query: &str) -> Option<(u32, Option<String>)> {
         let missing: Vec<String> = words.into_iter().filter(|w| !hay.contains(w.as_str())).collect();
         return Some((4, snippet(item, &missing)));
     }
-    let q = query.trim().to_lowercase();
+    let q = fold(query.trim());
     Some((if q.is_empty() {
         1
     } else if label.starts_with(&q) {
@@ -315,5 +325,24 @@ mod tests {
         assert!(score(&run, "#run").is_none());
         assert_eq!(score(&send, "#gg").map(|s| s.0), Some(4));
         assert_eq!(score(&send, "#").map(|s| s.0), Some(1), "# alone lists every block");
+    }
+
+    /// Texts whose lower case has more characters than they do (the Turkish
+    /// İ becomes two) are searched and shown like any other: the palette
+    /// used to stop the app on them.
+    #[test]
+    fn finds_text_with_a_dotted_capital_i() {
+        let text = "İyi akşamlar! İstanbul'dan İzmir'e İlk İş İçin İndirim";
+        let block = Item::new("Block", "Send Message", Cmd::RevealBlock("w".into(), "1".into())).content(vec![("Text".into(), text.into())]);
+        // Near the end, after seven İ: the place found is in the text itself.
+        assert_eq!(score(&block, "#rim"), Some((4, Some("Text: …İlk İş İçin İndirim".into()))));
+        assert_eq!(score(&block, "#lk"), Some((4, Some("Text: …İzmir'e İlk İş İçin İndirim".into()))));
+        // Typed without the dot, or with it, in any case.
+        for query in ["#indirim", "#İndirim", "#istanbul", "#AKŞAMLAR"] {
+            assert_eq!(score(&block, query).map(|s| s.0), Some(4), "{query}");
+        }
+        let named = Item::new("Workspace", "İndirimler", Cmd::OpenWorkspace("w".into()));
+        assert_eq!(score(&named, "ind"), Some((0, None)));
+        assert_eq!(fold("İYİ Straße"), "iyi straße");
     }
 }
