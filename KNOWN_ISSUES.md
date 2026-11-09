@@ -20,7 +20,6 @@ XC™ Circuit is in **Early Access**: it works and is used for real bots, but so
 ## Editor
 
 - **Blocks are in English only**, by design; the interface is in English and German.
-- **Screen readers can't read the app** for now: the bridge to them is turned off while freezes that may come from programs reading the window are looked into.
+- **On some computers XC Circuit stops answering now and then** (Windows says "Not Responding"), and it isn't clear yet why. Programs that read windows (some password managers and writing helpers) are one suspect: if it happens to you, try turning off Settings › Window › Accessibility, new after 0.2.7 (screen readers and the touch keyboard then can't see the window). Either way, `freezes.log` in the app's data folder says where it was stuck; please send it along when you report it.
 - **Copy, cut and paste** use the system's keys and can't be changed in Settings › Shortcuts.
-- **Native plugins** must be built with exactly the same version of XC Circuit; after an update they have to be rebuilt.
 - **Project files may still change before 1.0.** Older projects are upgraded automatically when they open, and every save keeps a backup.
