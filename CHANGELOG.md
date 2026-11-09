@@ -2,7 +2,7 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## Unreleased
+## 0.2.10
 
 ### Changed
 - **Saving writes only the files that changed**: every save wrote every workspace's file again, also the ones nothing had changed in. Those are left alone now, so saving a big project is quicker, and tools that go by a file's date (Git, backups, sync folders) see only what really changed.
