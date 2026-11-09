@@ -40,6 +40,8 @@ static ASKING: AtomicBool = AtomicBool::new(false);
 const INSIDE_EGUI: &str = "(inside egui, which was busy: laying out a long text, say, or the window's accessibility tree)";
 static PHASE: Mutex<String> = Mutex::new(String::new());
 static FOUND: Mutex<Vec<Freeze>> = Mutex::new(Vec::new());
+/// What this start runs on, said in the log before its first freeze.
+static ABOUT: Mutex<String> = Mutex::new(String::new());
 
 fn now_ms() -> u64 {
     CLOCK.get_or_init(Instant::now).elapsed().as_millis() as u64
@@ -54,6 +56,26 @@ pub fn mark(what: impl Into<String>) {
         *p = what;
     }
     BEAT.store(now_ms(), Ordering::Relaxed);
+}
+
+/// What draws the app (`graphics`, and whether in software), for the log:
+/// with the build (x86_64 or aarch64) and, on Windows, the processor, an
+/// x86_64 build that Windows on ARM runs translated shows.
+pub fn about(graphics: &str, software: bool) {
+    if let Ok(mut a) = ABOUT.lock() {
+        *a = describe_start(graphics, software, std::env::consts::ARCH, std::env::var("PROCESSOR_IDENTIFIER").ok().as_deref());
+    }
+}
+
+fn describe_start(graphics: &str, software: bool, build: &str, processor: Option<&str>) -> String {
+    let mut text = format!("{build} build, graphics: {graphics}");
+    if software {
+        text.push_str(" (in software)");
+    }
+    if let Some(p) = processor.map(str::trim).filter(|p| !p.is_empty()) {
+        text.push_str(&format!(", processor: {p}"));
+    }
+    text
 }
 
 /// Whether the window has the focus: only then is a missing frame a freeze
@@ -190,6 +212,7 @@ pub fn start(ctx: egui::Context, log: std::path::PathBuf) {
         .spawn(move || {
             let mut watch = Watch::default();
             let mut phase_then = String::new();
+            let mut said_about = false;
             loop {
                 std::thread::sleep(Duration::from_millis(200));
                 let now = now_ms();
@@ -202,6 +225,13 @@ pub fn start(ctx: egui::Context, log: std::path::PathBuf) {
                             phase_then = format!("{phase_then} {INSIDE_EGUI}");
                         }
                         let ms = now.saturating_sub(since);
+                        // Once a start: what it runs on, which a freeze often depends on.
+                        if !std::mem::replace(&mut said_about, true) {
+                            let about = ABOUT.lock().map(|a| a.clone()).unwrap_or_default();
+                            if !about.is_empty() {
+                                write_line(&log, &format!("this start: {about}"));
+                            }
+                        }
                         write_line(&log, &format!("not answering for {:.1} s, stuck in: {phase_then}", ms as f64 / 1000.0));
                     }
                     Step::Back { ms } => {
@@ -310,6 +340,17 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         }
         assert!(!ASKING.load(Ordering::Relaxed), "taken once egui was free");
+    }
+
+    /// The log says once a start what it runs on: an x86_64 build drawing in
+    /// software on an ARM processor (Windows on ARM translating it) shows.
+    #[test]
+    fn a_start_says_what_it_runs_on() {
+        assert_eq!(
+            describe_start("DirectX 12 · Microsoft Basic Render Driver", true, "x86_64", Some("ARMv8 (64-bit) Family 8 ")),
+            "x86_64 build, graphics: DirectX 12 · Microsoft Basic Render Driver (in software), processor: ARMv8 (64-bit) Family 8"
+        );
+        assert_eq!(describe_start("Vulkan · AMD Radeon", false, "x86_64", None), "x86_64 build, graphics: Vulkan · AMD Radeon");
     }
 
     #[test]

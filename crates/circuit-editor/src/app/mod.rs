@@ -251,6 +251,7 @@ impl CircuitApp {
         }
         ed.log(Level::Info, format!("Graphics: {graphics}"));
         eprintln!("graphics: {graphics}");
+        watchdog::about(&graphics, software);
         if software {
             ed.log(
                 Level::Warn,
@@ -572,13 +573,16 @@ impl eframe::App for CircuitApp {
         }
         top.show(ui, |ui| {
             crate::ui::theme::compact(ui.style_mut());
-            watchdog::mark("in the menus and the status bar");
+            watchdog::mark("in the menus");
             self.menu_bar(ui)
         });
         egui::Panel::bottom("status")
             .exact_size(24.0)
             .frame(Frame::new().fill(theme.status_bar).inner_margin(Margin::symmetric(4, 0)))
-            .show(ui, |ui| self.status_bar(ui));
+            .show(ui, |ui| {
+                watchdog::mark("in the status bar");
+                self.status_bar(ui)
+            });
         let key = (self.ed.history.revision(), self.ed.reloads, self.ed.prefs.language.clone());
         if self.problems_found.as_ref().is_none_or(|(k, _)| *k != key) {
             watchdog::mark("working out the Problems list");
@@ -609,11 +613,15 @@ impl eframe::App for CircuitApp {
                 .default_size(270.0)
                 .size_range(200.0..=560.0)
                 .frame(Frame::new().fill(theme.panel))
-                .show(ui, |ui| self.side_bar(ui, &key, tab, &problems));
+                .show(ui, |ui| {
+                    watchdog::mark("in the side bar");
+                    self.side_bar(ui, &key, tab, &problems)
+                });
         }
         // Filled, so the dock's rounded panel corners show the frame color and not
         // whatever is behind the window's content.
         if let Some(mut setup) = self.setup.take() {
+            watchdog::mark("on the first start page (setup)");
             let done = egui::CentralPanel::default().frame(Frame::new().fill(theme.frame)).show(ui, |ui| crate::pages::setup::show(ui, &mut self.ed, &mut setup)).inner;
             match done {
                 Some(crate::pages::setup::Done::Finished { tour }) => {
@@ -694,6 +702,7 @@ impl eframe::App for CircuitApp {
         if self.setup.is_none()
             && let Some(mut tour) = self.tour.take()
         {
+            watchdog::mark("in the tour's card");
             let running = self.bot.state != BotState::Stopped;
             let ask = crate::pages::tour::show(&ctx, &mut self.ed, &mut tour, running);
             self.tour = Some(tour);
@@ -704,6 +713,7 @@ impl eframe::App for CircuitApp {
                 None => {}
             }
         }
+        watchdog::mark("in the block picker and the command palette");
         picker::show(&ctx, &mut self.ed);
         if let Some(mut state) = self.palette.take() {
             let items = self.palette_items();
@@ -715,7 +725,7 @@ impl eframe::App for CircuitApp {
                 self.run_command(cmd, &ctx);
             }
         }
-        watchdog::mark("in dialogs and the command palette");
+        watchdog::mark("in dialogs");
         self.apply_actions();
         self.dialogs(&ctx);
         self.bot.windows(&ctx, &mut self.ed);
