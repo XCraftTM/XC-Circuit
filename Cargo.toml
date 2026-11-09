@@ -29,7 +29,11 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 toml = { version = "1", features = ["preserve_order"] }
 
-eframe = { version = "0.37", features = ["persistence", "glow"] }
+# eframe's default features without `accesskit`: no bridge to screen readers
+# (Windows UI Automation and the like), which other programs reading the
+# window could make hang. winit's own defaults, which eframe's bring along,
+# come from circuit-editor's Linux dependency on it.
+eframe = { version = "0.37", default-features = false, features = ["clipboard", "default_fonts", "links", "system_fonts", "wayland", "wgpu", "x11", "persistence", "glow"] }
 egui_extras = { version = "0.37", features = ["file", "svg", "image"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 

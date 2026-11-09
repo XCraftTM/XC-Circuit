@@ -49,6 +49,12 @@ serde.workspace = true
 serde_json.workspace = true
 raw-window-handle = "0.6"
 
+# Only for its default features (Wayland window decorations, and its
+# libraries loaded when the app starts), which eframe enables only with its
+# own defaults: those also bring the screen reader bridge, left out here.
+[target.'cfg(target_os = "linux")'.dependencies]
+winit = "0.30.13"
+
 [target.'cfg(windows)'.dependencies]
 # Diagnostics_Debug (with Storage_FileSystem, System_Kernel and System_Memory,
 # which its MiniDumpWriteDump needs) and System_Threading: the freeze
