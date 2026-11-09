@@ -281,6 +281,33 @@ assert.deepStrictEqual(
     await wait(60);
     assert.deepStrictEqual(calls.splice(0), ["message.delete c"]);
   }
+  // Channel Info: a text channel in a category, a thread, a category.
+  {
+    class Collection extends Map {}
+    const info = (channel, what) => all["discord.channel_info"].run({ fields: { channel, info: what }, ctx: {} }).then((o) => o.result);
+    const category = { id: "c1", type: 4, name: "Talk", children: { cache: new Collection([["b", { id: "b", position: 2 }], ["a", { id: "a", position: 1 }]]) } };
+    const pinnedMessage = { id: "m2" };
+    const text = {
+      id: "t1", type: 0, name: "general", topic: "Hi", parent: category, rateLimitPerUser: 5, nsfw: false,
+      members: new Collection([["u1", { id: "u1" }]]), lastMessageId: "m1",
+      messages: { fetch: async (id) => ({ id }), fetchPins: async () => ({ items: [{ message: pinnedMessage }] }) },
+    };
+    const thread = { id: "th", type: 11, parent: text, ownerId: "u9", memberCount: 7, archived: true, members: { cache: new Collection([["u1", { guildMember: { id: "u1" } }]]) }, client: { users: { fetch: async (id) => ({ id }) } } };
+    assert.deepStrictEqual(
+      [await info(text, "name"), await info(text, "kind"), await info(text, "mention"), await info(text, "slowmode"), await info(text, "category"), await info(text, "parent")],
+      ["general", "Text", "<#t1>", 5, category, null],
+    );
+    assert.deepStrictEqual((await info(text, "members")).map((m) => m.id), ["u1"], "a list, not a Collection");
+    assert.deepStrictEqual([(await info(text, "lastMessage")).id, (await info(text, "pinned"))[0]], ["m1", pinnedMessage]);
+    assert.deepStrictEqual((await info(category, "channels")).map((c) => c.id), ["a", "b"], "in their order");
+    assert.deepStrictEqual([await info(thread, "isThread"), await info(thread, "parent"), await info(thread, "category"), await info(thread, "memberCount"), (await info(thread, "owner")).id, await info(thread, "archived")], [true, text, null, 7, "u9", true]);
+    assert.deepStrictEqual((await info(thread, "members")).map((m) => m.id), ["u1"], "a thread's members are server members");
+    await assert.rejects(info(null, "name"), /Connect the channel/);
+    for (const [key, choice] of Object.entries(all["discord.channel_info"].fields.info.choices)) {
+      const out = all["discord.channel_info"].define({ values: { info: key } }).outputs.result;
+      assert.ok(out.type && out.label === choice, `channel info ${key}: typed output`);
+    }
+  }
   console.log(`${Object.keys(all).length} Discord blocks checked\ndiscord blocks test passed`);
 })().catch((e) => {
   console.error(e);

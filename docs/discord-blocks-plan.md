@@ -34,7 +34,7 @@ The blocks below are chosen so these common bots can be built without code:
 | Economy and daily rewards | Cooldown, stored balances, Leaderboard, Select Menu shop |
 | Reminders and scheduled posts | Every / At time, stored reminders, Send Message, Send DM |
 | Temporary voice channels | Voice State Changed, Create Channel, Move Member, Delete Channel |
-| Utility commands | User Info, Member Info, Server Info, Bot Info, Mention, Timestamp |
+| Utility commands | User Info, Member Info, Server Info, Channel Info, Bot Info, Mention, Timestamp |
 
 ## Events
 
@@ -130,6 +130,7 @@ The blocks below are chosen so these common bots can be built without code:
 
 | Block | Status | Notes |
 |---|---|---|
+| Channel Info | ✅ | name, kind, topic, category or thread's channel, slowmode, members, channels in a category, active threads, last and pinned messages, voice bitrate and limit, forum tags |
 | Find Channel | ✅ | by id or name |
 | Create Channel | ✅ | type (text, voice, category, announcement, forum, stage), name, category, topic → channel |
 | Edit Channel | ✅ | name, topic, slowmode, NSFW, category, position |

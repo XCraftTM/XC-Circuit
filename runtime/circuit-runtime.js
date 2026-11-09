@@ -473,7 +473,7 @@ class Graph {
     const run = new Run(this, outputs);
     run.setOutputs(node.id, outputs);
     this.rt.emit("node", { ws: this.key, node: node.id, phase: "enter", run: run.id });
-    this.rt.emit("node", { ws: this.key, node: node.id, phase: "exit", run: run.id, ms: 0, outputs: this.rt.debug ? previews(outputs) : undefined });
+    this.rt.emit("node", { ws: this.key, node: node.id, phase: "exit", run: run.id, ms: 0, outputs: this.rt.debug ? previews(run.outputs.get(node.id)) : undefined });
     const ended = this.rt.runStarted(outputs);
     return this.follow(run, node.id, "next")
       .then(
@@ -594,7 +594,7 @@ class Graph {
           // Value blocks report their runs too, so the editor shows them glow and how long they took.
           this.rt.emit("node", { ws: this.key, node: node.id, phase: "enter", run: run.id });
           const t0 = performance.now();
-          const out = (await node.def.run({ fields, ctx: this.rt.ctxFor(run, node, path), node: { id: node.id, workspace: this.key } })) || {};
+          const out = listsForCollections((await node.def.run({ fields, ctx: this.rt.ctxFor(run, node, path), node: { id: node.id, workspace: this.key } })) || {});
           this.rt.emit("node", { ws: this.key, node: node.id, phase: "exit", run: run.id, ms: +(performance.now() - t0).toFixed(1), outputs: this.rt.debug ? previews(out) : undefined });
           return out;
         })(),
@@ -731,8 +731,32 @@ class Run {
   }
 
   setOutputs(nodeId, outputs) {
-    this.outputs.set(nodeId, Object.assign(this.outputs.get(nodeId) || {}, outputs));
+    this.outputs.set(nodeId, Object.assign(this.outputs.get(nodeId) || {}, listsForCollections(outputs)));
   }
+}
+
+/**
+ * A Collection (discord.js's and Fluxer's): a Map of things by their id,
+ * which Discord libraries give for members, roles, channels, messages …
+ */
+function isCollection(value) {
+  return value instanceof Map && value.constructor?.name === "Collection";
+}
+
+/**
+ * A block's outputs with each Collection given as a list of its items:
+ * blocks never give Collections, so List Tools, For Each and the rest get
+ * the items (a Collection spread gives [id, item] pairs).
+ */
+function listsForCollections(outputs) {
+  if (!outputs || typeof outputs !== "object") return outputs;
+  let lists = null;
+  for (const [k, v] of Object.entries(outputs)) {
+    if (!isCollection(v)) continue;
+    lists = lists || { ...outputs };
+    lists[k] = [...v.values()];
+  }
+  return lists || outputs;
 }
 
 /**
@@ -952,8 +976,10 @@ function compileConversions(types, log) {
 function coerce(value, type) {
   if (value == null) return value;
   const t = String(type || "any").replace(/\?$/, "");
+  // A Collection where a list goes (from ${…}) is the list of its items.
+  if (t.startsWith("list<") && isCollection(value)) return [...value.values()];
   // One value where a list goes is a list of one (an embed into Embeds).
-  // Collections, Maps and Sets stay as they are: blocks walk those themselves.
+  // Maps and Sets stay as they are: blocks walk those themselves.
   if (t.startsWith("list<") && !Array.isArray(value) && (typeof value !== "object" || typeof value[Symbol.iterator] !== "function")) return [value];
   if ((t === "text" || t === "textarea") && typeof value !== "string" && typeof value !== "object") return String(value);
   if ((t === "text" || t === "textarea") && typeof value === "object" && !Array.isArray(value) && value.toString !== Object.prototype.toString) {
@@ -2722,4 +2748,4 @@ if (typeof __XC_BUNDLE__ !== "undefined") {
 }
 
 module.exports = {
-  isPrivateAddress, guardedFetch, start, ungroupBlock, fillTemplate, fillValue, templated, isContextType, templateParts, snapshot, Timers, coerce, compare, preview, Store, DbStore, Database, Databases, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };
+  isPrivateAddress, guardedFetch, start, ungroupBlock, fillTemplate, fillValue, templated, isContextType, templateParts, snapshot, Timers, coerce, listsForCollections, compare, preview, Store, DbStore, Database, Databases, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };

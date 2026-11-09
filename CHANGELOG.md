@@ -4,7 +4,12 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 
 ## Unreleased
 
+### Added
+- **Channel Info** (Discord and Fluxer): reads one thing about a channel, as Role Info and Server Info do for roles and servers: its name, id, mention, kind, topic, creation date, server, category, position, age restriction, slowmode, the channels in a category, its last message and pinned messages, and a voice channel's bitrate and user limit. On Discord also its link, members, active threads and forum tags, and for a thread the channel it's in, who started it, and whether it's archived or locked.
+- **Collection to List**: turns a Collection (a Discord library's members, roles, channels or messages by id), a Map, a Set or an object into a list: its items, their keys (ids), or both. Blocks already give lists; this is for values from JavaScript, such as `${message.mentions.users}`.
+
 ### Changed
+- **Blocks give lists, never Collections**: a Collection a block gives (Get Property reading `members.cache`, a block's own JavaScript, an event) is now a list of its items, and so is one that reaches an input for a list. List Tools, For Each and the rest used to get `[id, item]` pairs from a Collection; they get the items now. Inside `${…}` a Collection stays one, with `size`, `first()`, `get(id)` and the rest.
 - **Layout and settings are saved a moment after a change**, not every 30 seconds: 5 seconds after the last change (a click, a key, the window moved or resized, a plugin storing something), and each change in the meantime starts the wait again. Nothing changed, nothing is saved. Settings › Editor › **Save layout and settings after** sets the wait (1 to 60 seconds); it replaces Save layout and settings every.
 
 ### Fixed

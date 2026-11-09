@@ -29,6 +29,8 @@ A name none of these give gets an **input of its own** under the text, so you ca
 
 Values are real objects: a Discord *User* is a discord.js `User`, a *Member* a `GuildMember`. Their properties and reading methods work: `${user.username}`, `${member.roles.highest.name}`, `${user.displayAvatarURL()}`. Typing a `.` after a value inside `${…}` lists its members with their types, like a code editor. Collections (a server's `members.cache`, a member's `roles.cache`) list their own: `size`, `first()`, `get(id)`, `find(…)`, `filter(…)` …, and after one that gives back an item, the item's: `${server.members.cache.get(user.id).displayName}`, `${member.roles.cache.first().name}`. A Map lists `size`, `get(…)` and `has(…)`.
 
+Blocks never give Collections: what a block puts out is a list of the items (a Collection a block's JavaScript returns becomes one too), so List Tools, For Each and the rest get the items. Inside `${…}` a Collection stays one, with the members above. To turn one into a list (in a field for any value, such as `${message.mentions.users}`), use **Collection to List**, which can also give the ids (keys) or both.
+
 ## Mentions
 
 A user, member, role or channel in a text is a mention: `Welcome ${user}!` pings them, `${role}` pings the role and `${channel}` links the channel, as `<@id>`, `<@&id>` and `<#id>` do. For a name without a ping, use `${user.username}`, `${member.displayName}` or `${role.name}`. The list after `${` says which values ping (**pings them**) or link (**links it**). The **Mention** block does the same for an id, a list of people, `@everyone` or `@here`; Send Message's **Who gets pinged** decides who is notified.

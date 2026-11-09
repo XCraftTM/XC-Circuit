@@ -46,6 +46,8 @@ via = "v => v.user"
 
 Now a Member output connects to a User input, and the block gets the member's user. The runtime converts a wired value when it passes this type's `check`, so a type needs `check` for its conversions to work. Lists are converted item by item; inputs of type `any` get the value as it is.
 
+Blocks never give Collections (discord.js's and Fluxer's Maps of things by id): the runtime gives each Collection a block outputs as a list of its items, and a Collection that reaches a `list<…>` input becomes one too. So a block's `list<discord.member>` output can return `guild.members.cache` as it is.
+
 ## Finding values by id
 
 With `fromId`, an input of this type can also be given an id: typed into the block or wired in as text. The runtime finds the value before the block runs, so the block always gets the real thing.

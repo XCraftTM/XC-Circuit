@@ -193,6 +193,20 @@ const listen = (id, fields = {}) => {
   client.emit("guildEmojisUpdate", { guild_id: "g1", emojis: [{ name: "a" }, { name: "b" }] });
   assert.deepStrictEqual(emojis[0].names, ["a", "b"]);
 
+  // ---- Channel Info ----
+  {
+    const cat = { id: "k1", type: 4, name: "Talk", guildId: "g9", position: 0 };
+    const general = { id: "c5", type: 0, name: "general", topic: "Hi", guildId: "g9", parentId: "k1", position: 2, rateLimitPerUser: 3, lastMessageId: "m1", messages: { fetch: async (id) => ({ id }) }, fetchPinnedMessages: async () => [{ id: "m2" }] };
+    const other = { id: "c6", type: 2, name: "voice", guildId: "g9", parentId: "k1", position: 1, bitrate: 64000 };
+    const g9 = { id: "g9", channels: new Map([["k1", cat], ["c5", general], ["c6", other]]) };
+    const info = (channel, what) => run("fluxer.channel_info", { channel, info: what }, { fluxer: { ...fluxer, client: { guilds: new Map([["g9", g9]]) } } }).then((o) => o.result);
+    assert.deepStrictEqual([await info(general, "name"), await info(general, "kind"), await info(general, "mention"), await info(general, "slowmode"), await info(general, "server")], ["general", "Text", "<#c5>", 3, g9]);
+    assert.strictEqual(await info(general, "category"), cat);
+    assert.deepStrictEqual((await info(cat, "channels")).map((c) => c.id), ["c6", "c5"], "in their order");
+    assert.deepStrictEqual([(await info(general, "lastMessage")).id, (await info(general, "pinned"))[0].id, await info(other, "isVoice"), await info(other, "bitrate")], ["m1", "m2", true, 64000]);
+    await assert.rejects(info(null, "name"), /Connect the channel/);
+  }
+
   // ---- A refused request names the permission ----
   const msgOf = lib.explainError({ statusCode: 403, message: "Missing Permissions" }, all["fluxer.manage_role"], {});
   assert.match(msgOf, /needs this: Manage Roles\./);
