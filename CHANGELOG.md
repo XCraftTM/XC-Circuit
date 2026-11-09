@@ -2,7 +2,7 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## Unreleased
+## 0.2.6
 
 ### Added
 - **Settings for slower computers and big projects**: Settings › Editor › Save layout and settings every (30 seconds to start with, 10 seconds to 10 minutes) sets how often XC Circuit saves its panel layout and settings while it runs; they're still saved whenever it closes. Settings › Editor › Undo steps (200 to start with, 10 to 1000) sets how many changes each workspace can undo: every step keeps a copy of the workspace, so fewer steps use less memory. Settings › Backups › Crash recovery now sets how often unsaved changes are copied (every 30 seconds to start with).
