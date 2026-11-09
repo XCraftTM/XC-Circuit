@@ -799,8 +799,8 @@ impl eframe::App for CircuitApp {
         self.ed.finish_saving();
         self.bot.stop(&mut self.ed);
         // A downloaded update: installed now, and it starts the new version.
-        if let Some(file) = self.updater.ready.take()
-            && let Err(e) = crate::app::updater::Install::current().install(&file)
+        if let Some((file, sha256)) = self.updater.ready.take()
+            && let Err(e) = crate::app::updater::Install::current().install(&file, &sha256)
         {
             eprintln!("Couldn't install the update ({}): {e}", file.display());
         }
