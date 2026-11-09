@@ -10,6 +10,13 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    ignore:
+      # The editor uses these for fonts eframe already brings (its system
+      # fonts), so they stay at the versions egui uses: newer ones would be a
+      # second copy in the build, and fontique 0.12 next to egui's 0.11 doesn't
+      # even build on Linux (#12, #13). Raise them by hand together with egui.
+      - dependency-name: "fontique"
+      - dependency-name: "skrifa"
     groups:
       # egui, eframe and egui_extras only work in matching versions, so they
       # come together. (Native plugins are built with the editor's egui, so
