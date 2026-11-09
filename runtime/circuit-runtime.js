@@ -2330,8 +2330,6 @@ function isPrivateAddress(ip) {
   const net = require("net");
   let a = String(ip).toLowerCase();
   if (a.startsWith("[") && a.endsWith("]")) a = a.slice(1, -1);
-  const mapped = a.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-  if (mapped) a = mapped[1];
   if (net.isIPv4(a)) {
     const [p, q] = a.split(".").map(Number);
     return (
@@ -2339,9 +2337,51 @@ function isPrivateAddress(ip) {
     );
   }
   if (net.isIPv6(a)) {
-    return a === "::" || a === "::1" || /^f[cd]/.test(a) || /^fe[89ab]/.test(a) || a.startsWith("ff") || a.startsWith("64:ff9b:") || a.startsWith("2001:db8");
+    // By its numbers, not its text: one address is written in many ways
+    // (a URL turns ::ffff:127.0.0.1 into ::ffff:7f00:1).
+    const g = ipv6Groups(a);
+    if (!g) return true;
+    const zeros = (count) => g.slice(0, count).every((x) => x === 0);
+    const inside = (hi, lo) => isPrivateAddress(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`);
+    // An IPv4 address inside it goes where that address goes: mapped
+    // (::ffff:a.b.c.d, ::ffff:0:a.b.c.d), the old ::a.b.c.d (also :: and ::1), 6to4.
+    if (zeros(5) && g[5] === 0xffff) return inside(g[6], g[7]);
+    if (zeros(4) && g[4] === 0xffff && g[5] === 0) return inside(g[6], g[7]);
+    if (zeros(6)) return inside(g[6], g[7]);
+    if (g[0] === 0x2002) return inside(g[1], g[2]);
+    return (
+      (g[0] & 0xfe00) === 0xfc00 || // this network only (fc00::/7)
+      (g[0] & 0xff80) === 0xfe80 || // this link, and the old site-local (fe80::/9)
+      (g[0] & 0xff00) === 0xff00 || // multicast
+      (g[0] === 0x64 && g[1] === 0xff9b) || // an IPv4 address through NAT64
+      (g[0] === 0x2001 && g[1] === 0) || // Teredo
+      (g[0] === 0x2001 && g[1] === 0xdb8) // documentation
+    );
   }
   return true;
+}
+
+/** An IPv6 address as its 8 numbers (16 bits each), or null when it isn't one. */
+function ipv6Groups(text) {
+  // Without a zone ("fe80::1%eth0").
+  let a = String(text).split("%")[0];
+  // An IPv4 ending ("::ffff:1.2.3.4") is its last two numbers.
+  const v4 = /^(.*:)(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(a);
+  if (v4) {
+    const b = v4.slice(2).map(Number);
+    if (b.some((x) => x > 255)) return null;
+    a = `${v4[1]}${((b[0] << 8) | b[1]).toString(16)}:${((b[2] << 8) | b[3]).toString(16)}`;
+  }
+  const halves = a.split("::");
+  if (halves.length > 2) return null;
+  const parts = (s) => (s ? s.split(":") : []);
+  const head = parts(halves[0]);
+  const tail = halves.length === 2 ? parts(halves[1]) : [];
+  // "::" stands for the zeros left out: at least one.
+  const left = 8 - head.length - tail.length;
+  if (halves.length === 2 ? left < 1 : left !== 0) return null;
+  const groups = [...head, ...Array(halves.length === 2 ? left : 0).fill("0"), ...tail];
+  return groups.every((x) => /^[0-9a-f]{1,4}$/.test(x)) ? groups.map((x) => parseInt(x, 16)) : null;
 }
 
 /** Throws unless every address `url`'s host has is public. */

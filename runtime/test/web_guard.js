@@ -56,6 +56,16 @@ const n = (block, values = {}) => ({ block: block + "@1", at: [0, 0], values });
   for (const ip of ["1.1.1.1", "8.8.8.8", "172.32.0.1", "100.128.0.1", "2606:4700:4700::1111"]) {
     assert.ok(!isPrivateAddress(ip), `${ip} is public`);
   }
+  // An IPv4 address inside an IPv6 one, however it's written: as a URL writes
+  // ::ffff:127.0.0.1, in full, the older forms, 6to4, NAT64. And Teredo, the
+  // old site-local addresses, one with a zone.
+  for (const ip of ["::ffff:7f00:1", "::ffff:a9fe:a9fe", "0:0:0:0:0:ffff:a00:1", "::ffff:0:7f00:1", "::7f00:1", "::10.0.0.1", "2002:7f00:1::1", "2002:a9fe:a9fe::", "64:ff9b::7f00:1", "2001::1", "2001:db8::1", "fec0::1", "ff02::1", "fe80::1%eth0", "[::ffff:c0a8:101]"]) {
+    assert.ok(isPrivateAddress(ip), `${ip} is private`);
+  }
+  for (const ip of ["::ffff:808:808", "::ffff:8.8.8.8", "2002:808:808::1", "2001:4860:4860::8888", "2a00:1450:4001:81c::200e"]) {
+    assert.ok(!isPrivateAddress(ip), `${ip} is public`);
+  }
+  assert.ok(isPrivateAddress(new URL("http://[::ffff:169.254.169.254]/").hostname), "as a URL gives it");
 
   // A server on this computer: small and big answers, one without a length, and a redirect.
   const server = http.createServer((req, res) => {
@@ -87,6 +97,7 @@ const n = (block, values = {}) => ({ block: block + "@1", at: [0, 0], values });
   assert.deepStrictEqual(JSON.parse(r.body.toString()), { ok: "yes" });
   await assert.rejects(get(`${base}/ok`, {}, { publicOnly: true }), /private network/);
   await assert.rejects(get("http://localhost:1/", {}, { publicOnly: true }), /private network/, "a name that leads to this computer");
+  await assert.rejects(get("http://[::ffff:127.0.0.1]:1/", {}, { publicOnly: true }), /private network/, "this computer, written as an IPv6 address");
   await assert.rejects(get(`${base}/big`, {}, { maxBytes: mb }), /more than 1 MB/, "too big, by its length");
   await assert.rejects(get(`${base}/stream`, {}, { maxBytes: mb }), /more than 1 MB/, "too big, without a length");
   await assert.rejects(get("file:///etc/passwd", {}, { publicOnly: true }), /Only web addresses/);
