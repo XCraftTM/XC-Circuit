@@ -90,8 +90,7 @@ impl CircuitApp {
     /// tools (and the app's own `screenshot`). The server listens only while a plugin has tools (the AI
     /// agents plugin is on), and never in tests.
     fn serve_agents(&mut self, ctx: &egui::Context, running: bool) {
-        let tools = self.plugin_host.tools();
-        if tools.is_empty() || cfg!(test) {
+        if !self.plugin_host.has_tools() || cfg!(test) {
             self.agent_bridge = None;
         } else if self.agent_bridge.is_none() && self.agent_bridge_failed.is_none_or(|t| t.elapsed() > std::time::Duration::from_secs(30)) {
             match crate::mcp::bridge::Bridge::start(ctx.clone()) {
@@ -112,7 +111,7 @@ impl CircuitApp {
         for pending in requests {
             let answer = match pending.request["op"].as_str() {
                 Some("list") => {
-                    let mut list: Vec<serde_json::Value> = tools.iter().map(|t| serde_json::json!({ "name": t.name, "description": t.description, "inputSchema": t.input })).collect();
+                    let mut list: Vec<serde_json::Value> = self.plugin_host.tools().iter().map(|t| serde_json::json!({ "name": t.name, "description": t.description, "inputSchema": t.input })).collect();
                     list.push(screenshot_tool());
                     serde_json::json!({ "tools": list })
                 }

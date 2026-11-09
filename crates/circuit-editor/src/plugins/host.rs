@@ -26,6 +26,8 @@ struct Instance {
     obj: Box<dyn PluginObject>,
     commands: Vec<Command>,
     panels: Vec<PanelInfo>,
+    /// Its tools for AI agents, as it registered them when it loaded.
+    tools: Vec<api::Tool>,
     stamp: Stamp,
     /// Bumped on every reload, so panel widgets start fresh.
     generation: u32,
@@ -177,7 +179,8 @@ impl PluginHost {
                 let obj: Box<dyn PluginObject> = Box::new(obj);
                 let commands = obj.commands().unwrap_or_default();
                 let panels = obj.panels().unwrap_or_default();
-                p.instance = Some(Instance { obj, commands, panels, stamp: st.unwrap_or((SystemTime::UNIX_EPOCH, 0)), generation });
+                let tools = obj.tools();
+                p.instance = Some(Instance { obj, commands, panels, tools, stamp: st.unwrap_or((SystemTime::UNIX_EPOCH, 0)), generation });
                 p.status = Status::Loaded;
                 p.failed = None;
                 if changed {
@@ -274,15 +277,21 @@ impl PluginHost {
         self.call(i, ed, bot_running, |o, h| ui.push_id(id, |ui| o.panel_ui(panel, ui, h)).inner);
     }
 
+    /// Whether any plugin offers AI agents a tool. Asked every frame, so it
+    /// copies nothing.
+    pub fn has_tools(&self) -> bool {
+        self.plugins.iter().filter_map(|p| p.instance.as_ref()).any(|i| !i.tools.is_empty())
+    }
+
     /// Every tool plugins offer AI agents (the first plugin's, when two use a name).
     pub fn tools(&self) -> Vec<api::Tool> {
         let mut seen = std::collections::HashSet::new();
-        self.plugins.iter().filter_map(|p| p.instance.as_ref()).flat_map(|i| i.obj.tools()).filter(|t| seen.insert(t.name.clone())).collect()
+        self.plugins.iter().filter_map(|p| p.instance.as_ref()).flat_map(|i| &i.tools).filter(|t| seen.insert(t.name.as_str())).cloned().collect()
     }
 
     /// Runs a tool for an AI agent. None: no plugin has it.
     pub fn call_tool(&mut self, ed: &mut Editor, name: &str, args: &Value, bot_running: bool) -> Option<Result<Value, String>> {
-        let i = self.plugins.iter().position(|p| p.instance.as_ref().is_some_and(|i| i.obj.tools().iter().any(|t| t.name == name)))?;
+        let i = self.plugins.iter().position(|p| p.instance.as_ref().is_some_and(|i| i.tools.iter().any(|t| t.name == name)))?;
         // A tool's failure is its answer to the agent; the plugin stays on.
         Some(self.call(i, ed, bot_running, |o, h| Ok(o.call_tool(name, args, h))).unwrap_or_else(|| Err("the plugin crashed".into())))
     }
@@ -1031,6 +1040,7 @@ mod tests {
         ed.open_project(&tmp.join("bot"));
         let mut host = PluginHost::new(BTreeMap::new());
         host.sync(&mut ed, None);
+        assert!(!PluginHost::new(BTreeMap::new()).has_tools() && host.has_tools(), "the MCP server listens once a plugin has tools");
         let names: Vec<String> = host.tools().into_iter().map(|t| t.name).collect();
         for want in ["get_project", "get_workspace", "find_block_types", "add_block", "connect", "run_bot"] {
             assert!(names.iter().any(|n| n == want), "{want} in {names:?} · {:?}", ed.log);
