@@ -388,6 +388,11 @@ impl api::Host for EditorHost<'_> {
     }
 
     fn set_project_data(&mut self, key: &str, json: &str) -> Result<(), String> {
+        // Where the bot, its token and the saved password go is the user's
+        // to say, in Bot › Server….
+        if key == "hosting" {
+            return Err("the bot's server is set up by the user in Bot › Server…: a plugin or an agent can't change it".into());
+        }
         let value: Value = serde_json::from_str(json).map_err(|e| e.to_string())?;
         let project = self.ed.project.as_mut().ok_or("no project is open")?;
         if project.meta.data.get(key) != Some(&value) {
@@ -1024,6 +1029,21 @@ mod tests {
         assert_eq!((server["kind"].as_str(), server["runTarget"].as_str(), server["canRunThere"].as_bool()), (Some("none"), Some("local"), Some(false)), "{server}");
         assert!(call(&mut ed, "server_action", serde_json::json!({ "action": "start" })).is_err());
         assert!(call(&mut ed, "set_run_target", serde_json::json!({ "target": "server" })).is_err());
+        // Where the bot and its token go is the user's to say: a script can't set it.
+        let err = call(&mut ed, "run_script", serde_json::json!({ "code": "xc.data.set('hosting', { kind: 'ftp', host: 'elsewhere.example.com', user: 'bot' })" })).unwrap_err();
+        assert!(err.contains("Bot › Server"), "{err}");
+        assert!(ed.project.as_ref().unwrap().meta.data.get("hosting").is_none());
+        // And a server that came with the project's files isn't uploaded to.
+        let came_along = serde_json::json!({ "kind": "sftp", "host": "elsewhere.example.com", "user": "bot", "keyFile": "C:/keys/id_ed25519" });
+        ed.project.as_mut().unwrap().meta.data.insert("hosting".into(), came_along);
+        // (What agents see of the server is written twice a second: a new one writes it now.)
+        crate::bot::hosting::HostingUi::new().poll(&mut ed, &egui::Context::default());
+        let server = call(&mut ed, "get_server", serde_json::json!({})).unwrap();
+        assert_eq!(server["savedHere"], false, "{server}");
+        let err = call(&mut ed, "server_action", serde_json::json!({ "action": "upload" })).unwrap_err();
+        assert!(err.contains("aren't the ones the user saved"), "{err}");
+        ed.project.as_mut().unwrap().meta.data.shift_remove("hosting");
+        crate::bot::hosting::HostingUi::new().poll(&mut ed, &egui::Context::default());
         let project = call(&mut ed, "get_project", serde_json::json!({})).unwrap();
         assert!(project["server"].is_null(), "no server to show: {project}");
         let _ = std::fs::remove_dir_all(&tmp);

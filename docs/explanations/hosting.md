@@ -16,6 +16,8 @@ Pick one in **Bot › Server…**:
 
 Passwords and API keys are kept in your system's credential store, like the bot token (see [Tokens and safety](./safety)). The other settings are kept in the project, so you can upload again after opening it on another day.
 
+Because they are in the project, they also come along with a project someone else made, or change with a Git pull. Your password, API key and the bot token only go to the server you last **saved** in Bot › Server… on this computer: when the project's files name another one (another address, user, folder, FTP without encryption, the token turned on), nothing is sent, the Console says so, and Bot › Server… shows a note. Look the settings over and press **Save** to use them. Plugins' scripts and AI agents can't change the server.
+
 ## What is uploaded
 
 The same files as [Export](./running#what-export-does): `index.js`, `package.json`, `.gitignore`, `README.txt`, and `.env` with the bot token and secrets while **Send the bot token** is on. Turn that off to fill in `.env` on the server yourself.

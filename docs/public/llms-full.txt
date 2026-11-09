@@ -1569,6 +1569,8 @@ Pick one in **Bot › Server…**:
 
 Passwords and API keys are kept in your system's credential store, like the bot token (see [Tokens and safety](./safety)). The other settings are kept in the project, so you can upload again after opening it on another day.
 
+Because they are in the project, they also come along with a project someone else made, or change with a Git pull. Your password, API key and the bot token only go to the server you last **saved** in Bot › Server… on this computer: when the project's files name another one (another address, user, folder, FTP without encryption, the token turned on), nothing is sent, the Console says so, and Bot › Server… shows a note. Look the settings over and press **Save** to use them. Plugins' scripts and AI agents can't change the server.
+
 ## What is uploaded
 
 The same files as [Export](./running#what-export-does): `index.js`, `package.json`, `.gitignore`, `README.txt`, and `.env` with the bot token and secrets while **Send the bot token** is on. Turn that off to fill in `.env` on the server yourself.
@@ -1693,7 +1695,7 @@ The project folder never contains them, so you can put a project in Git, share i
 
 An exported bot reads its token from `.env`. Export only includes the token there when you ask it to, and its `.gitignore` keeps `.env` out of Git.
 
-The passwords and API keys for uploading the bot to its server (Bot › Server…) are kept in the credential store too. An upload sends the token in `.env` only while **Send the bot token** is on; over FTP, keep **Encrypted (FTPS)** on, as plain FTP sends it unencrypted. See [Putting your bot on a server](./hosting).
+The passwords and API keys for uploading the bot to its server (Bot › Server…) are kept in the credential store too. An upload sends the token in `.env` only while **Send the bot token** is on; over FTP, keep **Encrypted (FTPS)** on, as plain FTP sends it unencrypted. They, and the token, only go to the server you saved in Bot › Server… on this computer, not to one that came with a project's files. See [Putting your bot on a server](./hosting).
 
 ## What editor plugins can do
 
@@ -2744,7 +2746,7 @@ Types for your code editor: `/// <reference types="@xc-circuit/sdk/editor" />` (
 | `xc.blockTypes(query)` · `xc.blockType(type)` | installed block types · one type's fields, outputs and flows |
 | `xc.blockSource(type)` · `xc.plugins()` | a block type's code: `{ type, plugin, file, version, source }` · the plugins, turned on or off, with their blocks |
 | `xc.appSettings()` · `xc.botSettings()` | the app's settings (with the shortcuts) · Bot › Settings: `{ mode, pages, settings: [{ key, label, type, page, value, … }] }` (secrets only say whether one is saved) |
-| `xc.server()` | the bot's server (Bot › Server…): kind, where, `runTarget` (`local` or `server`), `canRunThere`, `state`, CPU and memory, `lastUpload`, the server console's last lines; never a password or key |
+| `xc.server()` | the bot's server (Bot › Server…): kind, where, `runTarget` (`local` or `server`), `canRunThere`, `savedHere` (false for a server that came with the project's files and the user hasn't saved on this computer: nothing is sent to it), `state`, CPU and memory, `lastUpload`, the server console's last lines; never a password or key |
 | `xc.blockPins(workspace, id)` | a block as it is now: its values and pins, with types and wires |
 | `xc.problems()` · `xc.console(lines)` | what the Problems panel and the Console show |
 | `xc.t(text)` | text in the app's language, from the plugins' `locales/*.toml` |
@@ -2762,7 +2764,7 @@ Types for your code editor: `/// <reference types="@xc-circuit/sdk/editor" />` (
 | `xc.openBuilder(workspace, id, field)` | open the Embed, Layout or Canvas Builder on a block's field |
 | `xc.blockRects(workspace)` | where its blocks are and how big, as drawn: `{ id: [x, y, width, height] }` |
 | `xc.select(workspace, ids)` · `xc.reveal(workspace, id, zoom?)` | select · go to a block (at `zoom` percent, 25 to 200, when given) |
-| `xc.data.set(key, value)` · `xc.storage.set(key, value)` | save data |
+| `xc.data.set(key, value)` · `xc.storage.set(key, value)` | save data (not the key `hosting`: the bot's server is the user's to set, in Bot › Server…) |
 | `xc.log(…)` · `xc.success(…)` · `xc.warn(…)` · `xc.error(…)` | write to the Console |
 | `xc.setBotSettings({ key: value })` | change Bot › Settings (not secrets), checked against each setting's type and choices; returns the keys changed |
 | `xc.run(id)` | run a command: a plugin's, or `"bot.run"`, `"bot.stop"`, `"file.save"`, `"server.upload"`, `"server.start"`, `"server.restart"`, `"server.stop"`, `"server.kill"`, `"run.local"`, `"run.server"` |

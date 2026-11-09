@@ -127,6 +127,8 @@ export interface Xc {
     host: string; port: number; user: string; panel: string; server: string; serverName: string; folder: string;
     uploadAfterSave: boolean; sendToken: boolean; restartAfterUpload: boolean;
     canRunThere: boolean; runTarget: "local" | "server";
+    /** False for a server that came with the project's files and the user hasn't saved on this computer: nothing is sent to it. */
+    savedHere: boolean;
     state: "running" | "starting" | "stopping" | "offline" | null;
     cpuPercent: number | null; memoryMb: number | null; memoryLimitMb: number | null; unreachable: string | null;
     uploading: boolean; lastUpload: { ok: boolean; text: string; secondsAgo: number } | null;

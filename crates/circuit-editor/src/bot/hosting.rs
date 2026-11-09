@@ -27,9 +27,66 @@ pub fn settings_of(ed: &Editor) -> Hosting {
     ed.project.as_ref().and_then(|p| p.meta.data.get(DATA_KEY)).and_then(|v| serde_json::from_value(v.clone()).ok()).unwrap_or_default()
 }
 
+/// The project's hosting secrets, to use: none while its server isn't the one
+/// saved on this computer (see [`approved`]), so they can't be sent elsewhere.
 fn secrets_of(ed: &Editor) -> Secrets {
+    if approved(ed) { saved_secrets(ed) } else { Secrets::default() }
+}
+
+/// The project's hosting secrets as they are saved, whatever its server is:
+/// only to tell whether there are any.
+fn saved_secrets(ed: &Editor) -> Secrets {
     let Some(p) = &ed.project else { return Secrets::default() };
     Secrets { password: secrets::get(&p.root, hosting::PASSWORD), api_key: secrets::get(&p.root, hosting::API_KEY) }
+}
+
+/// A project's server as far as its secrets go: where the password or key
+/// (and the bot token) would be sent, and how. Not its name, nor what
+/// happens around an upload.
+fn destination(h: &Hosting) -> Hosting {
+    Hosting { server_name: String::new(), auto_upload: false, restart: false, ..h.clone() }
+}
+
+fn project_key(ed: &Editor) -> Option<String> {
+    ed.project.as_ref().map(|p| p.root.display().to_string())
+}
+
+/// Whether the server in the project's files is the one last saved in
+/// Bot › Server… on this computer. The settings travel with the project (a
+/// plugin, an AI agent or a Git pull can change them); the password, the API
+/// key and the bot token don't, and are only sent to a server the user has
+/// seen and saved.
+pub fn approved(ed: &Editor) -> bool {
+    let h = settings_of(ed);
+    // Read back into settings before comparing: a setting added in a later
+    // version doesn't make every kept server another one.
+    let kept = project_key(ed).and_then(|k| ed.prefs.approved_servers.get(&k)).and_then(|kept| serde_json::from_str::<Hosting>(kept).ok());
+    h.kind == Kind::None || kept.is_some_and(|kept| destination(&kept) == destination(&h))
+}
+
+/// Takes the project's server as it is now as the one saved here.
+fn approve(ed: &mut Editor) {
+    if let Some(key) = project_key(ed) {
+        let now = serde_json::to_string(&destination(&settings_of(ed))).unwrap_or_default();
+        ed.prefs.approved_servers.insert(key, now);
+    }
+}
+
+/// A project from before servers were kept (it has a saved password or key,
+/// and no server kept): its server is taken as it is, once. False while the
+/// credential store hasn't been read yet.
+fn adopt_older(ed: &mut Editor) -> bool {
+    let Some(p) = &ed.project else { return false };
+    let known = project_key(ed).is_some_and(|k| ed.prefs.approved_servers.contains_key(&k));
+    if known || settings_of(ed).kind == Kind::None || !secrets::is_known(&p.root, hosting::PASSWORD) || !secrets::is_known(&p.root, hosting::API_KEY) {
+        return false;
+    }
+    let s = saved_secrets(ed);
+    if s.password.is_none() && s.api_key.is_none() {
+        return false;
+    }
+    approve(ed);
+    true
 }
 
 /// Where SFTP servers' keys are kept, for all projects.
@@ -105,7 +162,8 @@ impl HostingUi {
             return;
         }
         let h = settings_of(ed);
-        let s = secrets_of(ed);
+        // What is saved, also for a server not saved here yet: Save takes it.
+        let s = saved_secrets(ed);
         self.draft = Some(Draft {
             h,
             password: String::new(),
@@ -134,6 +192,9 @@ impl HostingUi {
     /// Every frame: messages from a running upload, sign-in and server list,
     /// and an upload after a save when that's turned on.
     pub fn poll(&mut self, ed: &mut Editor, ctx: &egui::Context) {
+        if adopt_older(ed) {
+            self.controllable = None;
+        }
         let mut messages = Vec::new();
         let mut gone = false;
         if let Some((_, rx)) = &self.job {
@@ -276,7 +337,7 @@ impl HostingUi {
         {
             return *yes;
         }
-        let yes = h.kind == Kind::Calagopus && !h.server.is_empty() && !h.panel.trim().is_empty() && secrets::get(&p.root, hosting::API_KEY).is_some();
+        let yes = h.kind == Kind::Calagopus && !h.server.is_empty() && !h.panel.trim().is_empty() && approved(ed) && secrets::get(&p.root, hosting::API_KEY).is_some();
         self.controllable = Some((key, yes));
         yes
     }
@@ -340,6 +401,7 @@ impl HostingUi {
             "uploadAfterSave": h.auto_upload,
             "sendToken": h.include_token,
             "restartAfterUpload": h.restart,
+            "savedHere": approved(ed),
             "canRunThere": can,
             "runTarget": if self.remote { "server" } else { "local" },
             "state": w.map(|w| w.state().to_string()).filter(|s| !s.is_empty()),
@@ -357,6 +419,9 @@ impl HostingUi {
     /// and restart upload what changed first (as Run does), stop and kill
     /// right away.
     pub fn remote_action(&mut self, ed: &mut Editor, action: &str) {
+        if self.another_server(ed) {
+            return;
+        }
         if !self.can_control(ed) {
             ed.log(Level::Warn, t!("The server can't be started or stopped from here: choose a Calagopus server in Bot › Server… and sign in."));
             return;
@@ -465,7 +530,19 @@ impl HostingUi {
             p.meta.data.insert(DATA_KEY.into(), value);
             ed.edited = true;
         }
+        // Saved here by the user: the secrets may go to this server.
+        approve(ed);
         ok
+    }
+
+    /// Whether the project's server is one that wasn't saved on this
+    /// computer, and says so: nothing is sent to it until it is.
+    fn another_server(&self, ed: &mut Editor) -> bool {
+        if approved(ed) {
+            return false;
+        }
+        ed.log(Level::Warn, t!("Nothing was sent: this project's server isn't the one you saved on this computer. Look at it in Bot › Server… and press Save to use it."));
+        true
     }
 
     /// Exports the bot to the project's `.circuit/upload` folder and uploads
@@ -481,13 +558,20 @@ impl HostingUi {
             self.again = true;
             return;
         }
-        let Some(project) = &ed.project else { return };
+        if ed.project.is_none() {
+            return;
+        }
         let h = settings_of(ed);
-        let s = secrets_of(ed);
-        if let Some(what) = h.missing(&s) {
+        // What's missing first: without it nothing would be sent anyway.
+        if let Some(what) = h.missing(&saved_secrets(ed)) {
             ed.log(Level::Warn, tf!("Not uploaded: {what} (Bot › Server…)", what = missing_text(what)));
             return;
         }
+        if self.another_server(ed) {
+            return;
+        }
+        let s = secrets_of(ed);
+        let Some(project) = &ed.project else { return };
         let bundle = match build_bundle(project, &ed.reg, ed.mode()) {
             Ok(b) => b,
             Err(e) => return ed.log(Level::Error, format!("Could not prepare the bot: {e:#}")),
@@ -588,6 +672,9 @@ impl HostingUi {
         let log: Vec<String> = self.log.iter().cloned().collect();
         let waiting = self.sign_in.is_some();
         let reading = self.servers.is_some();
+        // A server that came with the project's files and wasn't saved here:
+        // said at the top, as Save is what lets the secrets go there.
+        let another = (!approved(ed)).then(|| ed.reg.icons.clone());
         let d = self.draft.as_mut().unwrap();
         dialog::tab(
             ui,
@@ -595,6 +682,17 @@ impl HostingUi {
             dialog::Spec { id: "hosting", title: t!("Server"), subtitle: Some(t!("Upload the bot to the server it runs on, by hand or after every save")), icon: icon.as_deref(), width: 640.0 },
             |ui, part| match part {
                 Part::Body => {
+                    if let Some(icons) = &another {
+                        kit::note(
+                            ui,
+                            icons,
+                            &theme,
+                            "warning",
+                            t!("Check this server"),
+                            t!("These settings came with the project's files: they aren't the ones you last saved on this computer. Your saved password or API key and the bot token are only sent there once you press Save."),
+                        );
+                        ui.add_space(10.0);
+                    }
                     kit::section(ui, &theme, t!("How it gets there"));
                     ui.horizontal_wrapped(|ui| {
                         for (kind, label) in [(Kind::Sftp, t!("SFTP")), (Kind::Ftp, t!("FTP")), (Kind::Calagopus, t!("Calagopus panel")), (Kind::None, t!("Nowhere"))] {
@@ -1095,6 +1193,64 @@ mod tests {
         ed.finish_saving();
         ui.poll(&mut ed, &ctx);
         assert!(said(&ed), "{:?}", ed.log.iter().map(|l| &l.text).collect::<Vec<_>>());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A project's server settings travel with its files; its saved password
+    /// or key and the bot token only go to the server saved on this computer
+    /// (in Bot › Server…).
+    #[test]
+    fn secrets_only_go_to_the_server_saved_here() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let dir = std::env::temp_dir().join(format!("xc-hosting-saved-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        copy_dir(&root.join("examples/DemoBot"), &dir);
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&dir);
+        let mut ui = HostingUi::new();
+        assert!(approved(&ed), "no server: nowhere to send anything");
+
+        // A server that came with the project's files. With a key file it
+        // needs no password, so nothing is missing: it would upload.
+        let h = Hosting { kind: Kind::Sftp, host: "elsewhere.example.com".into(), user: "bot".into(), key_file: "C:/keys/id_ed25519".into(), auto_upload: true, ..Default::default() };
+        let put = |ed: &mut Editor, h: &Hosting| ed.project.as_mut().unwrap().meta.data.insert(DATA_KEY.into(), serde_json::to_value(h).unwrap());
+        put(&mut ed, &h);
+        assert!(!approved(&ed));
+        ui.upload(&mut ed);
+        assert!(ui.busy().is_none(), "no upload started");
+        assert!(ed.log.last().unwrap().text.starts_with("Nothing was sent"), "{:?}", ed.log.last().map(|l| &l.text));
+        assert_eq!(ui.view(&ed)["savedHere"], false);
+        assert!(secrets_of(&ed).password.is_none() && secrets_of(&ed).api_key.is_none());
+
+        // Saved in Bot › Server…: now it's the one.
+        ui.open(&ed);
+        assert!(ui.save_draft(&mut ed));
+        assert!(approved(&ed));
+        assert_eq!(ui.view(&ed)["savedHere"], true);
+        // What happens around an upload isn't part of where it goes …
+        put(&mut ed, &Hosting { auto_upload: false, restart: false, server_name: "My server".into(), ..h.clone() });
+        assert!(approved(&ed));
+        // … but who gets it, how, where and with or without the token is.
+        for other in [
+            Hosting { host: "other.example.com".into(), ..h.clone() },
+            Hosting { port: 2022, ..h.clone() },
+            Hosting { user: "root".into(), ..h.clone() },
+            Hosting { folder: "/etc".into(), ..h.clone() },
+            Hosting { include_token: !h.include_token, ..h.clone() },
+            Hosting { kind: Kind::Ftp, ftps: false, ..h.clone() },
+            Hosting { kind: Kind::Calagopus, panel: "https://panel.example.com".into(), server: "abc".into(), ..h.clone() },
+        ] {
+            put(&mut ed, &other);
+            assert!(!approved(&ed), "{other:?}");
+        }
+        // Back as saved: fine again, without saving again.
+        put(&mut ed, &h);
+        assert!(approved(&ed));
+        // Another project (folder) with the same settings has to save its own.
+        let here = ed.prefs.approved_servers.keys().next().cloned().unwrap();
+        let kept = ed.prefs.approved_servers.remove(&here).unwrap();
+        ed.prefs.approved_servers.insert(format!("{here}-copy"), kept);
+        assert!(!approved(&ed));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

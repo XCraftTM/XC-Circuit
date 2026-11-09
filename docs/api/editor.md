@@ -41,7 +41,7 @@ Types for your code editor: `/// <reference types="@xc-circuit/sdk/editor" />` (
 | `xc.blockTypes(query)` · `xc.blockType(type)` | installed block types · one type's fields, outputs and flows |
 | `xc.blockSource(type)` · `xc.plugins()` | a block type's code: `{ type, plugin, file, version, source }` · the plugins, turned on or off, with their blocks |
 | `xc.appSettings()` · `xc.botSettings()` | the app's settings (with the shortcuts) · Bot › Settings: `{ mode, pages, settings: [{ key, label, type, page, value, … }] }` (secrets only say whether one is saved) |
-| `xc.server()` | the bot's server (Bot › Server…): kind, where, `runTarget` (`local` or `server`), `canRunThere`, `state`, CPU and memory, `lastUpload`, the server console's last lines; never a password or key |
+| `xc.server()` | the bot's server (Bot › Server…): kind, where, `runTarget` (`local` or `server`), `canRunThere`, `savedHere` (false for a server that came with the project's files and the user hasn't saved on this computer: nothing is sent to it), `state`, CPU and memory, `lastUpload`, the server console's last lines; never a password or key |
 | `xc.blockPins(workspace, id)` | a block as it is now: its values and pins, with types and wires |
 | `xc.problems()` · `xc.console(lines)` | what the Problems panel and the Console show |
 | `xc.t(text)` | text in the app's language, from the plugins' `locales/*.toml` |
@@ -59,7 +59,7 @@ Types for your code editor: `/// <reference types="@xc-circuit/sdk/editor" />` (
 | `xc.openBuilder(workspace, id, field)` | open the Embed, Layout or Canvas Builder on a block's field |
 | `xc.blockRects(workspace)` | where its blocks are and how big, as drawn: `{ id: [x, y, width, height] }` |
 | `xc.select(workspace, ids)` · `xc.reveal(workspace, id, zoom?)` | select · go to a block (at `zoom` percent, 25 to 200, when given) |
-| `xc.data.set(key, value)` · `xc.storage.set(key, value)` | save data |
+| `xc.data.set(key, value)` · `xc.storage.set(key, value)` | save data (not the key `hosting`: the bot's server is the user's to set, in Bot › Server…) |
 | `xc.log(…)` · `xc.success(…)` · `xc.warn(…)` · `xc.error(…)` | write to the Console |
 | `xc.setBotSettings({ key: value })` | change Bot › Settings (not secrets), checked against each setting's type and choices; returns the keys changed |
 | `xc.run(id)` | run a command: a plugin's, or `"bot.run"`, `"bot.stop"`, `"file.save"`, `"server.upload"`, `"server.start"`, `"server.restart"`, `"server.stop"`, `"server.kill"`, `"run.local"`, `"run.server"` |
