@@ -828,10 +828,23 @@ pub fn option(ui: &mut Ui, selected: bool, text: impl Into<egui::WidgetText>) ->
     ui.selectable_label(selected, text)
 }
 
+/// What a dropdown shows closed, for the value it holds: the choice's own
+/// text; a value that is none of the choices as it is (not the first choice,
+/// which it isn't set to); None for no value at all.
+fn shown_choice<V: AsRef<str>, L: AsRef<str>>(value: &str, choices: &[(V, L)]) -> Option<String> {
+    match choices.iter().find(|(v, _)| v.as_ref() == value) {
+        Some((_, label)) => Some(label.as_ref().to_string()),
+        None => (!value.is_empty()).then(|| value.to_string()),
+    }
+}
+
 /// A dropdown that sets `value` to one of `choices` (value, what it shows).
 /// True when it changed.
 pub fn select<V: AsRef<str>, L: AsRef<str>>(ui: &mut Ui, id: impl std::hash::Hash + std::fmt::Debug, width: f32, value: &mut String, choices: &[(V, L)]) -> bool {
-    let shown = choices.iter().find(|(v, _)| v.as_ref() == value.as_str()).or(choices.first()).map(|(_, l)| l.as_ref().to_string()).unwrap_or_default();
+    let shown: egui::WidgetText = match shown_choice(value, choices) {
+        Some(text) => text.into(),
+        None => RichText::new(t!("Choose…")).weak().into(),
+    };
     let mut changed = false;
     dropdown(ui, egui::Id::unique(id), width, shown, |ui| {
         for (v, l) in choices {
@@ -967,6 +980,25 @@ mod tests {
         };
         assert!(!asks_again(600.0, wide)[3..].contains(&true), "it fits");
         assert!(!asks_again(150.0, wide)[3..].contains(&true), "wider than its room");
+    }
+
+    /// A dropdown shows what it is set to: not its first choice when the
+    /// value is another one, or none.
+    #[test]
+    fn a_dropdown_shows_what_it_is_set_to() {
+        let choices = [("online", "Online"), ("idle", "Idle")];
+        assert_eq!(shown_choice("idle", &choices).as_deref(), Some("Idle"));
+        assert_eq!(shown_choice("dnd", &choices).as_deref(), Some("dnd"), "a value that is none of them, as it is");
+        assert_eq!(shown_choice("", &choices), None, "nothing chosen yet");
+        assert_eq!(shown_choice("", &[("", "Default"), ("a", "A")]).as_deref(), Some("Default"), "unless empty is a choice");
+        // Drawn, and picking nothing changes nothing.
+        let mut value = String::from("dnd");
+        let ctx = egui::Context::default();
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            assert!(!select(ui, "status", 160.0, &mut value, &choices));
+        });
+        out.textures_delta.clear();
+        assert_eq!(value, "dnd");
     }
 
     /// Two settings with the same name each keep their own control's width,

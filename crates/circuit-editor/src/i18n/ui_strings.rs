@@ -1537,6 +1537,7 @@ pub const UI_STRINGS: &[&str] = &[
     "Open in its own window",
     "A window outside the app's, to put on another monitor",
     "Drag to resize, double-click to reset",
+    "Choose…",
     "Type a command, workspace, block or text in a block",
     "     Nothing matches",
     "> only commands    # only blocks and the texts in them",
