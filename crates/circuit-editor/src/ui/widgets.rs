@@ -201,7 +201,7 @@ fn editor(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width:
         PinType::Number => {
             let mut n = value.as_f64().or_else(|| value.as_str().and_then(|s| s.parse().ok())).unwrap_or(0.0);
             let speed = field.step.unwrap_or(0.1).max(0.01);
-            let range = field.min.map(|min| min..=field.max.unwrap_or(f64::MAX));
+            let range = number_range(field);
             // The Inspector (multiline) draws with the kit; a block on the canvas stays compact.
             let changed = if multiline {
                 let mut number = kit::Number::new(&mut n).speed(speed).width(width);
@@ -273,6 +273,15 @@ fn editor(ui: &mut Ui, id: egui::Id, field: &FieldDef, value: &mut Value, width:
             ui.label(egui::RichText::new(t!("connect a value")).italics().color(theme.text_muted));
             false
         }
+    }
+}
+
+/// The numbers a number field takes: from its `min` to its `max`, either of
+/// which may be left out. None when it has neither.
+fn number_range(field: &FieldDef) -> Option<std::ops::RangeInclusive<f64>> {
+    match (field.min, field.max) {
+        (None, None) => None,
+        (min, max) => Some(min.unwrap_or(f64::MIN)..=max.unwrap_or(f64::MAX)),
     }
 }
 
@@ -531,6 +540,30 @@ mod tests {
         assert_eq!(id_hint(&f), "Channel id");
         f.type_name = "discord.voice_channel".into();
         assert_eq!(id_hint(&f), "Voice channel id");
+    }
+
+    /// A number field keeps to its `max` also when it has no `min` (it was
+    /// only looked at together with one).
+    #[test]
+    fn number_fields_keep_to_a_max_alone() {
+        let field = |min: Option<f64>, max: Option<f64>| FieldDef { type_name: "number".into(), ty: PinType::Number, min, max, ..Default::default() };
+        assert_eq!(number_range(&field(None, None)), None);
+        assert_eq!(number_range(&field(Some(1.0), Some(5.0))), Some(1.0..=5.0));
+        assert_eq!(number_range(&field(Some(0.0), None)), Some(0.0..=f64::MAX));
+        assert_eq!(number_range(&field(None, Some(100.0))), Some(f64::MIN..=100.0));
+
+        // Typed past its max in the Inspector, it stops there.
+        let theme = Theme::from_def(&circuit_plugins::ThemeDef::default());
+        let f = field(None, Some(100.0));
+        let mut value = serde_json::json!(250);
+        let ctx = egui::Context::default();
+        for _ in 0..2 {
+            let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+                value_editor(ui, egui::Id::unique("n"), &f, &mut value, 80.0, true, &theme);
+            });
+            out.textures_delta.clear();
+        }
+        assert_eq!(value.as_f64(), Some(100.0));
     }
 
     /// A multi-select reads a list of keys, and the text older projects typed
