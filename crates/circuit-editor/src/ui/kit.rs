@@ -250,13 +250,17 @@ pub fn line<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
     let h = crate::ui::inputs::input_height(ui).max(ui.spacing().interact_size.y);
     let id = ui.scope_id().with(("kit-line", ui.next_auto_id()));
     let full = ui.available_size_before_wrap().x;
-    let width = ui.data(|d| d.get_temp::<f32>(id)).map_or(full, |w| w.min(full));
+    let known = ui.data(|d| d.get_temp::<f32>(id));
+    let width = known.map_or(full, |w| w.min(full));
     let r = ui.allocate_ui_with_layout(egui::vec2(width, h), egui::Layout::left_to_right(egui::Align::Center), |ui| {
         ui.set_min_height(h);
         add(ui)
     });
+    // Drawn again only when the content's width changed since last time. (Not
+    // when it differs from the room it was given: content wider than its
+    // room always does, and the app would draw itself again for ever.)
     let used = r.response.rect.width();
-    if (used - width).abs() > 0.5 {
+    if known.is_none_or(|w| (used - w).abs() > 0.5) {
         ui.data_mut(|d| d.insert_temp(id, used));
         ui.ctx().request_repaint();
     }
@@ -404,7 +408,9 @@ pub fn setting_row(ui: &mut Ui, theme: &Theme, title: &str, description: &str, c
         // The control's width as drawn last time: the text takes the rest. When
         // that leaves too little for the text, the control goes under it, so
         // a row is never wider than the page.
-        let measured = ui.scope_id().with(("settings-control", title));
+        // Kept for this row alone (by its place), not for its title: two rows
+        // called the same would take each other's width, and never settle.
+        let measured = ui.next_auto_id().with(("settings-control", title));
         let control_w: f32 = ui.data(|d| d.get_temp(measured)).unwrap_or(0.0);
         let stacked = inner - control_w - 16.0 < 180.0;
         // The title names the control too, for screen readers.
@@ -929,4 +935,55 @@ pub fn menu_item(ui: &mut Ui, text: impl Into<egui::WidgetText>, shortcut: Optio
         b = b.shortcut_text(s);
     }
     ui.add_enabled(enabled, b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Draws `add` for a few frames in a window `screen` wide: whether each
+    /// frame asked for another one right away.
+    fn asks_again(screen: f32, mut add: impl FnMut(&mut Ui)) -> Vec<bool> {
+        let ctx = egui::Context::default();
+        (0..8)
+            .map(|_| {
+                let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(screen, 400.0))), ..Default::default() };
+                let mut out = ctx.run_ui(input, &mut add);
+                out.textures_delta.clear();
+                out.viewport_output.get(&egui::ViewportId::ROOT).is_some_and(|v| v.repaint_delay.is_zero())
+            })
+            .collect()
+    }
+
+    /// A row settles after it has measured its content, also when the
+    /// content is wider than the room it has (a dropdown in a narrow panel):
+    /// it doesn't make the app draw itself again and again.
+    #[test]
+    fn a_line_settles_even_when_it_does_not_fit() {
+        let wide = |ui: &mut Ui| {
+            line(ui, |ui| {
+                ui.allocate_space(vec2(400.0, 20.0));
+            });
+        };
+        assert!(!asks_again(600.0, wide)[3..].contains(&true), "it fits");
+        assert!(!asks_again(150.0, wide)[3..].contains(&true), "wider than its room");
+    }
+
+    /// Two settings with the same name each keep their own control's width,
+    /// and settle.
+    #[test]
+    fn setting_rows_with_one_title_settle() {
+        let theme = Theme::fallback();
+        let mut lefts = Vec::new();
+        let frames = asks_again(700.0, |ui| {
+            setting_row(ui, &theme, "Enabled", "", |ui| {
+                ui.allocate_space(vec2(44.0, 24.0));
+            });
+            setting_row(ui, &theme, "Enabled", "", |ui| {
+                lefts.push(ui.allocate_space(vec2(260.0, 24.0)).1.left());
+            });
+        });
+        assert!(!frames[3..].contains(&true), "{frames:?}");
+        assert!(lefts[3..].windows(2).all(|w| w[0] == w[1]), "the control stays where it is: {lefts:?}");
+    }
 }
