@@ -162,6 +162,14 @@ impl Registry {
         let m = &plugin.manifest;
         let c = &m.contributes;
 
+        // A plugin's files are its own folder's: a pattern that leads out of
+        // it finds nothing (see `expand`), and says so here.
+        for pattern in [&c.icons, &c.pin_types, &c.classes, &c.themes, &c.locales, &c.build_modes, &c.bot_settings, &c.blocks].into_iter().flatten() {
+            if leaves_folder(pattern) {
+                self.problem(display(&plugin.dir.join("plugin.toml")), format!("`{pattern}` leads out of the plugin's folder, so it's left out: a plugin only has its own files"));
+            }
+        }
+
         for path in expand(&plugin.dir, &c.icons) {
             if let Some(stem) = path.file_stem() {
                 self.icons.insert(stem.to_string_lossy().into_owned(), path);
@@ -288,16 +296,23 @@ impl Registry {
             return;
         }
         let dir = path.parent().unwrap_or(Path::new("."));
+        // The files a block brings along go into the bot (and into exports):
+        // only the plugin's own, never one from elsewhere on the computer.
+        let mut outside = Vec::new();
         for asset in &def.assets {
             if !dir.join(asset).is_file() {
                 self.problem(display(path), format!("`requires.assets` lists {asset}, but there's no such file next to the block"));
+            } else if !inside_plugin(&plugin.dir, &dir.join(asset)) {
+                self.problem(display(path), format!("`requires.assets` lists {asset}, which is outside the plugin's folder, so it's left out"));
+                outside.push(asset.clone());
             }
         }
+        def.assets.retain(|a| !outside.contains(a));
         self.engine_keys.insert(def.id.clone(), key);
         self.block_icons.remove(&def.id);
         if let Some(icon) = def.icon.as_deref().filter(|i| i.ends_with(".svg") || i.ends_with(".png")) {
             let file = path.parent().unwrap_or(Path::new(".")).join(icon);
-            if file.is_file() {
+            if file.is_file() && inside_plugin(&plugin.dir, &file) {
                 self.block_icons.insert(def.id.clone(), file);
             }
         }
@@ -375,10 +390,27 @@ fn read_toml<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {
     toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))
 }
 
-/// Expands contribution globs such as `blocks/**/*.{js,ts}` inside a plugin folder.
+/// Whether a file really is in a plugin's folder, also going by where links
+/// lead. A plugin's files are read from nowhere else.
+pub fn inside_plugin(plugin_dir: &Path, file: &Path) -> bool {
+    match (plugin_dir.canonicalize(), file.canonicalize()) {
+        (Ok(dir), Ok(file)) => file.starts_with(dir),
+        _ => false,
+    }
+}
+
+/// Whether a pattern or path of a plugin's leads out of its folder: one that
+/// starts at the top of the disk or on a drive, or goes up with `..`.
+fn leaves_folder(pattern: &str) -> bool {
+    let p = pattern.replace('\\', "/");
+    p.starts_with('/') || p.contains(':') || p.split('/').any(|part| part == "..")
+}
+
+/// Expands contribution globs such as `blocks/**/*.{js,ts}` inside a plugin
+/// folder. Patterns that lead out of the folder find nothing.
 fn expand(dir: &Path, patterns: &[String]) -> Vec<PathBuf> {
     let mut out = Vec::new();
-    for pattern in patterns {
+    for pattern in patterns.iter().filter(|p| !leaves_folder(p)) {
         for p in brace_expand(pattern) {
             let full = dir.join(&p).to_string_lossy().replace('\\', "/");
             if let Ok(paths) = glob::glob(&full) {
@@ -470,6 +502,25 @@ version = \"{version}\"
         let reg = Registry::load(&[bundled, future], &engine);
         assert_eq!(reg.plugins[0].manifest.version, "1.2.0", "the one for a newer app is left out");
         assert!(reg.problems.iter().any(|p| p.message.contains("needs XC Circuit 99.0.0 or newer")), "{:?}", reg.problems.iter().map(|p| &p.message).collect::<Vec<_>>());
+
+        // A plugin has only its own files: patterns and a block's files that
+        // lead out of its folder are left out, and reported.
+        let greedy = base.join("greedy").join("acme.greedy");
+        fs::create_dir_all(greedy.join("blocks")).unwrap();
+        fs::create_dir_all(base.join("greedy").join("elsewhere")).unwrap();
+        fs::write(greedy.join("plugin.toml"), "id = \"acme.greedy\"\nname = \"Greedy\"\nversion = \"1.0.0\"\n\n[contributes]\nblocks = [\"blocks/*.js\", \"../elsewhere/*.js\"]\n").unwrap();
+        let block = |id: &str, assets: &str| format!("module.exports = {{ id: '{id}', kind: 'action', info: {{ name: 'B', version: '1.0.0' }}, requires: {{ assets: [{assets}] }}, run() {{}} }};");
+        fs::write(greedy.join("blocks").join("own.js"), block("greedy.own", "'own.txt', '../../elsewhere/secret.txt'")).unwrap();
+        fs::write(greedy.join("blocks").join("own.txt"), "mine").unwrap();
+        fs::write(base.join("greedy").join("elsewhere").join("secret.txt"), "not the plugin's").unwrap();
+        fs::write(base.join("greedy").join("elsewhere").join("other.js"), block("greedy.other", "")).unwrap();
+        let reg = Registry::load(&[base.join("greedy")], &engine);
+        assert_eq!(reg.block("greedy.own").unwrap().assets, ["own.txt"], "its own file stays, the one from elsewhere goes");
+        assert!(reg.block("greedy.other").is_none(), "a block file outside the folder isn't loaded");
+        let said: Vec<&str> = reg.problems.iter().map(|p| p.message.as_str()).collect();
+        assert!(said.iter().any(|m| m.contains("../elsewhere/*.js") && m.contains("leads out of the plugin's folder")), "{said:?}");
+        assert!(said.iter().any(|m| m.contains("secret.txt") && m.contains("outside the plugin's folder")), "{said:?}");
+        assert!(leaves_folder("/etc/*.js") && leaves_folder("C:/Users/*.js") && leaves_folder("blocks/../../x.js") && !leaves_folder("blocks/**/*.{js,ts}"));
 
         // What an install left behind (its folder starts with a dot) isn't a plugin.
         let left = base.join("updates").join(".replaced-acme.tools");

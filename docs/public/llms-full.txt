@@ -2214,7 +2214,7 @@ The keys inside `info`, `search`, `look` and `requires` may also stand at the to
 | --- | --- |
 | `intents` | Discord gateway intents the block needs, such as `GuildMessages` or `GuildMembers`. The bot asks Discord for the intents of the blocks used. |
 | `dependencies` | npm packages the block's code needs: `{ "node-fetch": "^3.3.0" }`. They're installed before Run and listed in exports. Load them with [`ctx.require`](./ctx#require). |
-| `assets` | Files the block needs in the bot, such as fonts or pictures, as paths relative to the block file: `["../../fonts/MyFont.ttf"]`. They go into the bot (and into exports) with the block; [`ctx.asset(name)`](./ctx#asset) gives a path to one. |
+| `assets` | Files the block needs in the bot, such as fonts or pictures, as paths relative to the block file: `["../../fonts/MyFont.ttf"]`. They go into the bot (and into exports) with the block; [`ctx.asset(name)`](./ctx#asset) gives a path to one. Only files inside the plugin's own folder: one from elsewhere is left out, with a line in Problems. |
 | `permissions` | The bot's permissions the block needs, by the platform's flag names: `["ManageRoles"]`, or a list per value of one field: `{ action: { kick: ["KickMembers"], ban: ["BanMembers"] } }`. When the platform answers "Missing Permissions", the error names them. |
 
 Discord's privileged intents (`GuildMembers`, `GuildPresences`, `MessageContent`) have to be turned on for the bot in the developer portal; Bot settings lists the ones the project's blocks need, with a link there.
@@ -3042,7 +3042,7 @@ These are **plugins**. npm packages for the bot go in a block's [`requires.depen
 
 ## `[contributes]`
 
-Each entry is a list of paths or glob patterns relative to the plugin folder. `**` matches any folders, `{a,b}` either word.
+Each entry is a list of paths or glob patterns relative to the plugin folder. `**` matches any folders, `{a,b}` either word. They stay inside the plugin's folder: a pattern that starts at the top of the disk or goes up with `..` is left out, with a line in Problems.
 
 | Key | Contributes | Reference |
 | --- | --- | --- |
@@ -3124,7 +3124,7 @@ prefix = { type = "text", group = "Messages", label = "Text command prefix", def
 | `description` | One sentence, shown in File › New Project. |
 | `blocks` | Which blocks appear: `"plugin.id/*"` for all blocks of a plugin. |
 | `runtime` | `"node"`. |
-| `runtimeLibs` | [Runtime libraries](./runtime-libs), as `"plugin.id/path/in/plugin.js"`. |
+| `runtimeLibs` | [Runtime libraries](./runtime-libs), as `"plugin.id/path/in/plugin.js"`: a file inside that plugin's folder. |
 | `exporter` | How Bot › Export packages the bot (`"<plugin>/node-bundle"`: a Node.js folder). |
 | `tokenEnv` | The environment variable an exported bot reads its token from. Default `DISCORD_TOKEN`. |
 | `features` | What the mode's projects have. `"slashCommands"` shows the Slash Command Builder. |

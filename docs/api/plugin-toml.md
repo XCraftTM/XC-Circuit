@@ -59,7 +59,7 @@ These are **plugins**. npm packages for the bot go in a block's [`requires.depen
 
 ## `[contributes]`
 
-Each entry is a list of paths or glob patterns relative to the plugin folder. `**` matches any folders, `{a,b}` either word.
+Each entry is a list of paths or glob patterns relative to the plugin folder. `**` matches any folders, `{a,b}` either word. They stay inside the plugin's folder: a pattern that starts at the top of the disk or goes up with `..` is left out, with a line in Problems.
 
 | Key | Contributes | Reference |
 | --- | --- | --- |

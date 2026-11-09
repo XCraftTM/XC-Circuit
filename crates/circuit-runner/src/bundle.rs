@@ -77,6 +77,9 @@ pub fn build_bundle(project: &Project, reg: &Registry, mode: Option<&BuildMode>)
         let (plugin_id, rel) = spec.split_once('/').ok_or_else(|| anyhow!("runtime library `{spec}` should look like plugin.id/path.js"))?;
         let plugin = reg.plugins.iter().find(|p| p.manifest.id == plugin_id).ok_or_else(|| anyhow!("runtime library `{spec}`: plugin `{plugin_id}` is not loaded"))?;
         let path = plugin.dir.join(rel);
+        if path.is_file() && !circuit_plugins::registry::inside_plugin(&plugin.dir, &path) {
+            anyhow::bail!("runtime library `{spec}` is outside the plugin's folder: a plugin only has its own files");
+        }
         let source = fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
         libs.push(json!({ "source": source, "file": path.display().to_string() }));
     }

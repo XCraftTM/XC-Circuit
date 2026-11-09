@@ -48,7 +48,7 @@ prefix = { type = "text", group = "Messages", label = "Text command prefix", def
 | `description` | One sentence, shown in File › New Project. |
 | `blocks` | Which blocks appear: `"plugin.id/*"` for all blocks of a plugin. |
 | `runtime` | `"node"`. |
-| `runtimeLibs` | [Runtime libraries](./runtime-libs), as `"plugin.id/path/in/plugin.js"`. |
+| `runtimeLibs` | [Runtime libraries](./runtime-libs), as `"plugin.id/path/in/plugin.js"`: a file inside that plugin's folder. |
 | `exporter` | How Bot › Export packages the bot (`"<plugin>/node-bundle"`: a Node.js folder). |
 | `tokenEnv` | The environment variable an exported bot reads its token from. Default `DISCORD_TOKEN`. |
 | `features` | What the mode's projects have. `"slashCommands"` shows the Slash Command Builder. |
