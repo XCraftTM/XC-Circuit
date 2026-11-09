@@ -6,6 +6,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 
 ### Fixed
 - **No more "Not Responding" during setup and the tour**: the first start page, the tour's Run step and Settings › Bot asked Node.js and winget for their version while drawing, and waited for the answer. Starting them can take a long time (the first time after installing, a virus scan, a slow virtual machine), and every 3 seconds in the tour, so the window froze for up to a minute at a time. They're now asked in the background, and the window keeps working.
+- **freezes.log says more**: before the first freeze of a start, it says how the app draws (and whether in software), whether it's the x86_64 or ARM build and, on Windows, the processor. The first start page, the side bar, the tour's card and the block picker now count as places of their own, so a freeze there is no longer blamed on the menus or the Console.
 
 ## 0.2.5
 
