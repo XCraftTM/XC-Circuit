@@ -31,7 +31,10 @@ fn spans<'a>(line: &'a str) -> Vec<Span<'a>> {
         } else if let Some(inner) = rest.strip_prefix('`') {
             inner.find('`').filter(|&end| end > 0).map(|end| (Span::Code(&inner[..end]), 2 + end))
         } else if let Some(inner) = rest.strip_prefix('[') {
-            inner.find("](").and_then(|mid| {
+            // A link's text ends at the first `]`, with its address right
+            // after: `[a, b]` earlier on the line is text, not the start of
+            // a link that comes later.
+            inner.find(']').filter(|&mid| mid > 0 && inner[mid + 1..].starts_with('(')).and_then(|mid| {
                 let url_part = &inner[mid + 2..];
                 url_part.find(')').map(|end| (Span::Link(&inner[..mid], &url_part[..end]), 1 + mid + 2 + end + 1))
             })
@@ -132,6 +135,12 @@ mod tests {
         );
         assert_eq!(spans("a ** b and `c"), vec![Span::Text("a ** b and `c")], "unclosed marks stay text");
         assert_eq!(spans("Ä **ö**"), vec![Span::Text("Ä "), Span::Bold("ö")]);
+        // Brackets that aren't a link stay text, also before a real link.
+        assert_eq!(
+            spans("An array [a, b] and `list[0]`: see [the docs](https://x.y/z)."),
+            vec![Span::Text("An array [a, b] and "), Span::Code("list[0]"), Span::Text(": see "), Span::Link("the docs", "https://x.y/z"), Span::Text(".")]
+        );
+        assert_eq!(spans("[] and [x] (y)"), vec![Span::Text("[] and [x] (y)")]);
     }
 
     /// The real release notes draw without trouble, and no mark is left as text.
