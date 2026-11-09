@@ -1090,7 +1090,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     }
     if let Some((node, key)) = open_embed_for {
         let value = ws.nodes.get(&node).and_then(|n| n.values.get(&key).cloned()).unwrap_or(Value::Null);
-        *embed_edit = Some(crate::builders::embed::EmbedEdit { ws: ws_key.to_string(), node, key, draft: crate::builders::embed::EmbedData::from_value(&value), json: None });
+        *embed_edit = Some(crate::builders::embed::EmbedEdit { ws: ws_key.to_string(), node, key, draft: crate::builders::embed::EmbedData::from_value(&value), json: None, set_time: false });
     }
     if let Some((node, pin)) = toggle_pin {
         let n = ws.nodes.get_mut(&node).unwrap();

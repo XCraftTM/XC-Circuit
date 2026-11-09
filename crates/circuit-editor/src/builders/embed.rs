@@ -399,6 +399,8 @@ pub struct EmbedEdit {
     pub draft: EmbedData,
     /// The draft as JSON, while switched to JSON.
     pub json: Option<JsonText>,
+    /// "A set time" was picked for the timestamp and no time typed yet.
+    pub set_time: bool,
 }
 
 pub fn open(ed: &mut Editor, ws: &str, node: &str, key: &str) {
@@ -407,7 +409,7 @@ pub fn open(ed: &mut Editor, ws: &str, node: &str, key: &str) {
         .and_then(|w| w.nodes.get(node))
         .and_then(|n| n.values.get(key).cloned())
         .unwrap_or(Value::Null);
-    ed.embed_edit = Some(EmbedEdit { ws: ws.into(), node: node.into(), key: key.into(), draft: EmbedData::from_value(&value), json: None });
+    ed.embed_edit = Some(EmbedEdit { ws: ws.into(), node: node.into(), key: key.into(), draft: EmbedData::from_value(&value), json: None, set_time: false });
 }
 
 /// The Embed Builder tab.
@@ -512,7 +514,7 @@ fn form_column(ui: &mut Ui, theme: &Theme, edit: &mut EmbedEdit, values: Option<
     }
     ScrollArea::vertical().id_salt("embed-form").max_height(dialog::remaining_height(ui, 300.0)).auto_shrink([false, false]).show(ui, |ui| {
         ui.set_width(ui.available_width() - 18.0);
-        form(ui, theme, &mut edit.draft);
+        form(ui, theme, &mut edit.draft, &mut edit.set_time);
         if let Some(values) = values {
             ui.add_space(12.0);
             if dialog::values_heading(ui, theme) {
@@ -522,7 +524,11 @@ fn form_column(ui: &mut Ui, theme: &Theme, edit: &mut EmbedEdit, values: Option<
     });
 }
 
-fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
+/// `set_time`: "A set time" is picked for the timestamp while its box is
+/// still empty. Kept with the builder that is open, not for all embeds: it
+/// used to carry over to the next embed opened, whose "When it's sent" then
+/// showed as a set time and was lost.
+fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData, set_time: &mut bool) {
     let heading = kit::section(ui, theme, t!("Color")).id;
     ui.horizontal(|ui| {
         // A colour, or ${…} for one from the bot or an input.
@@ -621,8 +627,7 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
     kit::labelled(ui, heading, |ui| ui.horizontal(|ui| {
         ui.set_min_height(crate::ui::kit::input_height(ui));
         // None, when it's sent, or a set time (kept in `time`).
-        let set_id = ui.scope_id().with("set-time");
-        let mut kind = if !e.time.is_empty() || ui.memory(|m| m.data.get_temp::<bool>(set_id).unwrap_or(false)) { 2 } else if e.timestamp { 1 } else { 0 };
+        let mut kind = if !e.time.is_empty() || *set_time { 2 } else if e.timestamp { 1 } else { 0 };
         let labels = [t!("None"), t!("When it's sent"), t!("A set time")];
         crate::ui::kit::dropdown(ui, ui.scope_id().with("timestamp"), 160.0, labels[kind], |ui| {
             for (i, l) in labels.iter().enumerate() {
@@ -633,7 +638,7 @@ fn form(ui: &mut Ui, theme: &Theme, e: &mut EmbedData) {
         if kind != 2 {
             e.time.clear();
         }
-        ui.memory_mut(|m| m.data.insert_temp(set_id, kind == 2));
+        *set_time = kind == 2;
         if kind == 2 {
             let w = ui.available_width();
             ui.add(crate::ui::kit::TextLine::new(&mut e.time).hint("2026-12-24T18:00:00Z or ${date}").width(w));
@@ -668,6 +673,31 @@ fn preview_message(ui: &mut Ui, theme: &Theme, e: &EmbedData, bot: Option<&crate
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// "A set time" picked in one embed's builder doesn't carry over to the
+    /// next embed: its "When it's sent" stays.
+    #[test]
+    fn the_timestamp_belongs_to_its_embed() {
+        let ctx = egui::Context::default();
+        crate::ui::fonts::install(&ctx);
+        let theme = Theme::fallback();
+        let run = |e: &mut EmbedData, set_time: &mut bool| {
+            let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(900.0, 900.0))), ..Default::default() };
+            let mut out = ctx.run_ui(raw, |ui| form(ui, &theme, e, set_time));
+            out.textures_delta.clear();
+        };
+        // One with a set time, its box emptied: still "A set time" there.
+        let (mut first, mut first_set) = (EmbedData { title: "a".into(), time: "2026-12-24T18:00:00Z".into(), ..Default::default() }, false);
+        run(&mut first, &mut first_set);
+        first.time.clear();
+        run(&mut first, &mut first_set);
+        assert!(first_set && !first.timestamp);
+        // The next one opened starts on its own.
+        let (mut second, mut second_set) = (EmbedData { title: "b".into(), timestamp: true, ..Default::default() }, false);
+        run(&mut second, &mut second_set);
+        run(&mut second, &mut second_set);
+        assert!(second.timestamp && !second_set && second.time.is_empty());
+    }
 
     #[test]
     fn embeds_go_to_discord_json_and_back() {
