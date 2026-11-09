@@ -181,9 +181,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
         let (dir, aside) = (tmp.join("acme.tools"), tmp.join(".replaced-acme.tools"));
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("plugin.toml"), "id = \"acme.tools\"
-version = \"1.0.0\"
-").unwrap();
+        std::fs::write(dir.join("plugin.toml"), "id = \"acme.tools\"\nversion = \"1.0.0\"\n").unwrap();
         // Nothing was unpacked: there is no new version to move in.
         let err = swap_in(&tmp.join(".installing-acme.tools"), &dir, &aside).unwrap_err();
         assert!(err.to_string().contains("new version"), "{err}");
@@ -193,9 +191,7 @@ version = \"1.0.0\"
         // With a new version, it takes the old one's place and the old one goes.
         let staging = tmp.join(".installing-acme.tools");
         std::fs::create_dir_all(&staging).unwrap();
-        std::fs::write(staging.join("plugin.toml"), "id = \"acme.tools\"
-version = \"2.0.0\"
-").unwrap();
+        std::fs::write(staging.join("plugin.toml"), "id = \"acme.tools\"\nversion = \"2.0.0\"\n").unwrap();
         swap_in(&staging, &dir, &aside).unwrap();
         assert!(std::fs::read_to_string(dir.join("plugin.toml")).unwrap().contains("2.0.0"));
         assert!(!aside.exists() && !staging.exists());
