@@ -347,6 +347,29 @@ fn kind_name(c: &Value) -> String {
     }
 }
 
+/// The number a custom id ends in (`button-3`, `answer3`): 0 without one.
+pub(crate) fn id_number(id: &str) -> usize {
+    let digits = id.chars().rev().take_while(char::is_ascii_digit).count();
+    id[id.len() - digits..].parse::<usize>().ok().filter(|n| *n < 1_000_000).unwrap_or(0)
+}
+
+/// A number for the next new part's custom id: one above the highest any
+/// custom id ends in. (It was the number of parts plus one, which gave an
+/// id a second time after a part had been removed.)
+fn next_id(list: &[Value]) -> usize {
+    fn highest(list: &[Value]) -> usize {
+        list.iter()
+            .map(|c| {
+                let inside = highest(list_of(c, "components"));
+                let accessory = c.get("accessory").map_or(0, |a| id_number(text_of(a, "custom_id")));
+                id_number(text_of(c, "custom_id")).max(inside).max(accessory)
+            })
+            .max()
+            .unwrap_or(0)
+    }
+    highest(list) + 1
+}
+
 /// A new component of the kind picked in an Add menu. `n` keeps custom ids apart.
 fn new_component(what: &str, n: usize) -> Value {
     match what {
@@ -530,7 +553,7 @@ fn form(ui: &mut Ui, theme: &Theme, edit: &mut LayoutEdit, values: Option<&crate
     ui.scope_builder(egui::UiBuilder::new().scope_id(form_id), |ui| {
         ScrollArea::vertical().id_salt("layout-form").max_height(dialog::remaining_height(ui, 300.0)).auto_shrink([false, false]).show(ui, |ui| {
             ui.set_width(ui.available_width() - 12.0);
-            let next = count(components(&edit.draft)) + 1;
+            let next = next_id(components(&edit.draft));
             list_editor(ui, theme, list_mut(&mut edit.draft, "components"), true, next);
             if let Some(values) = values {
                 ui.add_space(12.0);
@@ -1304,6 +1327,22 @@ fn preview_select(ui: &mut Ui, s: &Value, width: f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A part added after another was removed gets a custom id of its own.
+    #[test]
+    fn new_parts_get_custom_ids_no_other_has() {
+        assert_eq!((id_number("button-3"), id_number("answer12"), id_number("claim"), id_number("")), (3, 12, 0, 0));
+        let mut list = vec![new_component("buttons", next_id(&[]))];
+        list.push(new_component("buttons", next_id(&list)));
+        list.push(new_component("select", next_id(&list)));
+        list.remove(0);
+        list.push(new_component("buttons", next_id(&list)));
+        // A row's next button counts on from there.
+        let more = new_button(next_id(&list) + 1);
+        list_mut(&mut list[2], "components").push(more);
+        let layout = json!({ "components": list });
+        assert!(!problems(&layout).iter().any(|p| p.contains("used twice")), "{:?}", problems(&layout));
+    }
 
     /// Parts that aren't objects (a gallery's picture given as its address)
     /// are refused when pasted, and the builder draws what it is given: it

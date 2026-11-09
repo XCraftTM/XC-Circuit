@@ -410,7 +410,9 @@ fn parts_editor(ui: &mut Ui, theme: &Theme, list: &mut Vec<Value>) {
         ui.set_min_width(260.0);
         for (what, label) in ADDABLE {
             if kit::menu_item(ui, crate::i18n::t(label), None, true).clicked() {
-                let n = list.len() + 1;
+                // One above the highest number an answer id ends in: the number of
+                // parts plus one gave an id a second time after a part was removed.
+                let n = list.iter().filter_map(input_of).map(|i| crate::builders::layout::id_number(text_of(i, "custom_id"))).max().unwrap_or(0) + 1;
                 list.push(new_part(what, n));
             }
         }
