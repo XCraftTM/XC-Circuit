@@ -166,7 +166,7 @@ impl AppLink {
     fn connect() -> Result<(TcpStream, BufReader<TcpStream>), String> {
         let not_open = || "XC Circuit isn't open, or its AI agents plugin is turned off (Plugins in the side bar). Use open_xc_circuit to open it.".to_string();
         let info: Value = std::fs::read_to_string(super::info_file()).ok().and_then(|t| serde_json::from_str(&t).ok()).ok_or_else(not_open)?;
-        let port = info["port"].as_u64().ok_or_else(not_open)? as u16;
+        let port = info["port"].as_u64().and_then(|p| u16::try_from(p).ok()).ok_or_else(not_open)?;
         let mut stream = TcpStream::connect_timeout(&([127, 0, 0, 1], port).into(), Duration::from_secs(2)).map_err(|_| not_open())?;
         // The app greets at once; something else on its old port may never answer.
         let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
