@@ -104,15 +104,23 @@ here="$(dirname "$(readlink -f "$0")")"
 exec "$here/opt/xc-circuit/xc-circuit" "$@"
 EOF
 chmod 755 "$app/AppRun"
-tool="$work/appimagetool"
+# fetch <repo> <file> <to>: a file from the repo's "continuous" release.
 # Signed in (the build's GH_TOKEN, through gh) where it can: GitHub sometimes
 # times out unauthenticated downloads for a while. Else, or when that fails,
 # a plain download, tried again up to 8 times, 20 s apart.
-if ! { [ -n "${GH_TOKEN:-}" ] && command -v gh >/dev/null && gh release download continuous --repo AppImage/appimagetool --pattern "appimagetool-$arch.AppImage" --output "$tool" --clobber; }; then
-  curl -fsSL --retry 8 --retry-delay 20 --retry-all-errors --connect-timeout 30 -o "$tool" "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-$arch.AppImage"
-fi
+fetch() {
+  if ! { [ -n "${GH_TOKEN:-}" ] && command -v gh >/dev/null && gh release download continuous --repo "$1" --pattern "$2" --output "$3" --clobber; }; then
+    curl -fsSL --retry 8 --retry-delay 20 --retry-all-errors --connect-timeout 30 -o "$3" "https://github.com/$1/releases/download/continuous/$2"
+  fi
+}
+tool="$work/appimagetool"
+fetch AppImage/appimagetool "appimagetool-$arch.AppImage" "$tool"
 chmod 755 "$tool"
+# The runtime at the front of every AppImage: fetched here too, because
+# appimagetool's own download of it has no retries and isn't signed in.
+runtime="$work/runtime"
+fetch AppImage/type2-runtime "runtime-$arch" "$runtime"
 # The runners have no FUSE: the tool unpacks itself instead.
-APPIMAGE_EXTRACT_AND_RUN=1 ARCH="$arch" "$tool" --no-appstream "$app" "$out/XC-Circuit-$version-linux-$arch.AppImage"
+APPIMAGE_EXTRACT_AND_RUN=1 ARCH="$arch" "$tool" --no-appstream --runtime-file "$runtime" "$app" "$out/XC-Circuit-$version-linux-$arch.AppImage"
 
 ls -la "$out"
