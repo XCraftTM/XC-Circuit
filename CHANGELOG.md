@@ -4,6 +4,9 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 
 ## Unreleased
 
+### Changed
+- **Layout and settings are saved a moment after a change**, not every 30 seconds: 5 seconds after the last change (a click, a key, the window moved or resized, a plugin storing something), and each change in the meantime starts the wait again. Nothing changed, nothing is saved. Settings › Editor › **Save layout and settings after** sets the wait (1 to 60 seconds); it replaces Save layout and settings every.
+
 ### Fixed
 - **No more short freezes every 30 seconds**: when it saved the window's layout and settings (every 30 seconds, Settings › Editor), XC Circuit also saved everything egui, which draws the window, remembers, with the window locked meanwhile. That included the place of every popup, menu and window ever shown, start after start, so it grew into thousands and the window could stop answering for a few seconds each time ("XC Circuit didn't answer for 3.6 s … inside egui" in the Console). It now keeps only what's worth remembering (which sections are open, a text field's height …) and writes it with the window free.
 

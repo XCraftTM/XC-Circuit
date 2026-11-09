@@ -290,9 +290,9 @@ fn editor(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView, 
             asks.push(Ask::ResetLayout);
         }
     });
-    kit::setting_row(ui, theme, t!("Save layout and settings every"), t!("While XC Circuit runs, it saves the panel layout, the open project's place and these settings this often (and always when it closes). Less often is lighter on slower computers."), |ui| {
-        let range = crate::editor::prefs::SAVE_SECS_RANGE;
-        kit::Slider::new(&mut ed.prefs.settings_save_secs, range).step(5.0).suffix(" s").width(140.0).show(ui, theme);
+    kit::setting_row(ui, theme, t!("Save layout and settings after"), t!("XC Circuit saves the panel layout, the open project's place and these settings this long after the last change (and always when it closes). Each change in the meantime starts the wait again."), |ui| {
+        let range = crate::editor::prefs::SAVE_AFTER_RANGE;
+        kit::Slider::new(&mut ed.prefs.settings_save_after_secs, range).step(1.0).suffix(" s").width(140.0).show(ui, theme);
     });
     kit::setting_row(ui, theme, t!("Accessibility"), t!("Screen readers and the touch keyboard can see what's in the window. If XC Circuit stops answering while a program that reads windows runs (some password managers and writing helpers), try turning this off."), |ui| {
         toggle(ui, theme, &mut ed.prefs.accessibility);

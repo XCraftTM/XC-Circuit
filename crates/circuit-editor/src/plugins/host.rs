@@ -64,6 +64,8 @@ pub struct PluginHost {
     pub plugins: Vec<EditorPlugin>,
     /// Each plugin's key-value store.
     pub storage: BTreeMap<String, BTreeMap<String, String>>,
+    /// A plugin stored a value since the app last saved (see [`Self::take_stored`]).
+    stored: bool,
     last_poll: Option<Instant>,
     seen_saves: u64,
     /// Commands plugins asked to run, handled by the app.
@@ -92,8 +94,14 @@ fn map_level(l: api::Level) -> Level {
 }
 
 impl PluginHost {
+    /// Whether a plugin stored a value since this was last asked: the app
+    /// saves it a moment later.
+    pub fn take_stored(&mut self) -> bool {
+        std::mem::take(&mut self.stored)
+    }
+
     pub fn new(storage: BTreeMap<String, BTreeMap<String, String>>) -> PluginHost {
-        PluginHost { plugins: Vec::new(), storage, last_poll: None, seen_saves: 0, queued: Vec::new() }
+        PluginHost { plugins: Vec::new(), storage, stored: false, last_poll: None, seen_saves: 0, queued: Vec::new() }
     }
 
     /// Matches the running scripts to the registry's plugins, loading,
@@ -190,7 +198,7 @@ impl PluginHost {
         let p = &mut self.plugins[index];
         let inst = p.instance.as_mut()?;
         let storage = self.storage.entry(p.id.clone()).or_default();
-        let mut host = EditorHost { ed, storage, queued: &mut self.queued, bot_running };
+        let mut host = EditorHost { ed, storage, stored: &mut self.stored, queued: &mut self.queued, bot_running };
         // Its panics are caught and reported here, not crashes of the app.
         let call = || std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(inst.obj.as_mut(), &mut host))).unwrap_or_else(|p| Err(panic_message(&*p)));
         match crate::app::crash::plugin_call(call) {
@@ -312,6 +320,7 @@ pub fn status_text(s: &Status) -> String {
 struct EditorHost<'a> {
     ed: &'a mut Editor,
     storage: &'a mut BTreeMap<String, String>,
+    stored: &'a mut bool,
     queued: &'a mut Vec<String>,
     bot_running: bool,
 }
@@ -398,7 +407,10 @@ impl api::Host for EditorHost<'_> {
     }
 
     fn storage_set(&mut self, key: &str, value: &str) {
-        self.storage.insert(key.to_string(), value.to_string());
+        if self.storage.get(key).map(String::as_str) != Some(value) {
+            self.storage.insert(key.to_string(), value.to_string());
+            *self.stored = true;
+        }
     }
 
     fn add_block(&mut self, workspace: &str, block: &str, at: [f32; 2], values_json: &str) -> Result<String, String> {

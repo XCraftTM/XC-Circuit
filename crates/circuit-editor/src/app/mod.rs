@@ -206,6 +206,8 @@ pub struct CircuitApp {
     dock_before_start: Option<Dock<Tab>>,
     /// For saving what egui remembers (see `memory`).
     egui: egui::Context,
+    /// When to save the layout and settings next.
+    autosave: memory::Autosave,
 }
 
 impl CircuitApp {
@@ -347,6 +349,7 @@ impl CircuitApp {
         let setup = (!ed.prefs.setup_done).then(crate::pages::setup::Setup::new);
         CircuitApp {
             egui: cc.egui_ctx.clone(),
+            autosave: memory::Autosave::default(),
             ed,
             dock,
             title: String::new(),
@@ -779,6 +782,9 @@ impl eframe::App for CircuitApp {
         if self.ed.saver.busy() {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
+        // The layout and settings are saved a moment after the last change.
+        let stored = self.plugin_host.take_stored();
+        self.autosave.look(&ctx, stored, self.ed.prefs.settings_save_wait());
         watchdog::mark(watchdog::AFTER_FRAME);
     }
 
@@ -800,9 +806,10 @@ impl eframe::App for CircuitApp {
         }
     }
 
-    /// How often eframe saves the window's layout and settings: Settings › Editor.
+    /// eframe asks after every frame: it saves the window's layout and
+    /// settings once Settings › Editor's wait has passed since the last change.
     fn auto_save_interval(&self) -> std::time::Duration {
-        self.ed.prefs.settings_save_every()
+        self.autosave.interval(std::time::Instant::now(), self.ed.prefs.settings_save_wait())
     }
 
     /// egui's memory is saved here instead, the part worth keeping (see `memory`).
@@ -815,6 +822,7 @@ impl eframe::App for CircuitApp {
         watchdog::mark("saving the window's layout and settings");
         memory::save(&self.egui, storage);
         self.save_settings(storage);
+        self.autosave.saved();
         watchdog::mark(watchdog::AFTER_FRAME);
     }
 }

@@ -88,9 +88,9 @@ pub struct Prefs {
     /// (AccessKit). Off, the window's contents aren't offered to them, in
     /// case a program reading windows is what makes the app stop answering.
     pub accessibility: bool,
-    /// How often the window's layout and settings are saved, in seconds
-    /// (they're always saved when the app closes too).
-    pub settings_save_secs: u32,
+    /// How long after the last change the window's layout and settings are
+    /// saved, in seconds (they're always saved when the app closes too).
+    pub settings_save_after_secs: u32,
     /// How often unsaved changes are copied for crash recovery, in seconds.
     pub recovery_secs: u32,
     /// How many steps each workspace (and the project's settings) can undo.
@@ -115,9 +115,9 @@ impl Prefs {
         self.recent_projects.retain(|p| !same_folder(p, root));
     }
 
-    /// How often the window's layout and settings are saved.
-    pub fn settings_save_every(&self) -> std::time::Duration {
-        std::time::Duration::from_secs(self.settings_save_secs.clamp(*SAVE_SECS_RANGE.start(), *SAVE_SECS_RANGE.end()).into())
+    /// How long after the last change the window's layout and settings are saved.
+    pub fn settings_save_wait(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(self.settings_save_after_secs.clamp(*SAVE_AFTER_RANGE.start(), *SAVE_AFTER_RANGE.end()).into())
     }
 
     /// How often unsaved changes are copied for crash recovery.
@@ -181,7 +181,7 @@ impl SideView {
 
 impl Default for Prefs {
     fn default() -> Self {
-        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), activity: SideView::ALL.iter().map(|v| v.key().to_string()).collect(), side_shown: Some(SideView::Workspaces.key().into()), side_lower: None, side_split: 0.5, disabled_plugins: Vec::new(), removed_plugins: Vec::new(), console_font: None, console_font_size: CONSOLE_FONT_SIZE, console_line_spacing: CONSOLE_LINE_SPACING, new_project_location: None, recent_projects: Vec::new(), check_updates: true, skipped_update: None, snap_to_grid: false, recent_blocks: Vec::new(), favorite_blocks: Vec::new(), shortcuts: Default::default(), last_crash_seen: 0, remote_bots: Vec::new(), window_places: Default::default(), lighter_parts: Default::default(), lighter_auto: true, accessibility: true, settings_save_secs: SETTINGS_SAVE_SECS, recovery_secs: RECOVERY_SECS, undo_steps: UNDO_STEPS }
+        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), activity: SideView::ALL.iter().map(|v| v.key().to_string()).collect(), side_shown: Some(SideView::Workspaces.key().into()), side_lower: None, side_split: 0.5, disabled_plugins: Vec::new(), removed_plugins: Vec::new(), console_font: None, console_font_size: CONSOLE_FONT_SIZE, console_line_spacing: CONSOLE_LINE_SPACING, new_project_location: None, recent_projects: Vec::new(), check_updates: true, skipped_update: None, snap_to_grid: false, recent_blocks: Vec::new(), favorite_blocks: Vec::new(), shortcuts: Default::default(), last_crash_seen: 0, remote_bots: Vec::new(), window_places: Default::default(), lighter_parts: Default::default(), lighter_auto: true, accessibility: true, settings_save_after_secs: SETTINGS_SAVE_AFTER_SECS, recovery_secs: RECOVERY_SECS, undo_steps: UNDO_STEPS }
     }
 }
 
@@ -203,11 +203,13 @@ pub const CONSOLE_FONT_SIZE: f32 = 13.0;
 /// Room between the Console's lines to start with.
 pub const CONSOLE_LINE_SPACING: f32 = 2.0;
 
-/// How often the window's layout and settings are saved, to start with (eframe's own).
-pub const SETTINGS_SAVE_SECS: u32 = 30;
+/// How long after the last change the window's layout and settings are saved, to start with.
+pub const SETTINGS_SAVE_AFTER_SECS: u32 = 5;
+/// The seconds Settings offers for it.
+pub const SAVE_AFTER_RANGE: std::ops::RangeInclusive<u32> = 1..=60;
 /// How often unsaved changes are copied for crash recovery, to start with.
 pub const RECOVERY_SECS: u32 = 30;
-/// The seconds Settings offers for both.
+/// The seconds Settings offers for it.
 pub const SAVE_SECS_RANGE: std::ops::RangeInclusive<u32> = 10..=600;
 /// How many steps each workspace can undo, to start with.
 pub const UNDO_STEPS: usize = 200;
