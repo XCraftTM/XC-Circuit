@@ -483,7 +483,8 @@ fn masked_link(chars: &[char]) -> Option<(String, usize)> {
     let end = chars[close + 2..].iter().position(|c| *c == ')')? + close + 2;
     let url: String = chars[close + 2..end].iter().collect();
     let label: String = chars[1..close].iter().collect();
-    (url.starts_with("http://") || url.starts_with("https://") && !label.is_empty()).then_some((label, end + 1))
+    // A link needs a text to show, with either kind of address.
+    ((url.starts_with("http://") || url.starts_with("https://")) && !label.is_empty()).then_some((label, end + 1))
 }
 
 /// What `<inner>` shows as, and whether it is a chip (mentions, timestamps)
@@ -582,6 +583,18 @@ fn parts(b: &Built) -> Vec<(String, &'static str)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A link is `[text](http…)`: without a text it stays as typed, whether
+    /// its address starts with http:// or https://.
+    #[test]
+    fn a_link_needs_a_text() {
+        let chars = |s: &str| s.chars().collect::<Vec<char>>();
+        assert_eq!(masked_link(&chars("[docs](http://x.example) more")), Some(("docs".into(), 24)));
+        assert_eq!(masked_link(&chars("[docs](https://x.example)")), Some(("docs".into(), 25)));
+        assert_eq!(masked_link(&chars("[](http://x.example)")), None);
+        assert_eq!(masked_link(&chars("[](https://x.example)")), None);
+        assert_eq!(masked_link(&chars("[docs](x.example)")), None);
+    }
 
     fn md(text: &str) -> Vec<(String, &'static str)> {
         parts(&build(text, Kind::Full, 14.0, TEXT, 400.0))
