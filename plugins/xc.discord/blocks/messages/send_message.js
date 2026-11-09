@@ -112,13 +112,13 @@ module.exports = {
     const mode = values.mode || "reply";
     const add = {};
     if (INTERACTION_MODES.includes(mode)) {
-      add.interaction = { type: "discord.interaction", pin: "only", required: true, description: "The command use or button press to answer." };
+      add.interaction = { type: "discord.interaction", pin: "only", required: true, after: "", description: "The command use or button press to answer." };
     } else if (mode === "dm") {
-      add.user = { type: "discord.user", pin: "only", required: true, description: "Who gets the direct message (a member works too)." };
+      add.user = { type: "discord.user", pin: "only", required: true, after: "", description: "Who gets the direct message (a member works too)." };
     } else if (mode === "send") {
-      add.channel = { type: "discord.channel", pin: "only", required: true, description: "Where to send the message." };
+      add.channel = { type: "discord.channel", pin: "only", required: true, after: "", description: "Where to send the message." };
     } else {
-      add.message = { type: "discord.message", pin: "only", required: true, description: "The message to reply to or edit." };
+      add.message = { type: "discord.message", pin: "only", required: true, after: "", description: "The message to reply to or edit." };
     }
     const hide = DEFERS.includes(mode) ? ["text", "embeds", "components", "split", "files"] : [];
     const set = {};
@@ -128,7 +128,7 @@ module.exports = {
     }
     if (!DEFERS.includes(mode) && values.format === "layout") {
       // A Components V2 message has no text or embeds of its own: they are in the layout.
-      add.layout = { type: "discord.layout", pin: "only", required: true, description: "The message from Build Layout." };
+      add.layout = { type: "discord.layout", pin: "only", required: true, after: "", description: "The message from Build Layout." };
       hide.push("text", "embeds", "split", "tts", "noEmbeds");
     }
     return { add, hide, set };

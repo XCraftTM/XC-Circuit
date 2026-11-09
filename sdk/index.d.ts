@@ -14,6 +14,8 @@ export interface FieldDef {
   multi?: boolean;
   /** Used less often: on the block below More options (folded, shown only while in use), in the Inspector under More options. */
   advanced?: boolean;
+  /** For a field define() adds: the key of the field it goes after, or "" for the very top. Without it, it goes last. */
+  after?: string;
   /** Shown only when other fields have these values, e.g. { mode: ["edit", "reply"] }. */
   show?: Record<string, unknown>;
   choices?: Record<string, string | Record<string, string>>;

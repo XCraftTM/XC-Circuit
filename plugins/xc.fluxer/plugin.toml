@@ -1,6 +1,6 @@
 id          = "xc.fluxer"
 name        = "Fluxer Bot"
-version     = "1.2.5"
+version     = "1.2.6"
 author      = "XC Team"
 description = "Blocks, pin types and the build mode for Fluxer bots made with fluxer.js."
 

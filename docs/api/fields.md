@@ -21,7 +21,7 @@ fields: {
 | `label` | text | The name shown. Default: the key, in words (`deleteAfter` → *Delete after*). |
 | `description` | text | Help shown on hover and in the Inspector. |
 | `default` | any | The value of a new block. |
-| `required` | boolean | Empty is a problem (listed in Problems). Required fields come first on the block, above the others (also ones a `define()` adds). |
+| `required` | boolean | Empty is a problem (listed in Problems). |
 | `pin` | `"auto"` · `true` · `false` · `"only"` | `"auto"` (default): filled in on the block, with a pin toggle. `true`: starts as a pin. `false`: never a pin. `"only"`: must be connected (inputs whose pin type has [`fromId`](./pin-types#finding-values-by-id), such as channels, can still be switched to a box for an id). |
 | `multi` | boolean | The pin accepts several wires; the block gets their values as one list. |
 | `advanced` | boolean | An option used less often. On the block it goes below **More options**, folded to start with: folded, it shows only when it's in use (a pin, connected, or set to something other than its default). The Inspector lists it under *More options*; its **pin** chip (also for `pin: "only"` fields) puts its pin on the block. |
@@ -78,7 +78,7 @@ A type fits where its parent type is expected (`discord.member` extends `object`
 
 | Key | Description |
 | --- | --- |
-| `add` | More fields, by key, as field options. |
+| `add` | More fields, by key, as field options. They go after the block's own fields, unless a field says `after`: the key of the field it follows, or `""` for the very top (Send Message puts what it sends to there). |
 | `hide` | Keys of fields to hide. |
 | `set` | Changes to existing fields: `{ text: { label: "Reason", required: true } }`. |
 | `outputs` | Outputs to add or replace, by key: `{ item: { type: "discord.role" } }`. |

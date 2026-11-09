@@ -10,7 +10,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **AI agents can zoom**: the `screenshot` and `show_in_editor` tools take a `zoom` in percent (25 to 200), so an agent can look closer, or see the canvas at the zoom you mention. Plugins get it through `xc.reveal(workspace, block, zoom)`.
 
 ### Changed
-- **What a block needs comes first**: required inputs and options are at the top of a block, above the rest. Send Message's Interaction (when it replies) was at the bottom, where it was easy to miss.
+- **Send Message shows what it sends to first**: its Interaction, Channel, User or Message (and the layout, for Layout messages), which its settings add, came at the very bottom of the block, below every option, where it was easy to miss. They're now at the top. Blocks keep their own order otherwise; a plugin's `define()` can place a field it adds with `after` (a field's key, or `""` for the top).
 
 ### Fixed
 - **The "connect" hint no longer vanishes at some zooms**: zoomed out to around 85%, the grey "connect" next to inputs such as Embeds and Components turned almost black, because making small grey text brighter counted its see-through-ness twice. It keeps its colour now, and gets brighter as meant when zoomed further out.

@@ -54,9 +54,9 @@ module.exports = {
   define({ values }) {
     const mode = values.mode || "reply";
     const add = {};
-    if (mode === "send") add.channel = { type: "fluxer.channel", pin: "only", required: true, description: "Where to send the message." };
-    else if (mode === "dm") add.user = { type: "fluxer.user", pin: "only", required: true, description: "Who gets the direct message (a member works too)." };
-    else add.message = { type: "fluxer.message", pin: "only", required: true, description: mode === "edit" ? "The message to edit (the bot's own)." : "The message to reply to." };
+    if (mode === "send") add.channel = { type: "fluxer.channel", pin: "only", required: true, after: "", description: "Where to send the message." };
+    else if (mode === "dm") add.user = { type: "fluxer.user", pin: "only", required: true, after: "", description: "Who gets the direct message (a member works too)." };
+    else add.message = { type: "fluxer.message", pin: "only", required: true, after: "", description: mode === "edit" ? "The message to edit (the bot's own)." : "The message to reply to." };
     // Fluxer can't add files to a message that was sent.
     return { add, hide: mode === "edit" ? ["files"] : [] };
   },

@@ -453,8 +453,8 @@ fn wire_hit_test() {
 }
 
 /// The options used less often fold away below More options; folded, those
-/// in use (made pins, connected, or set to something) still show. What a
-/// block needs comes first: Send Message's Interaction when it replies.
+/// in use (made pins, connected, or set to something) still show. Send
+/// Message puts what it sends to first (its define() says `after: ""`).
 #[test]
 fn rarely_used_options_fold_and_needed_ones_come_first() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -505,6 +505,10 @@ fn rarely_used_options_fold_and_needed_ones_come_first() {
     let shape = circuit_core::BlockShape::build(def, values.as_object().unwrap(), Some(&define));
     let first = shape.visible_fields().next().map(|(k, _)| k.clone());
     assert_eq!(first.as_deref(), Some("interaction"), "what it needs comes first");
+    // A block's own order stays: Set Channel Permissions' Target comes after
+    // the Who that asks for it, not above it.
+    let perm = rows("discord.set_permissions", serde_json::json!({}), &[], false);
+    assert_eq!(perm[..3], ["channel".to_string(), "who".to_string(), "target".to_string()], "{perm:?}");
 }
 
 /// The glow of a missing required input pulses between faint and full, once every 1.5 seconds.

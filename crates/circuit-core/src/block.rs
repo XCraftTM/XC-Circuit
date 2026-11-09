@@ -1,7 +1,7 @@
 //! Block definitions as loaded from block files, and the effective shape of
 //! one placed block after `show` conditions and `define()` are applied.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use indexmap::IndexMap;
@@ -76,6 +76,10 @@ pub struct FieldDef {
     pub pin: PinMode,
     pub multi: bool,
     pub advanced: bool,
+    /// For a field `define()` adds: where it goes, right after the field
+    /// with this key, or first with `""`. Without it, it goes last.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub after: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub show: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -382,10 +386,33 @@ impl BlockShape {
         let mut hidden = HashSet::new();
 
         if let Some(d) = define {
+            // Where the last field placed after each anchor went, so several
+            // placed after the same one keep their order.
+            let mut placed: HashMap<String, usize> = HashMap::new();
             for (k, f) in &d.add {
                 let mut f = f.clone();
                 f.finish();
-                fields.insert(k.clone(), f);
+                fields.shift_remove(k);
+                let at = match f.after.as_deref() {
+                    Some("") => Some(placed.get("").map_or(0, |i| i + 1)),
+                    Some(anchor) => placed.get(anchor).copied().or_else(|| fields.get_index_of(anchor)).map(|i| i + 1),
+                    None => None,
+                };
+                match at.filter(|&i| i <= fields.len()) {
+                    Some(i) => {
+                        // Fields from here on move down by one.
+                        for v in placed.values_mut() {
+                            if *v >= i {
+                                *v += 1;
+                            }
+                        }
+                        placed.insert(f.after.clone().unwrap_or_default(), i);
+                        fields.shift_insert(i, k.clone(), f);
+                    }
+                    None => {
+                        fields.insert(k.clone(), f);
+                    }
+                }
             }
             for (k, patch) in &d.set {
                 if let Some(field) = fields.get_mut(k) {
@@ -412,13 +439,6 @@ impl BlockShape {
                 hidden.insert(k.clone());
             }
         }
-
-        // What a block needs comes first: required fields (not advanced ones)
-        // above the rest, each keeping its place among its kind. A define()
-        // that adds a required input (Send Message's Interaction) adds it at
-        // the end, where it would be missed.
-        let (needed, rest): (Vec<_>, Vec<_>) = fields.into_iter().partition(|(_, f)| f.required && !f.advanced);
-        fields = needed.into_iter().chain(rest).collect();
 
         // Each name a ${…} in a text field uses (or in any text of a design such
         // as an embed) gets an input right below it, to connect its value,
@@ -552,6 +572,35 @@ pub fn title_case(key: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    /// A block keeps its own order of fields, required or not; a field its
+    /// define() adds goes last, or where its `after` says (first with "").
+    #[test]
+    fn fields_keep_their_order_and_added_ones_go_where_said() {
+        let def: BlockDef = serde_json::from_value(json!({
+            "id": "t.perm", "name": "P", "kind": "action",
+            "fields": {
+                "channel": { "type": "any", "pin": "only", "required": true },
+                "who": { "type": "select", "choices": { "a": "A" } },
+                "target": { "type": "any", "pin": "only", "required": true },
+                "mode": { "type": "select", "choices": { "b": "B" } }
+            }
+        }))
+        .unwrap();
+        let keys = |shape: &BlockShape| shape.fields.iter().map(|(k, _)| k.clone()).collect::<Vec<_>>();
+        assert_eq!(keys(&BlockShape::build(&def, &Map::new(), None)), ["channel", "who", "target", "mode"], "the block's own order");
+        let define: DefineResult = serde_json::from_value(json!({ "add": {
+            "last": { "type": "text" },
+            "top": { "type": "any", "required": true, "after": "" },
+            "layout": { "type": "any", "required": true, "after": "" },
+            "near": { "type": "text", "after": "who" },
+            "nearer": { "type": "text", "after": "who" },
+            "lost": { "type": "text", "after": "nothing" }
+        } }))
+        .unwrap();
+        let shape = BlockShape::build(&def, &Map::new(), Some(&define));
+        assert_eq!(keys(&shape), ["top", "layout", "channel", "who", "near", "nearer", "target", "mode", "last", "lost"]);
+    }
 
     #[test]
     fn known_names_need_no_input() {
