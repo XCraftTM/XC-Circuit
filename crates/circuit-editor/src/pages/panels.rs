@@ -197,8 +197,8 @@ fn inspector_body(ui: &mut Ui, ed: &mut Editor, ask: &mut Option<InspectorAsk>) 
         ui.separator();
         padded(ui, |ui| {
             ui.horizontal(|ui| {
-                if crate::ui::kit::button(ui, &theme, t!("Block source")).clicked() {
-                    let _ = open::that(&def.source);
+                if crate::ui::kit::button(ui, &theme, t!("Block source")).on_hover_text(t!("Shows the block's file in its folder")).clicked() {
+                    crate::editor::show_in_folder(&def.source);
                 }
                 if let Some(docs) = &def.docs
                     && crate::ui::kit::button(ui, &theme, t!("Docs")).clicked()

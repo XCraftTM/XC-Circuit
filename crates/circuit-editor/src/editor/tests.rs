@@ -395,3 +395,11 @@ fn one_slow_define_doesnt_stop_its_kind() {
     assert!(ed.shapes.take_reports().is_empty(), "never stopped {} times in a row", shapes::STOPPED_TIMES);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Block source shows a block's file in its folder: Explorer gets the path
+/// with backslashes, after its switch for selecting a file.
+#[test]
+fn a_file_is_shown_in_its_folder_not_opened() {
+    let args = explorer_args(std::path::Path::new("C:/Apps/XC Circuit/plugins/xc.core/blocks/log.js"));
+    assert_eq!(args, ["/select,", r"C:\Apps\XC Circuit\plugins\xc.core\blocks\log.js"]);
+}

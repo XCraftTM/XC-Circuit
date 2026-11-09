@@ -1119,6 +1119,7 @@ pub const UI_STRINGS: &[&str] = &[
     "More options",
     "OUTPUTS",
     "Block source",
+    "Shows the block's file in its folder",
     "Docs",
     "Info",
     "Done",

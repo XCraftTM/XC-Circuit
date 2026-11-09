@@ -1739,7 +1739,7 @@ Blocks run in your bot, which is a normal Node.js program. A block can read file
 | More options | Options used less often are folded below **More options** at the bottom of its fields (click it to open or fold them; each block remembers). Folded, an option in use (connected, a pin, or set to something) still shows. The Inspector lists them under More options |
 | Accessibility | Settings › Window › Accessibility (on to start with) lets screen readers and the touch keyboard see what's in the window. If XC Circuit stops answering while a program that reads windows runs, try turning it off; freezes.log says whether it was on |
 | Select several | Shift-drag a box on empty canvas, or Ctrl+click blocks; Ctrl+A selects all |
-| Block actions | Select a block: Duplicate, Try Zone, Note and Delete are buttons above it (Delete key works too), in two rows when the block is narrow. The block's source file opens from the Inspector (Block source) |
+| Block actions | Select a block: Duplicate, Try Zone, Note and Delete are buttons above it (Delete key works too), in two rows when the block is narrow. The Inspector's Block source shows the block's source file in its folder |
 | Remove a wire | Click it, then its Delete wire button (or press Delete); or drag it off its input and drop it on empty canvas |
 | Zoom | The canvas toolbar: − / + , the percentage goes back to 100%, the corners button shows every block; or the mouse wheel |
 | Undo / Redo | Ctrl+Z / Ctrl+Y (per workspace). Each workspace keeps 200 steps; Settings › Editor › Undo steps changes that (every step is a copy of the workspace, so fewer use less memory on big projects) |

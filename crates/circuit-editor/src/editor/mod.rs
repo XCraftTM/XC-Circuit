@@ -923,6 +923,23 @@ pub fn file_uri(path: &Path) -> String {
     if p.starts_with('/') { format!("file://{p}") } else { format!("file:///{p}") }
 }
 
+/// Shows a file in the computer's file manager: selected in its folder on
+/// Windows, its folder elsewhere. The file itself is never opened: Windows
+/// would run a block's `.js` file with its script host, and takes `.ts` for
+/// a video.
+pub fn show_in_folder(path: &Path) {
+    if cfg!(windows) && std::process::Command::new("explorer").args(explorer_args(path)).spawn().is_ok() {
+        return;
+    }
+    let _ = open::that(path.parent().unwrap_or(path));
+}
+
+/// Explorer's arguments for a file's folder with the file selected. It
+/// wants the path with backslashes.
+fn explorer_args(path: &Path) -> [String; 2] {
+    ["/select,".to_string(), path.to_string_lossy().replace('/', "\\")]
+}
+
 fn clock() -> String {
     chrono::Local::now().format("%H:%M:%S").to_string()
 }
