@@ -1693,6 +1693,8 @@ A bot token is a password: whoever has it controls the bot. XC™ Circuit keeps 
 
 The project folder never contains them, so you can put a project in Git, share it or send it to someone for help without leaking the token. In Bot › Settings the eye button shows what you're typing, and Copy copies the saved token without showing it.
 
+While the bot runs from the editor, the Console hides its secrets: if the bot prints its token or a saved login (a Log block with `${process.env…}` would), `[hidden secret]` shows instead, also in a block's values on a wire and in errors. That keeps them out of screenshots and screen shares, and away from plugins' scripts and AI agents that read the Console. It doesn't make secrets unreachable for the bot's own code: blocks need the token, and code you run in your bot can use it.
+
 An exported bot reads its token from `.env`. Export only includes the token there when you ask it to, and its `.gitignore` keeps `.env` out of Git.
 
 The passwords and API keys for uploading the bot to its server (Bot › Server…) are kept in the credential store too. An upload sends the token in `.env` only while **Send the bot token** is on; over FTP, keep **Encrypted (FTPS)** on, as plain FTP sends it unencrypted. They, and the token, only go to the server you saved in Bot › Server… on this computer, not to one that came with a project's files. See [Putting your bot on a server](./hosting).

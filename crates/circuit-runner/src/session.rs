@@ -67,6 +67,14 @@ impl Session {
                 wake();
             };
             let stopping = || *s.lock().unwrap_or_else(|e| e.into_inner());
+            // What the bot is given as secrets, to take out of what it says
+            // (see `BotEvent::hide`): each as a whole and line by line, the
+            // longest first.
+            let mut secrets: Vec<String> = cfg.env.iter().filter(|(name, _)| name.starts_with("XC_SECRET_")).flat_map(|(_, value)| std::iter::once(value.as_str()).chain(value.lines())).map(|v| v.trim().to_string()).collect();
+            secrets.retain(|v| v.len() >= crate::protocol::SECRET_MIN);
+            secrets.sort_by_key(|v| std::cmp::Reverse(v.len()));
+            secrets.dedup();
+            let secrets = Arc::new(secrets);
             match prepare_and_spawn(&cfg, &send, &stopping) {
                 Ok(mut proc) => {
                     if *s.lock().unwrap() {
@@ -84,9 +92,12 @@ impl Session {
                         .map(|stream| {
                             let tx = tx.clone();
                             let wake = wake.clone();
+                            let secrets = secrets.clone();
                             thread::spawn(move || {
                                 for line in lines_lossy(stream) {
-                                    let _ = tx.send(Msg::Bot(parse_line(&line)));
+                                    let mut event = parse_line(&line);
+                                    event.hide(&secrets);
+                                    let _ = tx.send(Msg::Bot(event));
                                     wake();
                                 }
                             })
@@ -230,6 +241,53 @@ mod tests {
             thread::sleep(Duration::from_millis(50));
         }
         panic!("never saw {want:?}; got:\n{}", seen.join("\n"));
+    }
+
+    /// A bot made to print its token doesn't show it: the Console (and so
+    /// plugins and AI agents) gets "[hidden secret]" in its place.
+    #[test]
+    fn a_bot_printing_its_token_does_not_show_it() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let engine = BlockEngine::new().unwrap();
+        let reg = Registry::load(&[root.join("plugins")], &engine);
+        let dir = std::env::temp_dir().join(format!("xc-hide-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let mut project = Project::create(&dir, "Hide Test", "none").unwrap();
+        let ws: Workspace = serde_json::from_value(serde_json::json!({
+            "name": "Main",
+            "nodes": {
+                "1": { "block": "core.on_start@1", "at": [0, 0] },
+                "2": { "block": "core.log@1", "at": [0, 0], "values": { "message": "token: ${process.env.XC_SECRET_TOKEN} end", "level": "info" } }
+            },
+            "links": ["1.next > 2.in"]
+        }))
+        .unwrap();
+        project.workspaces.insert("main".into(), ws);
+        let bundle = build_bundle(&project, &reg, None).unwrap();
+        let token = "MTIzNDU2Nzg5MDEy.GhIjKl.mnopqrstuvwxyz0123456789";
+        let session = Session::start(
+            SessionConfig { bundle: bundle.value, dependencies: bundle.dependencies, packages_dir: dir.join("packages"), run_dir: dir.join(".circuit/run"), data_dir: dir.join(".circuit/data"), env: vec![("XC_SECRET_TOKEN".into(), token.into())] },
+            || {},
+        );
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut seen = Vec::new();
+        while Instant::now() < deadline {
+            for m in session.poll() {
+                let said = format!("{m:?}");
+                assert!(!said.contains(token), "the token shows: {said}");
+                if let Msg::Bot(BotEvent::Log { text, .. }) = &m
+                    && text.starts_with("token:")
+                {
+                    assert_eq!(text, "token: [hidden secret] end");
+                    session.stop();
+                    let _ = fs::remove_dir_all(&dir);
+                    return;
+                }
+                seen.push(said);
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        panic!("never saw the log line; got:\n{}", seen.join("\n"));
     }
 
     /// Stopping the bot lets it write its saved data first: a value stored just
