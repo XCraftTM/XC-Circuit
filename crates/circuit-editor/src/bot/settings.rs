@@ -339,6 +339,15 @@ pub(super) fn app_id_from_token(token: &str) -> Option<String> {
     (id.len() >= 15 && id.bytes().all(|b| b.is_ascii_digit())).then_some(id)
 }
 
+/// Every secret the project may have saved: read when it opens, so the
+/// window never waits on the credential store for them.
+pub fn secret_names(ed: &Editor) -> Vec<String> {
+    let mut names: Vec<String> = secret_keys(ed).into_iter().map(|(key, _)| key).collect();
+    names.extend(["token", circuit_runner::hosting::PASSWORD, circuit_runner::hosting::API_KEY].map(String::from));
+    names.dedup();
+    names
+}
+
 /// The secrets of the project's build mode, plugins and databases, with
 /// what to call them: they go to the bot as `XC_SECRET_<KEY>`.
 pub(super) fn secret_keys(ed: &Editor) -> Vec<(String, String)> {

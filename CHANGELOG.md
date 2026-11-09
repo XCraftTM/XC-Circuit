@@ -6,6 +6,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 
 ### Fixed
 - **Saving no longer freezes the window**: saving, the backup made with each save and the crash recovery copy (every 30 seconds while there are unsaved changes) were written while the window waited. On a slow or busy disk, or with a virus scanner checking each new file, that could make Windows say "Not Responding". They're now written in the background: the status bar says "Saving…" until the files are written, and if saving fails, the project shows as unsaved again.
+- **No more waiting on the credential store**: the bot token and other secrets were read from Windows Credential Manager (or the Linux keyring) while the window waited, when opening a project, Bot › Settings, Export, the Databases page, and on every Run. That's usually quick, but can take seconds. They're now read in the background when a project opens and kept in memory while it's open, so these open at once.
 
 ## 0.2.6
 

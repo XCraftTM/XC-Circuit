@@ -330,6 +330,10 @@ impl Editor {
                 self.refresh_define_ctx();
                 self.upgrade_blocks();
                 self.upgrade_texts();
+                // Its secrets, read in the background.
+                if let Some(p) = &self.project {
+                    circuit_runner::secrets::prefetch(&p.root, crate::bot::secret_names(self));
+                }
                 self.fetch_bot_profile();
                 if let Some(first) = first {
                     self.actions.push(Action::OpenWorkspace(first));

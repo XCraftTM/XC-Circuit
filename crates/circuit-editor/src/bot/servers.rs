@@ -87,7 +87,8 @@ pub struct Servers {
     pub error: Option<String>,
     /// The project has no saved bot token (or isn't a Discord bot).
     pub no_token: bool,
-    pending: Option<Receiver<Result<Vec<Server>, String>>>,
+    /// `Ok(None)`: no token is saved.
+    pending: Option<Receiver<Result<Option<Vec<Server>>, String>>>,
 }
 
 impl Servers {
@@ -95,17 +96,22 @@ impl Servers {
     pub fn fetch(&mut self, root: &Path, mode: &str) {
         self.pending = None;
         self.error = None;
-        let token = if mode.contains("discord") { circuit_runner::secrets::get(root, "token") } else { None };
-        let Some(token) = token else {
+        if !mode.contains("discord") {
             self.shown = None;
             self.no_token = true;
             return;
-        };
+        }
         self.no_token = false;
         let (tx, rx) = channel();
         self.pending = Some(rx);
+        let root = root.to_path_buf();
+        // The token too is read there: the credential store can be slow.
         std::thread::spawn(move || {
-            let _ = tx.send(load(&token).map_err(|e| format!("{e:#}")));
+            let servers = match circuit_runner::secrets::get(&root, "token") {
+                Some(token) => load(&token).map(Some).map_err(|e| format!("{e:#}")),
+                None => Ok(None),
+            };
+            let _ = tx.send(servers);
         });
     }
 
@@ -114,9 +120,13 @@ impl Servers {
         let Some(result) = self.pending.as_ref().and_then(|p| p.try_recv().ok()) else { return false };
         self.pending = None;
         match result {
-            Ok(list) => {
+            Ok(Some(list)) => {
                 self.shown = Some(Arc::new(list));
                 self.error = None;
+            }
+            Ok(None) => {
+                self.shown = None;
+                self.no_token = true;
             }
             Err(e) => self.error = Some(e),
         }

@@ -22,7 +22,8 @@ pub struct BotProfile {
 #[derive(Default)]
 pub struct Profile {
     pub shown: Option<BotProfile>,
-    pending: Option<Receiver<Result<BotProfile, String>>>,
+    /// `Ok(None)`: no token is saved.
+    pending: Option<Receiver<Result<Option<BotProfile>, String>>>,
 }
 
 impl Profile {
@@ -35,14 +36,16 @@ impl Profile {
             self.shown = None;
             return;
         }
-        let Some(token) = circuit_runner::secrets::get(root, "token") else {
-            self.shown = None;
-            return;
-        };
         let (tx, rx) = channel();
         self.pending = Some(rx);
+        let root = root.to_path_buf();
+        // The token too is read there: the credential store can be slow.
         std::thread::spawn(move || {
-            let _ = tx.send(load(&token).map_err(|e| format!("{e:#}")));
+            let profile = match circuit_runner::secrets::get(&root, "token") {
+                Some(token) => load(&token).map(Some).map_err(|e| format!("{e:#}")),
+                None => Ok(None),
+            };
+            let _ = tx.send(profile);
         });
     }
 
@@ -50,7 +53,7 @@ impl Profile {
     pub fn poll(&mut self) -> Option<Result<(), String>> {
         let result = self.pending.as_ref()?.try_recv().ok()?;
         self.pending = None;
-        Some(result.map(|p| self.shown = Some(p)))
+        Some(result.map(|p| self.shown = p))
     }
 
     pub fn busy(&self) -> bool {

@@ -7,7 +7,7 @@ pub mod hosting;
 pub mod remote;
 mod settings;
 
-pub use settings::SettingsDraft;
+pub use settings::{SettingsDraft, secret_names};
 
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, channel};
