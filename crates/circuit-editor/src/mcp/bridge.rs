@@ -4,9 +4,9 @@
 //! the app's data folder ([`super::info_file`]). Requests wait in a queue
 //! the app answers between frames, with the plugins' tools.
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::Arc;
@@ -17,6 +17,15 @@ use serde_json::{Value, json};
 
 /// How long an agent's request may wait for the app.
 const ANSWER_WITHIN: Duration = Duration::from_secs(60);
+/// How long a new connection has to say its token. Any program on this
+/// computer can connect; one that then says nothing is let go.
+const HELLO_WITHIN: Duration = Duration::from_secs(5);
+/// The longest line taken: the token's, and a request's (a whole workspace
+/// or a long script fits many times over).
+const HELLO_MAX: usize = 4 * 1024;
+const REQUEST_MAX: usize = 16 * 1024 * 1024;
+/// Connections at once, with or without a token; more are turned away.
+const CONNECTIONS_MAX: usize = 32;
 
 /// A request from an agent, waiting for the app's answer.
 pub struct Pending {
@@ -48,22 +57,35 @@ impl Bridge {
         let listener = TcpListener::bind(("127.0.0.1", 0))?;
         listener.set_nonblocking(true)?;
         let port = listener.local_addr()?.port();
-        let token = new_token();
+        // 256 bits from the system's own generator.
+        let token = circuit_runner::hosting::random_hex(32).map_err(std::io::Error::other)?;
         let file = super::info_file();
         if let Some(dir) = file.parent() {
             std::fs::create_dir_all(dir)?;
         }
-        std::fs::write(&file, json!({ "port": port, "token": token, "pid": std::process::id() }).to_string())?;
+        write_private(&file, &json!({ "port": port, "token": token, "pid": std::process::id() }).to_string())?;
         let (tx, rx) = channel();
         let stop = Arc::new(AtomicBool::new(false));
         let agents = Arc::new(AtomicUsize::new(0));
         let (stop2, agents2, token2) = (stop.clone(), agents.clone(), token.clone());
+        // Connections open now, also the ones that haven't said their token.
+        let open = Arc::new(AtomicUsize::new(0));
         std::thread::Builder::new().name("mcp-bridge".into()).spawn(move || {
             while !stop2.load(Ordering::Relaxed) {
                 match listener.accept() {
+                    // Too many at once: closed again, as each has a thread of its own.
+                    Ok(_) if open.load(Ordering::Relaxed) >= CONNECTIONS_MAX => {}
                     Ok((stream, _)) => {
-                        let (tx, stop, agents, token, ctx) = (tx.clone(), stop2.clone(), agents2.clone(), token2.clone(), ctx.clone());
-                        let _ = std::thread::Builder::new().name("mcp-agent".into()).spawn(move || serve(stream, &token, &tx, &stop, &agents, &ctx));
+                        let (tx, stop, agents, token, ctx, open) = (tx.clone(), stop2.clone(), agents2.clone(), token2.clone(), ctx.clone(), open.clone());
+                        open.fetch_add(1, Ordering::Relaxed);
+                        let closed = open.clone();
+                        let started = std::thread::Builder::new().name("mcp-agent".into()).spawn(move || {
+                            serve(stream, &token, &tx, &stop, &agents, &ctx, HELLO_WITHIN);
+                            open.fetch_sub(1, Ordering::Relaxed);
+                        });
+                        if started.is_err() {
+                            closed.fetch_sub(1, Ordering::Relaxed);
+                        }
                     }
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => std::thread::sleep(Duration::from_millis(100)),
                     Err(_) => std::thread::sleep(Duration::from_millis(500)),
@@ -95,23 +117,26 @@ impl Drop for Bridge {
     }
 }
 
-/// One agent's connection: its token first, then a request per line.
-fn serve(stream: TcpStream, token: &str, tx: &Sender<Pending>, stop: &AtomicBool, agents: &AtomicUsize, ctx: &egui::Context) {
+/// One agent's connection: its token first (within `hello_within`), then a
+/// request per line.
+fn serve(stream: TcpStream, token: &str, tx: &Sender<Pending>, stop: &AtomicBool, agents: &AtomicUsize, ctx: &egui::Context, hello_within: Duration) {
     let _ = stream.set_nonblocking(false);
+    let _ = stream.set_read_timeout(Some(hello_within));
     let Ok(mut out) = stream.try_clone() else { return };
-    let mut lines = BufReader::new(stream).lines();
-    let hello: Option<Value> = lines.next().and_then(Result::ok).and_then(|l| serde_json::from_str(&l).ok());
-    if hello.as_ref().and_then(|h| h["token"].as_str()) != Some(token) {
+    let mut reader = BufReader::new(stream);
+    let hello: Option<Value> = read_line(&mut reader, HELLO_MAX).and_then(|l| serde_json::from_str(&l).ok());
+    if !hello.as_ref().and_then(|h| h["token"].as_str()).is_some_and(|given| same(given, token)) {
         let _ = writeln!(out, "{}", json!({ "error": "wrong token" }));
         return;
     }
     if writeln!(out, "{}", json!({ "ok": true, "version": env!("CARGO_PKG_VERSION") })).is_err() {
         return;
     }
+    // An agent may say nothing for hours between its requests.
+    let _ = reader.get_ref().set_read_timeout(None);
     agents.fetch_add(1, Ordering::Relaxed);
     ctx.request_repaint();
-    for line in lines {
-        let Ok(line) = line else { break };
+    while let Some(line) = read_line(&mut reader, REQUEST_MAX) {
         if stop.load(Ordering::Relaxed) {
             break;
         }
@@ -150,22 +175,132 @@ fn waiting(rx: &Receiver<Pending>) -> Vec<Pending> {
     rx.try_iter().filter(|p| !p.given_up.load(Ordering::Relaxed)).collect()
 }
 
-/// A secret for the connection: 128 random bits as hex.
-fn new_token() -> String {
-    use std::hash::{BuildHasher, Hasher};
-    let part = |salt: u64| {
-        // RandomState is seeded from the system's randomness.
-        let mut h = std::collections::hash_map::RandomState::new().build_hasher();
-        h.write_u64(salt);
-        h.write_u128(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos());
-        h.finish()
-    };
-    format!("{:016x}{:016x}", part(1), part(2))
+/// The next line, without its end. None at the end, on an error (the wait
+/// for the token running out is one), and for a line longer than `max`
+/// bytes: what follows such a line can't be told from its rest, so the
+/// connection ends there.
+fn read_line(reader: &mut impl BufRead, max: usize) -> Option<String> {
+    let mut line = Vec::new();
+    let read = reader.by_ref().take(max as u64 + 1).read_until(b'\n', &mut line).ok()?;
+    let whole = line.last() == Some(&b'\n');
+    if read == 0 || (!whole && line.len() > max) {
+        return None;
+    }
+    while matches!(line.last(), Some(b'\n' | b'\r')) {
+        line.pop();
+    }
+    String::from_utf8(line).ok()
+}
+
+/// Whether two secrets are the same, taking as long whichever byte differs.
+fn same(given: &str, secret: &str) -> bool {
+    given.len() == secret.len() && given.bytes().zip(secret.bytes()).fold(0, |differ, (a, b)| differ | (a ^ b)) == 0
+}
+
+/// Writes a file that only this user may read: it holds the token. (On
+/// Windows the app's data folder is the user's own already.)
+fn write_private(path: &Path, text: &str) -> std::io::Result<()> {
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        options.mode(0o600);
+        // A file left by an earlier version keeps the rights it was made
+        // with: they're changed before the new token goes in.
+        if path.exists() {
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+        }
+    }
+    options.open(path)?.write_all(text.as_bytes())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Only who says the token in time gets in: a connection that says
+    /// nothing, the wrong token or an endless line is let go.
+    #[test]
+    fn only_the_token_gets_a_connection_in() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (tx, rx) = channel();
+        let agents = Arc::new(AtomicUsize::new(0));
+        let counted = agents.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let (tx, agents) = (tx.clone(), counted.clone());
+                std::thread::spawn(move || serve(stream, "right-token", &tx, &AtomicBool::new(false), &agents, &egui::Context::default(), Duration::from_millis(300)));
+            }
+        });
+        // What the app's side answers to a first line (None: it closed without a word).
+        let said = |first: Option<&[u8]>| -> Option<Value> {
+            let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
+            stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+            if let Some(first) = first {
+                // It may close while a long line is still being sent.
+                let _ = stream.write_all(first);
+            }
+            let mut answer = String::new();
+            let _ = BufReader::new(stream).read_line(&mut answer);
+            serde_json::from_str(&answer).ok()
+        };
+        let started = std::time::Instant::now();
+        assert_eq!(said(None).unwrap()["error"], "wrong token", "saying nothing ends it after a moment");
+        assert!(started.elapsed() < Duration::from_secs(5), "it didn't wait for good");
+        assert_eq!(said(Some(b"{\"token\":\"wrong-token\"}\n")).unwrap()["error"], "wrong token");
+        assert_eq!(said(Some(b"GET / HTTP/1.1\r\n")).unwrap()["error"], "wrong token", "a browser's request isn't one");
+        let endless = vec![b'x'; HELLO_MAX * 4];
+        assert!(said(Some(&endless)).is_none_or(|v| v["error"] == "wrong token"), "a line without an end is cut off");
+        assert_eq!(agents.load(Ordering::Relaxed), 0, "none of them counts as an agent");
+
+        // The right token: in, and its requests reach the app.
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        stream.write_all(b"{\"token\":\"right-token\"}\n{\"op\":\"list\"}\n").unwrap();
+        let mut reader = BufReader::new(stream.try_clone().unwrap());
+        let mut hello = String::new();
+        reader.read_line(&mut hello).unwrap();
+        assert_eq!(serde_json::from_str::<Value>(&hello).unwrap()["ok"], true);
+        let pending = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+        assert_eq!(pending.request["op"], "list");
+        pending.answer(json!({ "tools": [] }));
+        let mut answer = String::new();
+        reader.read_line(&mut answer).unwrap();
+        assert_eq!(serde_json::from_str::<Value>(&answer).unwrap(), json!({ "tools": [] }));
+        assert_eq!(agents.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn lines_have_a_longest_length_and_tokens_are_compared_whole() {
+        let mut text: &[u8] = b"one\r\ntwo\n12345\nrest";
+        assert_eq!(read_line(&mut text, 5).as_deref(), Some("one"));
+        assert_eq!(read_line(&mut text, 5).as_deref(), Some("two"));
+        assert_eq!(read_line(&mut text, 5).as_deref(), Some("12345"), "as long as allowed");
+        assert_eq!(read_line(&mut text, 5).as_deref(), Some("rest"), "the last line needs no end");
+        assert_eq!(read_line(&mut text, 5), None);
+        assert_eq!(read_line(&mut &b"123456\nnext\n"[..], 5), None, "too long");
+        assert!(same("abc123", "abc123"));
+        assert!(!same("abc124", "abc123") && !same("abc12", "abc123") && !same("", "abc123"));
+    }
+
+    /// The file with the token is for this user's eyes only, also one that
+    /// was there before with other rights.
+    #[cfg(unix)]
+    #[test]
+    fn the_token_file_is_private() {
+        use std::os::unix::fs::PermissionsExt;
+        let file = std::env::temp_dir().join(format!("xc-mcp-private-{}.json", std::process::id()));
+        std::fs::write(&file, "old").unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644)).unwrap();
+        write_private(&file, "{}").unwrap();
+        assert_eq!(std::fs::metadata(&file).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "{}");
+        std::fs::remove_file(&file).unwrap();
+        write_private(&file, "{}").unwrap();
+        assert_eq!(std::fs::metadata(&file).unwrap().permissions().mode() & 0o777, 0o600);
+        let _ = std::fs::remove_file(&file);
+    }
 
     /// A request the app answers in time gets its answer; one it didn't get
     /// to (a dialog was open) is told so and is not done later.

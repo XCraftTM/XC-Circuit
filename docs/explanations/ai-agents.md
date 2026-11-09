@@ -57,7 +57,7 @@ Every tool the agent uses is written to the **Console** as an **MCP** line ("AI 
 
 ## How it works
 
-The AI client starts `xc-circuit --mcp`, which speaks MCP over its input and output. It passes the agent's requests to the running app through a connection on your computer only (`127.0.0.1`, with a secret written to XC Circuit's data folder). The app answers them with the plugins' tools: plugins can add their own with [`xc.tool`](/api/editor#xc-tool).
+The AI client starts `xc-circuit --mcp`, which speaks MCP over its input and output. It passes the agent's requests to the running app through a connection on your computer only (`127.0.0.1`, with a secret written to XC Circuit's data folder, in a file only you can read). A program that connects without the secret is let go. The app answers them with the plugins' tools: plugins can add their own with [`xc.tool`](/api/editor#xc-tool).
 
 ## Turn it off
 

@@ -263,7 +263,7 @@ pub fn sign_in(panel: &str, name: &str) -> Result<SignIn> {
     let listener = TcpListener::bind("127.0.0.1:0").context("couldn't wait for the panel's answer on this computer")?;
     listener.set_nonblocking(true)?;
     let port = listener.local_addr()?.port();
-    let state = random_hex(16)?;
+    let state = super::random_hex(16)?;
     let callback = format!("http://127.0.0.1:{port}/?state={state}");
     let url = format!(
         "{}/account/api-keys/create?name={}&user_permissions=servers.read&server_permissions={}&callback_url={}",
@@ -320,7 +320,7 @@ fn answer(mut stream: TcpStream, state: &str) -> Option<String> {
 /// again, or for a second bot, would be refused). At most 31 characters,
 /// Calagopus's limit.
 pub fn key_name(bot: &str) -> String {
-    key_name_with(bot, &random_hex(2).unwrap_or_else(|_| "0000".into()))
+    key_name_with(bot, &super::random_hex(2).unwrap_or_else(|_| "0000".into()))
 }
 
 const KEY_NAME_MAX: usize = 31;
@@ -341,12 +341,6 @@ fn key_name_with(bot: &str, tag: &str) -> String {
     let room = KEY_NAME_MAX - "XCC · ".chars().count() - end.chars().count();
     let short: String = bot.chars().take(room).collect();
     format!("XCC · {}{end}", short.trim_end())
-}
-
-fn random_hex(bytes: usize) -> Result<String> {
-    let mut buf = vec![0u8; bytes];
-    rustls::crypto::ring::default_provider().secure_random.fill(&mut buf).map_err(|_| anyhow!("no random numbers"))?;
-    Ok(super::hex(&buf))
 }
 
 /// Something from a server's live console.

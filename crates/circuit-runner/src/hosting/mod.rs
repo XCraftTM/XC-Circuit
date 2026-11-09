@@ -258,6 +258,15 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// `bytes` random bytes from the system's own generator, as hex: for secrets
+/// that must not be guessed (a sign-in's `state`, the token AI clients'
+/// connections show).
+pub fn random_hex(bytes: usize) -> Result<String> {
+    let mut buf = vec![0u8; bytes];
+    rustls::crypto::ring::default_provider().secure_random.fill(&mut buf).map_err(|_| anyhow::anyhow!("no random numbers"))?;
+    Ok(hex(&buf))
+}
+
 fn size(bytes: usize) -> String {
     match bytes {
         0..1024 => format!("{bytes} B"),
