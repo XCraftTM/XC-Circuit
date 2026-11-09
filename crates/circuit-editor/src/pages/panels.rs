@@ -363,8 +363,11 @@ pub fn console(ui: &mut Ui, ed: &mut Editor) {
 fn wrap_columns(text: &str, cols: usize) -> Vec<&str> {
     let mut out = Vec::new();
     let mut rest = text;
-    while rest.chars().count() > cols {
-        let cut = rest.char_indices().nth(cols).map_or(rest.len(), |(i, _)| i);
+    // Where the character after `cols` of them starts, while there is one:
+    // found from the start of what's left, not by counting all of it each
+    // time (a line of a million characters took a tenth of a second, in
+    // every frame the Console was drawn).
+    while let Some((cut, _)) = rest.char_indices().nth(cols) {
         let at = rest[..cut].rfind(' ').filter(|&i| i > 0).map_or(cut, |i| i + 1);
         out.push(&rest[..at]);
         rest = &rest[at..];
@@ -549,6 +552,15 @@ mod tests {
         assert_eq!(wrap_columns("short", 12), ["short"]);
         assert_eq!(wrap_columns("C:/Users/Admin/AppData/Local", 10), ["C:/Users/A", "dmin/AppDa", "ta/Local"], "a long word is cut");
         assert_eq!(wrap_columns("äöü äöü äöü", 5), ["äöü ", "äöü ", "äöü"], "by characters, not bytes");
+        assert_eq!(wrap_columns("12345", 5), ["12345"], "just fits");
+        assert_eq!(wrap_columns("", 5), [""]);
+        // A very long line in time that grows with its length.
+        let long = "{\"id\":\"123456789012345678\"},".repeat(100_000);
+        let start = std::time::Instant::now();
+        let rows = wrap_columns(&long, 100);
+        assert_eq!(rows.concat(), long);
+        assert!(rows.iter().all(|r| r.chars().count() <= 100));
+        assert!(start.elapsed() < std::time::Duration::from_secs(2), "{:?}", start.elapsed());
     }
     use circuit_core::{Node, Workspace};
 
