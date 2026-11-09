@@ -53,7 +53,9 @@ Embeds, layouts and canvases are what Build Embed, Build Layout and Build Canvas
 
 `run_script` lets an agent build a whole flow in one step instead of a call per block. It runs in the same sandbox as plugins: no files, no network, at most 5 seconds.
 
-Every tool the agent uses is written to the **Console** as an **MCP** line ("AI agent: add_block · workspace main, type "core.log""), with the reason when it failed and **Show block** when it's about one. The **MCP** chip above the Console shows only those. Every change shows in the editor right away and can be undone with **Ctrl+Z**, like your own. The agent never sees the bot's token.
+Every tool the agent uses is written to the **Console** as an **MCP** line ("AI agent: add_block · workspace main, type "core.log""), with the reason when it failed and **Show block** when it's about one. The **MCP** chip above the Console shows only those. Every change shows in the editor right away and can be undone with **Ctrl+Z**, like your own.
+
+**The token.** No tool gives an agent the bot's token or another secret, agents can't change where the bot is uploaded to, and when the bot prints a secret, the Console (which the agent can read) shows `[hidden secret]` instead. An agent does build and run your bot, though, and a running bot has its token, as it must: let agents you trust work on bots whose tokens matter.
 
 ## How it works
 

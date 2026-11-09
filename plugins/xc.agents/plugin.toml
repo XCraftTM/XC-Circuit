@@ -1,6 +1,6 @@
 id          = "xc.agents"
 name        = "AI agents (MCP)"
-version     = "1.0.11"
+version     = "1.0.12"
 author      = "XC Team"
 description = "Lets AI agents such as Claude work on your project through XC Circuit's MCP server: read workspaces and blocks (and every block type, with its code), add, change and connect blocks, see problems, the Console, the plugins, the app's and bot's settings and the bot's server, and start or stop the bot (here or on its server). Its panel adds the server to Claude Desktop, Claude Code, Cursor or VS Code. Comes with the app; turn it off or remove it under Plugins."
 # Comes with the app, but can be turned off and removed.

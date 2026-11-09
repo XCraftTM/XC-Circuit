@@ -1077,6 +1077,9 @@ mod tests {
         assert_eq!((server["kind"].as_str(), server["runTarget"].as_str(), server["canRunThere"].as_bool()), (Some("none"), Some("local"), Some(false)), "{server}");
         assert!(call(&mut ed, "server_action", serde_json::json!({ "action": "start" })).is_err());
         assert!(call(&mut ed, "set_run_target", serde_json::json!({ "target": "server" })).is_err());
+        // Adding XC Circuit to AI clients is the plugin's own business, not an agent's.
+        let seen = call(&mut ed, "run_script", serde_json::json!({ "code": "return [typeof xc.agents, typeof xc.workspace, typeof globalThis.__host]" })).unwrap();
+        assert_eq!(seen["result"], serde_json::json!(["undefined", "function", "undefined"]), "{seen}");
         // Where the bot and its token go is the user's to say: a script can't set it.
         let err = call(&mut ed, "run_script", serde_json::json!({ "code": "xc.data.set('hosting', { kind: 'ftp', host: 'elsewhere.example.com', user: 'bot' })" })).unwrap_err();
         assert!(err.contains("Bot › Server"), "{err}");

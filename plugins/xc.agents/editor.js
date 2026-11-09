@@ -615,6 +615,10 @@ xc.tool({
     const output = [];
     const print = (...parts) => output.push(parts.map((p) => (typeof p === "string" ? p : JSON.stringify(p))).join(" "));
     const tools = Object.freeze(Object.fromEntries(Object.entries(runs).map(([name, run]) => [name, (args) => run(args || {})])));
+    // The plugin API without what is this plugin's own business: adding
+    // XC Circuit to (or taking it out of) AI clients' settings.
+    const { agents: _own, ...rest } = xc;
+    const api = Object.freeze(rest);
     let fn;
     try {
       fn = new Function("xc", "tools", "print", `"use strict";\n${code}`);
@@ -622,7 +626,7 @@ xc.tool({
       throw new Error(`The script doesn't parse: ${e.message}`);
     }
     try {
-      const result = fn(xc, tools, print);
+      const result = fn(api, tools, print);
       return { output, result: result === undefined ? null : result };
     } catch (e) {
       const said = output.length ? `\nPrinted before it stopped:\n${output.join("\n")}` : "";
@@ -654,7 +658,7 @@ xc.panel({
     if (!clients) refresh();
     const link = xc.agents.link() || {};
     ui.heading(t("AI agents (MCP)"));
-    ui.muted(t("AI agents such as Claude can read your project, add, change and connect blocks, see problems and the Console, and start or stop the bot. Every change shows here at once and can be undone. They never see the bot's token."));
+    ui.muted(t("AI agents such as Claude can read your project, add, change and connect blocks, see problems and the Console, and start or stop the bot. Every change shows here at once and can be undone. The tools never give them the bot's token, and the Console hides it; the bot they build and run uses it, as every bot does."));
     ui.space(6);
     const status = !link.listening ? t("Not listening") : link.agents ? t("Listening · {n} connected").replace("{n}", link.agents) : t("Listening · no agent connected");
     ui.row((ui) => {

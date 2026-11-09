@@ -50,7 +50,8 @@ Good to know:
 - A typical slash command: `discord.on_slash_command` (field `command`) → actions → `discord.send_message` (mode `reply`), with the event's `interaction` output wired to Send Message's `interaction` input. The command must also exist in `set_slash_commands`.
 - Texts take `${…}`: JavaScript, with values from earlier blocks by name.
 - Value blocks (Get Property, Math, Compare …) have `in` and `next` too: put them in the flow to make clear when they run (once, there); left out of it, they're worked out when a block reads them.
-- Every change shows in the editor at once and can be undone there (Ctrl+Z). Tokens and other secrets are never available to agents.
+- Every change shows in the editor at once and can be undone there (Ctrl+Z). The tools never return tokens or other secrets, and the Console hides them (`[hidden secret]`): don't make the bot print or send them.
+- A project's server (Bot › Server…) and its own plugins are the user's to confirm: `xc.data.set("hosting", …)` is refused, `get_server`'s `savedHere` says whether uploads go anywhere, and plugins in a project's `plugins/` folder load only after the user said yes.
 - Plugins can add their own tools with `xc.tool({ name, description, input, run })`.
 
 ## Repository map

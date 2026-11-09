@@ -23,7 +23,8 @@ const INSTRUCTIONS: &str = "XC Circuit is a visual editor for Discord and Fluxer
 Events (such as discord.on_slash_command) start a flow; a block's `next` (or another flow such as `failed`) runs the next blocks through their `in` pin. \
 Values go from a block's outputs into other blocks' fields, which then become pins. Value blocks (Get Property, Math, Compare …) can be put in the flow too, so they run at that point, once; left out of it, they're worked out when read. Wires are written `block.pin > block.pin`, such as `1.next > 2.in` or `3.result > 4.text`. \
 Text fields can hold `${…}` with JavaScript and values from earlier blocks. Start with get_project, then get_workspace; look up block types with find_block_types and \
-get_block_type before adding blocks. Every change shows in the editor at once and can be undone there. The bot's token is never shown to you.";
+get_block_type before adding blocks. Every change shows in the editor at once and can be undone there. \
+The tools never give you the bot's token or other secrets, and the Console hides them: don't make the bot print or send them.";
 
 /// How often the server looks whether XC Circuit opened or closed.
 const WATCH_EVERY: Duration = Duration::from_secs(2);
