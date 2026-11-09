@@ -71,6 +71,11 @@ impl Registry {
             let Ok(entries) = fs::read_dir(dir) else { continue };
             for entry in entries.flatten() {
                 let path = entry.path();
+                // A folder starting with a dot is an install under way (or
+                // what one left behind), not a plugin.
+                if entry.file_name().to_string_lossy().starts_with('.') {
+                    continue;
+                }
                 if path.join("plugin.toml").is_file() {
                     match read_manifest(&path) {
                         Ok(manifest) => found.push(LoadedPlugin { manifest, dir: path }),
@@ -465,6 +470,13 @@ version = \"{version}\"
         let reg = Registry::load(&[bundled, future], &engine);
         assert_eq!(reg.plugins[0].manifest.version, "1.2.0", "the one for a newer app is left out");
         assert!(reg.problems.iter().any(|p| p.message.contains("needs XC Circuit 99.0.0 or newer")), "{:?}", reg.problems.iter().map(|p| &p.message).collect::<Vec<_>>());
+
+        // What an install left behind (its folder starts with a dot) isn't a plugin.
+        let left = base.join("updates").join(".replaced-acme.tools");
+        fs::create_dir_all(&left).unwrap();
+        fs::write(left.join("plugin.toml"), "id = \"acme.tools\"\nname = \"Tools\"\nversion = \"50.0.0\"\n").unwrap();
+        let reg = Registry::load(&[update], &engine);
+        assert_eq!(reg.plugins.iter().map(|p| p.manifest.version.as_str()).collect::<Vec<_>>(), ["1.10.0"]);
         let _ = fs::remove_dir_all(&base);
 
         assert_eq!(compare_versions("0.1.0", "0.1"), std::cmp::Ordering::Equal);

@@ -100,11 +100,30 @@ fn install_from(reader: impl Read + Seek, plugins_dir: &Path, replace: bool) -> 
         let _ = std::fs::remove_dir_all(&staging);
         return Err(e);
     }
-    if dir.exists() {
-        std::fs::remove_dir_all(&dir).map_err(|e| other(format!("could not remove the old version: {e}")))?;
-    }
-    std::fs::rename(&staging, &dir).map_err(other)?;
+    swap_in(&staging, &dir, &plugins_dir.join(format!(".replaced-{folder}")))?;
     Ok(Installed { name, dir })
+}
+
+/// Puts the unpacked plugin in `staging` at `dir`. A version already there
+/// steps aside (to `aside`) first and is only deleted once the new one is in
+/// its place: if that fails, the old one comes back, so the plugin is never
+/// gone.
+fn swap_in(staging: &Path, dir: &Path, aside: &Path) -> Result<(), InstallError> {
+    let _ = std::fs::remove_dir_all(aside);
+    let had_old = dir.exists();
+    if had_old && let Err(e) = std::fs::rename(dir, aside) {
+        let _ = std::fs::remove_dir_all(staging);
+        return Err(other(format!("could not replace the old version (is one of its files open?): {e}")));
+    }
+    if let Err(e) = std::fs::rename(staging, dir) {
+        if had_old {
+            let _ = std::fs::rename(aside, dir);
+        }
+        let _ = std::fs::remove_dir_all(staging);
+        return Err(other(format!("could not put the new version in place: {e}")));
+    }
+    let _ = std::fs::remove_dir_all(aside);
+    Ok(())
 }
 
 /// A plugin id as a folder name: letters, digits, `.`, `-` and `_`.
@@ -151,6 +170,35 @@ mod tests {
 
         let err = install_from(zip_of(&[("readme.md", "hi")]), &tmp, false).unwrap_err();
         assert!(err.to_string().contains("no plugin.toml"), "{err}");
+        assert!(!tmp.join(".replaced-acme.tools").exists() && !tmp.join(".installing-acme.tools").exists(), "nothing is left behind");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// When the new version can't take the old one's place, the old one stays.
+    #[test]
+    fn a_failed_replace_keeps_the_old_version() {
+        let tmp = std::env::temp_dir().join(format!("xc-install-swap-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let (dir, aside) = (tmp.join("acme.tools"), tmp.join(".replaced-acme.tools"));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("plugin.toml"), "id = \"acme.tools\"
+version = \"1.0.0\"
+").unwrap();
+        // Nothing was unpacked: there is no new version to move in.
+        let err = swap_in(&tmp.join(".installing-acme.tools"), &dir, &aside).unwrap_err();
+        assert!(err.to_string().contains("new version"), "{err}");
+        assert!(std::fs::read_to_string(dir.join("plugin.toml")).unwrap().contains("1.0.0"), "the old version is back");
+        assert!(!aside.exists());
+
+        // With a new version, it takes the old one's place and the old one goes.
+        let staging = tmp.join(".installing-acme.tools");
+        std::fs::create_dir_all(&staging).unwrap();
+        std::fs::write(staging.join("plugin.toml"), "id = \"acme.tools\"
+version = \"2.0.0\"
+").unwrap();
+        swap_in(&staging, &dir, &aside).unwrap();
+        assert!(std::fs::read_to_string(dir.join("plugin.toml")).unwrap().contains("2.0.0"));
+        assert!(!aside.exists() && !staging.exists());
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }

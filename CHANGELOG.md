@@ -9,6 +9,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **Installing Node.js can't hang on a talkative installer**: winget's or the installer's output and errors were read one after the other, so one that wrote much to its errors first waited forever. Both are read at the same time now.
 - **An AI agent's request that took too long isn't done later after all**: while a dialog was open (a file picker, say), an agent's tool call waited, and after a minute the agent was told it failed. The call still ran once the dialog closed, so an agent that had tried again got its block twice. A call that was given up is now dropped, and the agent is told nothing was done.
 - **Workspaces named Con, Nul, Aux, Prn, Com1 or Lpt1 can be saved**: Windows keeps those names for devices, so the workspace's file (`con.json`) couldn't be written and saving failed. Such a workspace now gets a file name of its own (`con-workspace.json`); its name in the side bar stays as typed.
+- **Replacing a plugin can't lose it**: installing a plugin's zip over an installed version (or a block update) deleted the old version first; if the new one then couldn't be moved into place, the plugin was gone. The old version now steps aside and comes back when that happens. A folder an interrupted install left behind is no longer taken for a plugin.
 
 ## 0.2.9
 
