@@ -122,7 +122,7 @@ pub fn export(dir: &Path, bundle: &Bundle, opts: &ExportOptions, log: &mut dyn F
 fn env_file(existing: Option<&str>, token_env: &str, token: Option<&str>, secrets: &[ExportSecret]) -> String {
     let clean = |v: &str| v.trim().replace(['\r', '\n'], "");
     let mut text = match (token, existing) {
-        (Some(token), _) => format!("# Keep this file private: it holds your bot token.\n{token_env}={}\n", clean(token)),
+        (Some(token), _) => format!("# Keep this file private: it holds your bot token.\n{token_env}={}\n", env_value(&clean(token))),
         (None, Some(old)) => old.to_string(),
         (None, None) => format!("# Put your bot token here.\n{token_env}=\n"),
     };
@@ -135,9 +135,21 @@ fn env_file(existing: Option<&str>, token_env: &str, token: Option<&str>, secret
         if !text.ends_with('\n') {
             text.push('\n');
         }
-        text.push_str(&format!("# {}\n{}={}\n", s.label, s.env, s.value.as_deref().map(clean).unwrap_or_default()));
+        text.push_str(&format!("# {}\n{}={}\n", s.label, s.env, s.value.as_deref().map(|v| env_value(&clean(v))).unwrap_or_default()));
     }
     text
+}
+
+/// A value as `.env` holds it, so the bot reads back exactly `value`. The
+/// bot takes ` #…` (and a `#` at the start) for a comment and reads a value
+/// in quotes without them: a password such as `#secret` or `"a"b` came back
+/// empty or cut short. Those are written in double quotes, with `\"` and
+/// `\\` for a quote and a backslash; every other value as it is.
+fn env_value(value: &str) -> String {
+    if !(value.contains('#') || value.starts_with(['"', '\''])) {
+        return value.to_string();
+    }
+    format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
 /// Makes sure `.gitignore` lists `lines`, keeping what the user added to it.
@@ -189,6 +201,28 @@ mod tests {
         // An earlier .env keeps what was filled in, and gets the missing lines.
         assert_eq!(env_file(Some("DISCORD_TOKEN=x\nXC_SECRET_YOUTUBECOOKIE = mine\n"), "DISCORD_TOKEN", None, &secrets(None)), "DISCORD_TOKEN=x\nXC_SECRET_YOUTUBECOOKIE = mine\n");
         assert_eq!(env_file(Some("DISCORD_TOKEN=x"), "DISCORD_TOKEN", None, &secrets(None)), "DISCORD_TOKEN=x\n# YouTube cookie\nXC_SECRET_YOUTUBECOOKIE=\n");
+    }
+
+    /// Secrets with a # or quotes in them are written so that the bot reads
+    /// them back whole (checked against the runtime's own reader).
+    #[test]
+    fn env_values_come_back_as_they_were() {
+        assert_eq!(env_value("abc.DEF-123"), "abc.DEF-123");
+        assert_eq!(env_value("a b=c"), "a b=c");
+        assert_eq!(env_value("#secret1"), "\"#secret1\"");
+        assert_eq!(env_value("pa ss #1"), "\"pa ss #1\"");
+        assert_eq!(env_value("\"a\"b\\c"), "\"\\\"a\\\"b\\\\c\"");
+        let values = ["abc", "#secret1", "pa ss #1", "\"quoted\"rest", "'single' x", "back\\slash #1", "a\"b#c", "C:\\path\\file"];
+        let written: Vec<String> = values.iter().map(|v| env_value(v)).collect();
+        let runtime = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtime/circuit-runtime.js");
+        let script = format!(
+            "const {{ dotEnvValue }} = require({}); console.log(JSON.stringify({}.map(dotEnvValue)));",
+            serde_json::to_string(&runtime.display().to_string()).unwrap(),
+            serde_json::to_string(&written).unwrap()
+        );
+        let out = Command::new("node").arg("-e").arg(script).output().unwrap();
+        let read: Vec<String> = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| panic!("{e}: {}", String::from_utf8_lossy(&out.stderr)));
+        assert_eq!(read, values);
     }
 
     #[test]

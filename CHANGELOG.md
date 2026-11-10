@@ -6,6 +6,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 
 ### Fixed
 - **Stored values named like `constructor` or `toString` work like any other**: every JavaScript object answers to a few names by itself. Get Stored Value gave a function instead of the fallback for a name such as `constructor` that was never stored, and Has Stored Value said yes. A value stored as `__proto__` wasn't kept at all, and what was in it then showed up under the bucket's other names. That mattered where the name comes from what people type (a tag command, say). Only names that were really stored count now.
+- **An exported bot reads secrets with a `#` or quotes in them correctly**: the export wrote each secret into `.env` as it is, but the bot reads ` #…` as a comment and takes quotes off. A database password such as `#secret1` came back empty, `pa ss #1` as `pa ss`, and the bot then failed to log in with no hint why. Such values are written in quotes now, and read back whole. A `.env` you filled in yourself is read as before.
 
 ## 0.2.10
 

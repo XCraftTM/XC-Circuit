@@ -2729,6 +2729,17 @@ function loadDotEnv(file) {
  * after ` #` left out (`TOKEN=abc # mine` is `abc`).
  */
 function dotEnvValue(raw) {
+  // In double quotes, \" and \\ stand for a quote and a backslash: the export
+  // writes values with a # or a quote in them so.
+  const text = raw.trimStart();
+  if (text[0] === '"') {
+    let out = "";
+    for (let i = 1; i < text.length; i++) {
+      if (text[i] === "\\" && (text[i + 1] === '"' || text[i + 1] === "\\")) out += text[++i];
+      else if (text[i] === '"') return out;
+      else out += text[i];
+    }
+  }
   const quoted = /^\s*(['"])(.*?)\1/.exec(raw);
   if (quoted) return quoted[2];
   return raw.replace(/(^|\s)#.*$/, "").trim();
@@ -2816,4 +2827,5 @@ if (typeof __XC_BUNDLE__ !== "undefined") {
 }
 
 module.exports = {
+  dotEnvValue,
   isPrivateAddress, guardedFetch, start, ungroupBlock, fillTemplate, fillValue, templated, isContextType, templateParts, snapshot, Timers, coerce, listsForCollections, compare, preview, Store, DbStore, Database, Databases, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };
