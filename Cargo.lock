@@ -946,6 +946,7 @@ dependencies = [
  "anyhow",
  "circuit-core",
  "git2",
+ "serde",
  "serde_json",
  "ureq",
 ]

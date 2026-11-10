@@ -196,12 +196,19 @@ fn renumbered(doc: &Value, to: &HashMap<String, String>) -> Value {
 /// fixed id; where the same number means two blocks, the stored one keeps
 /// it. `Side::Both` for a block keeps mine and adds theirs as a copy.
 pub fn workspace(base: Option<&Value>, mine: &Value, theirs: &Value, keep: &dyn Fn(&str) -> Option<Side>) -> Outcome {
-    // The number each block ends up with: the stored side's first, as that
-    // is what everyone else already has.
+    workspace_numbered(base, mine, theirs, keep, Side::Theirs)
+}
+
+/// As [`workspace`], saying whose blocks keep their numbers where one
+/// number means two blocks: the stored side's when fetching (what everyone
+/// else already has), the host's in a live session.
+pub fn workspace_numbered(base: Option<&Value>, mine: &Value, theirs: &Value, keep: &dyn Fn(&str) -> Option<Side>, numbers: Side) -> Outcome {
+    // The number each block ends up with: that side's first.
     let mut number: HashMap<String, String> = HashMap::new();
     let mut taken: HashSet<String> = HashSet::new();
     let mut next = [Some(mine), Some(theirs), base].into_iter().flatten().flat_map(nodes_of).filter_map(|(k, _)| k.parse::<u64>().ok()).max().unwrap_or(0) + 1;
-    for doc in [Some(theirs), Some(mine), base].into_iter().flatten() {
+    let order = if numbers == Side::Mine { [Some(mine), Some(theirs), base] } else { [Some(theirs), Some(mine), base] };
+    for doc in order.into_iter().flatten() {
         for (key, node) in nodes_of(doc) {
             let who = ident(key, node);
             if number.contains_key(&who) {
