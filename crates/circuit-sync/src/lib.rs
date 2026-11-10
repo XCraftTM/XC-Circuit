@@ -164,6 +164,14 @@ impl Sync {
         Ok(())
     }
 
+    /// Forgets where the project is stored. Its history stays in the folder.
+    pub fn forget_remote(&self) -> Result<()> {
+        if self.repo.find_remote(REMOTE).is_ok() {
+            self.repo.remote_delete(REMOTE)?;
+        }
+        Ok(())
+    }
+
     fn branch(&self) -> Result<String> {
         // HEAD names a branch even before anything was stored on it.
         let head = self.repo.find_reference("HEAD")?;
@@ -572,6 +580,13 @@ mod tests {
         assert!(h.store("Tidy", &who("h")).unwrap());
         assert!(h.tip().unwrap().tree().unwrap().get_path(Path::new(".circuit/local.json")).is_err());
         assert!(hand.join(".circuit/local.json").is_file() && h.state().unwrap().changed.is_empty());
+
+        // Forgetting where it is stored, and connecting again.
+        a.forget_remote().unwrap();
+        assert!(a.state().unwrap().remote.is_none() && a.send(&none).is_err());
+        a.set_remote(&url).unwrap();
+        a.fetch(&none).unwrap();
+        assert_eq!(a.state().unwrap().ahead, 0);
 
         // Computer B gets it: without A's own part.
         let b = Sync::get(&url, &b_dir, &none).unwrap();

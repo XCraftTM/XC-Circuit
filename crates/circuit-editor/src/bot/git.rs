@@ -50,6 +50,23 @@ struct Asked {
 pub struct GetDraft {
     location: String,
     name: String,
+    /// In a folder the user chooses, not the app's own.
+    own_folder: bool,
+}
+
+/// Copies a folder with everything in it.
+fn copy_dir(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let target = to.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir(&entry.path(), &target)?;
+        } else {
+            std::fs::copy(entry.path(), &target)?;
+        }
+    }
+    Ok(())
 }
 
 /// What in a text looks like a secret that shouldn't be stored where others
@@ -141,6 +158,11 @@ pub struct GitUi {
     pub get: Option<GetDraft>,
     /// The project that Get from Git brought, for the app to open.
     got: Option<PathBuf>,
+    /// Disconnect… was pressed: asked about first.
+    disconnecting: bool,
+    /// A project moved out of the app's own folder: where to, and from
+    /// where, for the app to open it there.
+    pub moved: Option<(PathBuf, PathBuf)>,
     /// The newest stored versions, and whether the list shows.
     history: Vec<Version>,
     show_history: bool,
@@ -329,6 +351,45 @@ impl GitUi {
             })()
             .map_err(said))
         });
+    }
+
+    /// Forgets where the project is stored. With `move_out`, a project kept
+    /// in the app's own folder also moves into a folder the user picks.
+    fn disconnect(&mut self, ed: &mut Editor, move_out: bool) {
+        let Some(root) = self.root.clone() else { return };
+        let to = if move_out {
+            let Some(place) = rfd::FileDialog::new().set_title(t!("Where the project goes")).pick_folder() else { return };
+            let to = place.join(root.file_name().unwrap_or_default());
+            if to.exists() {
+                self.said = Some((false, tf!("There is already a folder called {name} there.", name = to.file_name().unwrap_or_default().to_string_lossy())));
+                return;
+            }
+            Some(to)
+        } else {
+            None
+        };
+        ed.save();
+        ed.finish_saving();
+        self.disconnecting = false;
+        match Sync::open(&root).and_then(|s| s.map(|s| s.forget_remote()).transpose()) {
+            Ok(_) => {}
+            Err(e) => {
+                self.said = Some((false, said(e)));
+                return;
+            }
+        }
+        self.address.clear();
+        self.said = Some((true, t!("Disconnected. The project stays on this computer.").into()));
+        if let Some(to) = to {
+            match copy_dir(&root, &to) {
+                Ok(()) => self.moved = Some((to, root)),
+                Err(e) => {
+                    let _ = std::fs::remove_dir_all(&to);
+                    self.said = Some((false, tf!("Disconnected, but the project couldn't be moved: {error}", error = e)));
+                }
+            }
+        }
+        self.read();
     }
 
     /// Looks whether newer versions are stored there, without changing
@@ -647,7 +708,7 @@ impl GitUi {
     pub fn open_get(&mut self, location: PathBuf) {
         let waiting = self.waiting.take();
         *self = GitUi { waiting, ..GitUi::default() };
-        self.get = Some(GetDraft { location: location.to_string_lossy().to_string(), name: String::new() });
+        self.get = Some(GetDraft { location: location.to_string_lossy().to_string(), name: String::new(), own_folder: false });
     }
 
     /// The Get from Git dialog. Gives the project's folder once it is there.
@@ -679,10 +740,23 @@ impl GitUi {
                     let from_address = name_of(&self.address);
                     let draft = self.get.as_mut().unwrap();
                     kit::field(ui, &theme, t!("Folder name"), Some(t!("The project's folder on this computer. Empty: the repository's name.")), |ui| kit::text_input(ui, &mut draft.name, &from_address, false));
-                    kit::field(ui, &theme, t!("Where to put it"), None, |ui| {
-                        let w = ui.available_width();
-                        kit::path(ui, &theme, &mut draft.location, "", true, w)
+                    ui.horizontal_wrapped(|ui| {
+                        for (own, label, tip) in [
+                            (false, t!("Kept by XC Circuit"), t!("No folder to look after: the project is in the app's own folder, and stays in your recent projects.")),
+                            (true, t!("In a folder I choose"), t!("For projects with files you reach by their path, such as pictures or plugins of their own.")),
+                        ] {
+                            if kit::radio(ui, &theme, draft.own_folder == own, label).on_hover_text(tip).clicked() {
+                                draft.own_folder = own;
+                            }
+                            ui.add_space(8.0);
+                        }
                     });
+                    if draft.own_folder {
+                        kit::field(ui, &theme, t!("Where to put it"), None, |ui| {
+                            let w = ui.available_width();
+                            kit::path(ui, &theme, &mut draft.location, "", true, w)
+                        });
+                    }
                     if let Some(host) = &host {
                         ui.add_space(8.0);
                         kit::section(ui, &theme, t!("Sign in"));
@@ -739,9 +813,11 @@ impl GitUi {
         let (Some(draft), Some(host)) = (&self.get, host_of(&self.address)) else { return };
         let address = self.address.trim().to_string();
         let name = if draft.name.trim().is_empty() { name_of(&address) } else { draft.name.trim().to_string() };
-        let to = PathBuf::from(draft.location.trim()).join(&name);
+        let place = if draft.own_folder { PathBuf::from(draft.location.trim()) } else { crate::bot::remotes_dir() };
+        let to = place.join(&name);
         self.run(Some("Fetching"), move || {
             Done::Got((|| {
+                std::fs::create_dir_all(&place)?;
                 if name.is_empty() || name.contains(['/', '\\', ':']) {
                     anyhow::bail!("Give the folder a name.");
                 }
@@ -774,6 +850,7 @@ impl GitUi {
         let signed_in = self.account.is_some();
         let (mut connect, mut store, mut fetch, mut close, mut github_in, mut token_in, mut out, mut cancel, mut retyped) = (false, false, false, false, false, false, false, false, false);
         let (mut anyway, mut not_now, mut back) = (false, false, None::<String>);
+        let (mut disconnect, mut move_out) = (false, false);
         dialog::tab(
             ui,
             &theme,
@@ -881,6 +958,37 @@ impl GitUi {
                             });
                         }
                     }
+                    if let (true, Some(root)) = (connected, &self.root) {
+                        ui.add_space(8.0);
+                        let kept = root.starts_with(crate::bot::remotes_dir());
+                        ui.horizontal(|ui| {
+                            if kit::link(ui, &theme, t!("Show the folder"), egui::FontId::proportional(12.5)).clicked() {
+                                crate::editor::show_in_folder(root);
+                            }
+                            ui.add_space(10.0);
+                            if !self.disconnecting && kit::link(ui, &theme, t!("Disconnect…"), egui::FontId::proportional(12.5)).clicked() {
+                                self.disconnecting = true;
+                            }
+                        });
+                        if self.disconnecting {
+                            let waiting = self.state.as_ref().is_some_and(|s| !s.changed.is_empty() || s.ahead > 0);
+                            let mut text = t!("The project stays on this computer with its history, and what is stored in the repository stays there. Store and Fetch stop until you connect again.").to_string();
+                            if waiting {
+                                text.push(' ');
+                                text.push_str(t!("Some changes here are not stored yet: they stay here, but the repository won't have them."));
+                            }
+                            kit::note(ui, &icons, &theme, "warning", t!("Disconnect from the repository?"), &text);
+                            ui.horizontal(|ui| {
+                                disconnect = kit::secondary_button(ui, &theme, t!("Disconnect")).clicked();
+                                if kept {
+                                    move_out = kit::secondary_button(ui, &theme, t!("Disconnect and keep as a folder…")).on_hover_text(t!("Moves the project out of XC Circuit's own folder into one you choose")).clicked();
+                                }
+                                if kit::secondary_button(ui, &theme, t!("Cancel")).clicked() {
+                                    self.disconnecting = false;
+                                }
+                            });
+                        }
+                    }
                     ui.add_space(8.0);
                     if let Some(what) = busy {
                         ui.horizontal(|ui| {
@@ -932,6 +1040,9 @@ impl GitUi {
         }
         if store {
             self.store(ed);
+        }
+        if disconnect || move_out {
+            self.disconnect(ed, move_out);
         }
         if anyway {
             self.secrets_ok = true;
@@ -1076,6 +1187,12 @@ mod tests {
         assert_eq!(ed.project.as_ref().unwrap().workspaces["main"].name, "Main", "{:?}", ui.said);
         assert_eq!(ui.history[0].message, "Back to: The first version");
         assert_eq!(ui.state.as_ref().map(|s| s.ahead), Some(0), "and sent");
+
+        // Disconnecting: the address is forgotten, the project and its history stay.
+        ui.disconnect(&mut ed, false);
+        wait(&mut ui, &mut ed);
+        assert!(ui.state.as_ref().is_some_and(|s| s.remote.is_none()) && ui.address.is_empty() && !ui.history.is_empty(), "{:?}", ui.said);
+        assert!(ui.status().is_none(), "nothing in the status bar for a project stored nowhere");
 
         // Getting it onto another computer: into a new folder, by its name.
         let mut get = GitUi::new();

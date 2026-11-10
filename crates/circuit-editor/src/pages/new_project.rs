@@ -22,6 +22,9 @@ pub struct NewProject {
     pub picked: usize,
     pub name: String,
     pub location: String,
+    /// Kept in a Git repository: the project goes into the app's own folder
+    /// for those, and File › Git… opens once it is made.
+    pub in_git: bool,
     /// A folder just chosen with Browse…, to be remembered for next time
     /// even if this project isn't made.
     pub browsed: Option<String>,
@@ -100,10 +103,13 @@ impl NewProject {
         if name.chars().any(|c| NOT_IN_NAMES.contains(c)) || name.ends_with('.') {
             return Err(tf!("A name can't contain {chars} or end with a dot.", chars = "< > : \" / \\ | ? *"));
         }
-        if self.location.trim().is_empty() {
+        let own = crate::bot::remotes_dir();
+        if self.in_git {
+            let _ = std::fs::create_dir_all(&own);
+        } else if self.location.trim().is_empty() {
             return Err(t!("Choose where it goes.").into());
         }
-        let location = Path::new(self.location.trim());
+        let location = if self.in_git { own.as_path() } else { Path::new(self.location.trim()) };
         if !location.is_dir() {
             return Err(if location.exists() { t!("That's a file, not a folder.") } else { t!("That folder isn't there. Is its drive connected?") }.into());
         }
@@ -237,6 +243,20 @@ fn form(ui: &mut Ui, theme: &Theme, state: &mut NewProject, reg: &Registry, temp
         ui.add_space(8.0);
     }
     kit::field(ui, theme, t!("Name"), None, |ui| kit::text_input(ui, &mut state.name, "", false));
+    ui.horizontal_wrapped(|ui| {
+        for (git, label, tip) in [
+            (false, t!("Only on this computer"), t!("A folder you choose. You can still put it in a Git repository later (File › Git…).")),
+            (true, t!("In a Git repository"), t!("For several computers, or to work on it with others: on GitHub, GitLab or Gitea. XC Circuit keeps the project's folder itself, and asks for the repository next.")),
+        ] {
+            if kit::radio(ui, theme, state.in_git == git, label).on_hover_text(tip).clicked() && state.in_git != git {
+                state.in_git = git;
+                state.checked = None;
+            }
+            ui.add_space(8.0);
+        }
+    });
+    ui.add_space(4.0);
+    if !state.in_git {
     kit::field(ui, theme, t!("Location"), None, |ui| {
         let mut browse = false;
         crate::ui::kit::field_with_button(ui, |ui| {
@@ -253,6 +273,7 @@ fn form(ui: &mut Ui, theme: &Theme, state: &mut NewProject, reg: &Registry, temp
             }
         }
     });
+    }
     match target {
         Ok(dir) => kit::hint(ui, theme, tf!("Created in {path}", path = dir.display())),
         Err(why) => ui.label(RichText::new(why).size(11.5).color(theme.warning)),

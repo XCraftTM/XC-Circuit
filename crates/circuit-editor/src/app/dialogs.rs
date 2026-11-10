@@ -521,7 +521,13 @@ impl CircuitApp {
                     None => Project::create(&dir, &name, &mode).map(|_| ()),
                 };
                 match made {
-                    Ok(()) => self.switch_project(&dir),
+                    Ok(()) => {
+                        self.switch_project(&dir);
+                        // Kept in a Git repository: which one is asked next.
+                        if state.in_git {
+                            self.bot.git.open(&self.ed);
+                        }
+                    }
                     Err(e) => {
                         self.ed.log(Level::Error, tf!("Could not create the project: {error}", error = format!("{e:#}")));
                         self.new_project = Some(state);
@@ -545,6 +551,17 @@ impl CircuitApp {
         self.new_project_chooser(ctx, &theme);
         if let Some(root) = self.bot.git.get_dialog(ctx, &mut self.ed) {
             self.switch_project(&root);
+        }
+        // A project moved out of the app's own folder: opened where it is
+        // now, and the old place cleared away.
+        if let Some((to, from)) = self.bot.git.moved.take() {
+            self.switch_project(&to);
+            if self.ed.project.as_ref().is_some_and(|p| p.root == to) {
+                self.ed.prefs.forget_project(&from.display().to_string());
+                if let Err(e) = std::fs::remove_dir_all(&from) {
+                    self.ed.log(Level::Warn, tf!("The project is in {to} now, but the old copy couldn't be removed: {error}", to = to.display(), error = e));
+                }
+            }
         }
         if self.show_about {
             let app_root = self.bundled_plugins.as_ref().and_then(|p| p.parent()).map(Path::to_path_buf);

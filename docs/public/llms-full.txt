@@ -1630,6 +1630,12 @@ A project is a folder of small text files, so it fits well in a Git repository: 
 
 The sign-in is kept in your system's credential store, one per place (`github.com`, your own Gitea …), for all your projects there. It is never written into the project.
 
+## A project without a folder of its own
+
+A project kept in a Git repository doesn't need a folder you look after. **File › New Project…** offers **In a Git repository** beside **Only on this computer**, and **Get from Git…** offers **Kept by XC Circuit**: the project then lives in the app's own folder (on Windows under `%LOCALAPPDATA%\XC Circuit\remotes`), as a complete copy you can work on without a network, and stays in your recent projects. **Show the folder** in File › Git… opens it. Choose a folder of your own instead when the project has files you reach by their path, such as pictures.
+
+**Disconnect…** in File › Git… forgets the repository: the project and its history stay on the computer, and what is stored there stays there. **Disconnect and keep as a folder…** also moves a project out of the app's folder into one you choose.
+
 ## Store and Fetch
 
 - **Store** saves the project, records what changed since the last time (with the few words you give it) and sends it to the repository.
