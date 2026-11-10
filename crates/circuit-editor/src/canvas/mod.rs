@@ -677,23 +677,36 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             painter.rect_filled(pill, 6.0, with_alpha(theme.panel_header, (alpha * 230.0) as u8));
             painter.galley(pill.min + vec2(6.0, 3.0), galley, color);
         }
+        // Zoomed far out, words under a block are too small to read and
+        // spill past their box: a plain bar in the note's colour marks the
+        // block, and the words come back when zooming in.
+        let far = view.zoom < 0.7;
+        let bar = Rect::from_min_size(layout.rect.left_bottom() + vec2(0.0, 6.0), vec2(layout.rect.width(), 10.0));
         if let Some(err) = &failed {
-            let text = if err.len() > 60 { format!("{}…", &err[..err.char_indices().nth(60).map(|(i, _)| i).unwrap_or(err.len())]) } else { err.clone() };
-            let galley = painter.layout_no_wrap(text, FontId::proportional(11.5), Color32::WHITE);
-            let pill = Rect::from_min_size(layout.rect.left_bottom() + vec2(0.0, 6.0), galley.size() + vec2(16.0, 8.0));
-            painter.rect_filled(pill, 6.0, theme.error);
-            painter.galley(pill.min + vec2(8.0, 4.0), galley, Color32::WHITE);
+            if far {
+                painter.rect_filled(bar, 5.0, theme.error);
+            } else {
+                // As wide as the block and no wider, on as many lines as it
+                // takes (a long one is cut): beside it is the next block.
+                let text = if err.chars().count() > 160 { format!("{}…", err.chars().take(160).collect::<String>()) } else { err.clone() };
+                let galley = painter.layout(text, FontId::proportional(11.5), Color32::WHITE, (layout.rect.width() - 16.0).max(120.0));
+                let pill = Rect::from_min_size(layout.rect.left_bottom() + vec2(0.0, 6.0), vec2(layout.rect.width().max(136.0), galley.size().y + 8.0));
+                painter.rect_filled(pill, 6.0, theme.error);
+                painter.galley(pill.min + vec2(8.0, 4.0), galley, Color32::WHITE);
+            }
         } else if let Some(text) = problems_here.and_then(|p| p.get(id)).and_then(|list| problem_line(list)) {
             // What Problems says about the block, where the block is: a
             // mistake in a ${#4.…} or an empty required field is seen while
             // building, not only by whoever opens the Problems panel.
-            let ink = Color32::from_rgb(0x1E, 0x1F, 0x22);
-            // As wide as the block and no wider, on as many lines as it
-            // takes: beside it is the next block, with a note of its own.
-            let galley = painter.layout(text, FontId::proportional(11.5), ink, (layout.rect.width() - 16.0).max(120.0));
-            let pill = Rect::from_min_size(layout.rect.left_bottom() + vec2(0.0, 6.0), vec2(layout.rect.width().max(136.0), galley.size().y + 8.0));
-            painter.rect_filled(pill, 6.0, theme.warning);
-            painter.galley(pill.min + vec2(8.0, 4.0), galley, ink);
+            if far {
+                painter.rect_filled(bar, 5.0, theme.warning);
+            } else {
+                let ink = Color32::from_rgb(0x1E, 0x1F, 0x22);
+                let galley = painter.layout(text, FontId::proportional(11.5), ink, (layout.rect.width() - 16.0).max(120.0));
+                let pill = Rect::from_min_size(layout.rect.left_bottom() + vec2(0.0, 6.0), vec2(layout.rect.width().max(136.0), galley.size().y + 8.0));
+                painter.rect_filled(pill, 6.0, theme.warning);
+                painter.galley(pill.min + vec2(8.0, 4.0), galley, ink);
+            }
         }
         let r8 = radius as u8;
         painter.rect_filled(layout.header.shrink(if is_selected { 2.0 } else { 1.0 }), CornerRadius { nw: r8, ne: r8, sw: 0, se: 0 }, theme.node_header);
