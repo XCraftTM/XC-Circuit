@@ -22,12 +22,11 @@ ureq = "3"
 sha2 = "0.11"
 flate2 = "1"
 tar = "0.4"
-# Uploading a bot to a server: SFTP (pure Rust, with ring like the rest), FTP
-# and FTPS, and the Calagopus panel's live console (a websocket over rustls).
+# Uploading a bot to a server: SFTP (pure Rust, with ring like the rest), and
+# the Calagopus panel's live console (a websocket over rustls).
 russh = { version = "0.65", default-features = false, features = ["ring", "rsa"] }
 russh-sftp = "3"
 tokio = { version = "1", default-features = false, features = ["rt", "net", "time", "io-util"] }
-suppaftp = { version = "12", default-features = false, features = ["rustls-ring"] }
 tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 webpki-roots = "1"

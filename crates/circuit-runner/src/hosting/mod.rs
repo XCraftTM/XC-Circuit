@@ -1,12 +1,11 @@
-//! Uploading an exported bot to the server it runs on: over SFTP, FTP (or
-//! FTPS), or through a Calagopus panel's API. Only files that changed since
+//! Uploading an exported bot to the server it runs on: over SFTP, or through
+//! a Calagopus panel's API. Only files that changed since
 //! the last upload to the same place are sent, and nothing else on the server
 //! is touched: its `data/` folder (the bot's saved data) and `node_modules/`
 //! stay as they are.
 
 pub mod calagopus;
 pub use sftp::forget_key;
-mod ftp;
 mod sftp;
 
 use std::collections::BTreeMap;
@@ -24,6 +23,8 @@ pub enum Kind {
     #[default]
     None,
     Sftp,
+    /// No longer offered (it sends the password and the token unprotected).
+    /// Still read, so a project set to it says so instead of not opening.
     Ftp,
     Calagopus,
 }
@@ -35,7 +36,7 @@ pub enum Kind {
 #[serde(rename_all = "camelCase", default)]
 pub struct Hosting {
     pub kind: Kind,
-    /// SFTP and FTP: the server's name or address, its port (0: the usual
+    /// SFTP: the server's name or address, its port (0: the usual
     /// one) and the user to log in as.
     pub host: String,
     pub port: u16,
@@ -43,8 +44,6 @@ pub struct Hosting {
     /// SFTP: a private key file to log in with instead of the password (which
     /// then unlocks the key, when it needs one).
     pub key_file: String,
-    /// FTP: encrypt the connection (FTPS). Plain FTP sends the password as is.
-    pub ftps: bool,
     /// Calagopus: the panel's address and the server (its uuid and name).
     pub panel: String,
     pub server: String,
@@ -68,7 +67,6 @@ impl Default for Hosting {
             port: 0,
             user: String::new(),
             key_file: String::new(),
-            ftps: true,
             panel: String::new(),
             server: String::new(),
             server_name: String::new(),
@@ -80,6 +78,9 @@ impl Default for Hosting {
     }
 }
 
+/// What a project still set to FTP is told.
+pub const FTP_GONE: &str = "FTP is no longer offered: it sends the password and the bot token unprotected. Choose SFTP or a Calagopus panel.";
+
 /// The credential store's names for a project's hosting secrets.
 pub const PASSWORD: &str = "hosting.password";
 pub const API_KEY: &str = "hosting.apiKey";
@@ -87,7 +88,7 @@ pub const API_KEY: &str = "hosting.apiKey";
 /// The secrets an upload needs, read from the credential store.
 #[derive(Default)]
 pub struct Secrets {
-    /// SFTP or FTP password, or the passphrase of the SFTP key file.
+    /// SFTP password, or the passphrase of the SFTP key file.
     pub password: Option<String>,
     pub api_key: Option<String>,
 }
@@ -95,21 +96,17 @@ pub struct Secrets {
 impl Hosting {
     /// The port used: the given one or the usual one.
     pub fn port(&self) -> u16 {
-        match (self.port, self.kind) {
-            (0, Kind::Sftp) => 22,
-            (0, _) => 21,
-            (p, _) => p,
-        }
+        if self.port == 0 { 22 } else { self.port }
     }
 
     /// What's missing before it can upload, in plain words; None when ready.
     pub fn missing(&self, secrets: &Secrets) -> Option<&'static str> {
         match self.kind {
             Kind::None => Some("Choose how the bot gets to its server."),
-            Kind::Sftp | Kind::Ftp if self.host.trim().is_empty() => Some("Fill in the server's address."),
-            Kind::Sftp | Kind::Ftp if self.user.trim().is_empty() => Some("Fill in the user name."),
+            Kind::Ftp => Some(FTP_GONE),
+            Kind::Sftp if self.host.trim().is_empty() => Some("Fill in the server's address."),
+            Kind::Sftp if self.user.trim().is_empty() => Some("Fill in the user name."),
             Kind::Sftp if self.key_file.trim().is_empty() && secrets.password.is_none() => Some("Fill in the password, or choose a key file."),
-            Kind::Ftp if secrets.password.is_none() => Some("Fill in the password."),
             Kind::Calagopus if self.panel.trim().is_empty() => Some("Fill in the panel's address."),
             Kind::Calagopus if secrets.api_key.is_none() => Some("Sign in to the panel, or paste an API key."),
             Kind::Calagopus if self.server.is_empty() => Some("Choose the server."),
@@ -235,7 +232,7 @@ fn save_record(path: &Path, record: &Record) -> Result<()> {
 fn open(hosting: &Hosting, secrets: &Secrets, known_hosts: &Path, log: &mut dyn FnMut(String)) -> Result<Box<dyn Remote>> {
     Ok(match hosting.kind {
         Kind::Sftp => Box::new(sftp::Sftp::open(hosting, secrets.password.as_deref(), known_hosts, log)?),
-        Kind::Ftp => Box::new(ftp::Ftp::open(hosting, secrets.password.as_deref().unwrap_or_default(), log)?),
+        Kind::Ftp => bail!(FTP_GONE),
         Kind::Calagopus => Box::new(calagopus::Upload::open(hosting, secrets.api_key.as_deref().unwrap_or_default(), log)?),
         Kind::None => bail!("Choose how the bot gets to its server."),
     })
@@ -275,7 +272,7 @@ fn size(bytes: usize) -> String {
     }
 }
 
-/// TLS settings for FTPS and the Calagopus console: the usual web roots, ring.
+/// TLS settings for the Calagopus console: the usual web roots, ring.
 pub(crate) fn tls_config() -> std::sync::Arc<rustls::ClientConfig> {
     let roots = rustls::RootCertStore { roots: webpki_roots::TLS_SERVER_ROOTS.to_vec() };
     let provider = std::sync::Arc::new(rustls::crypto::ring::default_provider());
@@ -306,8 +303,10 @@ mod tests {
         h.key_file = "C:/keys/id_ed25519".into();
         assert_eq!(h.missing(&Secrets::default()), None, "a key file is enough");
         assert_eq!(h.port(), 22);
+        // A project still set to FTP is told that it's gone, and nothing is sent.
         h.kind = Kind::Ftp;
-        assert_eq!(h.port(), 21);
+        assert_eq!(h.missing(&Secrets { password: Some("p".into()), ..Default::default() }), Some(FTP_GONE));
+        assert!(serde_json::from_value::<Hosting>(serde_json::json!({ "kind": "ftp", "host": "a", "ftps": false })).is_ok(), "an older project's settings are still read");
         let c = Hosting { kind: Kind::Calagopus, panel: "https://panel.example.com".into(), ..Default::default() };
         assert_eq!(c.missing(&Secrets { api_key: Some("c7sp_x".into()), ..Default::default() }), Some("Choose the server."));
     }
@@ -331,7 +330,7 @@ mod tests {
         }
         let record = dir.join("record.json");
         let sent = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
-        let h = Hosting { kind: Kind::Ftp, host: "a".into(), user: "u".into(), include_token: false, ..Default::default() };
+        let h = Hosting { kind: Kind::Sftp, host: "a".into(), user: "u".into(), include_token: false, ..Default::default() };
         let run = |h: &Hosting| {
             sent.borrow_mut().clear();
             let shared = sent.clone();
@@ -344,40 +343,6 @@ mod tests {
         assert_eq!(run(&h), ["index.js"]);
         let other = Hosting { folder: "elsewhere".into(), include_token: true, ..h.clone() };
         assert_eq!(run(&other).len(), 5, "another folder gets every file, .env too");
-        let _ = fs::remove_dir_all(&dir);
-    }
-
-    /// A real upload, to a test FTP server: XC_TEST_FTP=host:port, user
-    /// "bot", password "test-password", its folder in XC_TEST_FTP_HOME.
-    /// cargo test -p circuit-runner real_ftp_upload -- --ignored
-    #[test]
-    #[ignore]
-    fn real_ftp_upload() {
-        let (Ok(server), Ok(home)) = (std::env::var("XC_TEST_FTP"), std::env::var("XC_TEST_FTP_HOME")) else { return };
-        let (host, port) = server.split_once(':').unwrap();
-        let dir = std::env::temp_dir().join(format!("xc-ftp-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        for name in files_to_send(true) {
-            fs::write(dir.join(name), format!("{name} v1")).unwrap();
-        }
-        let h = Hosting { kind: Kind::Ftp, host: host.into(), port: port.parse().unwrap(), user: "bot".into(), ftps: false, folder: "bots/my-bot".into(), ..Default::default() };
-        let secrets = Secrets { password: Some("test-password".into()), ..Default::default() };
-        let record = dir.join("record.json");
-        let mut lines = Vec::new();
-        let up = upload(&dir, &h, &secrets, &record, &dir.join("known.json"), &mut |l| lines.push(l)).unwrap();
-        assert_eq!(up.sent.len(), 5, "{lines:?}");
-        let there = Path::new(&home).join("bots/my-bot");
-        assert_eq!(fs::read_to_string(there.join("index.js")).unwrap(), "index.js v1");
-        assert_eq!(fs::read_to_string(there.join(".env")).unwrap(), ".env v1");
-        fs::write(dir.join("index.js"), "index.js v2").unwrap();
-        let up = upload(&dir, &h, &secrets, &record, &dir.join("known.json"), &mut |_| {}).unwrap();
-        assert_eq!(up.sent, ["index.js"]);
-        assert_eq!(fs::read_to_string(there.join("index.js")).unwrap(), "index.js v2");
-        assert!(Path::new(&home).join("data/keep.json").is_file(), "nothing else is touched");
-        let wrong = Secrets { password: Some("nope".into()), ..Default::default() };
-        let err = test(&h, &wrong, &dir.join("known.json"), &mut |_| {}).unwrap_err().to_string();
-        assert!(err.contains("didn't accept the user name and password"), "{err}");
         let _ = fs::remove_dir_all(&dir);
     }
 

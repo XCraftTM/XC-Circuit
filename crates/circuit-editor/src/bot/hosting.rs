@@ -1,5 +1,5 @@
-//! Putting the bot on its server: Bot › Server… sets where it goes (SFTP,
-//! FTP or a Calagopus panel) and uploads it, by hand or after every save.
+//! Putting the bot on its server: Bot › Server… sets where it goes (SFTP
+//! or a Calagopus panel) and uploads it, by hand or after every save.
 //! For a Calagopus server there's also Bot › Server console: its state,
 //! Start / Restart / Stop, and its live console.
 //!
@@ -695,7 +695,7 @@ impl HostingUi {
                     }
                     kit::section(ui, &theme, t!("How it gets there"));
                     ui.horizontal_wrapped(|ui| {
-                        for (kind, label) in [(Kind::Sftp, t!("SFTP")), (Kind::Ftp, t!("FTP")), (Kind::Calagopus, t!("Calagopus panel")), (Kind::None, t!("Nowhere"))] {
+                        for (kind, label) in [(Kind::Sftp, t!("SFTP")), (Kind::Calagopus, t!("Calagopus panel")), (Kind::None, t!("Nowhere"))] {
                             if kit::radio(ui, &theme, d.h.kind == kind, label).clicked() {
                                 d.h.kind = kind;
                             }
@@ -704,27 +704,26 @@ impl HostingUi {
                     });
                     ui.add_space(8.0);
                     match d.h.kind {
-                        Kind::Sftp | Kind::Ftp => {
-                            let sftp = d.h.kind == Kind::Sftp;
+                        // An older project's setting: nothing is sent this way any more.
+                        Kind::Ftp => {
+                            ui.label(RichText::new(missing_text(circuit_runner::hosting::FTP_GONE)).color(theme.warning));
+                        }
+                        Kind::Sftp => {
                             kit::field(ui, &theme, t!("Server address"), Some(t!("Its name or IP address, such as node1.example.com.")), |ui| kit::text_input(ui, &mut d.h.host, "example.com", false));
-                            kit::field(ui, &theme, t!("Port"), Some(if sftp { t!("Usually 22 (game panels often use 2022).") } else { t!("Usually 21.") }), |ui| {
+                            kit::field(ui, &theme, t!("Port"), Some(t!("Usually 22 (game panels often use 2022).")), |ui| {
                                 let mut port = if d.h.port == 0 { String::new() } else { d.h.port.to_string() };
-                                if kit::text_input(ui, &mut port, if sftp { "22" } else { "21" }, false).changed() {
+                                if kit::text_input(ui, &mut port, "22", false).changed() {
                                     d.h.port = port.trim().parse().unwrap_or(0);
                                 }
                             });
                             kit::field(ui, &theme, t!("User name"), None, |ui| kit::text_input(ui, &mut d.h.user, "", false));
                             let saved_hint = if d.password_saved { t!("Saved: type to change it") } else { "" };
-                            let password_label = if sftp && !d.h.key_file.trim().is_empty() { t!("Key file password") } else { t!("Password") };
+                            let password_label = if !d.h.key_file.trim().is_empty() { t!("Key file password") } else { t!("Password") };
                             kit::field(ui, &theme, password_label, Some(t!("Kept in your system's credential store, never in the project.")), |ui| kit::text_input(ui, &mut d.password, saved_hint, true));
-                            if sftp {
-                                kit::field(ui, &theme, t!("Key file (optional)"), Some(t!("A private key to log in with instead of the password, such as id_ed25519.")), |ui| {
-                                    let w = ui.available_width();
-                                    kit::path(ui, &theme, &mut d.h.key_file, "", false, w)
-                                });
-                            } else {
-                                kit::toggle_row(ui, &theme, &mut d.h.ftps, t!("Encrypted (FTPS)"), t!("Plain FTP sends the password and the bot token as they are. Turn it off only for a server that can't do FTPS."));
-                            }
+                            kit::field(ui, &theme, t!("Key file (optional)"), Some(t!("A private key to log in with instead of the password, such as id_ed25519.")), |ui| {
+                                let w = ui.available_width();
+                                kit::path(ui, &theme, &mut d.h.key_file, "", false, w)
+                            });
                             kit::field(ui, &theme, t!("Folder on the server"), Some(t!("Where the bot's files go, made when missing. Empty: the folder you start in after logging in.")), |ui| kit::text_input(ui, &mut d.h.folder, "bots/my-bot", false));
                         }
                         Kind::Calagopus => {
@@ -879,7 +878,7 @@ fn missing_text(english: &str) -> &'static str {
         "Fill in the server's address." => t!("Fill in the server's address."),
         "Fill in the user name." => t!("Fill in the user name."),
         "Fill in the password, or choose a key file." => t!("Fill in the password, or choose a key file."),
-        "Fill in the password." => t!("Fill in the password."),
+        circuit_runner::hosting::FTP_GONE => t!("FTP is no longer offered: it sends the password and the bot token unprotected. Choose SFTP or a Calagopus panel."),
         "Fill in the panel's address." => t!("Fill in the panel's address."),
         "Sign in to the panel, or paste an API key." => t!("Sign in to the panel, or paste an API key."),
         "Choose the server." => t!("Choose the server."),
@@ -1179,10 +1178,10 @@ mod tests {
         let ctx = egui::Context::default();
         let mut ui = HostingUi::new();
         ui.poll(&mut ed, &ctx);
-        let h = Hosting { kind: Kind::Ftp, host: "ftp.example.com".into(), user: "bot".into(), auto_upload: false, ..Default::default() };
+        let h = Hosting { kind: Kind::Sftp, host: "sftp.example.com".into(), user: "bot".into(), auto_upload: false, ..Default::default() };
         ed.project.as_mut().unwrap().meta.data.insert(DATA_KEY.into(), serde_json::to_value(&h).unwrap());
         assert_eq!(settings_of(&ed), h, "kept in the project");
-        let said = |ed: &Editor| ed.log.iter().any(|l| l.text.starts_with("Not uploaded: Fill in the password."));
+        let said = |ed: &Editor| ed.log.iter().any(|l| l.text.starts_with("Not uploaded: Fill in the password, or choose a key file."));
         ed.save();
         ed.finish_saving();
         ui.poll(&mut ed, &ctx);
@@ -1237,7 +1236,6 @@ mod tests {
             Hosting { user: "root".into(), ..h.clone() },
             Hosting { folder: "/etc".into(), ..h.clone() },
             Hosting { include_token: !h.include_token, ..h.clone() },
-            Hosting { kind: Kind::Ftp, ftps: false, ..h.clone() },
             Hosting { kind: Kind::Calagopus, panel: "https://panel.example.com".into(), server: "abc".into(), ..h.clone() },
         ] {
             put(&mut ed, &other);
@@ -1322,8 +1320,8 @@ mod tests {
         let mut ui = HostingUi::new();
         let here = ed.project.as_ref().unwrap().root.display().to_string();
         ed.prefs.remote_bots.push(here);
-        // FTP can't be started or stopped from here.
-        let h = Hosting { kind: Kind::Ftp, host: "ftp.example.com".into(), user: "bot".into(), ..Default::default() };
+        // An SFTP server can't be started or stopped from here.
+        let h = Hosting { kind: Kind::Sftp, host: "sftp.example.com".into(), user: "bot".into(), ..Default::default() };
         ed.project.as_mut().unwrap().meta.data.insert(DATA_KEY.into(), serde_json::to_value(&h).unwrap());
         ui.poll(&mut ed, &ctx);
         assert!(!ui.remote && ui.watch.is_none() && !ui.can_control(&ed));

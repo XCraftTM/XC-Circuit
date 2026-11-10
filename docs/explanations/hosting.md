@@ -9,14 +9,13 @@ Pick one in **Bot › Server…**:
 | | What you fill in | Good for |
 | --- | --- | --- |
 | **SFTP** | the server's address, port (usually 22; game panels often use 2022), user name, and a password or a key file | a VPS or any server you can log in to with SSH, and most game panels |
-| **FTP** | the address, port (usually 21), user name and password; **Encrypted (FTPS)** is on | web hosts and panels that only offer FTP |
 | **Calagopus panel** | the panel's address; then **Sign in with the panel** and choose the server | servers on a [Calagopus](https://calagopus.com) panel: uploading, Start, Restart, Stop and the live console |
 
 **Folder on the server** says where the bot's files go (it's made when missing). Left empty, they go where you start after logging in, or, on a Calagopus server, into the server's own folder.
 
-Passwords and API keys are kept in your system's credential store, like the bot token (see [Tokens and safety](./safety)). The other settings are kept in the project, so you can upload again after opening it on another day.
+Passwords and API keys are kept in your system's credential store, like the bot token (see [Tokens and safety](./safety)). The other settings are kept on your computer, in the project's `.circuit/local.json`: they are yours, not the bot's, so they aren't shared when you share the project or put it into Git. On another computer you fill them in once.
 
-Because they are in the project, they also come along with a project someone else made, or change with a Git pull. Your password, API key and the bot token only go to the server you last **saved** in Bot › Server… on this computer: when the project's files name another one (another address, user, folder, FTP without encryption, the token turned on), nothing is sent, the Console says so, and Bot › Server… shows a note. Look the settings over and press **Save** to use them. Plugins' scripts and AI agents can't change the server.
+Your password, API key and the bot token only go to the server you last **saved** in Bot › Server… on this computer: when that file names another one (another address, user, folder, the token turned on), because something else changed it or the project came with it, nothing is sent, the Console says so, and Bot › Server… shows a note. Look the settings over and press **Save** to use them. Plugins' scripts and AI agents can't change the server.
 
 ## What is uploaded
 

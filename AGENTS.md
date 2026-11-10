@@ -40,7 +40,7 @@ Tools, and how to use them well:
 | `get_problems` · `get_console` | What's wrong; what the bot logged (with the block that wrote it). |
 | `list_block_types` · `get_block_source` · `list_plugins` | Every block type by category; a block type's source code (its JavaScript file), to see exactly what it does; the plugins and their blocks. |
 | `get_app_settings` · `get_bot_settings` · `set_bot_settings` | The app's settings (reading only); Bot › Settings, changed with checks like the page's. Secrets only say whether one is saved and can't be set. |
-| `get_server` · `server_action` · `set_run_target` | The bot's server (Bot › Server…: SFTP, FTP or Calagopus): its state, CPU and memory, the last upload, its console; upload, start, restart, stop, kill; whether `run_bot` acts here or there. |
+| `get_server` · `server_action` · `set_run_target` | The bot's server (Bot › Server…: SFTP or Calagopus): its state, CPU and memory, the last upload, its console; upload, start, restart, stop, kill; whether `run_bot` acts here or there. |
 | `run_bot` · `stop_bot` · `save_project` | Run and save (on the server when the run target is server). |
 | `run_script` | Many steps in one call: JavaScript with `tools` (every tool as a function: `tools.add_block({ … })`), `xc` (the [editor plugin API](docs/api/editor.md)) and `print()`. Sandboxed, 5 seconds. |
 
