@@ -462,8 +462,12 @@ async function start(options = settings()) {
   function botSays(bot, text) {
     for (const line of String(text).split(/\r?\n/)) {
       if (!line) continue;
-      bot.lines.push(line);
-      if (bot.lines.length > LIMITS.botLines) bot.lines.shift();
+      // What a watching editor reads (which blocks ran) is for now, not
+      // for whoever looks at the console later.
+      if (!line.startsWith("@@xc ")) {
+        bot.lines.push(line);
+        if (bot.lines.length > LIMITS.botLines) bot.lines.shift();
+      }
       for (const watcher of bot.watchers) watcher.send({ event: "console output", args: [line] });
     }
   }
