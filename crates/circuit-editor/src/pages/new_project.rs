@@ -125,6 +125,14 @@ impl NewProject {
     /// [`Self::target`], looked up on the disk when the name or the location
     /// changes and about once a second, not for every frame: a location on a
     /// slow or missing network drive would hold the window up while typing.
+    /// For the docs' picture of the window: the folder shown there (someone
+    /// else's Documents) counts as free, as it would be on their computer.
+    #[cfg(test)]
+    pub fn as_if_the_folder_is_free(&mut self) {
+        let target = PathBuf::from(&self.location).join(&self.name);
+        self.checked = Some((self.name.clone(), self.location.clone(), std::time::Instant::now(), Ok(target)));
+    }
+
     fn target_now(&mut self) -> Result<PathBuf, String> {
         if let Some((name, location, at, found)) = &self.checked
             && *name == self.name
@@ -158,10 +166,24 @@ const HEIGHT: f32 = 600.0;
 /// the right. `system_frame`: with the system's title bar.
 pub fn show(ctx: &egui::Context, theme: &Theme, state: &mut NewProject, reg: &Registry, templates: &[Template], system_frame: bool) -> Option<Outcome> {
     let mut outcome = None;
-    let target = state.target_now();
-    let place = *state.place.get_or_insert_with(|| dialog::centered_now(ctx, egui::vec2(880.0, 760.0)));
+    let place = *state.place.get_or_insert_with(|| dialog::centered_now(ctx, WINDOW));
     let icon = reg.icons.get("folder-plus").cloned();
-    let close = dialog::own_window(ctx, theme, dialog::Own { key: "new-project", title: t!("New project"), icon: icon.as_deref(), place, system_frame }, |ui| dialog::tab(
+    let close = dialog::own_window(ctx, theme, dialog::Own { key: "new-project", title: t!("New project"), icon: icon.as_deref(), place, system_frame }, |ui| outcome = content(ui, theme, state, reg, templates));
+    if close && outcome.is_none() {
+        outcome = Some(Outcome::Cancel);
+    }
+    outcome
+}
+
+/// How big the New Project window starts.
+pub const WINDOW: egui::Vec2 = egui::vec2(880.0, 760.0);
+
+/// What is in the New Project window, under its title bar: the kinds of
+/// project, the form, and Create and Cancel at the bottom.
+pub fn content(ui: &mut Ui, theme: &Theme, state: &mut NewProject, reg: &Registry, templates: &[Template]) -> Option<Outcome> {
+    let mut outcome = None;
+    let target = state.target_now();
+    dialog::tab(
         ui,
         theme,
         dialog::Spec { id: "new-project", title: t!("New project"), subtitle: Some(t!("What kind of bot, its name, and where it is kept")), icon: None, width: 820.0 },
@@ -193,10 +215,7 @@ pub fn show(ctx: &egui::Context, theme: &Theme, state: &mut NewProject, reg: &Re
                 }
             }
         },
-    ));
-    if close && outcome.is_none() {
-        outcome = Some(Outcome::Cancel);
-    }
+    );
     outcome
 }
 

@@ -43,6 +43,8 @@ mod start;
 mod windows;
 #[cfg(test)]
 mod a11y;
+#[cfg(test)]
+mod shots;
 mod memory;
 #[cfg(test)]
 mod tests;
@@ -244,6 +246,9 @@ pub struct CircuitApp {
     close_tab: bool,
     /// The tabs closed lately, the last one last: Ctrl+Shift+T brings them back.
     closed_tabs: Vec<closed::Closed>,
+    /// For the docs' pictures (see `shots`): what gets a numbered mark.
+    #[cfg(test)]
+    shot_marks: Vec<(egui::Rect, u8)>,
     /// Whether the window was last given the start window's shape (not yet, at first).
     window_shaped: Option<bool>,
     /// For saving what egui remembers (see `memory`).
@@ -444,6 +449,8 @@ impl CircuitApp {
             side_folded: None,
             close_tab: false,
             closed_tabs: Vec::new(),
+            #[cfg(test)]
+            shot_marks: Vec::new(),
             window_shaped: None,
             settings: Default::default(),
             restore: Default::default(),
@@ -934,6 +941,9 @@ impl eframe::App for CircuitApp {
         if !self.ed.prefs.system_titlebar && !start {
             crate::app::titlebar::frame_edges(&ctx, &theme);
         }
+        // The docs' pictures: numbered marks on what a tutorial points at.
+        #[cfg(test)]
+        shots::marks(&ctx, &self.shot_marks);
 
         // Record an undo step once an edit has settled.
         // Only looked for after an edit or input (not the pointer just moving),

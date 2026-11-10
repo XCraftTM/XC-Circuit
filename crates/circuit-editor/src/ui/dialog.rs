@@ -70,6 +70,35 @@ pub struct Own<'a> {
     pub system_frame: bool,
 }
 
+/// What fills a window of its own: the app's title bar with `title` and the
+/// window's buttons (not with the system's frame, `framed`), and under it
+/// what `add` draws.
+pub fn own_window_contents(ui: &mut Ui, theme: &Theme, title: &str, icon: Option<&Path>, framed: bool, add: impl FnOnce(&mut Ui)) {
+    let all = ui.max_rect();
+    ui.painter().rect_filled(all, 0.0, theme.panel);
+    let mut body = all;
+    if !framed {
+        let bar = egui::Rect::from_min_size(all.min, vec2(all.width(), crate::app::titlebar::HEIGHT));
+        body.min.y = bar.bottom();
+        ui.painter().rect_filled(bar, 0.0, theme.frame);
+        ui.painter().hline(bar.x_range(), bar.bottom() - 0.5, Stroke::new(1.0, theme.line));
+        let mut row = ui.new_child(egui::UiBuilder::new().id_salt("own-window-bar").max_rect(bar).layout(Layout::left_to_right(Align::Center)));
+        crate::app::titlebar::drag_region(&mut row, bar);
+        row.add_space(12.0);
+        if let Some(icon) = icon {
+            row.add(egui::Image::from_uri(file_uri(icon)).tint(theme.text_muted).fit_to_exact_size(vec2(16.0, 16.0)));
+            row.add_space(4.0);
+        }
+        row.add(egui::Label::new(RichText::new(title).size(12.5).color(theme.text)).selectable(false));
+        let mut right = ui.new_child(egui::UiBuilder::new().id_salt("own-window-buttons").max_rect(bar).layout(Layout::right_to_left(Align::Center)));
+        right.spacing_mut().item_spacing.x = 0.0;
+        crate::app::titlebar::window_buttons(&mut right, theme);
+    }
+    let mut inner = ui.new_child(egui::UiBuilder::new().id_salt("own-window-body").max_rect(body).layout(Layout::top_down(Align::Min)));
+    inner.set_clip_rect(body);
+    add(&mut inner);
+}
+
 /// A window of its own, beside the app's: for what is set up once and
 /// closed again. `add` draws what is under its title bar. Returns true
 /// when it was asked to close.
@@ -85,30 +114,8 @@ pub fn own_window(ctx: &egui::Context, theme: &Theme, own: Own, add: impl FnOnce
         .with_decorations(framed);
     let mut add = Some(add);
     ctx.show_viewport_immediate(egui::ViewportId::from_hash_of(("own-window", key)), builder, |ui, _| {
-        let all = ui.max_rect();
-        ui.painter().rect_filled(all, 0.0, theme.panel);
-        let mut body = all;
-        if !framed {
-            let bar = egui::Rect::from_min_size(all.min, vec2(all.width(), crate::app::titlebar::HEIGHT));
-            body.min.y = bar.bottom();
-            ui.painter().rect_filled(bar, 0.0, theme.frame);
-            ui.painter().hline(bar.x_range(), bar.bottom() - 0.5, Stroke::new(1.0, theme.line));
-            let mut row = ui.new_child(egui::UiBuilder::new().id_salt("own-window-bar").max_rect(bar).layout(Layout::left_to_right(Align::Center)));
-            crate::app::titlebar::drag_region(&mut row, bar);
-            row.add_space(12.0);
-            if let Some(icon) = icon {
-                row.add(egui::Image::from_uri(file_uri(icon)).tint(theme.text_muted).fit_to_exact_size(vec2(16.0, 16.0)));
-                row.add_space(4.0);
-            }
-            row.add(egui::Label::new(RichText::new(title).size(12.5).color(theme.text)).selectable(false));
-            let mut right = ui.new_child(egui::UiBuilder::new().id_salt("own-window-buttons").max_rect(bar).layout(Layout::right_to_left(Align::Center)));
-            right.spacing_mut().item_spacing.x = 0.0;
-            crate::app::titlebar::window_buttons(&mut right, theme);
-        }
-        let mut inner = ui.new_child(egui::UiBuilder::new().id_salt("own-window-body").max_rect(body).layout(Layout::top_down(Align::Min)));
-        inner.set_clip_rect(body);
         if let Some(add) = add.take() {
-            add(&mut inner);
+            own_window_contents(ui, theme, title, icon, framed, add);
         }
         if !framed {
             crate::app::titlebar::frame_edges(ui.ctx(), theme);
