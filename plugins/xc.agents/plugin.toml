@@ -8,8 +8,8 @@ optional    = true
 
 [engines]
 circuit = "^1.0"
-# xc.server, xc.botSettings, xc.blockSource … need this app or newer.
-app = "0.2.3"
+# The tools speak of Bot › Remote… and of a host, which are in XC Circuit 0.3.0.
+app = "0.3.0"
 
 [editor]
 script = "editor.js"
