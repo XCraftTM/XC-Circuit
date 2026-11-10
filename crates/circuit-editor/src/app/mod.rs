@@ -173,7 +173,7 @@ pub struct CircuitApp {
     problem_count: usize,
     /// The project's problems and what they were found for (project revision,
     /// plugin reloads, language): found again only when one changes.
-    problems_found: Option<((u64, u64, String), Vec<panels::ProblemItem>)>,
+    problems_found: Option<((u64, u64, String), panels::Problems)>,
     /// The dock's size last frame, so side panels keep theirs when it changes.
     dock_size: Option<egui::Vec2>,
     /// Where the activity bar's icons are (by key), for dropping between them.
@@ -762,13 +762,17 @@ impl eframe::App for CircuitApp {
                     self.ed.node_problems.entry(ws.clone()).or_default().entry(node.clone()).or_default().push(why.clone());
                 }
             }
-            self.problems_found = Some((key, found));
+            self.problems_found = Some((key, std::sync::Arc::new(found)));
             // The custom ids events offer change with the project, too.
             let ids = crate::editor::custom_ids::collect_for(&mut self.ed).suggestions();
             crate::ui::widgets::share_suggestions(ui.ctx(), ids);
         }
+        // Shared, not copied each frame; plugins' problems are added when there are any.
         let mut problems = self.problems_found.as_ref().map(|(_, p)| p.clone()).unwrap_or_default();
-        problems.extend(self.plugin_host.problems());
+        let from_plugins = self.plugin_host.problems();
+        if !from_plugins.is_empty() {
+            std::sync::Arc::make_mut(&mut problems).extend(from_plugins);
+        }
         self.problem_count = problems.len();
         let bars = self.setup.is_none() && self.tour.is_none() && self.ed.project.is_some();
         if self.ed.prefs.activity_bar && bars {

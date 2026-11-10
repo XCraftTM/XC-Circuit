@@ -198,14 +198,18 @@ pub(super) fn default_width(def: &BlockDef) -> f32 {
 /// Worked out again only when its values change (`cache`).
 pub(super) fn auto_width(measure: &egui::Painter, cache: &mut HashMap<String, (u64, f32)>, id: &str, node: &circuit_core::Node, def: Option<&BlockDef>, shape: Option<&BlockShape>) -> Option<f32> {
     let (def, shape) = (def?, shape?);
-    let previews: Vec<(&String, &circuit_core::FieldDef)> = shape.visible_fields().filter(|(_, f)| matches!(f.type_name.as_str(), "layout" | "modal" | "embed")).collect();
-    if previews.is_empty() {
+    // Runs for every block each frame: most have no preview, and what those
+    // that do show is hashed as it is, not written out as text.
+    let is_preview = |f: &circuit_core::FieldDef| matches!(f.type_name.as_str(), "layout" | "modal" | "embed");
+    if !shape.visible_fields().any(|(_, f)| is_preview(f)) {
         return None;
     }
+    let previews: Vec<(&String, &circuit_core::FieldDef)> = shape.visible_fields().filter(|(_, f)| is_preview(f)).collect();
     let value = |key: &String, f: &circuit_core::FieldDef| node.values.get(key).or(f.default.as_ref()).cloned().unwrap_or(Value::Null);
     let mut h = crate::editor::Fingerprint::default();
     for (key, f) in &previews {
-        (key.as_str(), value(key, f).to_string()).hash(&mut h);
+        key.as_str().hash(&mut h);
+        crate::editor::hash_value(node.values.get(*key).or(f.default.as_ref()).unwrap_or(&Value::Null), &mut h);
     }
     let print = h.finish();
     if let Some((p, w)) = cache.get(id)

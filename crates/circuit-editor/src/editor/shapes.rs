@@ -71,14 +71,18 @@ impl ShapeCache {
         let k = self.known.get_mut(ws_key).expect("just inserted");
         if k.pass != pass || k.names.is_empty() {
             let (structure, project) = (structure_hash(reg, ws), text_hash(project));
-            if structure != k.structure || project != k.project {
+            let rewired = structure != k.structure;
+            if rewired || project != k.project {
                 k.names.clear();
                 k.wiring = None;
                 (k.structure, k.project) = (structure, project);
             }
-            k.into.clear();
-            for (i, l) in ws.links.iter().enumerate() {
-                k.into.entry(l.to.node.clone()).or_default().push(i);
+            // The wires (part of the structure) are as they were: so is this.
+            if rewired || k.into.is_empty() {
+                k.into.clear();
+                for (i, l) in ws.links.iter().enumerate() {
+                    k.into.entry(l.to.node.clone()).or_default().push(i);
+                }
             }
             k.pass = pass;
         }
@@ -107,9 +111,10 @@ pub(super) struct Known {
     pub(super) wiring: Option<crate::editor::values::Wiring>,
 }
 
-pub(super) fn text_hash(v: &impl serde::Serialize) -> u64 {
-    let mut h = DefaultHasher::new();
-    serde_json::to_string(v).unwrap_or_default().hash(&mut h);
+/// Checked every frame: the value as it is, not written out as text first.
+pub(super) fn text_hash(v: &Value) -> u64 {
+    let mut h = Fingerprint::default();
+    hash_value(v, &mut h);
     h.finish()
 }
 
@@ -152,7 +157,7 @@ impl Fingerprint {
 }
 
 /// Hashes a JSON value as it is, without writing it out as text first.
-pub(super) fn hash_value(v: &Value, h: &mut impl Hasher) {
+pub(crate) fn hash_value(v: &Value, h: &mut impl Hasher) {
     match v {
         Value::Null => 0u8.hash(h),
         Value::Bool(b) => (1u8, b).hash(h),
@@ -176,7 +181,8 @@ pub(super) fn hash_map(o: &Map<String, Value>, h: &mut impl Hasher) {
 
 /// What the names blocks get from earlier blocks depend on.
 pub(super) fn structure_hash(reg: &Registry, ws: &Workspace) -> u64 {
-    let mut h = DefaultHasher::new();
+    // Every frame, over the whole workspace: the fast hasher.
+    let mut h = Fingerprint::default();
     for l in &ws.links {
         (&l.from.node, &l.from.pin, &l.to.node, &l.to.pin).hash(&mut h);
     }

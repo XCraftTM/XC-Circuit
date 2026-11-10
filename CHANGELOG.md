@@ -2,7 +2,11 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## 0.3.0
+## Unreleased
+
+### Fixed
+- **Big workspaces draw faster**: every frame, the canvas worked some things out again for every block, also those off screen: a map of all pins, whether an input comes from the event (rebuilding a list of all wires each time), the project's data written out as text to see whether it changed, and a copy of the Problems list. These are now made with a faster method, kept while nothing changes, or shared instead of copied, so a workspace of 1,600 blocks needs about a tenth less time per frame.
+
 
 The biggest release so far: your project can live in a Git repository and on a server of your own, several people can work in it at the same time, and the window is laid out anew.
 

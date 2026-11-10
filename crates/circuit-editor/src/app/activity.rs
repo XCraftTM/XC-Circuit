@@ -631,7 +631,7 @@ impl CircuitApp {
                 self.ed.ui_rects.insert("console".into(), ui.max_rect());
                 panels::console(ui, &mut self.ed);
             }
-            Tab::Problems => panels::problems(ui, &mut self.ed, problems.to_vec()),
+            Tab::Problems => panels::problems(ui, &mut self.ed, problems),
             Tab::Plugin(plugin, panel) => self.plugin_host.panel_ui(ui, &mut self.ed, &plugin, &panel, running),
             // The short view; Git's window has the rest.
             Tab::Git => self.bot.git.side(ui, &mut self.ed),

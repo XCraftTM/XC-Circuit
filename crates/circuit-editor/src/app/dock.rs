@@ -7,7 +7,7 @@ pub(super) struct Viewer<'a> {
     pub(super) bot: &'a mut BotUi,
     pub(super) running: bool,
     pub(super) problem_count: usize,
-    pub(super) problems: Vec<panels::ProblemItem>,
+    pub(super) problems: panels::Problems,
     pub(super) plugin_host: &'a mut crate::plugins::host::PluginHost,
     pub(super) settings: &'a mut crate::pages::settings::SettingsView,
     pub(super) restore: &'a mut crate::pages::restore::RestoreView,
@@ -229,7 +229,7 @@ impl DockViewer<Tab> for Viewer<'_> {
             }
             Tab::Inspector => panels::inspector(ui, self.ed),
             Tab::Console => panels::console(ui, self.ed),
-            Tab::Problems => panels::problems(ui, self.ed, self.problems.clone()),
+            Tab::Problems => panels::problems(ui, self.ed, &self.problems),
             Tab::Settings => crate::pages::settings::ui(ui, self.ed, self.settings, &mut self.asks),
             Tab::Backups => crate::pages::restore::ui(ui, self.ed, self.restore, self.running),
             Tab::Plugin(plugin, panel) => {

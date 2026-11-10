@@ -378,6 +378,8 @@ fn wrap_columns(text: &str, cols: usize) -> Vec<&str> {
 
 /// One entry in the Problems panel: where, what, and the block to jump to.
 pub type ProblemItem = (String, String, Option<(String, String)>);
+/// The Problems list, shared (not copied) by everything that shows it each frame.
+pub type Problems = std::sync::Arc<Vec<ProblemItem>>;
 
 /// Plugin problems plus checks of every workspace in the open project.
 pub fn collect_problems(ed: &mut Editor) -> Vec<ProblemItem> {
@@ -540,7 +542,7 @@ pub fn collect_problems(ed: &mut Editor) -> Vec<ProblemItem> {
     items
 }
 
-pub fn problems(ui: &mut Ui, ed: &mut Editor, items: Vec<ProblemItem>) {
+pub fn problems(ui: &mut Ui, ed: &mut Editor, items: &[ProblemItem]) {
     let theme = ed.theme.clone();
     ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         Frame::new().inner_margin(Margin::symmetric(12, 8)).show(ui, |ui| {
@@ -551,12 +553,13 @@ pub fn problems(ui: &mut Ui, ed: &mut Editor, items: Vec<ProblemItem>) {
                 // Wrapping: a long message (or a narrow panel) goes on to more lines.
                 ui.horizontal_wrapped(|ui| {
                     ui.label(RichText::new("⚠").color(theme.warning));
-                    let resp = ui.add(egui::Label::new(RichText::new(&message)).sense(egui::Sense::click()));
-                    ui.label(RichText::new(&source).size(11.0).color(with_alpha(theme.text_muted, 200)));
+                    let resp = ui.add(egui::Label::new(RichText::new(message.as_str())).sense(egui::Sense::click()));
+                    ui.label(RichText::new(source.as_str()).size(11.0).color(with_alpha(theme.text_muted, 200)));
                     if let Some(t) = target
                         && resp.clicked()
                     {
-                        ed.reveal(&t.0, &t.1);
+                        let (ws, node) = t.clone();
+                        ed.reveal(&ws, &node);
                     }
                 });
             }

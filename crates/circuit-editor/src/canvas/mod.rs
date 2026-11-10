@@ -327,12 +327,19 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         }
         layouts.push(zone_layout(zid, *rect));
     }
-    let pin_index: HashMap<(&str, &str, Dir), usize> = layouts
-        .iter()
-        .enumerate()
-        .flat_map(|(li, l)| l.pins.iter().enumerate().map(move |(pi, p)| ((l.id.as_str(), p.pin.as_str(), p.dir), li * 1000 + pi)))
-        .collect();
+    // Made every frame for every block's pins: with the fast hasher.
+    let mut pin_index: HashMap<(&str, &str, Dir), usize, std::hash::BuildHasherDefault<crate::editor::Fingerprint>> =
+        HashMap::with_capacity_and_hasher(layouts.iter().map(|l| l.pins.len()).sum(), Default::default());
+    for (li, l) in layouts.iter().enumerate() {
+        for (pi, p) in l.pins.iter().enumerate() {
+            pin_index.insert((l.id.as_str(), p.pin.as_str(), p.dir), li * 1000 + pi);
+        }
+    }
     let pin_at = |node: &str, pin: &str, dir: Dir| pin_index.get(&(node, pin, dir)).map(|i| &layouts[i / 1000].pins[i % 1000]);
+    // For inputs that may come from the event: the wires by block, made at
+    // most once a frame, and the blocks before each block asked about.
+    let mut wiring: Option<crate::editor::values::Wiring> = None;
+    let mut before: HashMap<String, Vec<String>> = HashMap::new();
 
     let (outer, _) = ui.allocate_exact_size(ui.available_size(), Sense::hover());
     ui.painter().rect_filled(outer, 0.0, theme.canvas);
@@ -884,7 +891,13 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     let node_values = &ws.nodes[id].values;
                     let empty = node_values.get(key).or(f.default.as_ref()).is_none_or(|v| v.is_null() || v == &Value::String(String::new()));
                     // An unconnected interaction or server comes from the event.
-                    let from_event = !connected && empty && crate::editor::values::from_event(ws, id, key, &f.type_name, reg);
+                    let from_event = !connected && empty && crate::editor::values::takes_context(&f.type_name) && {
+                        let up = before.entry(id.clone()).or_insert_with(|| {
+                            let wiring = wiring.get_or_insert_with(|| crate::editor::values::Wiring::new(ws));
+                            crate::editor::values::upstream_with(ws, id, reg, wiring)
+                        });
+                        crate::editor::values::from_event_in(ws, up, key, &f.type_name, reg)
+                    };
                     let missing = f.required && empty && !connected && !from_event;
                     if missing {
                         missing_glow(&painter, theme, *r, ctx.input(|i| i.time));
