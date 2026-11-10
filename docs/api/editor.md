@@ -41,7 +41,9 @@ Types for your code editor: `/// <reference types="@xc-circuit/sdk/editor" />` (
 | `xc.blockTypes(query)` · `xc.blockType(type)` | installed block types · one type's fields, outputs and flows |
 | `xc.blockSource(type)` · `xc.plugins()` | a block type's code: `{ type, plugin, file, version, source }` · the plugins, turned on or off, with their blocks |
 | `xc.appSettings()` · `xc.botSettings()` | the app's settings (with the shortcuts) · Bot › Settings: `{ mode, pages, settings: [{ key, label, type, page, value, … }] }` (secrets only say whether one is saved) |
-| `xc.server()` | the bot's server (Bot › Remote…): kind, where, `runTarget` (`local` or `server`), `canRunThere`, `savedHere` (false for a server that came with the project's files and the user hasn't saved on this computer: nothing is sent to it), `state`, CPU and memory, `lastUpload`, the server console's last lines; never a password or key |
+| `xc.remote()` | the bot's remote (Bot › Remote…; `xc.server()` is its older name): kind, where, `runTarget` (`local` or `server`), `canRunThere`, `savedHere` (false for a server that came with the project's files and the user hasn't saved on this computer: nothing is sent to it), `state`, CPU and memory, `lastUpload`, the server console's last lines; never a password or key |
+| `xc.git()` | the project's Git repository (Share › Git…): `connected`, `storedAt`, `branch`, `changed`, `toSend`, `toFetch`, `busy`, `conflicts`, `lastSaid` and the newest `versions`; never a sign-in. `xc.run("git.store")` and `xc.run("git.fetch")` do what the buttons do |
+| `xc.deleteWorkspace(key)` | asks the user whether to delete a workspace; nothing is deleted until they say yes |
 | `xc.blockPins(workspace, id)` | a block as it is now: its values and pins, with types and wires |
 | `xc.problems()` · `xc.console(lines)` | what the Problems panel and the Console show |
 | `xc.t(text)` | text in the app's language, from the plugins' `locales/*.toml` |

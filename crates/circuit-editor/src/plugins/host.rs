@@ -423,7 +423,8 @@ impl api::Host for EditorHost<'_> {
         // Starting the bot, or sending it to its server, runs code and uses
         // the token. A plugin that didn't come with the app does that when
         // the user clicked something of it, never by itself.
-        let starts_the_bot = matches!(id, "bot.run" | "run.local" | "run.server") || id.starts_with("server.");
+        // The same for storing the project in its repository: that sends it away.
+        let starts_the_bot = matches!(id, "bot.run" | "run.local" | "run.server" | "run.remote") || id.starts_with("server.") || id.starts_with("remote.") || id.starts_with("git.");
         if starts_the_bot && !by_user && !self.bundled {
             return Err(format!("xc.run(\"{id}\") only works from a command or a click (a button, a link, an overlay), not from a timer, a check or while drawing"));
         }
@@ -590,6 +591,20 @@ impl api::Host for EditorHost<'_> {
 
     fn server(&self) -> Value {
         self.ed.server_view.clone()
+    }
+
+    fn git(&self) -> Value {
+        self.ed.git_view.clone()
+    }
+
+    fn ask_delete_workspace(&mut self, key: &str) -> Result<(), String> {
+        let project = self.ed.project.as_ref().ok_or("no project is open")?;
+        if !project.workspaces.contains_key(key) {
+            return Err(format!("no workspace `{key}`"));
+        }
+        // The same question as Delete in the Workspaces view.
+        self.ed.ask_delete_workspaces = Some(vec![key.to_string()]);
+        Ok(())
     }
 
     fn plugins(&self) -> Value {
@@ -1185,6 +1200,42 @@ mod tests {
         // A folder in a folder, as a path.
         let nested = host.call_tool(&mut ed, "create_workspace", &serde_json::json!({ "name": "Archive", "folder": "Events / Old " }), false).unwrap().unwrap();
         assert_eq!(ed.workspace(nested["key"].as_str().unwrap()).unwrap().folder.as_deref(), Some("Events/Old"));
+
+        // A workspace itself: renamed, moved to a folder, turned off; deleting asks the user.
+        let changed = host.call_tool(&mut ed, "set_workspace", &serde_json::json!({ "workspace": moderation, "name": "Mod Log", "folder": "Staff / Logs", "off": true }), false).unwrap().unwrap();
+        assert_eq!(changed, serde_json::json!({ "key": moderation, "name": "Mod Log", "folder": "Staff/Logs", "off": true }));
+        let w = ed.workspace(&moderation).unwrap();
+        assert_eq!((w.name.as_str(), w.folder.as_deref(), w.disabled), ("Mod Log", Some("Staff/Logs"), true));
+        host.call_tool(&mut ed, "set_workspace", &serde_json::json!({ "workspace": "Mod Log", "folder": "", "off": false }), false).unwrap().unwrap();
+        let w = ed.workspace(&moderation).unwrap();
+        assert_eq!((w.name.as_str(), w.folder.as_deref(), w.disabled), ("Mod Log", None, false), "only what is given changes");
+        host.call_tool(&mut ed, "delete_workspace", &serde_json::json!({ "workspace": moderation }), false).unwrap().unwrap();
+        assert!(ed.workspace(&moderation).is_some(), "not deleted by the agent");
+        assert_eq!(ed.ask_delete_workspaces.take(), Some(vec![moderation.clone()]), "the user is asked");
+        // The remote under its new names and its older ones; Git; a notification.
+        let names: Vec<String> = host.tools().into_iter().map(|t| t.name).collect();
+        for want in ["get_remote", "remote_action", "get_server", "server_action", "get_git", "git_action", "undo", "notify_user"] {
+            assert!(names.iter().any(|n| n == want), "{want} in {names:?}");
+        }
+        let no_remote = host.call_tool(&mut ed, "remote_action", &serde_json::json!({ "action": "upload" }), false).unwrap().unwrap_err();
+        assert!(no_remote.contains("no remote set up"), "{no_remote}");
+        assert_eq!(host.call_tool(&mut ed, "server_action", &serde_json::json!({ "action": "upload" }), false).unwrap().unwrap_err(), no_remote, "the older name does the same");
+        ed.git_view = serde_json::json!({ "connected": false });
+        let git = host.call_tool(&mut ed, "get_git", &serde_json::json!({}), false).unwrap().unwrap();
+        assert_eq!(git["connected"], false);
+        let not_kept = host.call_tool(&mut ed, "git_action", &serde_json::json!({ "action": "store" }), false).unwrap().unwrap_err();
+        assert!(not_kept.contains("isn't kept in a Git repository"), "{not_kept}");
+        ed.git_view = serde_json::json!({ "connected": true, "changed": ["workspaces/main.json"] });
+        host.queued.clear();
+        host.call_tool(&mut ed, "git_action", &serde_json::json!({ "action": "store", "message": "Added
+ /ticket" }), false).unwrap().unwrap();
+        host.call_tool(&mut ed, "git_action", &serde_json::json!({ "action": "fetch" }), false).unwrap().unwrap();
+        host.call_tool(&mut ed, "undo", &serde_json::json!({}), false).unwrap().unwrap();
+        host.call_tool(&mut ed, "undo", &serde_json::json!({ "redo": true }), false).unwrap().unwrap();
+        assert_eq!(host.queued, ["git.store:Added /ticket", "git.fetch", "edit.undo", "edit.redo"]);
+        host.queued.clear();
+        host.call_tool(&mut ed, "notify_user", &serde_json::json!({ "message": "/ticket is ready to try", "level": "success" }), false).unwrap().unwrap();
+        assert_eq!(ed.notes.last(), Some(&(Level::Success, "/ticket is ready to try".to_string())));
 
         // Many things in one call: a flow built and wired by a script.
         let code = format!(

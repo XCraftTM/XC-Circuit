@@ -34,13 +34,16 @@ Tools, and how to use them well:
 | `add_block` · `set_block_values` · `move_block` · `delete_blocks` | Change blocks. Embeds and layouts can be given as Discord's own JSON. |
 | `connect` · `disconnect` | Wires, checked like drawn ones. Flow: `<block>.next` (or another flow such as `failed`) to `<block>.in`. Value: `<block>.<output>` to `<block>.<field>`; the field becomes a pin. |
 | `add_note` · `set_note` · `delete_note` | Notes: framed areas with a title and text; `around: [block ids]` frames blocks. |
-| `create_workspace` · `get_slash_commands` · `set_slash_commands` | Workspaces and the project's slash commands (`set` replaces the whole list). |
+| `create_workspace` · `get_slash_commands` · `set_slash_commands` | A new workspace, and the project's slash commands (`set` replaces the whole list). |
 | `open_builder` · `show_in_editor` | Show the user: open the Embed/Layout/Canvas Builder or Slash Commands, or centre the canvas on a block (at a `zoom` in percent, if given). |
 | `screenshot` | See the canvas as the user does (a workspace fitted to view, or centred on a block), at a `zoom` in percent (25 to 200) when given. Check layouts with it: blocks with previews (embeds, layouts, pictures) are tall. |
 | `get_problems` · `get_console` | What's wrong; what the bot logged (with the block that wrote it). |
 | `list_block_types` · `get_block_source` · `list_plugins` | Every block type by category; a block type's source code (its JavaScript file), to see exactly what it does; the plugins and their blocks. |
 | `get_app_settings` · `get_bot_settings` · `set_bot_settings` | The app's settings (reading only); Bot › Settings, changed with checks like the page's. Secrets only say whether one is saved and can't be set. |
-| `get_server` · `server_action` · `set_run_target` | The bot's server (Bot › Remote…: SFTP or Calagopus): its state, CPU and memory, the last upload, its console; upload, start, restart, stop, kill; whether `run_bot` acts here or there. |
+| `get_remote` · `remote_action` · `set_run_target` | The bot's remote (Bot › Remote…: your Host, SFTP or Calagopus): its state, CPU and memory, the last upload, its console; upload, start, restart, stop, kill; whether `run_bot` acts here or there. (`get_server` and `server_action` are their older names, and still work.) |
+| `get_git` · `git_action` | The project's Git repository (Share › Git…): what waits to be stored or fetched, the newest versions; Store (with a few words on what changed) and Fetch. Setting it up, signing in and choosing between two versions stay the user's. |
+| `set_workspace` · `delete_workspace` | A workspace's name, folder and whether it is turned off; deleting one asks the user in the app first. |
+| `undo` · `notify_user` | Takes back (or redoes) the last change in the open workspace; shows the user a notification in the app. |
 | `run_bot` · `stop_bot` · `save_project` | Run and save (on the server when the run target is server). |
 | `run_script` | Many steps in one call: JavaScript with `tools` (every tool as a function: `tools.add_block({ … })`), `xc` (the [editor plugin API](docs/api/editor.md)) and `print()`. Sandboxed, 5 seconds. |
 
@@ -51,7 +54,7 @@ Good to know:
 - Texts take `${…}`: JavaScript, with values from earlier blocks by name.
 - Value blocks (Get Property, Math, Compare …) have `in` and `next` too: put them in the flow to make clear when they run (once, there); left out of it, they're worked out when a block reads them.
 - Every change shows in the editor at once and can be undone there (Ctrl+Z). The tools never return tokens or other secrets, and the Console hides them (`[hidden secret]`): don't make the bot print or send them.
-- A project's server (Bot › Remote…) and its own plugins are the user's to confirm: `xc.data.set("hosting", …)` is refused, `get_server`'s `savedHere` says whether uploads go anywhere, and plugins in a project's `plugins/` folder load only after the user said yes.
+- A project's server (Bot › Remote…) and its own plugins are the user's to confirm: `xc.data.set("hosting", …)` is refused, `get_remote`'s `savedHere` says whether uploads go anywhere, and plugins in a project's `plugins/` folder load only after the user said yes.
 - Plugins can add their own tools with `xc.tool({ name, description, input, run })`.
 
 ## Repository map
@@ -62,14 +65,14 @@ Good to know:
 | `crates/circuit-plugins` | Loading plugins: `plugin.toml` (`manifest.rs`), the QuickJS sandbox that reads block files and runs their `define` (`engine.rs`), the registry of blocks, build modes, pin types, themes and translations, TypeScript stripping. |
 | `crates/circuit-runner` | Running bots: the bundle (`bundle.rs`), npm packages and Node.js (`node.rs`, `node_setup.rs`), the bot process and its debug protocol (`session.rs`, `protocol.rs`), secrets in the OS credential store (`secrets.rs`), export, database browsing. |
 | `crates/circuit-sync` | A project in a Git repository (libgit2, built in, HTTPS): store, send, fetch, and putting two versions together by what the files hold (`json.rs`). `live.rs`: the exchange of a live session, as two state machines (host and guest) without network or window. |
-| `crates/circuit-editor/src/app` | The window: menus, commands, dialogs, the dock layout (`dock.rs`), projects, plugins, updates, crash logs. |
+| `crates/circuit-editor/src/app` | The window: menus, commands, dialogs, the dock layout (`dock.rs`), the start window (`start.rs`), windows of their own (`windows.rs`), notifications (`notices.rs`), closed tabs (`closed.rs`), the activity bar and side bar (`activity.rs`), projects, plugins, updates, crash logs. |
 | `…/src/canvas` | The canvas: `show` in `mod.rs` draws a workspace; `layout.rs` places a block's rows and pins; wires, notes, the block picker. |
 | `…/src/editor` | Editor state: the open project, block shapes, undo history, preferences, shortcuts, values for `${…}` completion. |
 | `…/src/builders` | Embed, Layout, Canvas and Slash Command Builders (their tabs, previews and JSON views). |
 | `…/src/plugins` | Editor plugins: the script sandbox (`script.rs` + `script_prelude.js`, the `xc` API), what plugins see of the editor (`api.rs`, `host.rs`), installing, updates of bundled blocks. |
 | `…/src/mcp` | The MCP server: `stdio.rs` (`--mcp`), `bridge.rs` (the app's local link), `install.rs` (adding it to AI clients). |
 | `…/src/pages` | Side bar, inspector, panels (Console, Problems), Settings, backups, setup, tour, start page, Stored Data. |
-| `…/src/ui` | Shared pieces: the own dock (`ui/dock`), dialogs, widgets, inputs, theme, fonts, the command palette. |
+| `…/src/ui` | Shared pieces: the own dock (`ui/dock`), dialogs, the side bar views' kit (`side.rs`), widgets, inputs, theme, fonts, the command palette. |
 | `…/src/i18n` | Interface translations; `ui_strings.rs` is generated (see below). |
 | `runtime/circuit-runtime.js` | The Node.js runtime that runs a bundle (Run, and inside exports). `runtime/test/*.js`: its tests. |
 | `plugins/xc.core` | Core blocks (logic, values, stored data, timers, databases …), the interface's translations (`locales/`), themes, icons, settings pages. |

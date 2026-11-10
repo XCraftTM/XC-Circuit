@@ -188,8 +188,14 @@
     botSettings: () => host("botSettings"),
     /** Changes Bot › Settings ({ key: value }; not secrets). Returns the keys changed. */
     setBotSettings: (values) => host("setBotSettings", values),
-    /** The bot's server (Bot › Remote…): where it uploads, Run's target, its state, the last upload, its console. Null without a project. */
+    /** The bot's remote (Bot › Remote…): where it uploads, Run's target, its state, the last upload, its console. Null without a project. */
+    remote: () => host("server"),
+    /** The older name of xc.remote(). */
     server: () => host("server"),
+    /** The project's Git repository (Share › Git…): { connected, storedAt, branch, changed, toSend, toFetch, busy, conflicts, lastSaid, versions }. Null without a project. */
+    git: () => host("git"),
+    /** Asks the user, in the editor, whether to delete a workspace (by key). Nothing is deleted until they say yes. */
+    deleteWorkspace: (key) => host("askDeleteWorkspace", text(key)),
     /** A block of a workspace as it is now: its values and pins, with their types. */
     blockPins: (workspace, block) => host("blockPins", workspace, String(block)),
     /** Connects two pins ("3.next" to "4.in"), checked like a wire drawn on the canvas. It can be undone. */

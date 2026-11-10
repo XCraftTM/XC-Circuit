@@ -624,6 +624,7 @@ impl eframe::App for CircuitApp {
         self.bot.poll(&mut self.ed, &ctx);
         self.bot.hosting.poll(&mut self.ed, &ctx);
         self.bot.git.poll(&mut self.ed, &ctx);
+        self.ed.git_view = self.bot.git.view();
         self.bot.host.poll(&mut self.ed, &ctx);
         let bot = match self.bot.state {
             crate::bot::BotState::Stopped => "stopped",

@@ -1945,7 +1945,10 @@ What the agent can do:
 | `get_problems` · `get_console` | what's wrong, and what the bot logged |
 | `list_block_types` · `get_block_source` · `list_plugins` | every block, a block's code (to see exactly what it does), the plugins |
 | `get_app_settings` · `get_bot_settings` · `set_bot_settings` | XC Circuit's settings (to read), and Bot › Settings (to read and change; never the token) |
-| `get_server` · `server_action` · `set_run_target` | the bot's server: its state, the last upload and its console; upload, start, restart, stop, kill; and whether Run acts here or there |
+| `get_remote` · `remote_action` · `set_run_target` | the bot's remote: its state, CPU and memory, the last upload and its console; upload, start, restart, stop, kill; whether Run acts here or there (`get_server` and `server_action` are their older names and still work) |
+| `get_git` · `git_action` | the project's Git repository: what waits to be stored or fetched and the newest versions; Store and Fetch |
+| `set_workspace` · `delete_workspace` | a workspace's name, folder and whether it is turned off; deleting one asks you in the app first |
+| `undo` · `notify_user` | take back or redo the last change in the open workspace; show you a notification in the app |
 | `run_bot` · `stop_bot` · `save_project` · `show_in_editor` | run it (here or on the server), save it, show you a block |
 | `run_script` | many of these at once: JavaScript that gets every tool as a function (`tools.add_block({ … })`), the [plugin API](/api/editor) as `xc`, and `print()` |
 
@@ -3053,7 +3056,9 @@ Types for your code editor: `/// <reference types="@xc-circuit/sdk/editor" />` (
 | `xc.blockTypes(query)` · `xc.blockType(type)` | installed block types · one type's fields, outputs and flows |
 | `xc.blockSource(type)` · `xc.plugins()` | a block type's code: `{ type, plugin, file, version, source }` · the plugins, turned on or off, with their blocks |
 | `xc.appSettings()` · `xc.botSettings()` | the app's settings (with the shortcuts) · Bot › Settings: `{ mode, pages, settings: [{ key, label, type, page, value, … }] }` (secrets only say whether one is saved) |
-| `xc.server()` | the bot's server (Bot › Remote…): kind, where, `runTarget` (`local` or `server`), `canRunThere`, `savedHere` (false for a server that came with the project's files and the user hasn't saved on this computer: nothing is sent to it), `state`, CPU and memory, `lastUpload`, the server console's last lines; never a password or key |
+| `xc.remote()` | the bot's remote (Bot › Remote…; `xc.server()` is its older name): kind, where, `runTarget` (`local` or `server`), `canRunThere`, `savedHere` (false for a server that came with the project's files and the user hasn't saved on this computer: nothing is sent to it), `state`, CPU and memory, `lastUpload`, the server console's last lines; never a password or key |
+| `xc.git()` | the project's Git repository (Share › Git…): `connected`, `storedAt`, `branch`, `changed`, `toSend`, `toFetch`, `busy`, `conflicts`, `lastSaid` and the newest `versions`; never a sign-in. `xc.run("git.store")` and `xc.run("git.fetch")` do what the buttons do |
+| `xc.deleteWorkspace(key)` | asks the user whether to delete a workspace; nothing is deleted until they say yes |
 | `xc.blockPins(workspace, id)` | a block as it is now: its values and pins, with types and wires |
 | `xc.problems()` · `xc.console(lines)` | what the Problems panel and the Console show |
 | `xc.t(text)` | text in the app's language, from the plugins' `locales/*.toml` |

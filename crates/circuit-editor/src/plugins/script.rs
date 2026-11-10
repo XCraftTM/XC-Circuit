@@ -623,6 +623,11 @@ fn host_call(h: &mut dyn Host, method: &str, args: &str, by_user: bool) -> Resul
         "botSettings" => h.bot_settings(),
         "setBotSettings" => h.set_bot_settings(&value(0))?,
         "server" => h.server(),
+        "git" => h.git(),
+        "askDeleteWorkspace" => {
+            h.ask_delete_workspace(&s(0))?;
+            Value::Null
+        }
         "plugins" => h.plugins(),
         "blockSource" => h.block_source(&s(0))?,
         other => return Err(format!("xc has no `{other}`")),

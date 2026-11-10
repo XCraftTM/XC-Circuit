@@ -127,6 +127,8 @@ pub struct Editor {
     /// The bot's server as plugins and agents see it (`xc.server()`), kept
     /// up to date by the hosting part of the app. Nothing secret.
     pub server_view: serde_json::Value,
+    /// The project's repository as plugins and agents see it (`xc.git()`).
+    pub git_view: serde_json::Value,
     pub picker: Option<Picker>,
     pub actions: Vec<Action>,
     /// The workspace whose canvas was used last.
@@ -224,6 +226,7 @@ impl Editor {
             shapes: ShapeCache::default(),
             views: HashMap::new(),
             server_view: serde_json::Value::Null,
+            git_view: serde_json::Value::Null,
             picker: None,
             actions: Vec::new(),
             active_workspace: None,
@@ -260,7 +263,7 @@ impl Editor {
             ws_export: None,
             ws_import: None,
         };
-        ed.set_theme(theme_id.unwrap_or("modern-dark"));
+        ed.set_theme(theme_id.unwrap_or("graphite"));
         ed.log_plugin_summary();
         Ok(ed)
     }

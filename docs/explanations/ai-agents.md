@@ -45,7 +45,10 @@ What the agent can do:
 | `get_problems` · `get_console` | what's wrong, and what the bot logged |
 | `list_block_types` · `get_block_source` · `list_plugins` | every block, a block's code (to see exactly what it does), the plugins |
 | `get_app_settings` · `get_bot_settings` · `set_bot_settings` | XC Circuit's settings (to read), and Bot › Settings (to read and change; never the token) |
-| `get_server` · `server_action` · `set_run_target` | the bot's server: its state, the last upload and its console; upload, start, restart, stop, kill; and whether Run acts here or there |
+| `get_remote` · `remote_action` · `set_run_target` | the bot's remote: its state, CPU and memory, the last upload and its console; upload, start, restart, stop, kill; whether Run acts here or there (`get_server` and `server_action` are their older names and still work) |
+| `get_git` · `git_action` | the project's Git repository: what waits to be stored or fetched and the newest versions; Store and Fetch |
+| `set_workspace` · `delete_workspace` | a workspace's name, folder and whether it is turned off; deleting one asks you in the app first |
+| `undo` · `notify_user` | take back or redo the last change in the open workspace; show you a notification in the app |
 | `run_bot` · `stop_bot` · `save_project` · `show_in_editor` | run it (here or on the server), save it, show you a block |
 | `run_script` | many of these at once: JavaScript that gets every tool as a function (`tools.add_block({ … })`), the [plugin API](/api/editor) as `xc`, and `print()` |
 

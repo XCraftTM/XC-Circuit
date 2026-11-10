@@ -1002,6 +1002,36 @@ impl GitUi {
         self.state.as_ref().filter(|s| s.remote.is_some()).map_or(0, |s| s.changed.len().max(s.ahead) + s.behind)
     }
 
+    /// The repository as plugins and agents see it: whether the project is
+    /// kept in one and where (the address, never a sign-in), what waits to
+    /// be stored or fetched, what it is doing, how the last action went and
+    /// the newest stored versions.
+    pub fn view(&self) -> serde_json::Value {
+        let Some(state) = &self.state else { return serde_json::json!({ "connected": false }) };
+        serde_json::json!({
+            "connected": state.remote.is_some(),
+            "storedAt": state.remote,
+            "branch": state.branch,
+            "changed": state.changed,
+            "toSend": state.ahead,
+            "toFetch": state.behind,
+            "keepsInStepByItself": state.auto,
+            "busy": self.busy.map(busy_text),
+            "conflicts": self.conflicts.len(),
+            "looksLikeASecret": self.secrets,
+            "lastSaid": self.said.as_ref().map(|(ok, text)| serde_json::json!({ "ok": ok, "text": text })),
+            "versions": self.history.iter().take(15).map(|v| serde_json::json!({ "message": v.message, "who": v.who, "when": v.when })).collect::<Vec<_>>(),
+        })
+    }
+
+    /// Store, with these words for the version (as typed into the Git view).
+    pub fn store_with(&mut self, ed: &mut Editor, message: &str) {
+        if !message.trim().is_empty() {
+            self.message = message.trim().to_string();
+        }
+        self.store_now(ed);
+    }
+
     /// What Git is doing right now, in words (none while it rests).
     pub fn busy_words(&self) -> Option<String> {
         self.busy.map(|what| tf!("{what} …", what = busy_text(what)))

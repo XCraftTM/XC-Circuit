@@ -44,6 +44,10 @@ function tool(def) {
   runs[def.name] = def.run;
   xc.tool(def);
 }
+/** The same tool under the name it had before: kept so what was set up with it still works. */
+function olderName(older, def) {
+  tool({ ...def, name: older, description: `The older name of ${def.name}: use that one. ${def.description}` });
+}
 
 // ---- Reading ----------------------------------------------------------------
 
@@ -194,41 +198,100 @@ tool({
   },
 });
 
-tool({
-  name: "get_server",
-  description: "The bot's server (Bot › Remote…): how it uploads (host, calagopus, sftp or none), where, whether Run acts there (runTarget: local or server) and can (canRunThere: a Calagopus server with a key), the server's state (running, starting, stopping, offline) with CPU and memory, the last upload, and the server console's last lines when its tab is open. savedHere is false when the settings came with the project's files and the user hasn't saved them on this computer: nothing is sent to such a server. Never passwords or keys.",
+const getRemote = {
+  name: "get_remote",
+  description: "The bot's remote (Bot › Remote…), the place it is uploaded to and can run on: how it uploads (host, calagopus, sftp or none), where, whether Run acts there (runTarget: local or server) and can (canRunThere: a Calagopus server or the user's Host, with a saved key), its state (running, starting, stopping, offline) with CPU and memory, the last upload, and its console's last lines. savedHere false means the settings came with the project and the user hasn't confirmed them on this computer: nothing is sent there. Never passwords or keys.",
   input: schema({}),
   run() {
     needProject();
-    return xc.server();
+    return xc.remote();
   },
-});
+};
+tool(getRemote);
+olderName("get_server", getRemote);
 
-tool({
-  name: "server_action",
-  description: "Does something on the bot's server: upload (sends what changed), start or restart (uploads what changed first, then starts or restarts it, as Run does), stop, or kill (ends it at once). Start, restart, stop and kill need a Calagopus server (get_server: canRunThere). Check get_server a few seconds later for its state.",
+const remoteAction = {
+  name: "remote_action",
+  description: "Does something on the bot's remote: upload (sends what changed), start or restart (uploads what changed first, then starts or restarts it, as Run does), stop, or kill (ends it at once). Start, restart, stop and kill need a remote that can run the bot (get_remote: canRunThere). Check get_remote a few seconds later for its state.",
   input: schema({ action: { type: "string", enum: ["upload", "start", "restart", "stop", "kill"], description: "What to do." } }, ["action"]),
   run({ action }) {
     needProject();
-    const server = xc.server() || {};
-    if (!server.kind || server.kind === "none") throw new Error("The project has no server set up: the user chooses one in Bot › Remote….");
-    if (server.savedHere === false) throw new Error("The project's server settings aren't the ones the user saved on this computer, so nothing is sent there: the user looks at them in Bot › Remote… and presses Save.");
-    if (action !== "upload" && !server.canRunThere) throw new Error("This server can't be started or stopped from here: that needs a Calagopus server with a saved key (Bot › Remote…). upload works.");
-    if (server.uploading && action !== "stop" && action !== "kill") throw new Error("An upload is under way: try again once it's done (get_server: uploading).");
-    xc.run(`server.${action}`);
-    return action === "upload" ? "Uploading what changed. get_server's lastUpload says how it went." : `Asked the server to ${action}. get_server shows its state in a few seconds.`;
+    const remote = xc.remote() || {};
+    if (!remote.kind || remote.kind === "none") throw new Error("The project has no remote set up: the user chooses one in Bot › Remote….");
+    if (remote.savedHere === false) throw new Error("The project's remote settings aren't the ones the user saved on this computer, so nothing is sent there: the user looks at them in Bot › Remote… and presses Save.");
+    if (action !== "upload" && !remote.canRunThere) throw new Error("This remote can't be started or stopped from here: that needs a Calagopus server or a Host with a saved key (Bot › Remote…). upload works.");
+    if (remote.uploading && action !== "stop" && action !== "kill") throw new Error("An upload is under way: try again once it's done (get_remote: uploading).");
+    xc.run(`remote.${action}`);
+    return action === "upload" ? "Uploading what changed. get_remote's lastUpload says how it went." : `Asked the remote to ${action}. get_remote shows its state in a few seconds.`;
+  },
+};
+tool(remoteAction);
+olderName("server_action", remoteAction);
+
+tool({
+  name: "set_run_target",
+  description: "Where run_bot and stop_bot act: local (on this computer) or remote (where the bot is uploaded to; get_remote: canRunThere). Picking remote stops the bot running here, so the two don't both answer. (server is the older word for remote.)",
+  input: schema({ target: { type: "string", enum: ["local", "remote", "server"] } }, ["target"]),
+  run({ target }) {
+    needProject();
+    const there = target === "remote" || target === "server";
+    if (there && !(xc.remote() || {}).canRunThere) throw new Error("Run can't act on a remote here: that needs a Calagopus server or a Host with a saved key (Bot › Remote…).");
+    xc.run(there ? "run.remote" : "run.local");
+    return `Run, Restart and Stop now act ${there ? "on the remote" : "on this computer"}.`;
   },
 });
 
 tool({
-  name: "set_run_target",
-  description: "Where run_bot and stop_bot act: local (on this computer) or server (the bot's Calagopus server; get_server: canRunThere). Picking server stops the bot running here, so the two don't both answer.",
-  input: schema({ target: { type: "string", enum: ["local", "server"] } }, ["target"]),
-  run({ target }) {
+  name: "get_git",
+  description: "The project's Git repository (Share › Git…): connected (false: it isn't kept in one; the user sets that up), storedAt (the address), branch, changed (the files changed since the last Store), toSend and toFetch (versions waiting each way), busy (what it is doing now), conflicts (how many things both sides changed: the user chooses in Git's window), looksLikeASecret (what Store found in blocks and asks the user about), lastSaid (how the last Store or Fetch went) and the newest stored versions. Never a sign-in.",
+  input: schema({}),
+  run() {
     needProject();
-    if (target === "server" && !(xc.server() || {}).canRunThere) throw new Error("Run can't act on a server here: that needs a Calagopus server with a saved key (Bot › Remote…).");
-    xc.run(`run.${target}`);
-    return `Run, Restart and Stop now act ${target === "server" ? "on the server" : "on this computer"}.`;
+    return xc.git() || { connected: false };
+  },
+});
+
+tool({
+  name: "git_action",
+  description: "Store or Fetch, as the buttons in the Git view: store saves the project, records what changed (with `message`, a few words on what changed) and sends it to the repository; fetch gets what is stored there and puts it together with the project here. Needs a connected repository (get_git: connected). When both sides changed the same thing, or something looks like a secret, Git's window opens for the user to choose. Check get_git a few seconds later: lastSaid says how it went.",
+  input: schema({ action: { type: "string", enum: ["store", "fetch"] }, message: { type: "string", description: "For store: what changed, in a few words (\"Added /ticket\"). Without it the version is called Changes." } }, ["action"]),
+  run({ action, message }) {
+    needProject();
+    const git = xc.git() || {};
+    if (!git.connected) throw new Error("The project isn't kept in a Git repository: the user sets that up in Share › Git….");
+    if (git.busy) throw new Error(`Git is busy (${git.busy}): try again once it's done (get_git: busy).`);
+    if (git.conflicts) throw new Error("Both sides changed the same thing: the user chooses whose version stays in Git's window first.");
+    if (action === "store") {
+      // One line, and no colon games with the command's name.
+      const words = String(message || "").replace(/\s+/g, " ").trim().slice(0, 200);
+      xc.run(words ? `git.store:${words}` : "git.store");
+      return "Storing. get_git's lastSaid says how it went.";
+    }
+    xc.run("git.fetch");
+    return "Fetching. get_git's lastSaid says how it went, and get_workspace shows what came in.";
+  },
+});
+
+tool({
+  name: "undo",
+  description: "Takes back the last change in the workspace the user has open (as Ctrl+Z there), or with redo: true brings back what was taken back. Changes are undone per workspace, in the order they were made there.",
+  input: schema({ redo: { type: "boolean", description: "Redo instead of undo." } }),
+  run({ redo }) {
+    needProject();
+    xc.run(redo ? "edit.redo" : "edit.undo");
+    return redo ? "Asked to redo. get_workspace shows the result." : "Asked to undo. get_workspace shows the result.";
+  },
+});
+
+tool({
+  name: "notify_user",
+  description: "Shows the user a notification in XC Circuit: a card in the window's corner for a few seconds, kept in the list behind the bell. For what they should see even if they aren't reading this chat (\"/ticket is ready to try\"). One short sentence; not for every step.",
+  input: schema({ message: str, level: { type: "string", enum: ["info", "success", "warn", "error"], description: "info to start with." } }, ["message"]),
+  run({ message, level }) {
+    const words = String(message || "").trim();
+    if (!words) throw new Error("A notification needs a message.");
+    xc.notify(words.slice(0, 300), level || "info");
+    return "Shown.";
   },
 });
 
@@ -359,6 +422,44 @@ tool({
     needProject();
     const key = xc.addWorkspace(name, { folder });
     return { key, name };
+  },
+});
+
+tool({
+  name: "set_workspace",
+  description: "Changes a workspace itself, not its blocks: its name, the sidebar folder it is in (\"\" takes it out of its folder; a folder in a folder is written with /), and whether it is turned off (a workspace turned off is left out of the bot: its events don't fire). Only what is given changes. It can be undone.",
+  input: schema({ workspace: workspaceArg, name: str, folder: str, off: { type: "boolean", description: "true turns it off, false on again." } }, ["workspace"]),
+  run({ workspace, name, folder, off }) {
+    needProject();
+    const { key, ws } = load(workspace);
+    if (name !== undefined) {
+      const words = String(name).trim();
+      if (!words) throw new Error("A workspace needs a name.");
+      ws.name = words;
+    }
+    if (folder !== undefined) {
+      const path = String(folder).split("/").map((p) => p.trim()).filter(Boolean).join("/");
+      if (path) ws.folder = path;
+      else delete ws.folder;
+    }
+    if (off !== undefined) {
+      if (off) ws.disabled = true;
+      else delete ws.disabled;
+    }
+    xc.setWorkspace(key, ws);
+    return { key, name: ws.name, folder: ws.folder || "", off: Boolean(ws.disabled) };
+  },
+});
+
+tool({
+  name: "delete_workspace",
+  description: "Asks the user, in XC Circuit, whether to delete a workspace with all its blocks. Nothing is deleted until they say yes there; get_project shows afterwards whether it is gone. To empty a workspace instead, use delete_blocks.",
+  input: schema({ workspace: workspaceArg }, ["workspace"]),
+  run({ workspace }) {
+    needProject();
+    const { key, ws } = load(workspace);
+    xc.deleteWorkspace(key);
+    return `Asked the user whether to delete "${ws.name}". It is deleted once they say yes in XC Circuit.`;
   },
 });
 

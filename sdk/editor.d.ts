@@ -99,6 +99,12 @@ export interface Xc {
   data: { get(key: string): any; set(key: string, value: unknown): void };
   /** This plugin's own store, on this computer. */
   storage: { get(key: string): any; set(key: string, value: unknown): void };
+  /** The bot's remote (Bot › Remote…): where it uploads, Run's target, its state, the last upload, its console. */
+  remote(): any;
+  /** The project's Git repository (Share › Git…): { connected, storedAt, branch, changed, toSend, toFetch, busy, conflicts, lastSaid, versions }. */
+  git(): any;
+  /** Asks the user, in the editor, whether to delete a workspace (by key). */
+  deleteWorkspace(key: string): void;
   log(...parts: unknown[]): void;
   /** Shows a notification (a card in the window's corner, kept behind the bell) and writes it to the Console. */
   notify(message: unknown, level?: "info" | "success" | "warn" | "error"): void;

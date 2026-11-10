@@ -224,6 +224,17 @@ pub trait Host {
     fn server(&self) -> serde_json::Value {
         serde_json::Value::Null
     }
+    /// The project's Git repository (Share › Git…): whether it is kept in
+    /// one and where, what waits to be stored or fetched, the newest stored
+    /// versions. Never a sign-in.
+    fn git(&self) -> serde_json::Value {
+        serde_json::Value::Null
+    }
+    /// Asks the user, in the editor, whether to delete a workspace. Nothing
+    /// is deleted until they say yes.
+    fn ask_delete_workspace(&mut self, _key: &str) -> Result<(), String> {
+        Err("this editor can't delete workspaces for plugins".into())
+    }
     /// The installed plugins (and turned-off ones), with their blocks.
     fn plugins(&self) -> serde_json::Value {
         serde_json::Value::Array(Vec::new())

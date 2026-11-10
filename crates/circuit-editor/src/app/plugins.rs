@@ -263,13 +263,23 @@ impl CircuitApp {
                 "bot.stop" => self.run_command(Cmd::Stop, ctx),
                 "file.save" => self.run_command(Cmd::Save, ctx),
                 // The bot's server (Bot › Remote…).
-                "server.upload" => self.bot.hosting.upload(&mut self.ed),
-                "server.start" | "server.restart" | "server.stop" | "server.kill" => {
-                    let action = id.trim_start_matches("server.").to_string();
+                // (remote.… and, from before it was called that, server.…)
+                "server.upload" | "remote.upload" => self.bot.hosting.upload(&mut self.ed),
+                "server.start" | "server.restart" | "server.stop" | "server.kill" | "remote.start" | "remote.restart" | "remote.stop" | "remote.kill" => {
+                    let action = id.trim_start_matches("server.").trim_start_matches("remote.").to_string();
                     self.bot.hosting.remote_action(&mut self.ed, &action);
                 }
+                // The project's repository (Share › Git…): git.store may
+                // carry the words for the version after a colon.
+                "git.fetch" => self.bot.git.fetch_now(&mut self.ed),
+                store if store == "git.store" || store.starts_with("git.store:") => {
+                    let message = store.strip_prefix("git.store:").unwrap_or_default().to_string();
+                    self.bot.git.store_with(&mut self.ed, &message);
+                }
+                "edit.undo" => self.undo(),
+                "edit.redo" => self.redo(),
                 "run.local" => self.pick_remote(false),
-                "run.server" => {
+                "run.server" | "run.remote" => {
                     if self.bot.hosting.can_control(&self.ed) {
                         self.pick_remote(true);
                     } else {
