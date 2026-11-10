@@ -202,6 +202,13 @@ impl CircuitApp {
                 self.bot.hosting.open(&self.ed);
             }
         }
+        // The project's repository: what waits to be stored or fetched.
+        if has_project && let Some((dot, text)) = self.bot.git.status() {
+            let dot = dot.then_some(t.accent);
+            if status_item(&mut right, &t, dot, &text).on_hover_text(t!("File › Git…")).clicked() {
+                self.bot.git.open(&self.ed);
+            }
+        }
         let saved = if self.ed.unsaved() {
             t!("Unsaved changes")
         } else if self.ed.saver.busy() {

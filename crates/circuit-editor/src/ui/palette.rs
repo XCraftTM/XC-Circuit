@@ -32,6 +32,7 @@ pub enum Cmd {
     Hosting,
     /// File › Git…
     Git,
+    GetFromGit,
     Upload,
     ServerConsole,
     ImportWorkspaces,

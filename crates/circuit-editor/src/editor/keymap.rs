@@ -30,6 +30,10 @@ pub enum Action {
     Upload,
     ServerConsole,
     ServerSettings,
+    /// File › Git…, and its two actions.
+    Git,
+    GitStore,
+    GitFetch,
     /// Run, Restart and Stop between this computer and the server.
     ToggleRemote,
     Undo,
@@ -50,7 +54,7 @@ pub enum Action {
 pub const PER_ACTION: usize = 2;
 
 impl Action {
-    pub const ALL: [Action; 28] = [
+    pub const ALL: [Action; 31] = [
         Action::CommandPalette,
         Action::Settings,
         Action::Save,
@@ -67,6 +71,9 @@ impl Action {
         Action::ServerConsole,
         Action::ServerSettings,
         Action::ToggleRemote,
+        Action::Git,
+        Action::GitStore,
+        Action::GitFetch,
         Action::Undo,
         Action::Redo,
         Action::Duplicate,
@@ -100,6 +107,9 @@ impl Action {
             Action::ServerConsole => "server_console",
             Action::ServerSettings => "server_settings",
             Action::ToggleRemote => "toggle_remote",
+            Action::Git => "git",
+            Action::GitStore => "git_store",
+            Action::GitFetch => "git_fetch",
             Action::Undo => "undo",
             Action::Redo => "redo",
             Action::Duplicate => "duplicate",
@@ -133,6 +143,9 @@ impl Action {
             Action::ServerConsole => t!("Remote console"),
             Action::ServerSettings => t!("Remote settings (Bot › Remote…)"),
             Action::ToggleRemote => t!("Switch Run between this computer and the remote"),
+            Action::Git => t!("Git (File › Git…)"),
+            Action::GitStore => t!("Store the project in its repository"),
+            Action::GitFetch => t!("Fetch what is stored in the repository"),
             Action::Undo => t!("Undo"),
             Action::Redo => t!("Redo"),
             Action::Duplicate => t!("Duplicate the selected blocks"),
@@ -154,6 +167,7 @@ impl Action {
             Action::CommandPalette | Action::Settings | Action::Save | Action::NewProject | Action::OpenProject => t!("General"),
             Action::Run | Action::Stop | Action::Start | Action::Restart | Action::BotSettings | Action::SlashCommands | Action::ExportBot => t!("Bot"),
             Action::Upload | Action::ServerConsole | Action::ServerSettings | Action::ToggleRemote => t!("Remote"),
+            Action::Git | Action::GitStore | Action::GitFetch => "Git",
             Action::Undo | Action::Redo | Action::Duplicate | Action::SelectAll | Action::Delete => t!("Editing"),
             _ => t!("Canvas"),
         }
@@ -187,7 +201,7 @@ impl Action {
             Action::ZoomOut => vec![s("Ctrl+-")],
             Action::ZoomReset => vec![s("Ctrl+0")],
             // None to start with: set in Settings › Shortcuts.
-            Action::Start | Action::Restart | Action::BotSettings | Action::SlashCommands | Action::ExportBot | Action::Upload | Action::ServerConsole | Action::ServerSettings | Action::ToggleRemote => Vec::new(),
+            Action::Start | Action::Restart | Action::BotSettings | Action::SlashCommands | Action::ExportBot | Action::Upload | Action::ServerConsole | Action::ServerSettings | Action::ToggleRemote | Action::Git | Action::GitStore | Action::GitFetch => Vec::new(),
         }
     }
 }
@@ -397,7 +411,7 @@ mod tests {
         // Every default is readable (the newer actions have none to start
         // with), and every key egui knows reads back.
         for a in Action::ALL {
-            assert!(!a.defaults().is_empty() || a.group() == "Remote" || matches!(a, Action::Start | Action::Restart | Action::BotSettings | Action::SlashCommands | Action::ExportBot), "{a:?}");
+            assert!(!a.defaults().is_empty() || a.group() == "Remote" || a.group() == "Git" || matches!(a, Action::Start | Action::Restart | Action::BotSettings | Action::SlashCommands | Action::ExportBot), "{a:?}");
             assert!(!a.id().is_empty() && Action::ALL.iter().filter(|b| b.id() == a.id()).count() == 1, "{a:?}: one id each");
         }
         for k in Key::ALL {

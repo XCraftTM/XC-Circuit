@@ -502,6 +502,15 @@ impl eframe::App for CircuitApp {
             if hit(Hotkey::ServerSettings) && has_project {
                 self.bot.hosting.open(&self.ed);
             }
+            if hit(Hotkey::Git) && has_project {
+                self.bot.git.open(&self.ed);
+            }
+            if hit(Hotkey::GitStore) && has_project {
+                self.bot.git.store_now(&mut self.ed);
+            }
+            if hit(Hotkey::GitFetch) && has_project {
+                self.bot.git.fetch_now(&mut self.ed);
+            }
             if hit(Hotkey::ToggleRemote) && has_project {
                 if self.bot.hosting.can_control(&self.ed) {
                     let server = !self.bot.hosting.remote;

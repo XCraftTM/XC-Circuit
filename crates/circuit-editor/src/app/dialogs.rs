@@ -543,6 +543,9 @@ impl CircuitApp {
             self.own_plugins_dialog(ctx, &theme);
         }
         self.new_project_chooser(ctx, &theme);
+        if let Some(root) = self.bot.git.get_dialog(ctx, &mut self.ed) {
+            self.switch_project(&root);
+        }
         if self.show_about {
             let app_root = self.bundled_plugins.as_ref().and_then(|p| p.parent()).map(Path::to_path_buf);
             let info = tf!("{plugins} plugins · {blocks} blocks · {themes} themes loaded", plugins = self.ed.reg.plugins.len(), blocks = self.ed.reg.blocks.len(), themes = self.ed.reg.themes.len());

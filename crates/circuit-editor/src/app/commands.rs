@@ -30,12 +30,13 @@ impl CircuitApp {
                 items.push(Item::new(t!("Bot"), t!("Remote console"), Cmd::ServerConsole).shortcut(self.key_label(Hotkey::ServerConsole)));
             }
             items.push(Item::new(t!("File"), "Save", Cmd::Save).shortcut(self.key_label(Hotkey::Save)));
-            items.push(Item::new(t!("File"), "Git…", Cmd::Git));
+            items.push(Item::new(t!("File"), "Git…", Cmd::Git).shortcut(self.key_label(Hotkey::Git)));
             items.push(Item::new(t!("File"), t!("Import workspaces…"), Cmd::ImportWorkspaces));
             items.push(Item::new(t!("File"), t!("Export workspaces…"), Cmd::ExportWorkspaces));
         }
         items.push(Item::new(t!("File"), t!("New Project…"), Cmd::NewProject).shortcut(self.key_label(Hotkey::NewProject)));
         items.push(Item::new(t!("File"), t!("Open Project…"), Cmd::OpenProject).shortcut(self.key_label(Hotkey::OpenProject)));
+        items.push(Item::new(t!("File"), t!("Get from Git…"), Cmd::GetFromGit));
         let open = self.ed.project.as_ref().map(|p| p.root.display().to_string());
         for path in self.ed.prefs.recent_projects.iter().filter(|p| Some(*p) != open.as_ref()) {
             let name = Path::new(path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
@@ -143,6 +144,7 @@ impl CircuitApp {
             Cmd::Export => self.bot.open_export(&self.ed),
             Cmd::Hosting => self.bot.hosting.open(&self.ed),
             Cmd::Git => self.bot.git.open(&self.ed),
+            Cmd::GetFromGit => self.get_from_git(),
             Cmd::Upload => self.bot.hosting.upload(&mut self.ed),
             Cmd::ServerConsole => self.bot.hosting.open_console(&mut self.ed),
             Cmd::ImportWorkspaces => crate::editor::exchange::pick_import(&mut self.ed),

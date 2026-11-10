@@ -27,6 +27,12 @@ impl CircuitApp {
         self.new_project = Some(crate::pages::new_project::NewProject::new(&self.ed.reg, location));
     }
 
+    /// Start page and File › Get from Git…
+    pub(super) fn get_from_git(&mut self) {
+        let location = self.ed.prefs.new_project_location.as_ref().map(PathBuf::from).filter(|p| p.is_dir()).unwrap_or_else(|| crate::pages::new_project::default_location(None));
+        self.bot.git.open_get(location);
+    }
+
     /// Opens a project and puts it first among the recent ones.
     pub(super) fn switch_project(&mut self, dir: &Path) {
         self.load_project(dir);
@@ -66,6 +72,7 @@ impl CircuitApp {
         match pick {
             Pick::New => self.new_project_dialog(),
             Pick::Open => self.open_project_dialog(),
+            Pick::Get => self.get_from_git(),
             Pick::Recent(dir) => self.open_recent(&dir),
             Pick::Forget(path) => self.ed.prefs.forget_project(&path),
             Pick::Example => {

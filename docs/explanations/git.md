@@ -20,6 +20,10 @@ The sign-in is kept in your system's credential store, one per place (`github.co
 
 When newer changes are stored there, Store says so: press **Fetch** first, then **Store** again.
 
+## On another computer
+
+**File › Get from Git…** (also on the start page) brings a stored project onto a computer: paste the repository's address, choose where its folder goes, sign in if the repository is private, and press **Get the project**. It opens right away. Then fill in the bot token once in **Bot › Settings**; it was never stored.
+
 ## When both changed the same thing
 
 Changes to different files, or to different parts of one file, are put together without asking. Where both sides changed the same part of a file, XC Circuit **changes nothing** and lists those files. Choose for each whose version stays, **Mine** or **The stored one**, then press **Put together**. The version you didn't pick stays in the repository's history.
@@ -36,4 +40,4 @@ Never stored: the `.circuit/` folder. That is this computer's part: where the bo
 
 - A repository you set up yourself with Git works too: File › Git… uses it as it is, and adds `.circuit/` to its `.gitignore`.
 - Files are stored byte for byte, whatever line-ending setting your own Git has, so a project is the same on Windows and Linux.
-- To get a stored project onto another computer today, clone it with Git or download it from the repository's page, then open the folder.
+- The status bar shows how the project stands: **Git: stored**, or how many changes wait to be stored or fetched. Click it to open File › Git…. Store, Fetch and the dialog can each get a shortcut in Settings › Shortcuts.

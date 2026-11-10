@@ -29,6 +29,29 @@ enum Done {
     Code(Result<github::Code, String>),
     Asked(Result<Answer, String>),
     SignedIn(Result<String, String>),
+    /// A project fetched into a new folder.
+    Got(Result<PathBuf, String>),
+}
+
+/// What was pressed in the Sign in part.
+#[derive(Default)]
+struct Asked {
+    github_in: bool,
+    token_in: bool,
+    out: bool,
+    cancel: bool,
+}
+
+/// Getting a stored project onto this computer: where to.
+pub struct GetDraft {
+    location: String,
+    name: String,
+}
+
+/// The folder name an address suggests: `my-bot` for `…/you/my-bot.git`.
+fn name_of(address: &str) -> String {
+    let last = address.trim().trim_end_matches('/').rsplit('/').next().unwrap_or_default();
+    if host_of(address).is_none() { String::new() } else { last.trim_end_matches(".git").to_string() }
 }
 
 /// A sign-in on GitHub under way.
@@ -60,6 +83,13 @@ pub struct GitUi {
     keep: HashMap<String, Side>,
     /// What the last action said, and whether it went well.
     said: Option<(bool, String)>,
+    /// Get from Git: open while set.
+    pub get: Option<GetDraft>,
+    /// The project that Get from Git brought, for the app to open.
+    got: Option<PathBuf>,
+    /// The project and its number of saves when its repository was last
+    /// read, to read it again after the next save.
+    seen: Option<(PathBuf, u64)>,
 }
 
 /// The place an address is at: `github.com` for
@@ -117,10 +147,14 @@ impl GitUi {
     /// Reads how the project stands (on its own thread: the credential store
     /// can take a moment).
     fn read(&mut self) {
-        let Some(root) = self.root.clone() else { return };
+        let root = self.root.clone();
         let typed = host_of(&self.address);
         self.run(None, move || {
-            let state = Sync::open(&root).and_then(|s| s.map(|s| s.state()).transpose()).map_err(said);
+            // Without a project (Get from Git) only who is signed in.
+            let state = match &root {
+                Some(root) => Sync::open(root).and_then(|s| s.map(|s| s.state()).transpose()).map_err(said),
+                None => Ok(None),
+            };
             let host = typed.or_else(|| state.as_ref().ok().and_then(|s| s.as_ref()).and_then(|s| s.remote.as_deref()).and_then(host_of));
             let account = host.and_then(|h| secrets::sync_login(&h)).map(|(user, _)| if user.is_empty() { "…".to_string() } else { user });
             Done::Read(state, account)
@@ -139,6 +173,38 @@ impl GitUi {
             })()
             .map_err(said))
         });
+    }
+
+    /// What the status bar says: whether something waits, and the words.
+    /// `None` for a project that isn't stored anywhere.
+    pub fn status(&self) -> Option<(bool, String)> {
+        let state = self.state.as_ref().filter(|s| s.remote.is_some())?;
+        Some(if let Some(what) = self.busy {
+            (true, tf!("{what} …", what = busy_text(what)))
+        } else if !self.conflicts.is_empty() {
+            (true, t!("Git: choose whose files stay").to_string())
+        } else if state.behind > 0 {
+            (true, tf!("Git: {count} to fetch", count = state.behind))
+        } else if !state.changed.is_empty() || state.ahead > 0 {
+            (true, tf!("Git: {count} to store", count = state.changed.len().max(state.ahead)))
+        } else {
+            (false, t!("Git: stored").to_string())
+        })
+    }
+
+    /// Store by its shortcut: as the button, when the project is connected
+    /// and nothing else runs. Otherwise the dialog opens.
+    pub fn store_now(&mut self, ed: &mut Editor) {
+        if self.ready() { self.store(ed) } else { self.open(ed) }
+    }
+
+    /// Fetch by its shortcut.
+    pub fn fetch_now(&mut self, ed: &mut Editor) {
+        if self.ready() && self.conflicts.is_empty() { self.fetch(ed) } else { self.open(ed) }
+    }
+
+    fn ready(&self) -> bool {
+        self.busy.is_none() && self.state.as_ref().is_some_and(|s| s.remote.is_some())
     }
 
     /// Store: saves the project, records what changed and sends it.
@@ -216,8 +282,26 @@ impl GitUi {
     /// Every frame: what the jobs came back with, and asking GitHub whether
     /// the code was typed in.
     pub fn poll(&mut self, ed: &mut Editor, ctx: &egui::Context) {
-        if !self.open && self.jobs.is_empty() && self.waiting.is_none() {
-            return;
+        // A project with a repository: how it stands shows in the status
+        // bar, read again after every save.
+        if let Some(root) = ed.project.as_ref().map(|p| p.root.clone()) {
+            let key = (root.clone(), ed.saves);
+            if self.seen.as_ref() != Some(&key) && self.get.is_none() {
+                self.seen = Some(key);
+                if self.root.as_deref() != Some(root.as_path()) {
+                    let waiting = self.waiting.take();
+                    *self = GitUi { waiting, seen: self.seen.take(), ..GitUi::default() };
+                    self.root = Some(root.clone());
+                }
+                if root.join(".git").exists() {
+                    self.read();
+                }
+            }
+        } else if self.root.is_some() && self.get.is_none() {
+            self.root = None;
+            self.state = None;
+            self.seen = None;
+            self.open = false;
         }
         let mut done = Vec::new();
         self.jobs.retain(|rx| match rx.try_recv() {
@@ -356,6 +440,13 @@ impl GitUi {
                     }
                 }
             }
+            Done::Got(result) => match result {
+                Ok(root) => {
+                    self.said = None;
+                    self.got = Some(root);
+                }
+                Err(e) => self.said = Some((false, e)),
+            },
             Done::SignedIn(result) => {
                 match result {
                     Ok(_) => self.said = Some((true, t!("Signed in.").into())),
@@ -365,6 +456,175 @@ impl GitUi {
                 self.read();
             }
         }
+    }
+
+    /// The Sign in part: who is signed in at `host`, or the ways to sign in.
+    fn sign_in_block(&mut self, ui: &mut egui::Ui, theme: &crate::ui::theme::Theme, host: &str, busy: Option<&'static str>) -> Asked {
+        let mut asked = Asked::default();
+        ui.add_space(8.0);
+        kit::section(ui, theme, t!("Sign in"));
+        if let Some(name) = &self.account {
+            ui.horizontal(|ui| {
+                kit::done_label(ui, tf!("Signed in at {place} as {name}", place = host, name = name), theme.action);
+                asked.out = kit::secondary_button(ui, theme, t!("Sign out")).clicked();
+            });
+        } else {
+            if host == "github.com" {
+                if let Some(w) = &self.waiting {
+                    ui.label(t!("Type this code in on the GitHub page that opened:"));
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(&w.code.user_code).monospace().size(24.0).strong());
+                        if kit::secondary_button(ui, theme, t!("Copy")).clicked() {
+                            ui.ctx().copy_text(w.code.user_code.clone());
+                        }
+                        if kit::secondary_button(ui, theme, t!("Open the page again")).clicked() {
+                            let _ = open::that(&w.code.page);
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label(RichText::new(t!("Waiting for you to approve in the browser…")).color(theme.text_muted));
+                        asked.cancel = kit::secondary_button(ui, theme, t!("Cancel")).clicked();
+                    });
+                } else {
+                    ui.add_enabled_ui(busy.is_none(), |ui| {
+                        asked.github_in = kit::primary_button(ui, theme, t!("Sign in with GitHub")).clicked();
+                    });
+                }
+                ui.add_space(6.0);
+                kit::caption(ui, theme, t!("Or paste an access token:"));
+            }
+            kit::field(ui, theme, t!("User name"), Some(t!("Your account's name there. It stands on what you store.")), |ui| kit::text_input(ui, &mut self.user, "", false));
+            kit::field(
+                ui,
+                theme,
+                t!("Access token"),
+                Some(t!("Make one in your account's settings there, allowed to read and write repositories (GitHub: Developer settings › Personal access tokens; GitLab: Access tokens, write_repository; Gitea: Applications). Kept in your system's credential store, never in the project.")),
+                |ui| kit::text_input(ui, &mut self.token, "", true),
+            );
+            ui.add_enabled_ui(busy.is_none() && !self.token.trim().is_empty(), |ui| {
+                asked.token_in = kit::secondary_button(ui, theme, t!("Save the sign-in")).clicked();
+            });
+        }
+        asked
+    }
+
+    /// Start page and File › Get from Git…: asks for a repository and where
+    /// to put the project.
+    pub fn open_get(&mut self, location: PathBuf) {
+        let waiting = self.waiting.take();
+        *self = GitUi { waiting, ..GitUi::default() };
+        self.get = Some(GetDraft { location: location.to_string_lossy().to_string(), name: String::new() });
+    }
+
+    /// The Get from Git dialog. Gives the project's folder once it is there.
+    pub fn get_dialog(&mut self, ctx: &egui::Context, ed: &mut Editor) -> Option<PathBuf> {
+        if let Some(root) = self.got.take() {
+            self.get = None;
+            return Some(root);
+        }
+        self.get.as_ref()?;
+        let theme = ed.theme.clone();
+        let icon = ed.reg.icons.get("branch").cloned();
+        let busy = self.busy;
+        let host = host_of(&self.address);
+        let signed_in = self.account.is_some();
+        let (mut get, mut close, mut retyped) = (false, false, false);
+        let mut asked = Asked::default();
+        let closed = dialog::show(
+            ctx,
+            &theme,
+            dialog::Spec { id: "git-get", title: t!("Get a project from Git"), subtitle: Some(t!("Brings a project stored in a Git repository onto this computer")), icon: icon.as_deref(), width: 640.0 },
+            |ui, part| match part {
+                Part::Body => {
+                    if kit::field(ui, &theme, t!("Repository address"), Some(t!("The HTTPS address of the repository, as its page shows it under Code or Clone.")), |ui| kit::text_input(ui, &mut self.address, "https://github.com/you/my-bot.git", false)).changed() {
+                        retyped = true;
+                    }
+                    if host.is_none() && !self.address.trim().is_empty() {
+                        ui.label(RichText::new(t!("Use the address that starts with https://, not the SSH one (git@…).")).color(theme.warning));
+                    }
+                    let from_address = name_of(&self.address);
+                    let draft = self.get.as_mut().unwrap();
+                    kit::field(ui, &theme, t!("Folder name"), Some(t!("The project's folder on this computer. Empty: the repository's name.")), |ui| kit::text_input(ui, &mut draft.name, &from_address, false));
+                    kit::field(ui, &theme, t!("Where to put it"), None, |ui| {
+                        let w = ui.available_width();
+                        kit::path(ui, &theme, &mut draft.location, "", true, w)
+                    });
+                    if let Some(host) = &host {
+                        ui.add_space(8.0);
+                        kit::section(ui, &theme, t!("Sign in"));
+                        asked = self.sign_in_block(ui, &theme, host, busy);
+                        if !signed_in {
+                            kit::caption(ui, &theme, t!("A repository anyone may read needs no sign-in to get it."));
+                        }
+                    }
+                    ui.add_space(8.0);
+                    if let Some(what) = busy {
+                        ui.horizontal(|ui| {
+                            ui.spinner();
+                            ui.label(RichText::new(tf!("{what} …", what = busy_text(what))).size(12.0).color(theme.text_muted));
+                        });
+                    } else if let Some((ok, text)) = &self.said {
+                        ui.label(RichText::new(text).color(if *ok { theme.action } else { theme.warning }));
+                    }
+                }
+                Part::Footer => {
+                    ui.add_enabled_ui(busy.is_none() && host.is_some(), |ui| {
+                        get = kit::primary_button(ui, &theme, t!("Get the project")).clicked();
+                    });
+                    close = kit::secondary_button(ui, &theme, t!("Cancel")).clicked();
+                }
+            },
+        );
+        if retyped {
+            self.account = None;
+            self.read();
+        }
+        if asked.github_in {
+            self.sign_in_with_github();
+        }
+        if asked.token_in {
+            self.save_token();
+        }
+        if asked.out {
+            self.sign_out();
+        }
+        if asked.cancel {
+            self.waiting = None;
+        }
+        if get {
+            self.get_project();
+        }
+        if (close || closed) && busy.is_none() {
+            self.get = None;
+            self.waiting = None;
+        }
+        None
+    }
+
+    fn get_project(&mut self) {
+        let (Some(draft), Some(host)) = (&self.get, host_of(&self.address)) else { return };
+        let address = self.address.trim().to_string();
+        let name = if draft.name.trim().is_empty() { name_of(&address) } else { draft.name.trim().to_string() };
+        let to = PathBuf::from(draft.location.trim()).join(&name);
+        self.run(Some("Fetching"), move || {
+            Done::Got((|| {
+                if name.is_empty() || name.contains(['/', '\\', ':']) {
+                    anyhow::bail!("Give the folder a name.");
+                }
+                if to.exists() {
+                    anyhow::bail!("There is already a folder called {name} there: choose another name.");
+                }
+                Sync::get(&address, &to, &login_of(&host))?;
+                if !circuit_core::project::is_project(&to) {
+                    // Nothing of the user's: the folder was made just now.
+                    let _ = std::fs::remove_dir_all(&to);
+                    anyhow::bail!("That repository holds no XC Circuit project (no circuit.project.json).");
+                }
+                Ok(to)
+            })()
+            .map_err(said))
+        });
     }
 
     pub fn tab(&mut self, ui: &mut egui::Ui, ed: &mut Editor) {
@@ -405,51 +665,8 @@ impl GitUi {
                         ui.label(RichText::new(t!("Use the address that starts with https://, not the SSH one (git@…).")).color(theme.warning));
                     }
                     if let Some(host) = &host {
-                        ui.add_space(8.0);
-                        kit::section(ui, &theme, t!("Sign in"));
-                        if let Some(name) = &self.account {
-                            ui.horizontal(|ui| {
-                                kit::done_label(ui, tf!("Signed in at {place} as {name}", place = host, name = name), theme.action);
-                                out = kit::secondary_button(ui, &theme, t!("Sign out")).clicked();
-                            });
-                        } else {
-                            if host == "github.com" {
-                                if let Some(w) = &self.waiting {
-                                    ui.label(t!("Type this code in on the GitHub page that opened:"));
-                                    ui.horizontal(|ui| {
-                                        ui.label(RichText::new(&w.code.user_code).monospace().size(24.0).strong());
-                                        if kit::secondary_button(ui, &theme, t!("Copy")).clicked() {
-                                            ui.ctx().copy_text(w.code.user_code.clone());
-                                        }
-                                        if kit::secondary_button(ui, &theme, t!("Open the page again")).clicked() {
-                                            let _ = open::that(&w.code.page);
-                                        }
-                                    });
-                                    ui.horizontal(|ui| {
-                                        ui.spinner();
-                                        ui.label(RichText::new(t!("Waiting for you to approve in the browser…")).color(theme.text_muted));
-                                        cancel = kit::secondary_button(ui, &theme, t!("Cancel")).clicked();
-                                    });
-                                } else {
-                                    ui.add_enabled_ui(busy.is_none(), |ui| {
-                                        github_in = kit::primary_button(ui, &theme, t!("Sign in with GitHub")).clicked();
-                                    });
-                                }
-                                ui.add_space(6.0);
-                                kit::caption(ui, &theme, t!("Or paste an access token:"));
-                            }
-                            kit::field(ui, &theme, t!("User name"), Some(t!("Your account's name there. It stands on what you store.")), |ui| kit::text_input(ui, &mut self.user, "", false));
-                            kit::field(
-                                ui,
-                                &theme,
-                                t!("Access token"),
-                                Some(t!("Make one in your account's settings there, allowed to read and write repositories (GitHub: Developer settings › Personal access tokens; GitLab: Access tokens, write_repository; Gitea: Applications). Kept in your system's credential store, never in the project.")),
-                                |ui| kit::text_input(ui, &mut self.token, "", true),
-                            );
-                            ui.add_enabled_ui(busy.is_none() && !self.token.trim().is_empty(), |ui| {
-                                token_in = kit::secondary_button(ui, &theme, t!("Save the sign-in")).clicked();
-                            });
-                        }
+                        let asked = self.sign_in_block(ui, &theme, host, busy);
+                        (out, cancel, github_in, token_in) = (asked.out, asked.cancel, asked.github_in, asked.token_in);
                     }
                     if let (true, Some(state)) = (connected, &self.state) {
                         ui.add_space(8.0);
@@ -574,6 +791,9 @@ mod tests {
         assert_eq!(host_of("git@github.com:you/bot.git"), None, "SSH isn't spoken");
         assert_eq!(host_of("https://github.com"), None, "no repository in it");
         assert_eq!(host_of(""), None);
+        assert_eq!(name_of("https://github.com/you/my-bot.git"), "my-bot");
+        assert_eq!(name_of("https://git.example.com/team/bot/"), "bot");
+        assert_eq!(name_of("git@github.com:you/bot.git"), "");
     }
 
     /// Connect, Store and Fetch through the dialog's own steps, against a
@@ -655,6 +875,16 @@ mod tests {
         assert!(ui.conflicts.is_empty(), "{:?}", ui.said);
         assert_eq!(ed.project.as_ref().unwrap().workspaces["main"].name, "Theirs again");
         assert_eq!(ui.state.as_ref().map(|s| (s.ahead, s.behind, s.changed.len())), Some((0, 0, 0)), "put together and sent");
+
+        // Getting it onto another computer: into a new folder, by its name.
+        let mut get = GitUi::new();
+        get.open_get(dir.clone());
+        get.address = stored.clone();
+        assert!(host_of(&stored).is_none(), "a folder is no place to sign in at: the dialog asks for an HTTPS address");
+        let to = dir.join("copy");
+        let login = Login::default();
+        Sync::get(&stored, &to, &login).unwrap();
+        assert!(circuit_core::project::is_project(&to) && !to.join(".circuit").join("local.json").exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -13,6 +13,8 @@ use crate::ui::theme::{Theme, with_alpha};
 pub enum Pick {
     New,
     Open,
+    /// Get a project from a Git repository.
+    Get,
     Recent(PathBuf),
     Forget(String),
     Example,
@@ -91,6 +93,9 @@ pub fn show(ui: &mut Ui, theme: &Theme, state: &mut StartPage, recent: &[String]
                         }
                         if wide(ui, false, t!("Open project…")).clicked() {
                             pick = Some(Pick::Open);
+                        }
+                        if wide(ui, false, t!("Get from Git…")).clicked() {
+                            pick = Some(Pick::Get);
                         }
                         if has_example && wide(ui, false, t!("Open example: DemoBot")).clicked() {
                             pick = Some(Pick::Example);
