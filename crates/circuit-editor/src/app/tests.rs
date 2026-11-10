@@ -253,3 +253,24 @@ fn builders_open_in_the_middle_and_the_remote_console_at_the_bottom() {
     assert!(bottom.contains(&Tab::ServerConsole), "{bottom:?}");
     assert_eq!(super::chrome::window_key(&Tab::Export), "Export");
 }
+
+/// The search box keeps out of the way of the menus and of what is beside
+/// Run: it gets narrower, moves off the middle, or is left out.
+#[test]
+fn the_search_box_fits_between_the_menus_and_the_buttons() {
+    use super::menus::search_place;
+    let bar = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(1440.0, 34.0));
+    // Room enough: in the middle, as wide as it likes.
+    let r = search_place(bar, 360.0, 1120.0).unwrap();
+    assert_eq!((r.center().x, r.width()), (720.0, crate::app::titlebar::SEARCH_W));
+    // Local | Remote beside Run reaches into the middle: it moves left.
+    let r = search_place(bar, 360.0, 860.0).unwrap();
+    assert!(r.right() <= 848.0 && r.left() >= 372.0, "{r:?}");
+    assert_eq!(r.width(), crate::app::titlebar::SEARCH_W);
+    // A narrow window: narrower, between the two.
+    let narrow = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(900.0, 34.0));
+    let r = search_place(narrow, 360.0, 620.0).unwrap();
+    assert_eq!((r.left(), r.right()), (372.0, 608.0));
+    // No room: none.
+    assert!(search_place(narrow, 360.0, 500.0).is_none());
+}

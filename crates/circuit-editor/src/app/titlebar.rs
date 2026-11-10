@@ -41,8 +41,13 @@ pub fn search_box(ui: &mut egui::Ui, rect: Rect, theme: &Theme, label: &str, sho
     let stroke = Stroke::new(1.4, theme.text_muted);
     p.circle_stroke(c, 4.5, stroke);
     p.line_segment([c + vec2(3.3, 3.3), c + vec2(6.5, 6.5)], stroke);
-    p.text(rect.left_center() + vec2(30.0, 0.0), egui::Align2::LEFT_CENTER, label, egui::FontId::proportional(12.5), theme.text_muted);
-    p.text(rect.right_center() - vec2(10.0, 0.0), egui::Align2::RIGHT_CENTER, shortcut, egui::FontId::monospace(10.5), mix(theme.text_muted, theme.field, 0.35));
+    // A narrow box drops the shortcut, and cuts the label at its edge.
+    let roomy = rect.width() >= 240.0;
+    let label_end = if roomy { rect.right() - 70.0 } else { rect.right() - 8.0 };
+    p.with_clip_rect(rect.with_max_x(label_end)).text(rect.left_center() + vec2(30.0, 0.0), egui::Align2::LEFT_CENTER, label, egui::FontId::proportional(12.5), theme.text_muted);
+    if roomy {
+        p.text(rect.right_center() - vec2(10.0, 0.0), egui::Align2::RIGHT_CENTER, shortcut, egui::FontId::monospace(10.5), mix(theme.text_muted, theme.field, 0.35));
+    }
     resp.clicked()
 }
 

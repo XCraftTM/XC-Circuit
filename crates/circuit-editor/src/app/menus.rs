@@ -17,6 +17,21 @@ fn switch_on_hover(ctx: &egui::Context, tops: &[egui::Response]) {
     }
 }
 
+/// Where the title bar's search box goes: in the middle of `bar` and as
+/// wide as it likes to be, but only between where the menus end (`from`)
+/// and where the buttons on the right begin (`to`), with a little room to
+/// each. Narrower when that is less, moved off the middle when one side
+/// reaches further, and none when under 140 points are left.
+pub(super) fn search_place(bar: egui::Rect, from: f32, to: f32) -> Option<egui::Rect> {
+    let (from, to) = (from + 12.0, to - 12.0);
+    let width = crate::app::titlebar::SEARCH_W.min(to - from);
+    if width < 140.0 {
+        return None;
+    }
+    let x = bar.center().x.clamp(from + width / 2.0, to - width / 2.0);
+    Some(egui::Rect::from_center_size(egui::pos2(x, bar.center().y), egui::vec2(width, 24.0)))
+}
+
 impl CircuitApp {
     pub(super) fn menu_bar(&mut self, ui: &mut egui::Ui) {
         let theme = self.ed.theme.clone();
@@ -25,16 +40,10 @@ impl CircuitApp {
         if custom {
             crate::app::titlebar::drag_region(ui, bar);
         }
-        // The search box sits in the middle, where the window title would be.
-        let search = egui::Rect::from_center_size(bar.center(), egui::vec2(crate::app::titlebar::SEARCH_W, 24.0));
         let label = match &self.ed.project {
             Some(p) => tf!("Search {project}", project = p.meta.name),
             None => t!("Search").into(),
         };
-        self.ed.ui_rects.insert("search".into(), search);
-        if crate::app::titlebar::search_box(ui, search, &theme, &label, &self.key_label(Hotkey::CommandPalette)) {
-            self.palette = Some(Default::default());
-        }
         let row = |ui: &mut egui::Ui, layout| ui.new_child(egui::UiBuilder::new().max_rect(bar).layout(layout));
         let mut left = row(ui, egui::Layout::left_to_right(egui::Align::Center));
         if self.tour.is_some() {
@@ -332,6 +341,8 @@ impl CircuitApp {
 
         }
 
+        // Where the menus end: the search box starts after them.
+        let menus_end = left.min_rect().right();
         // Window buttons and Run / Stop on the right.
         let ui = &mut row(ui, egui::Layout::right_to_left(egui::Align::Center));
         if custom {
@@ -373,6 +384,16 @@ impl CircuitApp {
             ui.add_space(6.0);
             if let Some(server) = crate::bot::remote::switch(ui, &theme, remote) {
                 self.pick_remote(server);
+            }
+        }
+        // The search box sits in the middle, where the window title would
+        // be, in the room the menus and the buttons leave: narrower when
+        // they need more (a narrow window, Local | Remote beside Run), and
+        // left out when there is none (Ctrl+P still opens the search).
+        if let Some(search) = search_place(bar, menus_end, ui.min_rect().left()) {
+            self.ed.ui_rects.insert("search".into(), search);
+            if crate::app::titlebar::search_box(ui, search, &theme, &label, &self.key_label(Hotkey::CommandPalette)) {
+                self.palette = Some(Default::default());
             }
         }
     }
