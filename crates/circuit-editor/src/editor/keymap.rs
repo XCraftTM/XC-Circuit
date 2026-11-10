@@ -19,6 +19,8 @@ pub enum Action {
     OpenProject,
     /// Closes the tab in front among the workspaces' (as a browser's Ctrl+W).
     CloseTab,
+    /// Brings back the tab closed last (as a browser's Ctrl+Shift+T).
+    ReopenTab,
     Run,
     Stop,
     /// Start only (nothing when it runs already).
@@ -56,13 +58,14 @@ pub enum Action {
 pub const PER_ACTION: usize = 2;
 
 impl Action {
-    pub const ALL: [Action; 32] = [
+    pub const ALL: [Action; 33] = [
         Action::CommandPalette,
         Action::Settings,
         Action::Save,
         Action::NewProject,
         Action::OpenProject,
         Action::CloseTab,
+        Action::ReopenTab,
         Action::Run,
         Action::Stop,
         Action::Start,
@@ -98,6 +101,7 @@ impl Action {
             Action::Settings => "settings",
             Action::Save => "save",
             Action::CloseTab => "close_tab",
+            Action::ReopenTab => "reopen_tab",
             Action::NewProject => "new_project",
             Action::OpenProject => "open_project",
             Action::Run => "run",
@@ -133,6 +137,7 @@ impl Action {
         match self {
             Action::CommandPalette => t!("Command palette"),
             Action::CloseTab => t!("Close the tab in front"),
+            Action::ReopenTab => t!("Bring back the tab closed last"),
             Action::Settings => t!("Settings"),
             Action::Save => t!("Save (restarts a running bot)"),
             Action::NewProject => t!("New project"),
@@ -169,7 +174,7 @@ impl Action {
     /// The Settings page's group.
     pub fn group(self) -> &'static str {
         match self {
-            Action::CommandPalette | Action::Settings | Action::Save | Action::NewProject | Action::OpenProject | Action::CloseTab => t!("General"),
+            Action::CommandPalette | Action::Settings | Action::Save | Action::NewProject | Action::OpenProject | Action::CloseTab | Action::ReopenTab => t!("General"),
             Action::Run | Action::Stop | Action::Start | Action::Restart | Action::BotSettings | Action::SlashCommands | Action::ExportBot => t!("Bot"),
             Action::Upload | Action::ServerConsole | Action::ServerSettings | Action::ToggleRemote => t!("Remote"),
             Action::Git | Action::GitStore | Action::GitFetch => "Git",
@@ -192,6 +197,7 @@ impl Action {
             Action::NewProject => vec![s("Ctrl+N")],
             Action::OpenProject => vec![s("Ctrl+O")],
             Action::CloseTab => vec![s("Ctrl+W")],
+            Action::ReopenTab => vec![s("Ctrl+Shift+T")],
             Action::Run => vec![s("F5")],
             Action::Stop => vec![s("Shift+F5")],
             Action::Undo => vec![s("Ctrl+Z")],

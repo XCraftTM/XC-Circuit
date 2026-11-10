@@ -5,6 +5,8 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 ## Unreleased
 
 ### Added
+- **Ctrl+Shift+T brings back the tab closed last**, as in a browser: a workspace, a page or a panel comes back where it was among its area's tabs, and a builder (or the bot's settings) with what you were editing in it, so closing one by mistake loses nothing. Press it again for the one before; the last 25 are remembered until the project closes. Also File › Reopen Closed Tab, and it can be changed in Settings › Shortcuts.
+- **Open the project's folder**: File › Open Project Folder, the folder button at the top of the Workspaces view, or the command palette shows the project's files in the system's file manager.
 - **Ctrl+W closes the tab in front, Ctrl+1 to Ctrl+9 switch tabs**, as in a browser. Ctrl+W (also File › Close Tab) closes the workspace, builder or page you are in, as its × does; panels such as the Console stay. It can be changed in Settings › Shortcuts. Ctrl+1 to Ctrl+9 go to that tab of the area you are in (the workspaces' tabs, or the bottom panels' while you are in one), and Ctrl+9 to its last one.
 - **Move and fold the side bar's views by their name**: drag a view by its name at the top of the side bar onto the lower half to show it under another one, onto the activity bar to put its icon elsewhere, or out into the window to make it a tab. With two views shown, a click on a name folds that view away to its heading, the line between them is easier to take hold of, and a double-click on it gives each half the height.
 - **Plugins can show notifications**: `xc.notify(message, level?)` shows a card in the window's corner and keeps it behind the bell; `xc.warn` and `xc.error` do so already.

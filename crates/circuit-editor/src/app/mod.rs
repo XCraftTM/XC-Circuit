@@ -26,6 +26,7 @@ use crate::{canvas, ui::dialog, ui::palette, pages::panels, canvas::picker};
 
 mod activity;
 mod chrome;
+mod closed;
 use chrome::WindowPart;
 mod commands;
 mod dialogs;
@@ -241,6 +242,8 @@ pub struct CircuitApp {
     /// Close the tab in front was asked for (its shortcut, File › Close Tab):
     /// done where the tabs are drawn.
     close_tab: bool,
+    /// The tabs closed lately, the last one last: Ctrl+Shift+T brings them back.
+    closed_tabs: Vec<closed::Closed>,
     /// Whether the window was last given the start window's shape (not yet, at first).
     window_shaped: Option<bool>,
     /// For saving what egui remembers (see `memory`).
@@ -440,6 +443,7 @@ impl CircuitApp {
             side_before: None,
             side_folded: None,
             close_tab: false,
+            closed_tabs: Vec::new(),
             window_shaped: None,
             settings: Default::default(),
             restore: Default::default(),
@@ -597,6 +601,9 @@ impl eframe::App for CircuitApp {
             }
             if hit(Hotkey::CloseTab) {
                 self.close_tab = true;
+            }
+            if hit(Hotkey::ReopenTab) {
+                self.reopen_tab();
             }
             // Ctrl+1 to Ctrl+9: that tab of the area the user is in, as in a
             // browser (9 is the last one). After the shortcuts above, so one
@@ -815,6 +822,8 @@ impl eframe::App for CircuitApp {
                 canvases: self.dock.tabs().filter(|t| matches!(t, Tab::Canvas(_))).count(),
                 no_workspace: None,
                 in_window: false,
+                places: closed::places(&self.dock),
+                closed: Vec::new(),
                 bottom_ask: None,
                 bottom_filled: self.bottom_before.is_some(),
                 page_ask: None,
@@ -853,6 +862,7 @@ impl eframe::App for CircuitApp {
             let asks = std::mem::take(&mut viewer.asks);
             let side_ask = viewer.side_ask.take().or(viewer.page_ask.take());
             let bottom_ask = viewer.bottom_ask.take();
+            let closed = std::mem::take(&mut viewer.closed);
             let to_side = viewer.to_side.take();
             let closed_side = std::mem::take(&mut viewer.closed_side);
             if let Some(ask) = viewer.no_workspace.take() {
@@ -864,6 +874,7 @@ impl eframe::App for CircuitApp {
             if let Some(ask) = side_ask {
                 self.plugins_side_ask(ask, ui.ctx());
             }
+            self.keep_closed(closed);
             match bottom_ask {
                 Some(BottomAsk::Hide) => {
                     self.fill_bottom(false);

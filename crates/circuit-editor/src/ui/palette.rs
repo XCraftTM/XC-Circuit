@@ -12,6 +12,8 @@ pub enum Cmd {
     OpenExample,
     OpenRecent(std::path::PathBuf),
     CloseProject,
+    OpenProjectFolder,
+    ReopenTab,
     Save,
     ReloadPlugins,
     Undo,

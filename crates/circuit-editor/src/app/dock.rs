@@ -30,6 +30,9 @@ pub(super) struct Viewer<'a> {
     pub(super) in_window: bool,
     /// The bottom panels' buttons: make them fill the window (or give the
     /// room back), or hide them.
+    /// Where every tab is, and the tabs closed this frame (see `closed`).
+    pub(super) places: std::collections::HashMap<Tab, (Option<Tab>, usize)>,
+    pub(super) closed: Vec<super::closed::Closed>,
     pub(super) bottom_ask: Option<BottomAsk>,
     pub(super) bottom_filled: bool,
     /// What a plugin's page asked for.
@@ -172,19 +175,17 @@ impl DockViewer<Tab> for Viewer<'_> {
     }
 
     fn on_close(&mut self, tab: &Tab) -> Option<Tab> {
-        // The last workspace's tab leaves a placeholder in its place, so the
-        // area stays (and the Inspector doesn't take the whole window).
-        if matches!(tab, Tab::Canvas(_)) && self.canvases <= 1 && self.ed.project.is_some() {
-            return Some(Tab::Start);
-        }
-        // Closing an editor's tab cancels it.
+        use super::closed::{Closed, Draft, remembered};
+        // Closing an editor's tab cancels it; what it was editing is kept
+        // with the closed tab, for Ctrl+Shift+T.
+        let mut draft = Draft::None;
         match tab {
-            Tab::EmbedBuilder => self.ed.embed_edit = None,
-            Tab::LayoutBuilder => self.ed.layout_edit = None,
-            Tab::ModalBuilder => self.ed.modal_edit = None,
-            Tab::CanvasBuilder => self.ed.canvas_edit = None,
-            Tab::SlashCommands => self.ed.slash_edit = None,
-            Tab::BotSettings => self.bot.settings = None,
+            Tab::EmbedBuilder => draft = self.ed.embed_edit.take().map_or(Draft::None, Draft::Embed),
+            Tab::LayoutBuilder => draft = self.ed.layout_edit.take().map_or(Draft::None, Draft::Layout),
+            Tab::ModalBuilder => draft = self.ed.modal_edit.take().map_or(Draft::None, Draft::Modal),
+            Tab::CanvasBuilder => draft = self.ed.canvas_edit.take().map_or(Draft::None, Draft::Canvas),
+            Tab::SlashCommands => draft = self.ed.slash_edit.take().map_or(Draft::None, Draft::Slash),
+            Tab::BotSettings => draft = self.bot.settings.take().map_or(Draft::None, Draft::BotSettings),
             Tab::Export => self.bot.export = None,
             Tab::Hosting => self.bot.hosting.draft = None,
             Tab::Git if self.in_window => self.bot.git.open = false,
@@ -196,6 +197,15 @@ impl DockViewer<Tab> for Viewer<'_> {
             Tab::WorkspaceImport => self.ed.ws_import = None,
             Tab::Side(view) => self.closed_side.push(*view),
             _ => {}
+        }
+        if !self.in_window && remembered(tab, !matches!(draft, Draft::None)) {
+            let place = self.places.get(tab).and_then(|(anchor, index)| anchor.clone().map(|a| (a, *index)));
+            self.closed.push(Closed { tab: tab.clone(), draft, place });
+        }
+        // The last workspace's tab leaves a placeholder in its place, so the
+        // area stays (and the Inspector doesn't take the whole window).
+        if matches!(tab, Tab::Canvas(_)) && self.canvases <= 1 && self.ed.project.is_some() {
+            return Some(Tab::Start);
         }
         None
     }

@@ -576,6 +576,11 @@ impl CircuitApp {
         egui::Popup::menu(&more).id(egui::Id::unique(("side-head-menu", key))).show(&mut view_menu);
         let mut side_ask = None;
         match &tab {
+            Tab::Side(SideView::Workspaces) if self.ed.project.is_some() => {
+                if crate::ui::side::action(&mut bar, &t, &icons, "folder", t!("Open the project's folder")).clicked() {
+                    self.open_project_folder();
+                }
+            }
             Tab::Side(SideView::Plugins) => {
                 if crate::ui::side::action(&mut bar, &t, &icons, "folder", t!("Open the folder your own plugins go in")).clicked() {
                     side_ask = Some(crate::plugins::manager::SideAsk::OpenFolder);

@@ -291,6 +291,31 @@ fn ctrl_and_a_digit_goes_to_that_tab_of_the_area_in_use() {
     assert_eq!(nth_tab(&mut dock, 9), Some(Tab::Problems));
 }
 
+/// A closed tab is remembered with its place among its area's tabs, and
+/// goes back there; builders only with what they were editing.
+#[test]
+fn a_closed_tab_goes_back_where_it_was() {
+    use super::closed::{places, remembered};
+    let mut dock = default_layout();
+    for key in ["a", "b", "c"] {
+        open_canvas(&mut dock, key.into());
+    }
+    let b = Tab::Canvas("b".into());
+    let (anchor, index) = places(&dock)[&b].clone();
+    assert_eq!((anchor.clone(), index), (Some(Tab::Canvas("a".into())), 1));
+    dock.remove(&b);
+    dock.put(b.clone(), &Target::Tabs { anchor: anchor.unwrap(), index });
+    let middle = leaves(&dock).into_iter().find(|l| l.contains(&b)).unwrap();
+    assert_eq!(middle, [Tab::Canvas("a".into()), b, Tab::Canvas("c".into())], "between the two again");
+    // Alone in its area, it has no neighbour to go back to.
+    assert_eq!(places(&dock)[&Tab::Inspector], (None, 0));
+    assert!(remembered(&Tab::Canvas("a".into()), false) && remembered(&Tab::Settings, false) && remembered(&Tab::Console, false));
+    assert!(remembered(&Tab::EmbedBuilder, true) && !remembered(&Tab::EmbedBuilder, false), "a builder only with its draft");
+    assert!(!remembered(&Tab::Export, true) && !remembered(&Tab::Start, false) && !remembered(&Tab::ServerConsole, false));
+    use crate::editor::keymap::{Action, Shortcut};
+    assert_eq!(Action::ReopenTab.defaults(), [Shortcut::parse("Ctrl+Shift+T").unwrap()]);
+}
+
 /// The search box keeps out of the way of the menus and of what is beside
 /// Run: it gets narrower, moves off the middle, or is left out.
 #[test]

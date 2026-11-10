@@ -51,6 +51,14 @@ impl CircuitApp {
         }
     }
 
+    /// Opens the project's folder in the system's file manager.
+    pub(super) fn open_project_folder(&mut self) {
+        let Some(root) = self.ed.project.as_ref().map(|p| p.root.clone()) else { return };
+        if let Err(e) = open::that(&root) {
+            self.ed.log(Level::Error, tf!("Couldn't open {folder}: {error}", folder = root.display(), error = e));
+        }
+    }
+
     /// Saves and closes the project; the start page shows.
     pub(super) fn close_project(&mut self) {
         if self.ed.project.is_none() {
@@ -61,6 +69,7 @@ impl CircuitApp {
         }
         self.bot.stop(&mut self.ed);
         clear_canvases(&mut self.dock);
+        self.closed_tabs.clear();
         self.ed.close_project();
         self.plugin_host.sync(&mut self.ed, self.bundled_plugins.as_deref());
         self.watcher.watch(&self.ed.watch_dirs());
@@ -85,6 +94,7 @@ impl CircuitApp {
         }
         self.bot.stop(&mut self.ed);
         clear_canvases(&mut self.dock);
+        self.closed_tabs.clear();
         self.ed.open_project(dir);
         // It couldn't be opened: the project before stays, and so does its canvas.
         if let Some(p) = self.ed.project.as_ref().filter(|p| p.root != dir)

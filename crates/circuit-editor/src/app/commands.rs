@@ -46,6 +46,10 @@ impl CircuitApp {
         }
         if self.ed.project.is_some() {
             items.push(Item::new(t!("File"), t!("Close Project"), Cmd::CloseProject));
+            items.push(Item::new(t!("File"), t!("Open Project Folder"), Cmd::OpenProjectFolder));
+            if !self.closed_tabs.is_empty() {
+                items.push(Item::new(t!("File"), t!("Reopen Closed Tab"), Cmd::ReopenTab).shortcut(self.key_label(Hotkey::ReopenTab)));
+            }
         }
         if self.ed.examples_dir.is_some() {
             items.push(Item::new(t!("Help"), t!("Open Example: DemoBot"), Cmd::OpenExample));
@@ -123,6 +127,10 @@ impl CircuitApp {
             }
             Cmd::OpenRecent(path) => self.open_recent(&path),
             Cmd::CloseProject => self.close_project(),
+            Cmd::OpenProjectFolder => self.open_project_folder(),
+            Cmd::ReopenTab => {
+                self.reopen_tab();
+            }
             Cmd::Save => {
                 self.ed.save();
                 self.bot.restart_if_running(&mut self.ed, ctx);

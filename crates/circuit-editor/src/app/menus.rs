@@ -103,6 +103,9 @@ impl CircuitApp {
                 if kit::menu_item(ui, t!("Restore from backup…"), None, self.ed.project.is_some()).clicked() {
                     open_center(&mut self.dock, Tab::Backups);
                 }
+                if kit::menu_item(ui, t!("Open Project Folder"), None, self.ed.project.is_some()).on_hover_text(t!("Shows the project's files in the system's file manager")).clicked() {
+                    self.open_project_folder();
+                }
                 ui.separator();
                 if kit::menu_item(ui, t!("Settings…"), Some(self.key_label(Hotkey::Settings)), true).clicked() {
                     self.open_settings();
@@ -110,6 +113,9 @@ impl CircuitApp {
                 ui.separator();
                 if kit::menu_item(ui, t!("Close Tab"), Some(self.key_label(Hotkey::CloseTab)), self.ed.project.is_some()).clicked() {
                     self.close_tab = true;
+                }
+                if kit::menu_item(ui, t!("Reopen Closed Tab"), Some(self.key_label(Hotkey::ReopenTab)), !self.closed_tabs.is_empty()).clicked() {
+                    self.reopen_tab();
                 }
                 if kit::menu_item(ui, t!("Close Project"), None, self.ed.project.is_some()).on_hover_text(t!("Back to the start window")).clicked() {
                     self.close_project();
