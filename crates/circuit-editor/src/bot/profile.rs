@@ -59,6 +59,13 @@ impl Profile {
     pub fn busy(&self) -> bool {
         self.pending.is_some()
     }
+
+    /// Shows a profile that came from elsewhere: a live session's host
+    /// read it with its token, for a guest who has none.
+    pub fn show(&mut self, profile: BotProfile) {
+        self.pending = None;
+        self.shown = Some(profile);
+    }
 }
 
 /// Asks Discord who the bot is, and downloads its picture unless it is cached.

@@ -55,6 +55,15 @@ pub struct Perms {
     /// Change blocks, wires and notes.
     #[serde(default)]
     pub blocks: Blocks,
+    /// See the bot's servers, channels and roles in pickers. Without it a
+    /// field only shows the id that is in it.
+    #[serde(default)]
+    pub servers: bool,
+    /// See the values that went through the wires when the bot ran: those
+    /// hold real members' names and messages. Which blocks ran, how long
+    /// they took and what failed, everyone sees.
+    #[serde(default)]
+    pub values: bool,
 }
 
 impl Perms {
@@ -124,6 +133,20 @@ pub enum Msg {
     Console { lines: Vec<(String, String)> },
     /// Whether the bot at the host's runs: `stopped`, `starting`, `running`.
     Bot { state: String },
+    /// How the bot looks in Discord, for the previews: its name and its
+    /// picture (as base64). Read by the host with its token; every guest
+    /// gets it, so previews look the same for all.
+    Profile { name: String, picture: Option<String> },
+    /// The bot's servers with their channels and roles, for pickers: read
+    /// by the host with its token, for guests with the leave for it. Empty
+    /// for the others.
+    Servers { servers: Value },
+    /// Blocks that just ran at the host's: the workspace, the block, what
+    /// went wrong if anything, and how long it took (ms).
+    Ran { blocks: Vec<(String, String, Option<String>, Option<f64>)> },
+    /// Values that just went through wires: the workspace, the block, the
+    /// pin, the value as text. For guests with the leave for it.
+    Values { values: Vec<(String, String, String, String)> },
 }
 
 fn merge(key: &str, base: Option<&Value>, mine: &Value, theirs: &Value, keep: Side) -> Value {
@@ -382,6 +405,9 @@ pub struct GuestTurn {
     pub console: Vec<(String, String)>,
     /// Whether the bot at the host's runs.
     pub bot: Option<String>,
+    /// The messages that only carry something to show ([`Msg::Profile`],
+    /// [`Msg::Servers`], [`Msg::Ran`], [`Msg::Values`]), as they came.
+    pub show: Vec<Msg>,
 }
 
 /// One document changed by the host, for the guest's project to follow.
@@ -447,6 +473,7 @@ impl GuestSide {
             Msg::Gone { id } => turn.gone = Some(id),
             Msg::Console { lines } => turn.console = lines,
             Msg::Bot { state } => turn.bot = Some(state),
+            msg @ (Msg::Profile { .. } | Msg::Servers { .. } | Msg::Ran { .. } | Msg::Values { .. }) => turn.show.push(msg),
             Msg::Perms { perms } => {
                 self.perms = perms;
                 // What was refused before may be welcome now.
@@ -648,7 +675,7 @@ mod tests {
         t.guest_sync("g1");
         assert!(t.same_everywhere() && t.guests["g1"].2.last().unwrap().contains("slash commands"));
 
-        let send = t.host.allow("g1", Perms { commands: true, workspaces: true, blocks: Blocks::All, power: false });
+        let send = t.host.allow("g1", Perms { commands: true, workspaces: true, blocks: Blocks::All, ..Default::default() });
         t.deliver(send);
         t.docs("g1").insert("new".into(), ws("New", json!({}), json!([])));
         *t.docs("g1").get_mut(META).unwrap() = json!({ "slashCommands": [{ "name": "ping" }] });
@@ -759,6 +786,11 @@ mod tests {
         let turn = guest.receive(Msg::Console { lines: vec![("info".into(), "Bot ready".into())] }, &Docs::new());
         assert_eq!(turn.console, vec![("info".to_string(), "Bot ready".to_string())]);
         assert_eq!(guest.receive(Msg::Bot { state: "running".into() }, &Docs::new()).bot.as_deref(), Some("running"));
+        let ran = Msg::Ran { blocks: vec![("main".into(), "1".into(), None, Some(1.5))] };
+        assert_eq!(guest.receive(ran.clone(), &Docs::new()).show, vec![ran]);
+        // Older apps' leave has no word on servers and values: no.
+        let old: Perms = serde_json::from_str(r#"{ "power": true }"#).unwrap();
+        assert!(old.power && !old.servers && !old.values);
     }
 
     #[test]

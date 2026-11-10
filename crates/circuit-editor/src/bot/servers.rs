@@ -14,7 +14,7 @@ use serde_json::Value;
 const MAX_SERVERS: usize = 25;
 
 /// A server the bot is in.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Server {
     pub id: String,
     pub name: String,
@@ -24,7 +24,7 @@ pub struct Server {
     pub roles: Vec<Role>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Channel {
     pub id: String,
     pub name: String,
@@ -34,7 +34,7 @@ pub struct Channel {
     pub position: i64,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Role {
     pub id: String,
     pub name: String,
@@ -135,6 +135,15 @@ impl Servers {
 
     pub fn busy(&self) -> bool {
         self.pending.is_some()
+    }
+
+    /// Shows a list that came from elsewhere: a live session's host read
+    /// it with its token, for a guest who has none.
+    pub fn show(&mut self, list: Arc<Vec<Server>>) {
+        self.pending = None;
+        self.error = None;
+        self.no_token = false;
+        self.shown = Some(list);
     }
 }
 

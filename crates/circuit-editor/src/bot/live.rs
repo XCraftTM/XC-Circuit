@@ -124,6 +124,16 @@ pub struct LiveUi {
     told: (usize, String),
     /// The bot at the host's, as a guest was last told.
     bot: Option<String>,
+    /// The host: the profile the guests have, the server list each guest
+    /// has (which list, by where it lives; 0: none), and up to when blocks
+    /// that ran were passed on.
+    told_profile: Option<crate::bot::profile::BotProfile>,
+    told_servers: BTreeMap<String, usize>,
+    told_ran: Option<Instant>,
+    /// A guest: the server list and the profile the host gave, shown again
+    /// when the guest's own (empty) read comes in over them.
+    given_servers: Option<std::sync::Arc<Vec<crate::bot::servers::Server>>>,
+    given_profile: Option<crate::bot::profile::BotProfile>,
 }
 
 impl LiveUi {
@@ -242,6 +252,7 @@ impl LiveUi {
                         // The newcomer learns where everyone is, and how the bot stands.
                         self.here = None;
                         self.told.1.clear();
+                        self.told_profile = None;
                     }
                     if let Some(here) = turn.presence {
                         self.others.insert(here.id.clone(), here);
@@ -297,6 +308,38 @@ impl LiveUi {
                     if let Some(state) = turn.bot {
                         self.bot = Some(state);
                     }
+                    for msg in turn.show {
+                        match msg {
+                            Msg::Profile { name, picture } => {
+                                // The picture goes beside the copy, as a file to show.
+                                let file = picture.and_then(|p| base64::Engine::decode(&base64::engine::general_purpose::STANDARD, p).ok()).filter(|b| b.len() <= 2_000_000).and_then(|bytes| {
+                                    let path = folder.join(".circuit").join("bot-picture.png");
+                                    std::fs::create_dir_all(path.parent()?).ok()?;
+                                    std::fs::write(&path, bytes).ok()?;
+                                    Some(path)
+                                });
+                                self.given_profile = Some(crate::bot::profile::BotProfile { name, avatar: file });
+                            }
+                            Msg::Servers { servers } => {
+                                self.given_servers = serde_json::from_value::<Vec<crate::bot::servers::Server>>(servers).ok().filter(|l| !l.is_empty()).map(std::sync::Arc::new);
+                                if self.given_servers.is_none() {
+                                    ed.servers.shown = None;
+                                }
+                            }
+                            Msg::Ran { blocks } => {
+                                for (ws, node, error, ms) in blocks {
+                                    let now = Instant::now();
+                                    ed.activity.insert((ws, node), crate::bot::Activity { at: now, error, ms: ms.map(|ms| (ms, now)) });
+                                }
+                            }
+                            Msg::Values { values } => {
+                                for (ws, node, pin, value) in values {
+                                    ed.wire_values.insert((ws, node, pin), (value, Instant::now()));
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
                 }
                 (_, Event::Closed { why }) => over = Some(why),
                 _ => {}
@@ -307,6 +350,10 @@ impl LiveUi {
             self.others.clear();
             ed.live_others.clear();
             self.bot = None;
+            self.given_servers = None;
+            self.given_profile = None;
+            self.told_servers.clear();
+            self.told_profile = None;
             let text = if why.is_empty() { t!("The session is over.").to_string() } else { tf!("The session is over: {why}", why = why) };
             ed.log(Level::Info, text.clone());
             self.said = Some((why.is_empty(), text));
@@ -378,6 +425,59 @@ impl LiveUi {
         } else if matches!(session.role, Role::Host { .. }) {
             // Nobody to tell: what was written before a guest came stays here.
             self.told = (ed.log.len(), String::new());
+        }
+        // The host passes on what it read with the bot's token, and what
+        // the bot just did; a guest shows what it was given.
+        match &session.role {
+            Role::Host { side, .. } if !side.guests.is_empty() => {
+                if self.told_profile != ed.bot_profile.shown
+                    && let Some(profile) = ed.bot_profile.shown.clone()
+                {
+                    let picture = profile.avatar.as_ref().and_then(|p| std::fs::read(p).ok()).filter(|b| b.len() <= 150_000).map(|b| base64::Engine::encode(&base64::engine::general_purpose::STANDARD, b));
+                    session.wire.send(None, serde_json::to_value(Msg::Profile { name: profile.name.clone(), picture }).unwrap_or_default());
+                    self.told_profile = Some(profile);
+                }
+                self.told_servers.retain(|id, _| side.guests.contains_key(id));
+                for (id, guest) in &side.guests {
+                    let list = ed.servers.shown.as_ref().filter(|_| guest.perms.servers);
+                    let which = list.map_or(0, |l| std::sync::Arc::as_ptr(l) as usize);
+                    if self.told_servers.get(id).copied().unwrap_or(0) != which {
+                        self.told_servers.insert(id.clone(), which);
+                        let servers = list.map(|l| serde_json::to_value(&**l).unwrap_or_default()).unwrap_or_else(|| serde_json::json!([]));
+                        session.wire.send(Some(id), serde_json::to_value(Msg::Servers { servers }).unwrap_or_default());
+                    }
+                }
+                // Blocks that ran since the last look, and the values on
+                // their wires for those who may see them.
+                let since = self.told_ran.unwrap_or_else(Instant::now);
+                let now = Instant::now();
+                let blocks: Vec<(String, String, Option<String>, Option<f64>)> = ed.activity.iter().filter(|(_, a)| a.at > since && a.at <= now).map(|((ws, node), a)| (ws.clone(), node.clone(), a.error.clone(), a.ms.map(|(ms, _)| ms))).collect();
+                if !blocks.is_empty() {
+                    session.wire.send(None, serde_json::to_value(Msg::Ran { blocks }).unwrap_or_default());
+                }
+                let values: Vec<(String, String, String, String)> = ed.wire_values.iter().filter(|(_, (_, at))| *at > since && *at <= now).map(|((ws, node, pin), (value, _))| (ws.clone(), node.clone(), pin.clone(), value.chars().take(2000).collect())).take(500).collect();
+                if !values.is_empty() {
+                    for (id, _) in side.guests.iter().filter(|(_, g)| g.perms.values) {
+                        session.wire.send(Some(id), serde_json::to_value(Msg::Values { values: values.clone() }).unwrap_or_default());
+                    }
+                }
+                self.told_ran = Some(now);
+            }
+            Role::Host { .. } => self.told_ran = Some(Instant::now()),
+            Role::Guest { .. } => {
+                if let Some(list) = &self.given_servers
+                    && !ed.servers.busy()
+                    && !ed.servers.shown.as_ref().is_some_and(|s| std::sync::Arc::ptr_eq(s, list))
+                {
+                    ed.servers.show(list.clone());
+                }
+                if let Some(profile) = &self.given_profile
+                    && !ed.bot_profile.busy()
+                    && ed.bot_profile.shown.as_ref() != Some(profile)
+                {
+                    ed.bot_profile.show(profile.clone());
+                }
+            }
         }
         ed.live_others = self.others.values().filter_map(|o| Some(crate::editor::LiveOther { name: o.name.clone(), color: colour_of(&o.id), ws: o.ws.clone()?, at: o.at, selected: o.selected.clone() })).collect();
         ctx.request_repaint_after(Duration::from_millis(if self.others.is_empty() { 250 } else { 60 }));
@@ -462,6 +562,8 @@ impl LiveUi {
                                     if kit::checkbox(ui, &theme, &mut all, t!("Blocks, everywhere")).changed() {
                                         perms.blocks = if all { Blocks::All } else { Blocks::None };
                                     }
+                                    kit::checkbox(ui, &theme, &mut perms.servers, t!("Servers, channels, roles")).on_hover_text(t!("Lets the guest pick from the bot's servers, channels and roles, which you read with the bot's token. Without it a field only shows the id in it."));
+                                    kit::checkbox(ui, &theme, &mut perms.values, t!("Values on wires")).on_hover_text(t!("Lets the guest see what went through the wires when the bot ran: real members' names and messages. Which blocks ran and what failed, every guest sees."));
                                     if kit::link(ui, &theme, t!("Send away"), egui::FontId::proportional(12.0)).clicked() {
                                         kick = Some(id.clone());
                                     }
@@ -784,6 +886,30 @@ mod tests {
         guest.ask_power(&mut guest_ed, Power::Start);
         turn(&mut host, &mut host_ed, &mut guest, &mut guest_ed, &mut |h, _, _, _| h.power == Some(Power::Start));
         assert!(host_ed.log.iter().any(|l| l.text == "Grace started the bot"));
+
+        // What the host read with the bot's token: the profile reaches
+        // every guest, the servers only one who may see them.
+        host_ed.bot_profile.show(crate::bot::profile::BotProfile { name: "Circuit Bot".into(), avatar: None });
+        let servers = std::sync::Arc::new(vec![crate::bot::servers::Server { id: "1".into(), name: "My server".into(), channels: vec![crate::bot::servers::Channel { id: "2".into(), name: "general".into(), kind: 0, parent: None, position: 0 }], roles: Vec::new() }]);
+        host_ed.servers.show(servers.clone());
+        turn(&mut host, &mut host_ed, &mut guest, &mut guest_ed, &mut |_, _, _, ged| ged.bot_profile.shown.as_ref().is_some_and(|p| p.name == "Circuit Bot"));
+        assert!(guest_ed.servers.shown.is_none(), "not without the leave for it");
+        if let Some(Session { wire, role: Role::Host { side, .. }, .. }) = host.session.as_mut() {
+            let id = side.guests.keys().next().unwrap().clone();
+            for (to, msg) in side.allow(&id, Perms { blocks: Blocks::All, power: true, servers: true, ..Default::default() }) {
+                wire.send(to.as_deref(), serde_json::to_value(&msg).unwrap());
+            }
+        }
+        turn(&mut host, &mut host_ed, &mut guest, &mut guest_ed, &mut |_, _, _, ged| ged.servers.shown.as_deref() == Some(&*servers));
+
+        // A block that ran at the host's lights up at the guest's; the
+        // value on its wire stays the host's without the leave for it.
+        let now = Instant::now() + Duration::from_millis(5);
+        std::thread::sleep(Duration::from_millis(30));
+        host_ed.activity.insert(("main".into(), "1".into()), crate::bot::Activity { at: now, error: None, ms: Some((12.0, now)) });
+        host_ed.wire_values.insert(("main".into(), "1".into(), "result".into()), ("a member's message".into(), now));
+        turn(&mut host, &mut host_ed, &mut guest, &mut guest_ed, &mut |_, _, _, ged| ged.activity.get(&("main".to_string(), "1".to_string())).is_some_and(|a| a.ms.map(|m| m.0) == Some(12.0)));
+        assert!(guest_ed.wire_values.is_empty());
 
         // The host ends it: over for the guest, whose copy stays open.
         host.end();

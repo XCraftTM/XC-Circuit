@@ -1807,7 +1807,7 @@ What goes wrong comes back as `error { re, why }`. The source is one file, [`hos
 In a live session several people work in one project at the same time. One of them **hosts**: the project is theirs, it is saved on their computer, and the bot runs there. The others are **guests**: they see every change as it happens, and may change what the host lets them.
 
 ::: warning Work in progress
-Sessions work for workspaces, blocks, wires, notes and slash commands; you see where the others are, and guests read the bot's console. Still to come: which blocks ran and the values on the wires for guests, the host's plugins for guests who don't have them, and pickers (channels, roles) for guests.
+Sessions work for workspaces, blocks, wires, notes and slash commands; you see where the others are, and guests follow the bot: its console, which blocks ran, and the pickers for servers, channels and roles. Still to come: the host's plugins for guests who don't have them, and a guest finding their way back in after their connection dropped.
 :::
 
 ## Starting one
@@ -1839,6 +1839,8 @@ A new guest only **watches**. The host ticks, per guest, what they may change, a
 | **Workspaces** | make, rename, move, turn on and off, and delete workspaces |
 | **Blocks, everywhere** | change blocks, wires and notes in every workspace |
 | **Blocks in:** (some workspaces) | the same, in the ticked workspaces only |
+| **Servers, channels, roles** | pick from the bot's servers, channels and roles in a block's fields; without it a field only shows the id that is in it |
+| **Values on wires** | see what went through the wires when the bot ran: real members' names and messages |
 
 The host checks every change against this before taking it. A change a guest may not make is taken back at the guest's, with a word why. Bot settings, secrets, where the bot is uploaded to and plugins are the host's alone. **Send away** removes a guest.
 
@@ -1855,6 +1857,12 @@ Changes are put together the way they are when [two stored versions meet](git.md
 ## The bot, and ending
 
 The bot runs only at the host's: the token never leaves their computer. What it writes to the **Console** shows at every guest's too (secrets are hidden there as always), and File › Live session… says whether it runs. A guest the host ticked **The bot** for starts and stops it with their own Run and Stop; for the others, Run says that it is the host's to start.
+
+Every guest sees **which blocks ran**, how long they took, and where one failed, lit up on the canvas as at the host's. The values on the wires are for guests with that tick only.
+
+## What the bot's token is for
+
+A guest has no token. Whatever needs it, the host's app reads and passes on, and only what it shows itself: how the bot looks (its name and picture, for the previews: every guest gets that, so previews look the same for all) and, for guests with the tick, the list of servers with their channels and roles. A guest can't ask Discord for anything else through the host, and nothing on this way changes anything at Discord.
 
 **End the session** (the host) ends it for everyone; **Leave the session** (a guest) only for that guest. When the host's app closes or loses its connection, the session is over. A guest's copy stays open as it was, but it is only a copy: what counts is the host's project.
 
