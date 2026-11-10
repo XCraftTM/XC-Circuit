@@ -19,6 +19,8 @@ use std::path::Path;
 
 /// The name the place a project is stored at has in its repository.
 const REMOTE: &str = "origin";
+/// The setting [`Sync::set_auto`] keeps.
+const AUTO: &str = "xc.auto";
 /// What a project's repository never holds: this computer's part.
 const IGNORED: &[&str] = [".circuit/"].as_slice();
 
@@ -46,6 +48,20 @@ pub enum Side {
     Mine,
     /// The stored one's.
     Theirs,
+    /// Mine, and theirs beside it as a copy: for a block of a workspace.
+    /// For anything else it means mine.
+    Both,
+}
+
+/// What a conflict is called: the file, and the part of it when it is asked
+/// about part by part (`workspaces/main.json#nodes/7` is block 7 there).
+pub fn conflict_id(path: &str, part: &str) -> String {
+    if part.is_empty() { path.to_string() } else { format!("{path}#{part}") }
+}
+
+/// A conflict's file and part ([`conflict_id`] taken apart).
+pub fn conflict_parts(id: &str) -> (&str, &str) {
+    id.split_once('#').unwrap_or((id, ""))
 }
 
 /// How a project stands against where it is stored.
@@ -61,6 +77,9 @@ pub struct State {
     /// Fetched, not put together with this computer's yet. Only as new as
     /// the last [`Sync::fetch`].
     pub behind: usize,
+    /// Stored after every save and fetched when it opens, without asking
+    /// ([`Sync::set_auto`]).
+    pub auto: bool,
 }
 
 /// What putting the fetched version together with this one did.
@@ -71,8 +90,9 @@ pub enum Merged {
     /// The project is now what was stored, with this computer's changes in
     /// it: the files that changed here.
     Updated(Vec<String>),
-    /// Both sides changed these files (or together they no longer read):
-    /// nothing was changed. Call again with a [`Side`] for each.
+    /// Both sides changed these in different ways (or a file no longer
+    /// reads with both changes in): nothing was changed. Call again with a
+    /// [`Side`] for each. A whole file, or a part of one ([`conflict_id`]).
     Conflicts(Vec<String>),
 }
 
@@ -164,6 +184,13 @@ impl Sync {
         Ok(())
     }
 
+    /// Whether the app keeps the project in step by itself: kept in the
+    /// repository's own settings, so it is this computer's choice.
+    pub fn set_auto(&self, on: bool) -> Result<()> {
+        self.repo.config()?.open_level(git2::ConfigLevel::Local)?.set_bool(AUTO, on)?;
+        Ok(())
+    }
+
     /// Forgets where the project is stored. Its history stays in the folder.
     pub fn forget_remote(&self) -> Result<()> {
         if self.repo.find_remote(REMOTE).is_ok() {
@@ -208,7 +235,8 @@ impl Sync {
             }
             (None, None) => {}
         }
-        Ok(State { remote: self.repo.find_remote(REMOTE).ok().and_then(|r| r.url().ok().map(str::to_string)), branch: self.branch()?, changed, ahead, behind })
+        let auto = self.repo.config().and_then(|c| c.get_bool(AUTO)).unwrap_or(false);
+        Ok(State { remote: self.repo.find_remote(REMOTE).ok().and_then(|r| r.url().ok().map(str::to_string)), branch: self.branch()?, changed, ahead, behind, auto })
     }
 
     /// Records the project as it is now. False when nothing changed since
@@ -299,6 +327,8 @@ impl Sync {
         // Both changed something: put them together in memory.
         let mut index = self.repo.merge_commits(&mine, &theirs, None)?;
         let mut unsure: BTreeSet<String> = BTreeSet::new();
+        // The parts of files still to be decided.
+        let mut asked: Vec<String> = Vec::new();
         let (my_tree, their_tree) = (mine.tree()?, theirs.tree()?);
         // The project's files are put together by what they hold, not line
         // by line: blocks by their number, wires as a set, each setting on
@@ -317,17 +347,16 @@ impl Sync {
             };
             let (Some((a, mode)), Some((b, _))) = (read(&my_tree), read(&their_tree)) else { continue };
             let base = base_tree.as_ref().and_then(read).map(|(v, _)| v);
-            match json::merge(base.as_ref(), &a, &b) {
-                Some(merged) => {
-                    let mut text = serde_json::to_string_pretty(&merged)?;
-                    text.push('\n');
-                    let id = self.repo.blob(text.as_bytes())?;
-                    index.conflict_remove(Path::new(&path)).ok();
-                    index.remove_path(Path::new(&path)).ok();
-                    index.add(&entry(&path, id, mode as u32))?;
-                }
-                None => drop(unsure.insert(path)),
-            }
+            // A side chosen for the part, or for the whole file.
+            let chosen = |part: &str| keep.get(&conflict_id(&path, part)).or_else(|| keep.get(&path)).copied();
+            let out = if path.starts_with("workspaces/") { json::workspace(base.as_ref(), &a, &b, &chosen) } else { json::merge_with(base.as_ref(), &a, &b, &chosen) };
+            asked.extend(out.open.iter().map(|part| conflict_id(&path, part)));
+            let mut text = serde_json::to_string_pretty(&out.value)?;
+            text.push('\n');
+            let id = self.repo.blob(text.as_bytes())?;
+            index.conflict_remove(Path::new(&path)).ok();
+            index.remove_path(Path::new(&path)).ok();
+            index.add(&entry(&path, id, mode as u32))?;
         }
         for conflict in index.conflicts()? {
             let c = conflict?;
@@ -343,12 +372,13 @@ impl Sync {
                 unsure.insert(path);
             }
         }
-        let open: Vec<String> = unsure.iter().filter(|p| !keep.contains_key(*p)).cloned().collect();
+        let mut open: Vec<String> = unsure.iter().filter(|p| !keep.contains_key(*p)).cloned().collect();
+        open.extend(asked);
         if !open.is_empty() {
             return Ok(Merged::Conflicts(open));
         }
         for path in &unsure {
-            let from = if keep[path] == Side::Mine { &my_tree } else { &their_tree };
+            let from = if keep[path] == Side::Theirs { &their_tree } else { &my_tree };
             index.conflict_remove(Path::new(path)).ok();
             index.remove_path(Path::new(path)).ok();
             // A side that deleted the file: it stays deleted.
@@ -553,6 +583,9 @@ mod tests {
         assert_eq!(fs::read_to_string(a_dir.join(".gitignore")).unwrap(), ".circuit/\n");
         let state = a.state().unwrap();
         assert_eq!((state.branch.as_str(), state.remote.clone(), state.ahead), ("main", None, 0));
+        assert!(!state.auto);
+        a.set_auto(true).unwrap();
+        assert!(a.state().unwrap().auto && Sync::open(&a_dir).unwrap().unwrap().state().unwrap().auto);
         assert!(state.changed.contains(&"workspaces/main.json".to_string()) && !state.changed.iter().any(|p| p.starts_with(".circuit")), "{:?}", state.changed);
         assert!(a.send(&none).unwrap_err().to_string().contains("isn't stored anywhere yet"));
         a.set_remote(&url).unwrap();
@@ -625,7 +658,8 @@ mod tests {
         write(&b_dir, "workspaces/b.json", "{ \"name\": \"B2\" }\n");
         b.store("B renames", &who("b")).unwrap();
         b.fetch(&none).unwrap();
-        assert_eq!(b.merge(&nothing, &who("b")).unwrap(), Merged::Conflicts(vec!["workspaces/main.json".into()]));
+        assert_eq!(b.merge(&nothing, &who("b")).unwrap(), Merged::Conflicts(vec!["workspaces/main.json#name".into()]));
+        assert_eq!(conflict_parts("workspaces/main.json#name"), ("workspaces/main.json", "name"));
         assert!(fs::read_to_string(b_dir.join("workspaces/main.json")).unwrap().contains("Main of B"), "untouched");
         assert!(b.state().unwrap().changed.is_empty(), "and not half merged");
         let Versions { mine, theirs } = b.versions("workspaces/main.json").unwrap();
@@ -694,10 +728,11 @@ mod tests {
         write(&b_dir, "workspaces/main.json", &file("{", "    \"k\": 1", "}"));
         b.store("B", &who("b")).unwrap();
         b.fetch(&none).unwrap();
-        assert_eq!(b.merge(&HashMap::new(), &who("b")).unwrap(), Merged::Conflicts(vec!["workspaces/main.json".into()]));
+        assert_eq!(b.merge(&HashMap::new(), &who("b")).unwrap(), Merged::Conflicts(vec!["workspaces/main.json#list".into()]));
         let keep = HashMap::from([("workspaces/main.json".to_string(), Side::Mine)]);
         assert!(matches!(b.merge(&keep, &who("b")).unwrap(), Merged::Updated(_)));
-        assert_eq!(fs::read_to_string(b_dir.join("workspaces/main.json")).unwrap(), file("{", "    \"k\": 1", "}"), "B's file as B had it");
+        let kept: serde_json::Value = serde_json::from_str(&fs::read_to_string(b_dir.join("workspaces/main.json")).unwrap()).unwrap();
+        assert_eq!(kept, serde_json::json!({ "list": { "k": 1 } }), "B's own version");
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -769,7 +804,13 @@ mod tests {
         write(&b_dir, "workspaces/main.json", &ws(at_b));
         b.store("B2", &who("b")).unwrap();
         b.fetch(&none).unwrap();
-        assert_eq!(b.merge(&HashMap::new(), &who("b")).unwrap(), Merged::Conflicts(vec!["workspaces/main.json".into()]));
+        assert_eq!(b.merge(&HashMap::new(), &who("b")).unwrap(), Merged::Conflicts(vec!["workspaces/main.json#nodes/2".into()]));
+        // Both: mine stays, theirs comes in beside it.
+        let keep = HashMap::from([("workspaces/main.json#nodes/2".to_string(), Side::Both)]);
+        assert!(matches!(b.merge(&keep, &who("b")).unwrap(), Merged::Updated(_)));
+        let got: serde_json::Value = serde_json::from_str(&fs::read_to_string(b_dir.join("workspaces/main.json")).unwrap()).unwrap();
+        let said: Vec<&str> = got["nodes"].as_object().unwrap().values().filter_map(|n| n["values"]["message"].as_str()).collect();
+        assert!(said.contains(&"A says") && said.contains(&"B says"), "{said:?}");
         let _ = fs::remove_dir_all(&dir);
     }
 }

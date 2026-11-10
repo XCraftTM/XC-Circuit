@@ -29,7 +29,11 @@ enum Done {
     WentBack(Result<usize, String>),
     Connected(Result<(), String>),
     Stored(Result<&'static str, String>),
-    Fetched(Result<Merged, String>),
+    /// What changed here is recorded and what is stored there has arrived:
+    /// putting the two together comes next, in the window's own turn.
+    Arrived(Result<(), String>),
+    /// What was put together was sent.
+    Sent(Result<(), String>),
     Code(Result<github::Code, String>),
     Asked(Result<Answer, String>),
     SignedIn(Result<String, String>),
@@ -158,6 +162,13 @@ pub struct GitUi {
     pub get: Option<GetDraft>,
     /// The project that Get from Git brought, for the app to open.
     got: Option<PathBuf>,
+    /// The step of the setup guide a project without a repository shows.
+    step: u8,
+    /// Removing the project from this computer was asked for: asked about
+    /// once more.
+    removing: bool,
+    /// A project to close and delete from this computer, for the app.
+    pub removed: Option<PathBuf>,
     /// Disconnect… was pressed: asked about first.
     disconnecting: bool,
     /// A project moved out of the app's own folder: where to, and from
@@ -194,7 +205,11 @@ fn login_of(host: &str) -> Login {
 }
 
 fn who_of(host: &str, login: &Login) -> Who {
-    let name = if login.user.is_empty() { "XC Circuit".to_string() } else { login.user.clone() };
+    who_named(host, &login.user)
+}
+
+fn who_named(host: &str, name: &str) -> Who {
+    let name = if name.is_empty() || name == "…" { "XC Circuit".to_string() } else { name.to_string() };
     Who { email: format!("{}@users.noreply.{host}", name.replace(' ', "-")), name }
 }
 
@@ -255,7 +270,9 @@ impl GitUi {
                 let sync = Sync::start(&root)?;
                 sync.set_remote(&address)?;
                 // Also the test that the address and the sign-in are right.
-                sync.fetch(&login_of(&host))
+                sync.fetch(&login_of(&host))?;
+                // From here on the app keeps the two in step by itself.
+                sync.set_auto(true)
             })()
             .map_err(said))
         });
@@ -268,7 +285,9 @@ impl GitUi {
         Some(if let Some(what) = self.busy {
             (true, tf!("{what} …", what = busy_text(what)))
         } else if !self.conflicts.is_empty() {
-            (true, t!("Git: choose whose files stay").to_string())
+            (true, t!("Git: choose whose version stays").to_string())
+        } else if !self.secrets.is_empty() {
+            (true, t!("Git: look before storing").to_string())
         } else if state.behind > 0 {
             (true, tf!("Git: {count} to fetch", count = state.behind))
         } else if !state.changed.is_empty() || state.ahead > 0 {
@@ -310,8 +329,7 @@ impl GitUi {
             }
         }
         self.secrets.clear();
-        ed.save();
-        ed.finish_saving();
+        self.save(ed);
         let message = if self.message.trim().is_empty() { "Changes".to_string() } else { self.message.trim().to_string() };
         self.run(Some("Storing"), move || {
             Done::Stored((|| {
@@ -404,32 +422,106 @@ impl GitUi {
         });
     }
 
-    /// Fetch: saves and records what changed here, gets what is stored there
-    /// and puts the two together.
+    /// Fetch: records what changed here, gets what is stored there and puts
+    /// the two together.
     fn fetch(&mut self, ed: &mut Editor) {
+        self.fetch_with(ed, "Changes on this computer");
+    }
+
+    /// The first part of Fetch, away from the window: recording what
+    /// changed here (with `message`) and getting what is stored there.
+    /// Putting them together follows in [`Self::put_together`], in the
+    /// window's own turn: the project is read again from the disk there,
+    /// and nobody may be editing it in between.
+    fn fetch_with(&mut self, ed: &mut Editor, message: &str) {
         let (Some(root), Some(remote)) = (self.root.clone(), self.state.as_ref().and_then(|s| s.remote.clone())) else { return };
         // A repository set up by hand at an address with no place to sign in
         // at (a folder, say) is used as it is.
         let host = host_of(&remote).unwrap_or_default();
-        ed.save();
-        ed.finish_saving();
-        let keep = self.keep.clone();
+        self.save(ed);
+        let message = message.to_string();
         self.run(Some("Fetching"), move || {
-            Done::Fetched((|| {
+            Done::Arrived((|| {
                 let login = login_of(&host);
-                let who = who_of(&host, &login);
                 let Some(sync) = Sync::open(&root)? else { anyhow::bail!("The project has no repository yet.") };
-                sync.store("Changes on this computer", &who)?;
-                sync.fetch(&login)?;
-                let merged = sync.merge(&keep, &who)?;
-                // Put together here: what is stored there gets it too.
-                if matches!(merged, Merged::Updated(_)) && sync.state()?.ahead > 0 {
-                    sync.send(&login)?;
-                }
-                Ok(merged)
+                sync.store(&message, &who_of(&host, &login))?;
+                sync.fetch(&login)
             })()
             .map_err(said))
         });
+    }
+
+    /// Saves what is unsaved and waits for it to be written. The save is
+    /// this dialog's own: it doesn't count as one to store after.
+    fn save(&mut self, ed: &mut Editor) {
+        if ed.unsaved_now() {
+            ed.save();
+        }
+        ed.finish_saving();
+        if let Some((_, saves)) = &mut self.seen {
+            *saves = ed.saves;
+        }
+    }
+
+    /// The second part of Fetch: what arrived and what is here, put
+    /// together, and the project read again. Then what came of it is sent.
+    fn put_together(&mut self, ed: &mut Editor) {
+        let (Some(root), Some(remote)) = (self.root.clone(), self.state.as_ref().and_then(|s| s.remote.clone())) else { return };
+        let host = host_of(&remote).unwrap_or_default();
+        let who = who_named(&host, self.account.as_deref().unwrap_or_default());
+        // What was changed while the first part ran goes in too.
+        self.save(ed);
+        let merged = (|| {
+            let Some(sync) = Sync::open(&root)? else { anyhow::bail!("The project has no repository yet.") };
+            sync.store("Changes on this computer", &who)?;
+            let merged = sync.merge(&self.keep, &who)?;
+            Ok((merged, sync.state()?.ahead > 0))
+        })();
+        match merged.map_err(said) {
+            Ok((Merged::Conflicts(parts), _)) => {
+                for part in &parts {
+                    self.keep.entry(part.clone()).or_insert(Side::Mine);
+                }
+                self.keep.retain(|k, _| parts.contains(k));
+                self.conflicts = parts;
+                self.said = None;
+                // Asked about now, also when this ran by itself.
+                self.open = true;
+            }
+            Ok((merged, to_send)) => {
+                self.conflicts.clear();
+                self.keep.clear();
+                if let Merged::Updated(files) = &merged {
+                    // The files changed under the editor: read them again.
+                    ed.open_project(&root);
+                    let text = tf!("Fetched. Files changed: {count}", count = files.len());
+                    ed.log(Level::Success, text.clone());
+                    self.said = Some((true, text));
+                } else {
+                    self.said = Some((true, t!("Nothing new is stored there.").into()));
+                }
+                if to_send {
+                    self.run(Some("Storing"), move || Done::Sent(Sync::open(&root).and_then(|s| s.map(|s| s.send(&login_of(&host))).transpose()).map(|_| ()).map_err(said)));
+                }
+            }
+            Err(e) => self.said = Some((false, e)),
+        }
+        self.read();
+    }
+
+    /// Turns keeping in step by itself on or off, for this computer.
+    fn set_auto(&mut self, on: bool) {
+        if let Some(Ok(Some(sync))) = self.root.as_deref().map(Sync::open) {
+            let _ = sync.set_auto(on);
+        }
+        if let Some(state) = &mut self.state {
+            state.auto = on;
+        }
+    }
+
+    /// Whether the app stores and fetches by itself right now.
+    fn by_itself(&self) -> bool {
+        self.busy.is_none() && self.conflicts.is_empty() && self.account.is_some() && self.state.as_ref().is_some_and(|s| s.auto && s.remote.is_some())
     }
 
     fn sign_in_with_github(&mut self) {
@@ -461,12 +553,23 @@ impl GitUi {
             let key = (root.clone(), ed.saves);
             if self.seen.as_ref() != Some(&key) && self.get.is_none() {
                 self.seen = Some(key);
-                if self.root.as_deref() != Some(root.as_path()) {
+                let saved = self.root.as_deref() == Some(root.as_path());
+                if !saved {
                     let waiting = self.waiting.take();
                     *self = GitUi { waiting, seen: self.seen.take(), ..GitUi::default() };
                     self.root = Some(root.clone());
                 }
-                if root.join(".git").exists() {
+                if saved && self.by_itself() {
+                    // Saved: stored and sent too, and what others stored comes in.
+                    let found = if self.secrets_ok { Vec::new() } else { ed.project.as_ref().map(secrets_in).unwrap_or_default() };
+                    if found.is_empty() {
+                        self.fetch_with(ed, "Changes");
+                    } else if self.secrets != found {
+                        // Asked about first, as with Store.
+                        self.secrets = found;
+                        self.open = true;
+                    }
+                } else if root.join(".git").exists() {
                     self.read();
                 }
             }
@@ -521,10 +624,11 @@ impl GitUi {
                 }
                 self.account = account;
                 self.history = history;
-                // Once per project: is something newer stored there?
+                // Once per project: is something newer stored there? Kept in
+                // step by itself, it is fetched right away.
                 if !self.checked && self.account.is_some() && self.state.as_ref().is_some_and(|s| s.remote.is_some()) {
                     self.checked = true;
-                    self.check();
+                    if self.by_itself() { self.fetch_with(ed, "Changes on this computer") } else { self.check() }
                 }
             }
             Done::Checked => self.read(),
@@ -562,31 +666,16 @@ impl GitUi {
                 });
                 self.read();
             }
-            Done::Fetched(result) => {
-                match result {
-                    Ok(Merged::UpToDate) => {
-                        self.conflicts.clear();
-                        self.said = Some((true, t!("Nothing new is stored there.").into()));
-                    }
-                    Ok(Merged::Updated(files)) => {
-                        self.conflicts.clear();
-                        self.keep.clear();
-                        // The files changed under the editor: read them again.
-                        if let Some(root) = self.root.clone() {
-                            ed.open_project(&root);
-                        }
-                        let text = tf!("Fetched. Files changed: {count}", count = files.len());
-                        ed.log(Level::Success, text.clone());
-                        self.said = Some((true, text));
-                    }
-                    Ok(Merged::Conflicts(files)) => {
-                        for file in &files {
-                            self.keep.entry(file.clone()).or_insert(Side::Mine);
-                        }
-                        self.conflicts = files;
-                        self.said = None;
-                    }
-                    Err(e) => self.said = Some((false, e)),
+            Done::Arrived(result) => match result {
+                Ok(()) => self.put_together(ed),
+                Err(e) => {
+                    self.said = Some((false, e));
+                    self.read();
+                }
+            },
+            Done::Sent(result) => {
+                if let Err(e) = result {
+                    self.said = Some((false, if e == circuit_sync::NEWER_THERE { t!("Newer changes are stored there. Press Fetch first, then Store again.").to_string() } else { e }));
                 }
                 self.read();
             }
@@ -850,23 +939,48 @@ impl GitUi {
         let signed_in = self.account.is_some();
         let (mut connect, mut store, mut fetch, mut close, mut github_in, mut token_in, mut out, mut cancel, mut retyped) = (false, false, false, false, false, false, false, false, false);
         let (mut anyway, mut not_now, mut back) = (false, false, None::<String>);
-        let (mut disconnect, mut move_out) = (false, false);
+        let (mut disconnect, mut move_out, mut remove, mut auto) = (false, false, false, None::<bool>);
         dialog::tab(
             ui,
             &theme,
             dialog::Spec { id: "git", title: "Git", subtitle: Some(t!("Keep the project in a Git repository: on several computers, or together with others")), icon: icon.as_deref(), width: 640.0 },
             |ui, part| match part {
                 Part::Body => {
+                    if remote.is_none() && self.address.trim().is_empty() && self.step < 3 {
+                        let (title, text) = match self.step {
+                            0 => (t!("What this does"), t!("XC Circuit keeps your project in a Git repository: a place on the internet that holds every version of it. You get the bot on all your computers, can go back to any earlier version, and can work on it with others.\n\nStored there: your workspaces with their blocks, the slash commands and the project's settings.\nNever stored there: the bot token and passwords, where the bot is uploaded to, and the bot's own data. Those stay on this computer.")),
+                            1 => (t!("1. An account"), t!("You need an account at a place that keeps Git repositories. GitHub is the best known and free for this; GitLab and Gitea work as well, also on a server of your own.")),
+                            _ => (t!("2. A repository"), t!("Make a new repository there for this bot. Leave it empty (no README), and make it private if the bot is only yours. Then copy its HTTPS address: the page shows it right after, or under Code.")),
+                        };
+                        kit::note(ui, &icons, &theme, "info", title, text);
+                        ui.add_space(8.0);
+                        ui.horizontal(|ui| {
+                            let next = match self.step {
+                                0 => t!("Set it up"),
+                                1 => t!("I have an account"),
+                                _ => t!("I have the address"),
+                            };
+                            if kit::primary_button(ui, &theme, next).clicked() {
+                                self.step += 1;
+                            }
+                            if self.step == 1 && kit::secondary_button(ui, &theme, t!("Make a GitHub account")).clicked() {
+                                let _ = open::that("https://github.com/signup");
+                            }
+                            if self.step == 2 && kit::secondary_button(ui, &theme, t!("Make one on GitHub")).clicked() {
+                                let _ = open::that("https://github.com/new");
+                            }
+                            if self.step > 0 && kit::link(ui, &theme, t!("Back"), egui::FontId::proportional(12.5)).clicked() {
+                                self.step -= 1;
+                            }
+                            if kit::link(ui, &theme, t!("Skip the steps"), egui::FontId::proportional(12.5)).clicked() {
+                                self.step = 3;
+                            }
+                        });
+                        return;
+                    }
                     if remote.is_none() {
-                        kit::note(
-                            ui,
-                            &icons,
-                            &theme,
-                            "info",
-                            t!("How to set it up"),
-                            t!("1. Make a new, empty repository on GitHub, GitLab or Gitea (private, if the bot is only yours).\n2. Copy its HTTPS address and paste it below.\n3. Sign in, then press Connect.\nYour bot token and passwords are never stored there: they stay in this computer's credential store."),
-                        );
-                        ui.add_space(10.0);
+                        kit::caption(ui, &theme, t!("3. Paste the repository's address, sign in, and press Connect. On your other computers: File › Get from Git…"));
+                        ui.add_space(6.0);
                     }
                     kit::section(ui, &theme, t!("Where it is stored"));
                     if kit::field(ui, &theme, t!("Repository address"), Some(t!("The HTTPS address of the repository, as its page shows it under Code or Clone.")), |ui| kit::text_input(ui, &mut self.address, "https://github.com/you/my-bot.git", false)).changed() {
@@ -943,19 +1057,37 @@ impl GitUi {
                     }
                     if !self.conflicts.is_empty() {
                         ui.add_space(8.0);
-                        kit::note(ui, &icons, &theme, "warning", t!("Both sides changed the same files"), t!("Nothing was changed yet. Choose for each file whose version stays, then press Put together. The other version stays in the repository's history."));
+                        kit::note(ui, &icons, &theme, "warning", t!("Both sides changed the same thing"), t!("Nothing was changed yet. Choose for each whose version stays, then press Put together. For a block, Both keeps yours and adds the other one beside it. What you don't pick stays in the repository's history."));
                         ui.add_space(6.0);
-                        for file in &self.conflicts {
+                        for id in &self.conflicts {
+                            let (file, part) = circuit_sync::conflict_parts(id);
+                            let file = file.trim_start_matches("workspaces/").trim_end_matches(".json");
+                            let block = part.strip_prefix("nodes/");
+                            let label = match (block, part) {
+                                (Some(number), _) => tf!("{file}: block #{number}", file = file, number = number),
+                                (None, "") => file.to_string(),
+                                (None, part) => format!("{file}: {part}"),
+                            };
                             ui.horizontal(|ui| {
-                                let side = self.keep.entry(file.clone()).or_insert(Side::Mine);
+                                let side = self.keep.entry(id.clone()).or_insert(Side::Mine);
                                 if kit::radio(ui, &theme, *side == Side::Mine, t!("Mine")).clicked() {
                                     *side = Side::Mine;
                                 }
                                 if kit::radio(ui, &theme, *side == Side::Theirs, t!("The stored one")).clicked() {
                                     *side = Side::Theirs;
                                 }
-                                ui.label(RichText::new(file).monospace().size(11.5));
+                                if block.is_some() && kit::radio(ui, &theme, *side == Side::Both, t!("Both")).clicked() {
+                                    *side = Side::Both;
+                                }
+                                ui.label(RichText::new(label).size(12.0));
                             });
+                        }
+                    }
+                    if let (true, Some(state)) = (connected, &self.state) {
+                        ui.add_space(8.0);
+                        let mut on = state.auto;
+                        if kit::toggle_row(ui, &theme, &mut on, t!("Keep in step by itself"), t!("Stores after every save and fetches when the project opens. Off: only when you press Store or Fetch.")).changed() {
+                            auto = Some(on);
                         }
                     }
                     if let (true, Some(root)) = (connected, &self.root) {
@@ -983,10 +1115,26 @@ impl GitUi {
                                 if kept {
                                     move_out = kit::secondary_button(ui, &theme, t!("Disconnect and keep as a folder…")).on_hover_text(t!("Moves the project out of XC Circuit's own folder into one you choose")).clicked();
                                 }
+                                if kept && kit::secondary_button(ui, &theme, t!("Remove from this computer…")).clicked() {
+                                    self.removing = true;
+                                }
                                 if kit::secondary_button(ui, &theme, t!("Cancel")).clicked() {
                                     self.disconnecting = false;
+                                    self.removing = false;
                                 }
                             });
+                            if self.removing {
+                                ui.add_space(6.0);
+                                kit::note(
+                                    ui,
+                                    &icons,
+                                    &theme,
+                                    "warning",
+                                    t!("Delete this copy for good?"),
+                                    t!("The project's folder on this computer is deleted. What is stored in the repository stays there, and you can get it again. Gone for good: changes not stored yet, and the bot's own data on this computer (what it saved about members, its databases), which is nowhere else."),
+                                );
+                                remove = kit::danger_button(ui, &theme, t!("Delete this copy")).clicked();
+                            }
                         }
                     }
                     ui.add_space(8.0);
@@ -1043,6 +1191,14 @@ impl GitUi {
         }
         if disconnect || move_out {
             self.disconnect(ed, move_out);
+        }
+        if remove {
+            self.save(ed);
+            self.removed = self.root.clone();
+            self.open = false;
+        }
+        if let Some(on) = auto {
+            self.set_auto(on);
         }
         if anyway {
             self.secrets_ok = true;
@@ -1170,9 +1326,9 @@ mod tests {
         ed.project.as_mut().unwrap().workspaces["main"].name = "Mine".into();
         ui.fetch(&mut ed);
         wait(&mut ui, &mut ed);
-        assert_eq!(ui.conflicts, ["workspaces/main.json"], "{:?}", ui.said);
+        assert_eq!(ui.conflicts, ["workspaces/main.json#name"], "{:?}", ui.said);
         assert_eq!(ed.project.as_ref().unwrap().workspaces["main"].name, "Mine");
-        ui.keep.insert("workspaces/main.json".into(), Side::Theirs);
+        ui.keep.insert("workspaces/main.json#name".into(), Side::Theirs);
         ui.fetch(&mut ed);
         wait(&mut ui, &mut ed);
         assert!(ui.conflicts.is_empty(), "{:?}", ui.said);
@@ -1187,6 +1343,27 @@ mod tests {
         assert_eq!(ed.project.as_ref().unwrap().workspaces["main"].name, "Main", "{:?}", ui.said);
         assert_eq!(ui.history[0].message, "Back to: The first version");
         assert_eq!(ui.state.as_ref().map(|s| s.ahead), Some(0), "and sent");
+
+        // Kept in step by itself: a save is stored and sent, and what the
+        // other stored comes in with it.
+        ui.set_auto(true);
+        ui.account = Some("me".into());
+        assert!(ui.by_itself());
+        other.fetch(&nobody).unwrap();
+        other.merge(&HashMap::new(), &them).unwrap();
+        rename("Theirs, later");
+        other.store("Later", &them).unwrap();
+        other.send(&nobody).unwrap();
+        ed.project.as_mut().unwrap().workspaces["main"].folder = Some("Mine".into());
+        ed.save();
+        ed.finish_saving();
+        wait(&mut ui, &mut ed);
+        wait(&mut ui, &mut ed);
+        let ws = &ed.project.as_ref().unwrap().workspaces["main"];
+        assert_eq!((ws.name.as_str(), ws.folder.as_deref()), ("Theirs, later", Some("Mine")), "{:?}", ui.said);
+        assert_eq!(ui.state.as_ref().map(|s| (s.ahead, s.behind, s.changed.len())), Some((0, 0, 0)), "stored and sent by itself");
+        ui.set_auto(false);
+        assert!(!ui.by_itself());
 
         // Disconnecting: the address is forgotten, the project and its history stay.
         ui.disconnect(&mut ed, false);

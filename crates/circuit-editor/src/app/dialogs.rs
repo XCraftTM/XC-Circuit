@@ -552,6 +552,18 @@ impl CircuitApp {
         if let Some(root) = self.bot.git.get_dialog(ctx, &mut self.ed) {
             self.switch_project(&root);
         }
+        // A copy the user asked to delete from this computer.
+        if let Some(root) = self.bot.git.removed.take()
+            && self.ed.project.as_ref().is_some_and(|p| p.root == root)
+            && root.starts_with(crate::bot::remotes_dir())
+        {
+            self.close_project();
+            self.ed.prefs.forget_project(&root.display().to_string());
+            match std::fs::remove_dir_all(&root) {
+                Ok(()) => self.ed.log(Level::Info, tf!("Deleted the copy in {path}", path = root.display())),
+                Err(e) => self.ed.log(Level::Warn, tf!("Couldn't delete {path}: {error}", path = root.display(), error = e)),
+            }
+        }
         // A project moved out of the app's own folder: opened where it is
         // now, and the old place cleared away.
         if let Some((to, from)) = self.bot.git.moved.take() {

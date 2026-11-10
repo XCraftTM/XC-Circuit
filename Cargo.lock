@@ -943,6 +943,7 @@ name = "circuit-sync"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "circuit-core",
  "git2",
  "serde_json",
  "ureq",

@@ -4,12 +4,13 @@ A project is a folder of small text files, so it fits well in a Git repository: 
 
 ## Setting it up
 
-1. Make a new, **empty** repository where you want the project stored. Make it private if the bot is only yours.
-2. Copy its **HTTPS address** (the page shows it under *Code* or *Clone*; it starts with `https://`, not `git@`).
-3. Open **File › Git…**, paste the address, and sign in:
+**File › Git…** leads you through it the first time: what is stored and what never is, an account (with a button to make one on GitHub), a repository (with a button to make one), and then the form:
+
+1. Paste the repository's **HTTPS address** (the page shows it under *Code* or *Clone*; it starts with `https://`, not `git@`).
+2. Sign in:
    - **GitHub:** press **Sign in with GitHub**. A page opens in your browser; type in the code XC Circuit shows and approve. No password goes through the app.
    - **Anywhere else, or if you prefer:** make an **access token** in your account's settings there, allowed to read and write repositories (GitHub: *Developer settings › Personal access tokens*; GitLab: *Access tokens* with `write_repository`; Gitea: *Applications*), and paste it.
-4. Press **Connect**.
+3. Press **Connect**.
 
 The sign-in is kept in your system's credential store, one per place (`github.com`, your own Gitea …), for all your projects there. It is never written into the project.
 
@@ -17,9 +18,11 @@ The sign-in is kept in your system's credential store, one per place (`github.co
 
 A project kept in a Git repository doesn't need a folder you look after. **File › New Project…** offers **In a Git repository** beside **Only on this computer**, and **Get from Git…** offers **Kept by XC Circuit**: the project then lives in the app's own folder (on Windows under `%LOCALAPPDATA%\XC Circuit\remotes`), as a complete copy you can work on without a network, and stays in your recent projects. **Show the folder** in File › Git… opens it. Choose a folder of your own instead when the project has files you reach by their path, such as pictures.
 
-**Disconnect…** in File › Git… forgets the repository: the project and its history stay on the computer, and what is stored there stays there. **Disconnect and keep as a folder…** also moves a project out of the app's folder into one you choose.
+**Disconnect…** in File › Git… forgets the repository: the project and its history stay on the computer, and what is stored there stays there. **Disconnect and keep as a folder…** also moves a project out of the app's folder into one you choose. **Remove from this computer…** deletes a copy the app keeps, after asking once more: what is in the repository stays, but changes not stored yet and the bot's own data on that computer are gone for good.
 
 ## Store and Fetch
+
+Once connected, XC Circuit keeps the two in step **by itself**: every save is stored and sent, what others stored comes in with it, and when the project opens the newest version is fetched first. Without a network you just keep working; the next save catches up. **Keep in step by itself** in File › Git… turns that off for this computer; then it happens when you press:
 
 - **Store** saves the project, records what changed since the last time (with the few words you give it) and sends it to the repository.
 - **Fetch** gets what is stored there and puts it together with what you have here. Your own changes are recorded first, so nothing of yours is lost.
@@ -40,9 +43,13 @@ When a block holds something that looks like a secret (a webhook address, a bot 
 
 ## When both changed the same thing
 
-The project's files are put together by what they hold, not line by line: blocks by their number, wires one by one, every setting of a block on its own. So two people can work in the same workspace: one changes a block's message while the other adds blocks and wires, and both arrive. Where a block sits never stands in the way; if both moved it, yours stays. Only where both changed the **same setting** in different ways (or one deleted a block the other changed) XC Circuit **changes nothing** and lists those files. Choose for each whose version stays, **Mine** or **The stored one**, then press **Put together**. The version you didn't pick stays in the repository's history.
+The project's files are put together by what they hold, not line by line: every setting of a block on its own, wires one by one. So two people can work in the same workspace: one changes a block's message while the other adds blocks and wires, and both arrive. Where a block sits never stands in the way; if both moved it, yours stays.
 
-The two versions are put together in memory first; the project's folder only changes once the result is whole. A file that would no longer read after both changes went in counts as changed by both, and is asked about too.
+Blocks are told apart by a fixed id, not by their number. When two people both add a "block 7", those are two blocks: the one already stored keeps the number, the other gets the next free one, and its wires and every `${#7.…}` that reads it follow.
+
+Only where both changed the **same setting** in different ways (or one deleted a block the other changed) XC Circuit **changes nothing** and asks, part by part: *main: block #4*, *main: name*. Choose for each whose version stays, **Mine** or **The stored one**; for a block there is also **Both**, which keeps yours and puts the other one beside it as a block of its own. Then press **Put together**. What you didn't pick stays in the repository's history.
+
+The two versions are put together in memory first; the project's folder only changes once the result is whole.
 
 ## What is stored, and what never is
 
