@@ -15,6 +15,8 @@ module.exports = {
     if (!intents.length) intents.push(GatewayIntentBits.Guilds);
     const sharding = shardOptions(rt.setting("shards"));
     const client = new Client({ intents, partials: [Partials.Channel, Partials.Message, Partials.Reaction], ...sharding });
+    // With nobody listening, Node.js ends the bot when the client reports an error.
+    client.on("error", (e) => rt.log.error(`Discord: ${e?.message || e}`));
     rt.log.info(`Intents: ${names.length ? names.join(", ") : "Guilds"}`);
     if (sharding.shards) rt.log.info(`Shards: ${sharding.shardCount ?? "chosen by Discord"}`);
     // A run that hasn't answered its button, menu, command or form after 2.5 s

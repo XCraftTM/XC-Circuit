@@ -229,7 +229,13 @@ class Runtime {
 
     for (const ws of this.workspaces.values()) {
       for (const node of ws.nodes.values()) {
-        if (node.def.setup) await node.def.setup(this.ctxFor(null, node));
+        if (!node.def.setup) continue;
+        // One block's mistake doesn't keep the rest of the bot from starting.
+        try {
+          await node.def.setup(this.ctxFor(null, node));
+        } catch (e) {
+          this.log.error(`${ws.name} › ${node.def.name || node.blockId} (#${node.id}): its setup failed: ${e.message}${errorDetails(e)}`);
+        }
       }
     }
     for (const ws of this.workspaces.values()) ws.listen();
