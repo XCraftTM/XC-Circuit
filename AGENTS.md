@@ -61,6 +61,7 @@ Good to know:
 | `crates/circuit-core` | The model, independent of Discord: projects and their files (`project.rs`), workspaces, nodes, links, zones, notes (`graph.rs`), block definitions and shapes (`block.rs`), pin types (`types.rs`), `${…}` templates, backups. |
 | `crates/circuit-plugins` | Loading plugins: `plugin.toml` (`manifest.rs`), the QuickJS sandbox that reads block files and runs their `define` (`engine.rs`), the registry of blocks, build modes, pin types, themes and translations, TypeScript stripping. |
 | `crates/circuit-runner` | Running bots: the bundle (`bundle.rs`), npm packages and Node.js (`node.rs`, `node_setup.rs`), the bot process and its debug protocol (`session.rs`, `protocol.rs`), secrets in the OS credential store (`secrets.rs`), export, database browsing. |
+| `crates/circuit-sync` | A project in a Git repository (libgit2, built in, HTTPS): store, send, fetch, and putting two versions together in memory before the folder changes. |
 | `crates/circuit-editor/src/app` | The window: menus, commands, dialogs, the dock layout (`dock.rs`), projects, plugins, updates, crash logs. |
 | `…/src/canvas` | The canvas: `show` in `mod.rs` draws a workspace; `layout.rs` places a block's rows and pins; wires, notes, the block picker. |
 | `…/src/editor` | Editor state: the open project, block shapes, undo history, preferences, shortcuts, values for `${…}` completion. |

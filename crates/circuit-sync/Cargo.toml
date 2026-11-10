@@ -1,0 +1,20 @@
+[package]
+name = "circuit-sync"
+description = "Keeping an XC Circuit project in a Git repository"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license-file.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde_json.workspace = true
+# libgit2, built in (users rarely have Git installed), over HTTPS only.
+git2 = { version = "0.21", default-features = false, features = ["https", "vendored-libgit2"] }
+
+# Windows speaks HTTPS through the system; elsewhere OpenSSL is built in too,
+# so the app needs none installed.
+[target.'cfg(not(windows))'.dependencies]
+git2 = { version = "0.21", default-features = false, features = ["https", "vendored-libgit2", "vendored-openssl"] }
