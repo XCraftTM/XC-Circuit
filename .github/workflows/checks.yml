@@ -83,6 +83,7 @@ jobs:
           node runtime/test/fluxer_run.js
           node runtime/test/fluxer_more.js
           node runtime/test/store.js
+          node runtime/test/exported.js
           node runtime/test/conversions.js
           node runtime/test/collections.js
           node runtime/test/from_id.js

@@ -40,6 +40,8 @@ node index.js
 
 The token is read from `.env` (`DISCORD_TOKEN=…` for Discord bots, `FLUXER_BOT_TOKEN=…` for Fluxer bots). Stored data goes into `data/`. Exporting again into the same folder keeps what you filled into `.env`.
 
+An exported bot keeps itself running: `node index.js` watches the bot, starts it again a few seconds after a crash (waiting longer when it keeps crashing right away) and at once when a Restart block asks for it. A bot that can't start, because its token is missing or wrong, stays stopped. If something else already restarts your bot (pm2, systemd, Docker, a hosting panel), start it with `node index.js --no-restart` or set `XC_NO_RESTART=1`.
+
 To put it on a server and keep it up to date there without copying files by hand, see [Putting your bot on a server](./hosting).
 
 Exported bots are yours: you may run, share and sell them. See the [licence](https://github.com/XCraftTM/XC-Circuit/blob/main/LICENSE).

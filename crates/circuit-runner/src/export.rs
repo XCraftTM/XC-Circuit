@@ -101,7 +101,7 @@ pub fn export(dir: &Path, bundle: &Bundle, opts: &ExportOptions, log: &mut dyn F
     fs::write(
         dir.join("README.txt"),
         format!(
-            "{name}\n\nMade with XC Circuit.\n\n1. Install Node.js 22 or newer: https://nodejs.org\n2. In this folder, run: npm install   (once)\n3. Start the bot:      node index.js\n\nThe bot token is read from .env ({env}=...). Never share that file.\nSaved data is kept in the data/ folder.\n",
+            "{name}\n\nMade with XC Circuit.\n\n1. Install Node.js 22 or newer: https://nodejs.org\n2. In this folder, run: npm install   (once)\n3. Start the bot:      node index.js\n\nThe bot token is read from .env ({env}=...). Never share that file.\nSaved data is kept in the data/ folder.\n\nIf the bot crashes, it starts again by itself after a few seconds.\nTo run it without that (under pm2, systemd, Docker or a panel that restarts it): node index.js --no-restart\n",
             name = one_line,
             env = opts.token_env
         ),

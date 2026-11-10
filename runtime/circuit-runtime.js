@@ -14,11 +14,16 @@ const Module = require("module");
 const ACTION_IN = "in";
 const PROTOCOL = "@@xc ";
 
+/** How the bot ends when it wants to be started again (the Restart block). */
+const EXIT_RESTART = 75;
+/** How it ends when it couldn't start (no token, a wrong one): starting it again wouldn't help. */
+const EXIT_CANT_START = 78;
+
 function start(bundle, opts) {
   const rt = new Runtime(bundle, opts);
   rt.start().catch((e) => {
     rt.log.error(`Bot stopped: ${e && e.message ? e.message : e}${errorDetails(e)}`);
-    process.exitCode = 1;
+    process.exitCode = EXIT_CANT_START;
   });
   return rt;
 }
@@ -310,7 +315,7 @@ class Runtime {
           return Date.now() - rt.startedAt;
         },
         stop: () => shutdown(0),
-        restart: () => shutdown(75),
+        restart: () => shutdown(EXIT_RESTART),
       },
       runtime: {
         onError: (h) => rt.errorHandlers.push({ h, node }),
@@ -2800,7 +2805,65 @@ process.on("uncaughtException", (e) => {
   reportFatal(`Bot crashed: ${e && e.stack ? e.stack : e}`);
   process.exit(1);
 });
-for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => shutdown(0));
+for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => (watching ? watching(signal) : shutdown(0)));
+
+// ─── An exported bot keeps itself running ───────────────────────────────────
+// `node index.js` starts the bot as a second process and watches it: after a
+// crash it is started again (a little later each time it crashes right away),
+// and at once when it asks to be (the Restart block). A bot that can't start
+// (no token) or that was stopped stays stopped. `--no-restart` or
+// XC_NO_RESTART=1 runs the bot in this process, as it always did: for those
+// who have pm2, systemd, Docker or a panel do the watching.
+
+/** Set while this process only watches the bot: what a stop signal does then. */
+let watching = null;
+
+function watchesItself() {
+  return !process.env.XC_BOT_CHILD && process.env.XC_NO_RESTART !== "1" && !process.argv.includes("--no-restart") && !process.argv.includes("--debug");
+}
+
+/** Seconds to wait before starting a bot again that crashed `quick` times in a row soon after starting. */
+function restartWait(quick) {
+  return Math.min(60, 5 * 2 ** Math.max(0, quick - 1));
+}
+
+function watchBot() {
+  const { spawn } = require("child_process");
+  let child = null;
+  let timer = null;
+  let stopping = false;
+  let quick = 0;
+  const say = (text) => console.error(`\x1b[90m${new Date().toLocaleTimeString()}\x1b[0m \x1b[33mWATCH  \x1b[0m ${text}`);
+  const run = () => {
+    timer = null;
+    const startedAt = Date.now();
+    // With a channel to it: the bot ends when this process goes away.
+    child = spawn(process.execPath, [...process.execArgv, __filename, ...process.argv.slice(2)], { stdio: ["inherit", "inherit", "inherit", "ipc"], env: { ...process.env, XC_BOT_CHILD: "1" } });
+    child.on("error", (e) => {
+      say(`The bot couldn't be started: ${e.message}`);
+      process.exit(1);
+    });
+    child.on("exit", (code, signal) => {
+      child = null;
+      if (stopping || code === 0 || code === EXIT_CANT_START) process.exit(code ?? 0);
+      if (code === EXIT_RESTART) return run();
+      quick = Date.now() - startedAt < 60_000 ? quick + 1 : 1;
+      const wait = restartWait(quick);
+      say(`The bot ended unexpectedly (${signal || `code ${code}`}). Starting it again in ${wait} s. (node index.js --no-restart turns this off.)`);
+      timer = setTimeout(run, wait * 1000);
+    });
+  };
+  watching = (signal) => {
+    stopping = true;
+    clearTimeout(timer);
+    if (!child) process.exit(0);
+    // In a Windows console the bot got Ctrl+C itself; elsewhere it is passed on.
+    if (process.platform !== "win32") child.kill(signal);
+    // It saves its data and ends; if it doesn't, it is ended.
+    setTimeout(() => child && child.kill(), 10_000).unref();
+  };
+  run();
+}
 
 /** XC Circuit stops a running bot by writing "stop" to it (or by closing its input). */
 function listenForStop() {
@@ -2826,12 +2889,19 @@ function listenForStop() {
 }
 
 if (typeof __XC_BUNDLE__ !== "undefined") {
-  loadDotEnv(path.join(__dirname, ".env"));
-  start(__XC_BUNDLE__, { debug: process.argv.includes("--debug"), depsRoot: __dirname, dataDir: path.join(__dirname, "data") });
+  if (watchesItself()) {
+    watchBot();
+  } else {
+    // Started by the process that watches it: gone with it.
+    if (process.env.XC_BOT_CHILD && process.send) process.on("disconnect", () => shutdown(0));
+    loadDotEnv(path.join(__dirname, ".env"));
+    start(__XC_BUNDLE__, { debug: process.argv.includes("--debug"), depsRoot: __dirname, dataDir: path.join(__dirname, "data") });
+  }
 } else if (require.main === module) {
   cli();
 }
 
 module.exports = {
+  restartWait,
   dotEnvValue,
   isPrivateAddress, guardedFetch, start, ungroupBlock, fillTemplate, fillValue, templated, isContextType, templateParts, snapshot, Timers, coerce, listsForCollections, compare, preview, Store, DbStore, Database, Databases, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };

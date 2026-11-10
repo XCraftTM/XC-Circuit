@@ -10,6 +10,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 - **An exported bot no longer carries your server and your folders**: `index.js` held everything of Bot › Server… (address, port, user name, folder) and, for each block, the full path of its file on your computer, which has your Windows user name in it. Neither is needed to run the bot, and exported bots get shared. Both are left out now; blocks are named by their plugin and file (`xc.core/blocks/debug/log.js`).
 - **One block's start-up mistake no longer keeps the whole bot from starting**: when a block failed while setting itself up, the bot stopped with that error. The Console now says which block failed, and the rest of the bot starts.
 - **Discord bots: an error from the connection no longer ends the bot**: discord.js reports some problems as an `error` on the client, and with nobody listening Node.js ends the program. It's written to the Console now, as Fluxer bots already did.
+- **An exported bot starts again after a crash**: when an exported bot ended on an error nothing was there to catch, it stayed off until someone noticed, and the Restart block only stopped it. `node index.js` now keeps watch over the bot: after a crash it starts it again (5 seconds later, longer if it keeps crashing right away), and a restart the bot asks for happens at once. A bot that can't start at all (no token, a wrong one) isn't started over and over. `node index.js --no-restart` (or `XC_NO_RESTART=1`) runs it as before, for those who use pm2, systemd or a panel for this.
 
 ## 0.2.10
 
