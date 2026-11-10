@@ -64,6 +64,8 @@ fn main() -> eframe::Result {
     if fps {
         // As fast as it can draw, at a fixed size.
         options.wgpu_options.surface.present_mode = eframe::wgpu::PresentMode::AutoNoVsync;
+        // The same for eframe's own OpenGL renderer (Older OpenGL).
+        options.glow_options.vsync = false;
         options.window_builder = None;
     }
     let result = eframe::run_native(
