@@ -45,6 +45,10 @@ jobs:
           docker logs full 2>&1 | grep 'Pair the first one'
           docker exec full test -f /data/host.sqlite
           docker exec full git --version
+      - name: A device pairs, stores a project with a big file and gets it back
+        run: |
+          code=$(docker logs full 2>&1 | grep -o '[A-Z2-9]\{4\}-[A-Z2-9]\{4\}$' | tail -1)
+          node host/test/running.js http://127.0.0.1:7421 "$code" || { docker logs full; exit 1; }
           docker rm -f full
       - name: Full mode refuses to start without its data folder
         run: |
