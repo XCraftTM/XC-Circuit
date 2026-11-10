@@ -37,6 +37,13 @@ pub struct Workspace {
 pub struct Node {
     /// `id@major`, for example `discord.send_message@3`.
     pub block: String,
+    /// What tells this block from every other in its workspace, for good.
+    /// Its number (the key it is kept under, shown in its title bar and used
+    /// in `${#4.…}`) is short and easy to read, but two people who each add
+    /// a block get the same next number; this is what their work is put
+    /// together by. Never shown.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub uid: String,
     #[serde(serialize_with = "round_point")]
     pub at: [f32; 2],
     #[serde(skip_serializing_if = "Map::is_empty")]
@@ -212,6 +219,8 @@ impl Workspace {
         for (old, node) in &clip.nodes {
             let id = self.next_node_id();
             let mut n = node.clone();
+            // A block of its own, not the copied one again.
+            n.uid.clear();
             n.at = [n.at[0] + offset[0], n.at[1] + offset[1]];
             n.zone = n.zone.as_ref().and_then(|z| map.get(z).cloned());
             self.nodes.insert(id.clone(), n);
@@ -316,6 +325,34 @@ pub struct Note {
 }
 
 impl Workspace {
+    /// Gives the blocks that have no `uid` one made from the workspace's key
+    /// and their number: for workspaces saved before blocks had one. Made,
+    /// not drawn, so every computer that reads the same file gives the same
+    /// block the same uid.
+    pub fn give_legacy_uids(&mut self, key: &str) {
+        let mut taken: HashSet<String> = self.nodes.values().filter(|n| !n.uid.is_empty()).map(|n| n.uid.clone()).collect();
+        for (id, node) in self.nodes.iter_mut().filter(|(_, n)| n.uid.is_empty()) {
+            let fnv = |text: &str| text.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3));
+            let mut uid = format!("{:012x}", fnv(&format!("{key}\u{0}{id}")) & 0xffff_ffff_ffff);
+            while !taken.insert(uid.clone()) {
+                uid = format!("{:012x}", fnv(&uid) & 0xffff_ffff_ffff);
+            }
+            node.uid = uid;
+        }
+    }
+
+    /// Gives the blocks that have no `uid` yet (new ones, pasted ones) one
+    /// drawn at random, and a block whose uid another one has already (a
+    /// file put together by hand) another.
+    pub fn give_new_uids(&mut self) {
+        let mut taken: HashSet<String> = HashSet::new();
+        for node in self.nodes.values_mut() {
+            while node.uid.is_empty() || !taken.insert(node.uid.clone()) {
+                node.uid = crate::project::new_id()[..12].to_string();
+            }
+        }
+    }
+
     /// An id for a new note: `n1`, `n2` …
     pub fn next_note_id(&self) -> String {
         (1..).map(|i| format!("n{i}")).find(|n| !self.notes.contains_key(n)).expect("unbounded range")

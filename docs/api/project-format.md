@@ -124,6 +124,7 @@ Each file in `workspaces/` is one workspace; its file name without `.json` is it
 | Key | Description |
 | --- | --- |
 | `block` | The block id and its major version: `discord.send_message@3`. |
+| `uid` | What tells this block from every other for good. Its number (the key it is kept under) is easy to read, but two people who each add a block get the same next number; `uid` is what their work can be put together by. XC Circuit writes it; a block without one gets one. |
 | `at` | Position on the canvas `[x, y]`. |
 | `values` | Field values by key. Missing fields have their default. |
 | `pins` | Fields switched to pins. |

@@ -248,6 +248,7 @@ impl Project {
                 match read {
                     Ok(mut ws) => {
                         ws.pin_wired_fields();
+                        ws.give_legacy_uids(&stem);
                         workspaces.insert(stem, ws);
                     }
                     Err(e) => unreadable.push((stem, format!("{e:#}"))),
@@ -339,6 +340,7 @@ impl Project {
     /// delete; give them back with [`Project::removed`] if that save fails.
     pub fn take_save(&mut self) -> Project {
         self.meta.order = self.order_to_save();
+        self.workspaces.values_mut().for_each(Workspace::give_new_uids);
         let copy = self.clone();
         self.removed.clear();
         copy
@@ -348,6 +350,8 @@ impl Project {
         fs::create_dir_all(self.root.join(WORKSPACE_DIR))?;
         self.meta.order = self.order_to_save();
         self.meta.layout = LAYOUT;
+        // New blocks get what tells them apart for good.
+        self.workspaces.values_mut().for_each(Workspace::give_new_uids);
         let (shared, commands, local) = self.split();
         write_json(&self.root.join(PROJECT_FILE), &shared)?;
         write_commands(&self.root, &commands, &self.unreadable_commands)?;
@@ -546,6 +550,7 @@ pub(crate) fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
 
     fn temp(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("xc-project-{name}-{}", std::process::id()));
@@ -664,6 +669,34 @@ mod tests {
         let refused = Project::load(&dir).unwrap_err().to_string();
         assert!(refused.contains("newer XC Circuit") && refused.contains("layout 3"), "{refused}");
         assert_eq!(fs::read_to_string(&file).unwrap(), newer, "and left as it is");
+    }
+
+    /// Every block has a uid: one made from its place for blocks saved before
+    /// there were uids (the same on every computer), a new one for each new
+    /// block and each copy.
+    #[test]
+    fn blocks_have_uids() {
+        use crate::graph::Node;
+        let dir = temp("uids");
+        Project::create(&dir, "Test", "none").unwrap();
+        fs::write(dir.join(WORKSPACE_DIR).join("main.json"), r#"{ "name": "Main", "nodes": { "1": { "block": "core.on_start@1", "at": [0, 0] }, "2": { "block": "core.log@1", "at": [0, 0] } }, "links": ["1.next > 2.in"] }"#).unwrap();
+        let mut p = Project::load(&dir).unwrap();
+        let before: Vec<String> = p.workspaces["main"].nodes.values().map(|n| n.uid.clone()).collect();
+        assert!(before.iter().all(|u| u.len() == 12) && before[0] != before[1], "{before:?}");
+        assert_eq!(Project::load(&dir).unwrap().workspaces["main"].nodes.values().map(|n| n.uid.clone()).collect::<Vec<_>>(), before, "read again: the same");
+
+        // A new block and a pasted copy get their own when saved; the others keep theirs.
+        let ws = p.workspaces.get_mut("main").unwrap();
+        ws.nodes.insert("3".into(), Node { block: "core.log@1".into(), ..Default::default() });
+        let clip = ws.extract(&["2".to_string()]);
+        let pasted = ws.paste(&clip, [20.0, 20.0]);
+        assert!(ws.nodes[&pasted[0]].uid.is_empty());
+        p.save().unwrap();
+        let after: Vec<String> = Project::load(&dir).unwrap().workspaces["main"].nodes.values().map(|n| n.uid.clone()).collect();
+        assert_eq!(after[..2], before[..]);
+        let all: HashSet<&String> = after.iter().collect();
+        assert_eq!((after.len(), all.len()), (4, 4), "each its own: {after:?}");
+        assert!(fs::read_to_string(dir.join(WORKSPACE_DIR).join("main.json")).unwrap().contains("\"uid\""));
     }
 
     #[test]
