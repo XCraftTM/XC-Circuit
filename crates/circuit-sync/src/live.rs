@@ -466,7 +466,7 @@ mod tests {
             }
         }
 
-        fn to_host(&mut self, from: &str, msgs: Vec<Msg>) {
+        fn host_gets(&mut self, from: &str, msgs: Vec<Msg>) {
             for msg in msgs {
                 let turn = self.host.receive(from, msg, &self.files);
                 for (key, _, now) in turn.changed {
@@ -481,14 +481,14 @@ mod tests {
 
         fn join(&mut self, id: &str, name: &str, version: &str) {
             self.guests.insert(id.into(), (GuestSide::new(), Docs::new(), Vec::new()));
-            self.to_host(id, vec![GuestSide::hello(name, version)]);
+            self.host_gets(id, vec![GuestSide::hello(name, version)]);
         }
 
         /// The guest's edits go to the host, and the answers come back.
         fn guest_sync(&mut self, id: &str) {
             let (guest, docs, _) = self.guests.get_mut(id).unwrap();
             let msgs = guest.local(&docs.clone());
-            self.to_host(id, msgs);
+            self.host_gets(id, msgs);
         }
 
         fn host_sync(&mut self) {
@@ -606,8 +606,8 @@ mod tests {
         let from_g1 = { let (g, d, _) = t.guests.get_mut("g1").unwrap(); g.local(&d.clone()) };
         let from_g2 = { let (g, d, _) = t.guests.get_mut("g2").unwrap(); g.local(&d.clone()) };
         t.host_sync();
-        t.to_host("g1", from_g1);
-        t.to_host("g2", from_g2);
+        t.host_gets("g1", from_g1);
+        t.host_gets("g2", from_g2);
         // Until everyone has said and heard everything.
         for _ in 0..4 {
             t.guest_sync("g1");
@@ -631,7 +631,7 @@ mod tests {
         t.docs("g1").get_mut("main").unwrap()["nodes"]["1"]["values"]["message"] = "Grace says".into();
         let from_g1 = { let (g, d, _) = t.guests.get_mut("g1").unwrap(); g.local(&d.clone()) };
         t.host_sync();
-        t.to_host("g1", from_g1);
+        t.host_gets("g1", from_g1);
         t.guest_sync("g1");
         assert!(t.same_everywhere() && t.host_docs["main"]["nodes"]["1"]["values"]["message"] == "the host says");
 
