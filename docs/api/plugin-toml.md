@@ -64,6 +64,7 @@ Each entry is a list of paths or glob patterns relative to the plugin folder. `*
 | Key | Contributes | Reference |
 | --- | --- | --- |
 | `blocks` | block files | [Blocks](./blocks) |
+| `blockModes` | the kinds of bot your blocks are offered in, by build mode id: `["discord-bot"]`. Leave it out and they are offered in every kind | [below](#where-your-blocks-show) |
 | `buildModes` | build modes | [Build modes](./build-modes) |
 | `pinTypes` | pin types | [Pin types](./pin-types) |
 | `classes` | class catalogs: the members of the values behind pin types, for completion in `${…}` | [Pin types](./pin-types#class-catalogs) |
@@ -73,6 +74,20 @@ Each entry is a list of paths or glob patterns relative to the plugin folder. `*
 | `icons` | icons, by file name without extension (`icons/rocket.svg` is `rocket`) | — |
 
 Runtime libraries are named by the build mode that uses them ([`runtimeLibs`](./build-modes#keys)), and templates are found in the plugin's `templates/` folder without being listed.
+
+### Where your blocks show
+
+A plugin that adds blocks needs no build mode of its own, and no change to anyone else's: its blocks are in the block picker of **every kind of bot** (Discord Bot, Fluxer Bot …), in the category each names in [`search.category`](./blocks#search).
+
+Blocks that only make sense for one kind (they use discord.js, say) name it:
+
+```toml
+[contributes]
+blocks     = ["blocks/**/*.js"]
+blockModes = ["discord-bot"]
+```
+
+The ids are the build modes' (`discord-bot`, `fluxer-bot`, or another plugin's). Only a plugin that a [build mode](./build-modes) lists in its `blocks` belongs to that kind of bot alone: that is how Discord's own blocks stay out of Fluxer bots.
 
 ## `[editor]`
 

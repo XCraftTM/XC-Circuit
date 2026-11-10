@@ -46,7 +46,7 @@ prefix = { type = "text", group = "Messages", label = "Text command prefix", def
 | `name` | Shown in File › New Project. |
 | `icon` | An icon name. |
 | `description` | One sentence, shown in File › New Project. |
-| `blocks` | Which blocks appear: `"plugin.id/*"` for all blocks of a plugin. |
+| `blocks` | The plugins whose blocks belong to this kind of bot: `"plugin.id/*"` for all blocks of a plugin. Plugins no build mode lists are add-ons, and their blocks appear in every kind (or the ones they name in [`blockModes`](./plugin-toml#where-your-blocks-show)), so you don't list them here. |
 | `runtime` | `"node"`. |
 | `runtimeLibs` | [Runtime libraries](./runtime-libs), as `"plugin.id/path/in/plugin.js"`: a file inside that plugin's folder. |
 | `exporter` | How Bot › Export packages the bot (`"<plugin>/node-bundle"`: a Node.js folder). |

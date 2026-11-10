@@ -78,6 +78,10 @@ pub fn app_supported(min: Option<&str>) -> bool {
 pub struct Contributes {
     pub build_modes: Vec<String>,
     pub blocks: Vec<String>,
+    /// The kinds of bot (build mode ids, such as `discord-bot`) this
+    /// plugin's blocks are offered in. Empty: in every kind, unless a
+    /// build mode lists the plugin itself (see `Registry::offers`).
+    pub block_modes: Vec<String>,
     pub pin_types: Vec<String>,
     /// Class catalogs (JSON): the members of the values behind pin types, for
     /// `{#1.user.username}` in texts.

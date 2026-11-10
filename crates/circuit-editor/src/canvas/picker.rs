@@ -220,7 +220,7 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
         .blocks
         .values()
         .filter(|d| {
-            mode.as_ref().is_none_or(|m: &BuildMode| m.includes(&d.plugin, &d.id))
+            mode.as_ref().is_none_or(|m: &BuildMode| ed.reg.offers(m, d))
                 || project_root.as_ref().is_some_and(|r| d.source.starts_with(r))
         })
         .filter(|d| d.deprecated.is_none())

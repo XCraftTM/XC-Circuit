@@ -334,6 +334,24 @@ impl Registry {
         self.modes.iter().find(|m| m.id == id)
     }
 
+    /// Whether a kind of bot offers a block (in the block picker). It does
+    /// when its build mode lists the block's plugin. A plugin no build mode
+    /// lists is an add-on: its blocks are offered in every kind of bot, or,
+    /// when its plugin.toml names some (`[contributes] blockModes`), in
+    /// those. So a plugin that only adds blocks needs no build mode of its
+    /// own, and no change to someone else's.
+    pub fn offers(&self, mode: &BuildMode, def: &BlockDef) -> bool {
+        if mode.includes(&def.plugin, &def.id) {
+            return true;
+        }
+        let own = self.plugins.iter().find(|p| p.manifest.id == def.plugin).map(|p| p.manifest.contributes.block_modes.as_slice()).unwrap_or_default();
+        if !own.is_empty() {
+            return own.contains(&mode.id);
+        }
+        // Listed by another kind of bot: it belongs to that one.
+        !self.modes.iter().any(|m| m.blocks.iter().any(|pattern| pattern.split('/').next() == Some(def.plugin.as_str())))
+    }
+
     pub fn theme(&self, id: &str) -> Option<&ThemeDef> {
         self.themes.iter().find(|t| t.id == id)
     }
@@ -564,6 +582,42 @@ version = \"{version}\"
         assert!(reg.block("discord.send_message@3").is_some());
         assert!(reg.mode("discord-bot").is_some());
         assert!(reg.theme("graphite").is_some());
+    }
+
+    /// A plugin that only adds blocks shows them in every kind of bot, or in
+    /// the kinds it names; the blocks of one kind of bot stay out of another.
+    #[test]
+    fn an_add_on_plugin_s_blocks_are_offered_without_a_build_mode() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+        let tmp = std::env::temp_dir().join(format!("xc-addon-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        let block = |id: &str| format!("module.exports = {{ id: \"{id}\", kind: \"action\", info: {{ name: \"Hi\", description: \"Says hi\", version: \"1.0.0\" }}, run() {{}} }};");
+        for (plugin, extra) in [("acme.everywhere", ""), ("acme.fluxer-only", "blockModes = [\"fluxer-bot\"]
+")] {
+            let dir = tmp.join(plugin);
+            fs::create_dir_all(dir.join("blocks")).unwrap();
+            fs::write(dir.join("plugin.toml"), format!("id = \"{plugin}\"
+name = \"{plugin}\"
+version = \"1.0.0\"
+
+[contributes]
+blocks = [\"blocks/*.js\"]
+{extra}")).unwrap();
+            fs::write(dir.join("blocks").join("hi.js"), block(&format!("{}.hi", plugin.replace(['.', '-'], "_")))).unwrap();
+        }
+        let engine = BlockEngine::new().unwrap();
+        let reg = Registry::load(&[root, tmp.clone()], &engine);
+        let (discord, fluxer) = (reg.mode("discord-bot").unwrap(), reg.mode("fluxer-bot").unwrap());
+        let everywhere = reg.blocks.values().find(|b| b.plugin == "acme.everywhere").expect("its block loaded");
+        let fluxer_only = reg.blocks.values().find(|b| b.plugin == "acme.fluxer-only").expect("its block loaded");
+        assert!(reg.offers(discord, everywhere) && reg.offers(fluxer, everywhere), "an add-on shows in every kind of bot");
+        assert!(reg.offers(fluxer, fluxer_only) && !reg.offers(discord, fluxer_only), "or in the kinds it names");
+        // What a kind of bot lists is that kind's: Discord's blocks stay out of Fluxer.
+        let send = reg.block("discord.send_message@3").unwrap();
+        assert!(reg.offers(discord, send) && !reg.offers(fluxer, send));
+        let log = reg.blocks.values().find(|b| b.plugin == "xc.core").unwrap();
+        assert!(reg.offers(discord, log) && reg.offers(fluxer, log));
+        let _ = fs::remove_dir_all(&tmp);
     }
 
     /// A plugin turned off isn't loaded (its blocks aren't there) but is still listed.
