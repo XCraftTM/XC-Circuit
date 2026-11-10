@@ -56,6 +56,7 @@ impl Tab {
             Tab::Export | Tab::WorkspaceExport => "package",
             Tab::Hosting => "server",
             Tab::Git => "git",
+            Tab::Host => "server",
             Tab::ServerConsole => "terminal",
             Tab::WorkspaceImport => "folder-plus",
             Tab::Start => "block",
@@ -105,6 +106,7 @@ impl DockViewer<Tab> for Viewer<'_> {
             Tab::Export => t!("Export bot").into(),
             Tab::Hosting => t!("Remote").into(),
             Tab::Git => "Git".into(),
+            Tab::Host => "Host".into(),
             Tab::ServerConsole => match &self.bot.hosting.console {
                 Some(c) => tf!("Console of {server}", server = c.name),
                 None => t!("Remote console").into(),
@@ -153,6 +155,7 @@ impl DockViewer<Tab> for Viewer<'_> {
             Tab::Export => self.bot.export = None,
             Tab::Hosting => self.bot.hosting.draft = None,
             Tab::Git => self.bot.git.open = false,
+            Tab::Host => self.bot.host.open = false,
             Tab::ServerConsole => self.bot.hosting.console = None,
             Tab::WorkspaceExport => self.ed.ws_export = None,
             Tab::WorkspaceImport => self.ed.ws_import = None,
@@ -209,6 +212,7 @@ impl DockViewer<Tab> for Viewer<'_> {
             Tab::Export => self.bot.export_tab(ui, self.ed),
             Tab::Hosting => self.bot.hosting.tab(ui, self.ed),
             Tab::Git => self.bot.git.tab(ui, self.ed),
+            Tab::Host => self.bot.host.tab(ui, self.ed),
             Tab::ServerConsole => {
                 if let Some(c) = &mut self.bot.hosting.console {
                     c.tab(ui, self.ed);

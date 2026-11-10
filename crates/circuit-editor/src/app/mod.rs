@@ -66,6 +66,8 @@ pub enum Tab {
     Hosting,
     /// File › Git…: the project in a Git repository.
     Git,
+    /// File › Host…: pairing with an XC Circuit Host.
+    Host,
     /// A Calagopus server's state, power buttons and live console.
     ServerConsole,
     Plugins,
@@ -539,6 +541,11 @@ impl eframe::App for CircuitApp {
         self.bot.poll(&mut self.ed, &ctx);
         self.bot.hosting.poll(&mut self.ed, &ctx);
         self.bot.git.poll(&mut self.ed, &ctx);
+        self.bot.host.poll(&mut self.ed, &ctx);
+        // Keep this project on the host: File › Git… does it.
+        if let Some(address) = self.bot.host.keep.take() {
+            self.bot.git.connect_to(&self.ed, address);
+        }
         if let Some(Err(e)) = self.ed.bot_profile.poll() {
             self.ed.log(crate::editor::Level::Warn, tf!("Couldn't load the bot's name and picture: {error}", error = e));
         }

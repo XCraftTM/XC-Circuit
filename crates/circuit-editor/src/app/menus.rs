@@ -96,6 +96,9 @@ impl CircuitApp {
                 if kit::menu_item(ui, "Git…", None, self.ed.project.is_some()).clicked() {
                     self.bot.git.open(&self.ed);
                 }
+                if kit::menu_item(ui, "Host…", None, true).clicked() {
+                    self.bot.host.open();
+                }
                 if kit::menu_item(ui, t!("Restore from backup…"), None, self.ed.project.is_some()).clicked() {
                     open_center(&mut self.dock, Tab::Backups);
                 }

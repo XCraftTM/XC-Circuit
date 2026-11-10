@@ -3,7 +3,7 @@
 The **XC Circuit Host** is a small server you run yourself, in a Docker container. It is for people who want their projects on a machine of their own instead of GitHub, and it is what live sessions go through.
 
 ::: warning Work in progress
-The container is here and tested, and XC Circuit can already keep a project on it (as a Git repository, see below). Pairing devices from inside the app, carrying the bot token between your devices, and live sessions are being built: the host already has their side.
+The container is here and tested, and from XC Circuit you can pair with it, keep projects on it and carry a project's secrets between your devices. Live sessions and running the bot on the host are still being built: the host already passes a session's messages on.
 :::
 
 ## What it does
@@ -45,7 +45,32 @@ You need a server with Docker and a reverse proxy that adds HTTPS, such as Nginx
    docker compose -f host/docker-compose.yml logs xc-circuit-host
    ```
 
-   Every further device comes in with a code from a device that is already paired.
+   In XC Circuit, open **File › Host…**, fill in the host's address and that code, and press **Pair**.
+
+## Your devices
+
+The first device makes the **key your secrets are sealed with**, and shows it once as a **recovery code**: write it down. Your devices pass the key on to each other; if all of them are ever gone, the recovery code is the only way to read the secrets on the host again (tick *I have a recovery code* when pairing the next first device).
+
+Every further device comes in through one that is paired already:
+
+1. On the paired device: **File › Host… › Add a device**. It shows a code of 16 letters and digits. Leave that window open.
+2. On the new device: **File › Host…**, the host's address and that code, **Pair**.
+
+Half of the code goes to the host, which lets the device in. The other half only travels from one screen to the other keyboard: the two devices use it to pass the key on, so the host can't get at it even if it tried.
+
+**Unpair this computer…** takes it off the host's list and deletes its token and its key here.
+
+## A project on the host
+
+With a project open, File › Host… has three buttons:
+
+- **Keep this project on the host** stores it there as a Git repository and keeps it in step from then on, exactly as [with GitHub](git.md); File › Git… opens to show it.
+- **Send its secrets** seals the bot token and the project's other secrets on this computer and puts them in the host's vault.
+- **Get its secrets** fetches them on another device and saves them in that computer's credential store. No more typing the token in on every device.
+
+The passwords for uploading the bot from one computer (Bot › Remote…) don't travel: they belong to that computer.
+
+On another device, get the project with **File › Get from Git…** and the address `https://circuit.example.com/git/my-bot.git`; once paired, that device is signed in there already.
 
 ## Settings
 
@@ -55,16 +80,6 @@ You need a server with Docker and a reverse proxy that adds HTTPS, such as Nginx
 | `XC_HOST_PORT` | `7421` | The port inside the container. Not a port of any common service, and never open to the internet: the proxy is. |
 | `XC_HOST_DATA` | `/data` | Where full mode keeps everything: `host.sqlite` and `projects/`. |
 | `XC_HOST_TRUSTED_PROXY` | (none) | Whose word to take for an app's address (`X-Forwarded-For`), to limit misuse per person: `private` for a proxy on a private network, or the proxy's addresses, separated by commas. |
-
-## Keeping a project on it
-
-A paired device has a **token**. With it, a project is stored at
-
-```
-https://circuit.example.com/git/my-bot.git
-```
-
-Paste that into **File › Git…** as the repository's address, with the token as the access token (the user name can be anything). The repository is made the first time something is stored. A project's name is lowercase letters, digits and dashes.
 
 ## Good to know
 

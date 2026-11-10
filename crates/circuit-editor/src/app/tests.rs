@@ -187,6 +187,7 @@ fn every_tab_has_an_icon() {
         Tab::Export,
         Tab::Hosting,
         Tab::Git,
+        Tab::Host,
         Tab::ServerConsole,
         Tab::Plugins,
         Tab::WorkspaceExport,

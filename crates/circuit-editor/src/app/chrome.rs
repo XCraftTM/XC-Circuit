@@ -274,6 +274,7 @@ impl CircuitApp {
             (Tab::Export, self.bot.export.is_some(), egui::vec2(560.0, 620.0)),
             (Tab::Hosting, self.bot.hosting.draft.is_some(), egui::vec2(680.0, 760.0)),
             (Tab::Git, self.bot.git.open, egui::vec2(680.0, 760.0)),
+            (Tab::Host, self.bot.host.open, egui::vec2(680.0, 720.0)),
             (Tab::ServerConsole, self.bot.hosting.console.is_some(), egui::vec2(900.0, 560.0)),
             (Tab::WorkspaceExport, self.ed.ws_export.is_some(), egui::vec2(660.0, 680.0)),
             (Tab::WorkspaceImport, self.ed.ws_import.is_some(), egui::vec2(660.0, 680.0)),

@@ -262,6 +262,15 @@ impl GitUi {
         });
     }
 
+    /// Opens the dialog and connects the open project to `address`: for a
+    /// place the sign-in is known for already (a paired host).
+    pub fn connect_to(&mut self, ed: &Editor, address: String) {
+        self.open(ed);
+        self.address = address;
+        self.step = 3;
+        self.connect();
+    }
+
     fn connect(&mut self) {
         let (Some(root), Some(host)) = (self.root.clone(), host_of(&self.address)) else { return };
         let address = self.address.trim().to_string();

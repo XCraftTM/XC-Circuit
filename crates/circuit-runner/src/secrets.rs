@@ -242,6 +242,22 @@ pub fn set_sync_login(host: &str, user: &str, token: &str) -> Result<()> {
     e.set_password(&serde_json::json!({ "user": user, "token": token }).to_string()).map_err(|e| anyhow!("couldn't save the sign-in: {e}"))
 }
 
+/// What is kept of this computer's pairing with an XC Circuit Host, by the
+/// host's name: its token and its key for the secrets, as the app wrote it.
+pub fn host_login(host: &str) -> Option<String> {
+    open(format!("host:{}", host.trim().to_ascii_lowercase())).ok()?.get_password().ok().filter(|p| !p.is_empty())
+}
+
+/// Keeps the pairing with `host`; an empty text forgets it.
+pub fn set_host_login(host: &str, entry: &str) -> Result<()> {
+    let e = open(format!("host:{}", host.trim().to_ascii_lowercase()))?;
+    if entry.is_empty() {
+        let _ = e.delete_credential();
+        return Ok(());
+    }
+    e.set_password(entry).map_err(|e| anyhow!("couldn't save the pairing: {e}"))
+}
+
 fn sync_account(host: &str) -> String {
     format!("sync:{}", host.trim().to_ascii_lowercase())
 }

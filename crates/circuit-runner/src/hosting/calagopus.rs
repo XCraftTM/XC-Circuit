@@ -407,8 +407,8 @@ impl Drop for Console {
     }
 }
 
-pub(crate) trait Stream: Read + Write {}
-impl<T: Read + Write> Stream for T {}
+pub(crate) trait Stream: Read + Write + Send {}
+impl<T: Read + Write + Send> Stream for T {}
 
 /// One connection to the console, until it closes (Err) or `stop` (Ok).
 fn run_console(panel: &Panel, server: &str, tx: &Sender<ConsoleEvent>, commands: &Receiver<String>, stop: &AtomicBool) -> Result<()> {

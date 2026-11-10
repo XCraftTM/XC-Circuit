@@ -4,6 +4,7 @@ pub mod profile;
 pub mod servers;
 pub(crate) mod databases;
 pub mod git;
+pub mod host;
 pub mod hosting;
 pub mod remote;
 mod settings;
@@ -113,11 +114,13 @@ pub struct BotUi {
     pub hosting: hosting::HostingUi,
     /// File › Git…: the project in a Git repository.
     pub git: git::GitUi,
+    /// File › Host…: this computer and an XC Circuit Host.
+    pub host: host::HostUi,
 }
 
 impl BotUi {
     pub fn new() -> Self {
-        BotUi { state: BotState::Stopped, session: None, old: None, restart: None, settings: None, export: None, jobs: Vec::new(), events: Vec::new(), question: None, hosting: hosting::HostingUi::new(), git: git::GitUi::new() }
+        BotUi { state: BotState::Stopped, session: None, old: None, restart: None, settings: None, export: None, jobs: Vec::new(), events: Vec::new(), question: None, hosting: hosting::HostingUi::new(), git: git::GitUi::new(), host: host::HostUi::new() }
     }
 
     /// Starts the bot, or restarts it: a running bot is stopped first, and the

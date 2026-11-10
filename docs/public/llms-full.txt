@@ -1691,7 +1691,7 @@ Never stored: the `.circuit/` folder. That is this computer's part: where the bo
 The **XC Circuit Host** is a small server you run yourself, in a Docker container. It is for people who want their projects on a machine of their own instead of GitHub, and it is what live sessions go through.
 
 ::: warning Work in progress
-The container is here and tested, and XC Circuit can already keep a project on it (as a Git repository, see below). Pairing devices from inside the app, carrying the bot token between your devices, and live sessions are being built: the host already has their side.
+The container is here and tested, and from XC Circuit you can pair with it, keep projects on it and carry a project's secrets between your devices. Live sessions and running the bot on the host are still being built: the host already passes a session's messages on.
 :::
 
 ## What it does
@@ -1733,7 +1733,32 @@ You need a server with Docker and a reverse proxy that adds HTTPS, such as Nginx
    docker compose -f host/docker-compose.yml logs xc-circuit-host
    ```
 
-   Every further device comes in with a code from a device that is already paired.
+   In XC Circuit, open **File › Host…**, fill in the host's address and that code, and press **Pair**.
+
+## Your devices
+
+The first device makes the **key your secrets are sealed with**, and shows it once as a **recovery code**: write it down. Your devices pass the key on to each other; if all of them are ever gone, the recovery code is the only way to read the secrets on the host again (tick *I have a recovery code* when pairing the next first device).
+
+Every further device comes in through one that is paired already:
+
+1. On the paired device: **File › Host… › Add a device**. It shows a code of 16 letters and digits. Leave that window open.
+2. On the new device: **File › Host…**, the host's address and that code, **Pair**.
+
+Half of the code goes to the host, which lets the device in. The other half only travels from one screen to the other keyboard: the two devices use it to pass the key on, so the host can't get at it even if it tried.
+
+**Unpair this computer…** takes it off the host's list and deletes its token and its key here.
+
+## A project on the host
+
+With a project open, File › Host… has three buttons:
+
+- **Keep this project on the host** stores it there as a Git repository and keeps it in step from then on, exactly as [with GitHub](git.md); File › Git… opens to show it.
+- **Send its secrets** seals the bot token and the project's other secrets on this computer and puts them in the host's vault.
+- **Get its secrets** fetches them on another device and saves them in that computer's credential store. No more typing the token in on every device.
+
+The passwords for uploading the bot from one computer (Bot › Remote…) don't travel: they belong to that computer.
+
+On another device, get the project with **File › Get from Git…** and the address `https://circuit.example.com/git/my-bot.git`; once paired, that device is signed in there already.
 
 ## Settings
 
@@ -1743,16 +1768,6 @@ You need a server with Docker and a reverse proxy that adds HTTPS, such as Nginx
 | `XC_HOST_PORT` | `7421` | The port inside the container. Not a port of any common service, and never open to the internet: the proxy is. |
 | `XC_HOST_DATA` | `/data` | Where full mode keeps everything: `host.sqlite` and `projects/`. |
 | `XC_HOST_TRUSTED_PROXY` | (none) | Whose word to take for an app's address (`X-Forwarded-For`), to limit misuse per person: `private` for a proxy on a private network, or the proxy's addresses, separated by commas. |
-
-## Keeping a project on it
-
-A paired device has a **token**. With it, a project is stored at
-
-```
-https://circuit.example.com/git/my-bot.git
-```
-
-Paste that into **File › Git…** as the repository's address, with the token as the access token (the user name can be anything). The repository is made the first time something is stored. A project's name is lowercase letters, digits and dashes.
 
 ## Good to know
 
@@ -1934,6 +1949,7 @@ Blocks run in your bot, which is a normal Node.js program. A block can read file
 | Side bar | The activity bar's icon picks what it shows (Workspaces, Stored Data, Plugins to start with); clicking the one shown folds it away. Two at once: drag an icon (or one of those tabs) onto the side bar's lower half, or right-click an icon › Show in the lower half; it shows under the first, and the line between them drags to share the height. Right-click a half's name to swap the halves, close one, or move it to the main area; clicking an icon that shows hides that half. The icons work like tabs: drag one to reorder them, or out onto the main area to make it a tab there. Drag a tab (Workspaces, Inspector, Console, Problems, the Server console, a plugin's panel) onto the activity bar to make it an icon. Right-click an icon › Move to the main area. View › Side bar and View › Panels tick what's open, as an icon or a tab: untick to take it away, tick to bring it back (Workspaces, Stored Data and Plugins into the activity bar, panels as a tab). Narrow, Settings and Bot settings show their pages as a dropdown |
 | Tour | Help › Take the tour: build a tiny bot on a practice project. What to click next glows (the Add block button, the Math entry, the two pins to wire, the Inspector's fields, Run), the card says what to do right now and what went wrong, and Do it for me does any step. Skip any time; arrow keys move between steps |
 | Git | File › Git… keeps the project in a Git repository (GitHub, GitLab, Gitea …): **Store** records what changed and sends it, **Fetch** gets what is stored and puts the two together; files both sides changed are asked about. Sign in with GitHub in the browser, or with an access token. See [Keeping a project in Git](git.md). |
+| Host | File › Host… pairs this computer with an XC Circuit Host (a container you run yourself), keeps a project on it, adds further devices by a code, and sends and gets a project's secrets through its vault, sealed on the devices. See [The Host](host.md). |
 | Backups | Every save keeps a snapshot outside the project (newest 20, plus one a day for 14 days; Settings › Backups). File › Restore from backup… compares them with now and restores the project or one workspace. Unsaved changes are copied every 30 s (Settings › Backups › Crash recovery) and offered back after a crash |
 | Bot data backups | A bot backs up its saved data (store.json) when it starts and every 6 hours, keeping the newest 10 in data/backups. If the data is empty or damaged it asks: restore a backup or start empty (a dialog in XC Circuit, a question in the terminal) |
 | Shortcuts | Settings › Shortcuts: click a shortcut and press the keys you want: any key (letters, digits, F1–F24, arrows, punctuation, Home, Insert …) with any mix of Ctrl, Shift and Alt, or the mouse's side buttons. Each action can have two; a shortcut taken from another action says so. Besides Run (F5) and Stop (Shift+F5), Start and Restart alone, Bot settings, Slash Commands, Export, Upload to the server, Server console, Server settings and switching Run between this computer and the server can get one (they have none to start with); menus and the command palette show them. Shortcuts without Ctrl or Alt don't fire while typing. Copy, cut and paste stay the system's keys |
