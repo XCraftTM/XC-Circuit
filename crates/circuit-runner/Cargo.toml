@@ -30,3 +30,5 @@ tokio = { version = "1", default-features = false, features = ["rt", "net", "tim
 tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 webpki-roots = "1"
+# Sealing secrets for an XC Circuit Host's vault (the library rustls uses already).
+ring = "0.17"

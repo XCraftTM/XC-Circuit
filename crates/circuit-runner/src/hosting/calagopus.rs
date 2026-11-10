@@ -407,7 +407,7 @@ impl Drop for Console {
     }
 }
 
-trait Stream: Read + Write {}
+pub(crate) trait Stream: Read + Write {}
 impl<T: Read + Write> Stream for T {}
 
 /// One connection to the console, until it closes (Err) or `stop` (Ok).
@@ -469,7 +469,7 @@ fn run_console(panel: &Panel, server: &str, tx: &Sender<ConsoleEvent>, commands:
 
 /// Opens the websocket (ws:// or wss://, the panel may give http(s)://),
 /// reading with a short timeout so commands go out while it waits.
-fn connect_socket(url: &str) -> Result<tungstenite::WebSocket<Box<dyn Stream>>> {
+pub(crate) fn connect_socket(url: &str) -> Result<tungstenite::WebSocket<Box<dyn Stream>>> {
     use tungstenite::client::IntoClientRequest;
     let url = url.replacen("https://", "wss://", 1).replacen("http://", "ws://", 1);
     let secure = url.starts_with("wss://");
