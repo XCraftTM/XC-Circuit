@@ -119,6 +119,9 @@ pub struct Editor {
     /// The last value each output gave while the bot ran, as a short text,
     /// and when: (workspace, block or zone, output) → value.
     pub wire_values: HashMap<(String, String, String), (String, std::time::Instant)>,
+    /// What the Problems panel says about each block, shown on the block
+    /// too: workspace → block → what's wrong. Kept current by the app.
+    pub node_problems: HashMap<String, HashMap<String, Vec<String>>>,
     /// Every selected block in the selected workspace (includes `selected`).
     pub multi: HashSet<String>,
     /// Selected notes: (workspace, note).
@@ -205,6 +208,7 @@ impl Editor {
             active_workspace: None,
             activity: HashMap::new(),
             wire_values: HashMap::new(),
+            node_problems: HashMap::new(),
             multi: HashSet::new(),
             selected_notes: HashSet::new(),
             recording_frame: None,

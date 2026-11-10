@@ -607,7 +607,15 @@ impl eframe::App for CircuitApp {
             watchdog::mark("working out the Problems list");
             // A form that changed changes what Modal Submitted gives.
             self.ed.refresh_forms();
-            self.problems_found = Some((key, panels::collect_problems(&mut self.ed)));
+            let found = panels::collect_problems(&mut self.ed);
+            // Each block's own, for the canvas to show on it.
+            self.ed.node_problems.clear();
+            for (_, why, at) in &found {
+                if let Some((ws, node)) = at {
+                    self.ed.node_problems.entry(ws.clone()).or_default().entry(node.clone()).or_default().push(why.clone());
+                }
+            }
+            self.problems_found = Some((key, found));
             // The custom ids events offer change with the project, too.
             let ids = crate::editor::custom_ids::collect_for(&mut self.ed).suggestions();
             crate::ui::widgets::share_suggestions(ui.ctx(), ids);

@@ -212,7 +212,7 @@ fn edge_push(outer: Rect, p: Pos2) -> Vec2 {
 }
 
 pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
-    let Editor { reg, engine, theme, project, shapes, views, selected, edited, picker, active_workspace, activity, wire_values, multi, selected_notes, recording_frame, define_ctx, embed_edit, layout_edit, modal_edit, canvas_edit, selected_wire, prefs, ui_rects, tour_parts, .. } = ed;
+    let Editor { reg, engine, theme, project, shapes, views, selected, edited, picker, active_workspace, activity, wire_values, multi, selected_notes, recording_frame, define_ctx, node_problems, embed_edit, layout_edit, modal_edit, canvas_edit, selected_wire, prefs, ui_rects, tour_parts, .. } = ed;
     let Some(project) = project.as_mut() else { return };
     let mode = reg.mode(&project.meta.mode).or_else(|| reg.modes.first());
     let Some(ws) = project.workspaces.get_mut(ws_key) else {
@@ -618,6 +618,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     }
 
     // Blocks.
+    let problems_here = node_problems.get(ws_key);
     let mut toggle_pin: Option<(String, String)> = None;
     let mut open_embed_for: Option<(String, String)> = None;
     let mut dropped: Option<String> = None;
@@ -673,6 +674,15 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             let pill = Rect::from_min_size(layout.rect.left_bottom() + vec2(0.0, 6.0), galley.size() + vec2(16.0, 8.0));
             painter.rect_filled(pill, 6.0, theme.error);
             painter.galley(pill.min + vec2(8.0, 4.0), galley, Color32::WHITE);
+        } else if let Some(text) = problems_here.and_then(|p| p.get(id)).and_then(|list| problem_line(list)) {
+            // What Problems says about the block, where the block is: a
+            // mistake in a ${#4.…} or an empty required field is seen while
+            // building, not only by whoever opens the Problems panel.
+            let ink = Color32::from_rgb(0x1E, 0x1F, 0x22);
+            let galley = painter.layout_no_wrap(text, FontId::proportional(11.5), ink);
+            let pill = Rect::from_min_size(layout.rect.left_bottom() + vec2(0.0, 6.0), galley.size() + vec2(16.0, 8.0));
+            painter.rect_filled(pill, 6.0, theme.warning);
+            painter.galley(pill.min + vec2(8.0, 4.0), galley, ink);
         }
         let r8 = radius as u8;
         painter.rect_filled(layout.header.shrink(if is_selected { 2.0 } else { 1.0 }), CornerRadius { nw: r8, ne: r8, sw: 0, se: 0 }, theme.node_header);
@@ -1525,6 +1535,16 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             }
         }
     }
+}
+
+/// A block's problems on one line under it: the first, cut to fit, and how
+/// many more there are.
+fn problem_line(list: &[String]) -> Option<String> {
+    let first = list.first()?;
+    let cut: String = first.chars().take(72).collect();
+    let dots = if cut.len() < first.len() { "…" } else { "" };
+    let more = if list.len() > 1 { format!("  +{}", list.len() - 1) } else { String::new() };
+    Some(format!("{cut}{dots}{more}"))
 }
 
 /// The block whose action bar is shown.

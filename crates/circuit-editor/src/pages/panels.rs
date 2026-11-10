@@ -429,6 +429,8 @@ pub fn collect_problems(ed: &mut Editor) -> Vec<ProblemItem> {
         }
         // Workspaces that are off don't run, so their blocks aren't checked.
         for (key, ws) in project.workspaces.iter().filter(|(_, ws)| !ws.disabled) {
+            // What runs after what, by the Action wires alone.
+            let actions = ws.flow(|_| false);
             for (id, node) in &ws.nodes {
                 let Some(def) = ed.reg.block(&node.block) else {
                     items.push((format!("{} › #{id}", ws.name), tf!("block `{block}` is not installed", block = node.block), Some((key.clone(), id.clone()))));
@@ -463,16 +465,36 @@ pub fn collect_problems(ed: &mut Editor) -> Vec<ProblemItem> {
                         items.push((format!("{} › {}", ws.name, def.name), format!("{}: {p}", f.label(k)), Some((key.clone(), id.clone()))));
                     }
                 }
-                // `${#4.…}` pointing at a block this workspace doesn't have (a
-                // copy pasted without it, or a block since deleted).
+                // `${#4.…}` that can't get anything when the bot runs: a block
+                // this workspace doesn't have (a copy pasted without it, or a
+                // block since deleted), one that runs later or on another
+                // path, or an output the block doesn't have.
                 let mut said = std::collections::HashSet::new();
                 for (k, v) in &node.values {
                     let mut refs = Vec::new();
-                    circuit_core::graph::block_refs_in(v, &mut refs);
-                    for r in refs.into_iter().filter(|r| !ws.nodes.contains_key(r)) {
-                        if said.insert((k.clone(), r.clone())) {
-                            let field = def.fields.get(k).map(|f| f.label(k).to_string()).unwrap_or_else(|| k.clone());
-                            items.push((format!("{} › {}", ws.name, def.name), tf!("`{field}` uses #{block}, but this workspace has no block #{block}", field = field, block = r), Some((key.clone(), id.clone()))));
+                    circuit_core::graph::block_outputs_read_in(v, &mut refs);
+                    for (r, output) in refs {
+                        use circuit_core::graph::RefProblem;
+                        let field = def.fields.get(k).map(|f| f.label(k).to_string()).unwrap_or_else(|| k.clone());
+                        let why = match ws.ref_problem(&actions, id, &r) {
+                            Some(RefProblem::Missing) => Some(tf!("`{field}` uses #{block}, but this workspace has no block #{block}", field = field, block = r)),
+                            Some(RefProblem::Itself) => Some(tf!("`{field}` uses #{block}, but that is this block itself: its outputs are only there once it has run", field = field, block = r)),
+                            Some(RefProblem::Later) => Some(tf!("`{field}` uses #{block}, but that block runs after this one, so it has nothing to give yet", field = field, block = r)),
+                            Some(RefProblem::Elsewhere) => Some(tf!("`{field}` uses #{block}, but that block isn't on the path that leads here, so it has nothing to give", field = field, block = r)),
+                            None => output.and_then(|output| {
+                                // The outputs it has, as drawn (a Try Zone's are fixed).
+                                let has: Vec<String> = if ws.zones.contains_key(&r) {
+                                    vec!["message".into(), "details".into()]
+                                } else {
+                                    crate::editor::node_shape(&ed.reg, &ed.engine, &mut ed.shapes, key, ws, &r, &ed.define_ctx).map(|s| s.outputs.iter().map(|(name, _)| name.clone()).collect()).unwrap_or_default()
+                                };
+                                (!has.is_empty() && !has.contains(&output)).then(|| tf!("`{field}` uses #{block}.{output}, but that block has no output of that name (it has: {list})", field = field, block = r, output = output, list = has.join(", ")))
+                            }),
+                        };
+                        if let Some(why) = why
+                            && said.insert(why.clone())
+                        {
+                            items.push((format!("{} › {}", ws.name, def.name), why, Some((key.clone(), id.clone()))));
                         }
                     }
                 }
@@ -622,6 +644,43 @@ mod tests {
         let at = |node: &str, what: &str| items.iter().any(|(_, why, at)| at.as_ref().is_some_and(|(_, n)| n == node) && why.contains(what));
         assert!(at("embed", "Embed: The title has 300 characters: Discord allows 256."), "{items:?}");
         assert!(at("layout", "label has up to 80 characters"), "{items:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// `${#4.…}` that can't get anything when the bot runs is a problem on
+    /// the block that uses it: an output the block doesn't have, a block
+    /// that runs later, one on another path.
+    #[test]
+    fn references_that_get_nothing_are_problems() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        let dir = std::env::temp_dir().join(format!("xc-problems-nothing-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        circuit_core::Project::create(&dir, "Refs", "none").unwrap();
+        ed.open_project(&dir);
+        let log = |message: &str| Node { block: "core.log@1".into(), values: serde_json::json!({ "message": message }).as_object().cloned().unwrap(), ..Default::default() };
+        let project = ed.project.as_mut().unwrap();
+        let mut ws = Workspace::new("Main");
+        ws.nodes.insert("1".into(), Node { block: "core.on_start@1".into(), ..Default::default() });
+        ws.nodes.insert("2".into(), Node { block: "core.increase_stored@1".into(), values: serde_json::json!({ "scope": "global", "key": "n" }).as_object().cloned().unwrap(), ..Default::default() });
+        ws.nodes.insert("3".into(), log("fine: ${#2.value} at ${#1.startedAt}"));
+        ws.nodes.insert("4".into(), log("typo: ${#2.valeu}"));
+        ws.nodes.insert("5".into(), log("too early: ${#6.value} and itself ${#5.x}"));
+        ws.nodes.insert("6".into(), Node { block: "core.increase_stored@1".into(), values: serde_json::json!({ "scope": "global", "key": "m" }).as_object().cloned().unwrap(), ..Default::default() });
+        ws.nodes.insert("7".into(), Node { block: "core.on_start@1".into(), ..Default::default() });
+        ws.nodes.insert("8".into(), log("elsewhere: ${#2.value}"));
+        for link in ["1.next > 2.in", "2.next > 3.in", "3.next > 4.in", "4.next > 5.in", "5.next > 6.in", "7.next > 8.in"] {
+            ws.links.push(link.parse().unwrap());
+        }
+        project.workspaces.clear();
+        project.workspaces.insert("main".into(), ws);
+        let items = collect_problems(&mut ed);
+        let on = |node: &str| -> Vec<&str> { items.iter().filter(|(_, why, at)| at.as_ref().is_some_and(|(_, n)| n == node) && why.contains("uses #")).map(|(_, why, _)| why.as_str()).collect() };
+        assert!(on("3").is_empty(), "{:?}", on("3"));
+        assert_eq!(on("4").len(), 1);
+        assert!(on("4")[0].contains("uses #2.valeu, but that block has no output of that name (it has: value"), "{:?}", on("4"));
+        assert!(on("5").iter().any(|w| w.contains("#6, but that block runs after this one")) && on("5").iter().any(|w| w.contains("#5, but that is this block itself")), "{:?}", on("5"));
+        assert!(on("8").len() == 1 && on("8")[0].contains("isn't on the path that leads here"), "{:?}", on("8"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -227,6 +227,25 @@ fn refs_in(chars: &[char], from: usize, to: usize, out: &mut Vec<(usize, usize, 
     }
 }
 
+/// The `#4` block references in a text with the output each one reads, when
+/// it reads one: `("4", Some("message"))` for `${#4.message.url}`, and
+/// `("4", None)` for `${#4}` alone.
+pub fn block_outputs_read(text: &str) -> Vec<(String, Option<String>)> {
+    let chars: Vec<char> = text.chars().collect();
+    block_refs(text)
+        .into_iter()
+        .map(|(_, end, id)| {
+            // `.name` or `?.name` right after the reference.
+            let mut i = end;
+            if chars.get(i) == Some(&'?') {
+                i += 1;
+            }
+            let output = (chars.get(i) == Some(&'.')).then(|| chars[i + 1..].iter().take_while(|c| is_name_char(**c)).collect::<String>()).filter(|name| !name.is_empty());
+            (id, output)
+        })
+        .collect()
+}
+
 /// The text with its `#4` block references renamed by `rename` (those it
 /// gives a new id for), or `None` when none changed.
 pub fn rename_blocks(text: &str, rename: impl Fn(&str) -> Option<String>) -> Option<String> {

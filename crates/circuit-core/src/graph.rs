@@ -270,6 +270,65 @@ pub fn block_refs_in(v: &Value, out: &mut Vec<String>) {
     }
 }
 
+/// Every `#4` block reference in a value's texts, with the output it reads
+/// (see [`crate::template::block_outputs_read`]).
+pub fn block_outputs_read_in(v: &Value, out: &mut Vec<(String, Option<String>)>) {
+    match v {
+        Value::String(s) => out.extend(crate::template::block_outputs_read(s)),
+        Value::Array(a) => a.iter().for_each(|v| block_outputs_read_in(v, out)),
+        Value::Object(o) => o.values().for_each(|v| block_outputs_read_in(v, out)),
+        _ => {}
+    }
+}
+
+/// Why a `${#4.…}` in block `user` can't get anything from block `used`
+/// when the bot runs, as far as the wires tell.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RefProblem {
+    /// The workspace has no such block (or Try Zone).
+    Missing,
+    /// A block reading its own outputs: they are only there once it ran.
+    Itself,
+    /// It runs after the block that reads it.
+    Later,
+    /// It isn't on any path that leads to the block that reads it: on
+    /// another event's path, or on none (a value block nothing runs).
+    Elsewhere,
+}
+
+impl Workspace {
+    /// What is wrong with block `user` reading the outputs of `used` by its
+    /// number, if anything. A block's outputs are there once it ran in the
+    /// same run; this says when the wires rule that out. `flow` is
+    /// `self.flow(|_| false)`: the Action wires alone.
+    ///
+    /// A block that isn't run by an Action wire itself (a value block read
+    /// by others) is only checked for `used` being there: when it is read
+    /// depends on who reads it.
+    pub fn ref_problem(&self, flow: &Flow, user: &str, used: &str) -> Option<RefProblem> {
+        if !self.nodes.contains_key(used) && !self.zones.contains_key(used) {
+            return Some(RefProblem::Missing);
+        }
+        if user == used {
+            return Some(RefProblem::Itself);
+        }
+        // Not run by an Action wire itself: when it is read is its reader's matter.
+        self.links_into(user, ACTION_IN).next()?;
+        if flow.reaches(used, user) {
+            return None;
+        }
+        if flow.reaches(user, used) {
+            return Some(RefProblem::Later);
+        }
+        // Not straight before it, but run earlier on the same event's path
+        // (a block in a loop's body, read after the loop): fine.
+        let starts = |id: &str| -> Vec<&String> { self.nodes.keys().filter(|s| self.links_into(s, ACTION_IN).next().is_none() && s.as_str() != id && flow.reaches(s, id)).collect() };
+        let of_used = starts(used);
+        let shared = starts(user).into_iter().any(|s| of_used.contains(&s));
+        (!shared).then_some(RefProblem::Elsewhere)
+    }
+}
+
 /// The wires a workspace's paths follow: Action wires, and wires between
 /// value blocks (which read each other when asked for a value).
 pub struct Flow {
@@ -530,6 +589,51 @@ fn round_width<S: Serializer>(w: &Option<f32>, s: S) -> Result<S::Ok, S::Error> 
 
 fn round_rect<S: Serializer>(r: &[f32; 4], s: S) -> Result<S::Ok, S::Error> {
     r.map(|v| v.round() as i64).serialize(s)
+}
+
+#[cfg(test)]
+mod ref_tests {
+    use super::*;
+
+    /// `${#4.…}` gets something only from a block that ran before on the
+    /// same path.
+    #[test]
+    fn references_are_checked_against_the_wires() {
+        let ws: Workspace = serde_json::from_value(serde_json::json!({
+            "name": "W",
+            "nodes": {
+                "1": { "block": "e@1", "at": [0, 0] }, "2": { "block": "a@1", "at": [0, 0] }, "3": { "block": "a@1", "at": [0, 0] },
+                "4": { "block": "loop@1", "at": [0, 0] }, "5": { "block": "a@1", "at": [0, 0] }, "6": { "block": "a@1", "at": [0, 0] },
+                "7": { "block": "e@1", "at": [0, 0] }, "8": { "block": "a@1", "at": [0, 0] }, "9": { "block": "v@1", "at": [0, 0] },
+                "10": { "block": "a@1", "at": [0, 0], "zone": "z1" }, "11": { "block": "a@1", "at": [0, 0] }
+            },
+            "zones": { "z1": { "title": "T", "rect": [0, 0, 1, 1] } },
+            "links": ["1.next > 2.in", "2.next > 3.in", "3.next > 4.in", "4.body > 5.in", "4.done > 6.in", "7.next > 8.in", "9.result > 8.text", "6.next > 10.in", "z1.error > 11.in"]
+        }))
+        .unwrap();
+        let flow = ws.flow(|_| false);
+        let check = |user: &str, used: &str| ws.ref_problem(&flow, user, used);
+        assert_eq!(check("3", "1"), None, "the event that started it");
+        assert_eq!(check("3", "2"), None, "the block before");
+        assert_eq!(check("2", "3"), Some(RefProblem::Later));
+        assert_eq!(check("3", "3"), Some(RefProblem::Itself));
+        assert_eq!(check("3", "42"), Some(RefProblem::Missing));
+        assert_eq!(check("5", "4"), None, "a loop's own outputs in its body");
+        assert_eq!(check("6", "5"), None, "a block of the loop's body, read after the loop");
+        assert_eq!(check("5", "6"), None, "after the loop, read in a later pass: can't be ruled out");
+        assert_eq!(check("8", "2"), Some(RefProblem::Elsewhere), "another event's path");
+        assert_eq!(check("3", "9"), Some(RefProblem::Elsewhere), "a value block nothing runs");
+        assert_eq!(check("9", "2"), None, "a value block is read when its reader runs");
+        assert_eq!(check("9", "42"), Some(RefProblem::Missing));
+        assert_eq!(check("11", "z1"), None, "a Try Zone's outputs after it");
+        assert_eq!(check("11", "10"), None, "a block in the zone, read in its Error path");
+        assert_eq!(check("2", "z1"), Some(RefProblem::Later));
+
+        let mut read = Vec::new();
+        block_outputs_read_in(&serde_json::json!({ "a": "Hi ${#4.message.url} and ${#5?.user} ${#6} '#7.x' ${`${#8.y}`}", "b": ["${#z1.message}"] }), &mut read);
+        let read: Vec<(&str, Option<&str>)> = read.iter().map(|(id, o)| (id.as_str(), o.as_deref())).collect();
+        assert_eq!(read, [("4", Some("message")), ("5", Some("user")), ("6", None), ("8", Some("y")), ("z1", Some("message"))]);
+    }
 }
 
 #[cfg(test)]
