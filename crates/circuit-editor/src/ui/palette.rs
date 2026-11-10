@@ -30,6 +30,8 @@ pub enum Cmd {
     Export,
     /// Bot › Remote…, uploading to it, and a Calagopus server's console.
     Hosting,
+    /// File › Git…
+    Git,
     Upload,
     ServerConsole,
     ImportWorkspaces,

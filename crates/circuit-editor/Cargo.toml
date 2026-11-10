@@ -16,6 +16,7 @@ path = "src/main.rs"
 circuit-core.workspace = true
 circuit-plugins.workspace = true
 circuit-runner.workspace = true
+circuit-sync.workspace = true
 anyhow.workspace = true
 arboard = "3"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }

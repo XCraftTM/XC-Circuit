@@ -30,6 +30,7 @@ impl CircuitApp {
                 items.push(Item::new(t!("Bot"), t!("Remote console"), Cmd::ServerConsole).shortcut(self.key_label(Hotkey::ServerConsole)));
             }
             items.push(Item::new(t!("File"), "Save", Cmd::Save).shortcut(self.key_label(Hotkey::Save)));
+            items.push(Item::new(t!("File"), "Git…", Cmd::Git));
             items.push(Item::new(t!("File"), t!("Import workspaces…"), Cmd::ImportWorkspaces));
             items.push(Item::new(t!("File"), t!("Export workspaces…"), Cmd::ExportWorkspaces));
         }
@@ -141,6 +142,7 @@ impl CircuitApp {
             Cmd::Settings => self.bot.open_settings(&mut self.ed),
             Cmd::Export => self.bot.open_export(&self.ed),
             Cmd::Hosting => self.bot.hosting.open(&self.ed),
+            Cmd::Git => self.bot.git.open(&self.ed),
             Cmd::Upload => self.bot.hosting.upload(&mut self.ed),
             Cmd::ServerConsole => self.bot.hosting.open_console(&mut self.ed),
             Cmd::ImportWorkspaces => crate::editor::exchange::pick_import(&mut self.ed),

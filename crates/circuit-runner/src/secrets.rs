@@ -223,6 +223,29 @@ fn store(project_root: &Path, name: &str, value: &str) -> Result<()> {
     e.set_password(value).map_err(|e| anyhow!("could not save the secret: {e}"))
 }
 
+/// The sign-in for a place projects are stored at (github.com, a GitLab or
+/// Gitea of one's own), by its host name: the account's name and its access
+/// token. One for all the projects stored there, on this computer only.
+pub fn sync_login(host: &str) -> Option<(String, String)> {
+    let text = open(sync_account(host)).ok()?.get_password().ok().filter(|p| !p.is_empty())?;
+    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+    Some((v["user"].as_str().unwrap_or_default().to_string(), v["token"].as_str().filter(|t| !t.is_empty())?.to_string()))
+}
+
+/// Keeps the sign-in for `host`; an empty token forgets it.
+pub fn set_sync_login(host: &str, user: &str, token: &str) -> Result<()> {
+    let e = open(sync_account(host))?;
+    if token.is_empty() {
+        let _ = e.delete_credential();
+        return Ok(());
+    }
+    e.set_password(&serde_json::json!({ "user": user, "token": token }).to_string()).map_err(|e| anyhow!("couldn't save the sign-in: {e}"))
+}
+
+fn sync_account(host: &str) -> String {
+    format!("sync:{}", host.trim().to_ascii_lowercase())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

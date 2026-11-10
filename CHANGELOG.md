@@ -5,6 +5,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 ## Unreleased
 
 ### Added
+- **Git, built in (File › Git…)**: keep a project in a repository on GitHub, GitLab, Gitea or any other place that speaks Git over HTTPS, to have it on several computers and to work on it with others. **Store** saves the project, records what changed and sends it; **Fetch** gets what is stored there and puts it together with yours. Where both changed the same part of a file, nothing is changed until you pick whose version stays. Sign in with GitHub in the browser (you type in a short code), or paste an access token; the sign-in stays in your system's credential store. You don't need Git installed, and the bot token, passwords and the `.circuit/` folder never go there. See `Keeping a project in Git` in the docs.
 - **`${#4.…}` is checked, and a block's problems show on the block**: a text can read another block's output by its number, such as `${#4.message}`. That only gives something when block 4 ran before on the same path, and until now a mistake showed up when the bot ran, as an error. XC Circuit now checks every such reference while you build: whether the block is there, whether it runs before the block that reads it (not after it, and not on another event's path), and whether it has an output of that name (`${#4.mesage}` is caught, with the outputs it does have). What Problems says about a block also stands under the block on the canvas, in amber, so you see it where you work.
 
 ### Changed

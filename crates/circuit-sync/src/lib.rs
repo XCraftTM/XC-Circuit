@@ -91,7 +91,12 @@ impl Sync {
     /// a project lying somewhere inside another repository has none.
     pub fn open(root: &Path) -> Result<Option<Sync>> {
         match Repository::open(root) {
-            Ok(repo) => Ok(Some(Sync { repo })),
+            Ok(repo) => {
+                // Also in a repository someone made by hand: this computer's
+                // part (where the bot is uploaded to, its data) stays here.
+                keep_ignored(root)?;
+                Ok(Some(Sync { repo }))
+            }
             Err(e) if e.code() == git2::ErrorCode::NotFound => Ok(None),
             Err(e) => Err(e).with_context(|| format!("opening the repository in {}", root.display())),
         }
@@ -110,6 +115,15 @@ impl Sync {
         keep_ignored(root)?;
         sync.keep_bytes()?;
         Ok(sync)
+    }
+
+    /// Makes an empty repository to store projects in, in the new folder
+    /// `dir`: for a shared drive or a stick, where no GitHub is.
+    pub fn start_bare(dir: &Path) -> Result<()> {
+        let mut options = git2::RepositoryInitOptions::new();
+        options.bare(true).initial_head("main");
+        Repository::init_opts(dir, &options).with_context(|| format!("making a repository in {}", dir.display()))?;
+        Ok(())
     }
 
     /// Gets a stored project into the new folder `root`.
@@ -194,6 +208,10 @@ impl Sync {
         let mut index = self.repo.index()?;
         index.add_all(["*"], git2::IndexAddOption::DEFAULT, None)?;
         index.update_all(["*"], None)?;
+        // Whatever of this computer's part got in before comes out again.
+        for dir in IGNORED {
+            index.remove_dir(Path::new(dir.trim_end_matches('/')), 0)?;
+        }
         index.write()?;
         let tree = self.repo.find_tree(index.write_tree()?)?;
         let tip = self.tip();
@@ -450,6 +468,25 @@ mod tests {
         assert_eq!(a.state().unwrap().ahead, 1);
         a.send(&none).unwrap();
         assert_eq!((a.state().unwrap().ahead, a.state().unwrap().changed.len()), (0, 0));
+
+        // A repository made by hand, with this computer's part already in it:
+        // it comes out with the next Store, and stays on the computer.
+        let hand = dir.join("hand");
+        write(&hand, "circuit.project.json", "{}
+");
+        write(&hand, ".circuit/local.json", "{}");
+        let repo = Repository::init(&hand).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_all(["*"], git2::IndexAddOption::DEFAULT, None).unwrap();
+        index.write().unwrap();
+        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+        let sig = signature(&who("h")).unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "By hand", &tree, &[]).unwrap();
+        assert!(tree.get_path(Path::new(".circuit/local.json")).is_ok());
+        let h = Sync::open(&hand).unwrap().unwrap();
+        assert!(h.store("Tidy", &who("h")).unwrap());
+        assert!(h.tip().unwrap().tree().unwrap().get_path(Path::new(".circuit/local.json")).is_err());
+        assert!(hand.join(".circuit/local.json").is_file() && h.state().unwrap().changed.is_empty());
 
         // Computer B gets it: without A's own part.
         let b = Sync::get(&url, &b_dir, &none).unwrap();

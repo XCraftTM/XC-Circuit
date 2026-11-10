@@ -15,6 +15,7 @@ publish = false
 circuit-core = { path = "crates/circuit-core" }
 circuit-plugins = { path = "crates/circuit-plugins" }
 circuit-runner = { path = "crates/circuit-runner" }
+circuit-sync = { path = "crates/circuit-sync" }
 
 anyhow = "1"
 dirs = "7"

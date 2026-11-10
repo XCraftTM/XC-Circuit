@@ -90,6 +90,9 @@ impl CircuitApp {
                     crate::editor::exchange::open_export(&mut self.ed, crate::editor::exchange::Preselect::All);
                 }
                 ui.separator();
+                if kit::menu_item(ui, "Git…", None, self.ed.project.is_some()).clicked() {
+                    self.bot.git.open(&self.ed);
+                }
                 if kit::menu_item(ui, t!("Restore from backup…"), None, self.ed.project.is_some()).clicked() {
                     open_center(&mut self.dock, Tab::Backups);
                 }

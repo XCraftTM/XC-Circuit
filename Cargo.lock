@@ -867,6 +867,7 @@ dependencies = [
  "circuit-core",
  "circuit-plugins",
  "circuit-runner",
+ "circuit-sync",
  "dirs",
  "eframe",
  "egui",
