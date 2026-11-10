@@ -81,6 +81,7 @@ What belongs to this computer, not to the bot:
 | `hosting` | Where Bot › Server… uploads the bot (`kind`, `host`, `port`, `user`, `folder`, `panel`, `server` …; no passwords or keys). |
 | `settings` | Private settings, by key. |
 | `databases` | Where each database is, by its id: everything of a connection but its `id`, `name` and `kind`. |
+| `more` | The blocks whose More options are open, by workspace: their `uid`s. |
 
 In the editor, to plugins and in the running bot the project is whole: `settings` and `data` hold the shared and the local parts together, as before.
 

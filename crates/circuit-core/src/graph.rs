@@ -60,8 +60,11 @@ pub struct Node {
     #[serde(skip_serializing_if = "Option::is_none", serialize_with = "round_width")]
     pub width: Option<f32>,
     /// Its More options are open: every option shows, the ones used less
-    /// often too (folded, only those in use do).
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    /// often too (folded, only those in use do). How someone looks at a
+    /// block, not part of the bot: kept on their computer (the project's
+    /// local.json), not in the workspace's file. Still read from there, where
+    /// older versions wrote it.
+    #[serde(default, skip_serializing)]
     pub more: bool,
 }
 

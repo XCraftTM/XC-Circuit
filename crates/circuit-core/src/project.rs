@@ -61,6 +61,16 @@ pub fn id_of(dir: &Path) -> Option<String> {
     (!id.is_empty()).then_some(id)
 }
 
+/// Gives the project in `dir` a new id, in its project file: for a copy that
+/// is to be a project of its own (a starter, the example bot), not the one
+/// it was copied from again.
+pub fn give_new_id(dir: &Path) -> Result<()> {
+    let path = dir.join(PROJECT_FILE);
+    let mut meta: ProjectMeta = serde_json::from_str(&fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?)?;
+    meta.id = new_id();
+    write_json(&path, &meta)
+}
+
 /// A new project's id: 128 random bits, as hex. Not a secret, only never the
 /// same twice.
 pub fn new_id() -> String {
@@ -171,6 +181,9 @@ struct Local {
     /// Where each database is, by its id: everything but its id, name and kind.
     #[serde(skip_serializing_if = "Map::is_empty")]
     databases: Map<String, Value>,
+    /// The blocks whose More options are open, by workspace: their uids.
+    #[serde(skip_serializing_if = "IndexMap::is_empty")]
+    more: IndexMap<String, Vec<String>>,
 }
 
 /// The first word of a command's name: `ticket` of `ticket open`.
@@ -216,13 +229,14 @@ impl Project {
         let mut converted_from = None;
         let mut local_settings = Vec::new();
         let mut unreadable_commands = Vec::new();
+        let mut more_open = IndexMap::new();
         if old {
             // Layout 1 had everything in its one file: it is whole already.
             converted_from = Some(meta.layout.max(1));
             meta.layout = LAYOUT;
         } else {
             unreadable_commands = read_commands(&root, &mut meta);
-            local_settings = read_local(&root, &mut meta);
+            (local_settings, more_open) = read_local(&root, &mut meta);
         }
         if meta.id.is_empty() {
             meta.id = path_id(&root);
@@ -249,6 +263,12 @@ impl Project {
                     Ok(mut ws) => {
                         ws.pin_wired_fields();
                         ws.give_legacy_uids(&stem);
+                        // Which blocks have their More options open is this computer's.
+                        if let Some(open) = more_open.get(&stem) {
+                            for node in ws.nodes.values_mut().filter(|n| open.contains(&n.uid)) {
+                                node.more = true;
+                            }
+                        }
                         workspaces.insert(stem, ws);
                     }
                     Err(e) => unreadable.push((stem, format!("{e:#}"))),
@@ -297,6 +317,12 @@ impl Project {
             shared.settings.insert(DATABASES.into(), Value::Array(names));
         }
         local.hosting = shared.data.remove(HOSTING);
+        for (key, ws) in &self.workspaces {
+            let open: Vec<String> = ws.nodes.values().filter(|n| n.more && !n.uid.is_empty()).map(|n| n.uid.clone()).collect();
+            if !open.is_empty() {
+                local.more.insert(key.clone(), open);
+            }
+        }
         let commands = match shared.data.remove(SLASH_COMMANDS) {
             Some(Value::Array(list)) => list,
             _ => Vec::new(),
@@ -498,11 +524,12 @@ fn write_local(root: &Path, local: &Local) -> Result<()> {
 
 /// Puts what `.circuit/local.json` holds back into the project: private
 /// settings, where the databases are, and where the bot is uploaded to.
-/// Gives the keys of the settings it held. A file that can't be read is left
-/// as it is: the project opens without its local part.
-fn read_local(root: &Path, meta: &mut ProjectMeta) -> Vec<String> {
+/// Gives the keys of the settings it held, and the blocks whose More options
+/// are open. A file that can't be read is left as it is: the project opens
+/// without its local part.
+fn read_local(root: &Path, meta: &mut ProjectMeta) -> (Vec<String>, IndexMap<String, Vec<String>>) {
     let path = root.join(LOCAL_DIR).join(LOCAL_FILE);
-    let Some(local) = fs::read_to_string(&path).ok().and_then(|text| serde_json::from_str::<Local>(&text).ok()) else { return Vec::new() };
+    let Some(local) = fs::read_to_string(&path).ok().and_then(|text| serde_json::from_str::<Local>(&text).ok()) else { return Default::default() };
     let keys: Vec<String> = local.settings.keys().cloned().collect();
     meta.settings.extend(local.settings);
     if let Some(Value::Array(list)) = meta.settings.get_mut(DATABASES) {
@@ -516,7 +543,7 @@ fn read_local(root: &Path, meta: &mut ProjectMeta) -> Vec<String> {
     if let Some(hosting) = local.hosting {
         meta.data.insert(HOSTING.into(), hosting);
     }
-    keys
+    (keys, local.more)
 }
 
 /// Whether Windows keeps this file name (without its ending) for a device.
@@ -592,6 +619,12 @@ mod tests {
         }
         let shared: Value = serde_json::from_str(&file).unwrap();
         assert_eq!((shared["layout"].clone(), shared["id"].clone()), (json!(2), json!(id)));
+        // A copy made into a project of its own: another id, nothing else changed.
+        give_new_id(&dir).unwrap();
+        let renamed: Value = serde_json::from_str(&fs::read_to_string(dir.join(PROJECT_FILE)).unwrap()).unwrap();
+        assert!(renamed["id"] != shared["id"] && renamed["settings"] == shared["settings"] && renamed["commandOrder"] == shared["commandOrder"]);
+        p.meta.id = renamed["id"].as_str().unwrap().to_string();
+        let id = p.meta.id.clone();
         assert_eq!(shared["settings"], json!({ "prefix": "?", "storeIn": "main", "databases": [{ "id": "main", "name": "Main", "kind": "postgres" }, { "id": "files", "name": "Files", "kind": "sqlite" }] }));
         assert_eq!(shared["data"], json!({ "slashFolders": ["Fun"] }));
         assert_eq!(shared["commandOrder"], json!(["ticket", "rank", "Con"]));
@@ -696,6 +729,14 @@ mod tests {
         assert_eq!(after[..2], before[..]);
         let all: HashSet<&String> = after.iter().collect();
         assert_eq!((after.len(), all.len()), (4, 4), "each its own: {after:?}");
+
+        // Whether a block's More options are open is kept on this computer, by its uid.
+        p.workspaces.get_mut("main").unwrap().nodes.get_mut("2").unwrap().more = true;
+        p.save().unwrap();
+        assert!(!fs::read_to_string(dir.join(WORKSPACE_DIR).join("main.json")).unwrap().contains("\"more\""));
+        assert!(fs::read_to_string(dir.join(LOCAL_DIR).join(LOCAL_FILE)).unwrap().contains(&before[1]));
+        let again = Project::load(&dir).unwrap();
+        assert!(again.workspaces["main"].nodes["2"].more && !again.workspaces["main"].nodes["1"].more);
         assert!(fs::read_to_string(dir.join(WORKSPACE_DIR).join("main.json")).unwrap().contains("\"uid\""));
     }
 

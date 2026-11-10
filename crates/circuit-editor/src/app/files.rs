@@ -74,7 +74,11 @@ pub(super) fn writable_example(examples: &Path) -> Option<PathBuf> {
         Ok(())
     }
     match copy(&from, &to) {
-        Ok(()) => Some(to),
+        Ok(()) => {
+            // The user's own project from here on, not the example everyone has.
+            let _ = circuit_core::project::give_new_id(&to);
+            Some(to)
+        }
         // Can't copy: open it where it is.
         Err(_) => Some(from),
     }
