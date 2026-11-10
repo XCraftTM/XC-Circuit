@@ -254,6 +254,43 @@ fn builders_open_in_the_middle_and_the_remote_console_at_the_bottom() {
     assert_eq!(super::chrome::window_key(&Tab::Export), "Export");
 }
 
+/// Ctrl+W closes a tab of the middle, never a panel: the one the user is
+/// in, or the one in front there while a panel has the focus.
+#[test]
+fn close_tab_picks_a_tab_of_the_middle() {
+    let mut dock = default_layout();
+    open_canvas(&mut dock, "main".into());
+    open_canvas(&mut dock, "other".into());
+    assert_eq!(tab_to_close(&dock), Some(Tab::Canvas("other".into())));
+    dock.focus(&Tab::Canvas("main".into()));
+    assert_eq!(tab_to_close(&dock), Some(Tab::Canvas("main".into())));
+    // In the Console: still the workspace in front, not the Console.
+    dock.focus(&Tab::Console);
+    assert_eq!(tab_to_close(&dock), Some(Tab::Canvas("main".into())));
+    // Nothing in the middle: nothing to close.
+    close_tabs(&mut dock, |t| matches!(t, Tab::Canvas(_)));
+    assert_eq!(tab_to_close(&dock), None);
+    use crate::editor::keymap::{Action, Shortcut};
+    assert_eq!(Action::CloseTab.defaults(), [Shortcut::parse("Ctrl+W").unwrap()]);
+}
+
+/// Ctrl+1 to Ctrl+9 go to that tab of the area the user is in; 9 is its last.
+#[test]
+fn ctrl_and_a_digit_goes_to_that_tab_of_the_area_in_use() {
+    let mut dock = default_layout();
+    for key in ["a", "b", "c"] {
+        open_canvas(&mut dock, key.into());
+    }
+    assert_eq!(nth_tab(&mut dock, 1), Some(Tab::Canvas("a".into())));
+    assert_eq!(nth_tab(&mut dock, 3), Some(Tab::Canvas("c".into())));
+    assert_eq!(nth_tab(&mut dock, 9), Some(Tab::Canvas("c".into())), "9 is the last one");
+    assert_eq!(nth_tab(&mut dock, 4), None, "there is no fourth");
+    // In the bottom panels: their tabs.
+    dock.focus(&Tab::Console);
+    assert_eq!(nth_tab(&mut dock, 2), Some(Tab::Problems));
+    assert_eq!(nth_tab(&mut dock, 9), Some(Tab::Problems));
+}
+
 /// The search box keeps out of the way of the menus and of what is beside
 /// Run: it gets narrower, moves off the middle, or is left out.
 #[test]

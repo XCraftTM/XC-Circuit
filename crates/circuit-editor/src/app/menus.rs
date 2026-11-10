@@ -108,6 +108,9 @@ impl CircuitApp {
                     self.open_settings();
                 }
                 ui.separator();
+                if kit::menu_item(ui, t!("Close Tab"), Some(self.key_label(Hotkey::CloseTab)), self.ed.project.is_some()).clicked() {
+                    self.close_tab = true;
+                }
                 if kit::menu_item(ui, t!("Close Project"), None, self.ed.project.is_some()).on_hover_text(t!("Back to the start window")).clicked() {
                     self.close_project();
                 }

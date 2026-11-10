@@ -495,6 +495,25 @@ fn no_workspace(ui: &mut egui::Ui, ed: &Editor) -> Option<NoWorkspace> {
     ask
 }
 
+/// The tab that Close the tab in front closes: the one the user is in when
+/// it is one of the middle's (a workspace, a builder, a page), else the one
+/// in front there. Never a panel or a view of the side bar.
+pub(super) fn tab_to_close(dock: &Dock<Tab>) -> Option<Tab> {
+    let middle = |t: &Tab| t.side() == Side::Center;
+    if let Some(tab) = dock.focused().filter(|t| middle(t)) {
+        return Some(tab.clone());
+    }
+    dock.main.iter().flat_map(|m| m.leaves()).filter_map(|l| l.active_tab()).find(|t| middle(t)).cloned()
+}
+
+/// The tab Ctrl+`n` goes to: the `n`th (from 1) of the area the user is in,
+/// and with 9 its last one, as in a browser. None when the area has fewer.
+pub(super) fn nth_tab(dock: &mut Dock<Tab>, n: usize) -> Option<Tab> {
+    let focused = dock.focused().cloned()?;
+    let tabs = dock.leaf_with(&focused)?.tabs.clone();
+    if n == 9 { tabs.last().cloned() } else { tabs.get(n.checked_sub(1)?).cloned() }
+}
+
 /// Focuses a workspace's canvas tab, or opens it next to the other canvases.
 pub(super) fn open_canvas(dock: &mut Dock<Tab>, key: String) {
     open_center(dock, Tab::Canvas(key));

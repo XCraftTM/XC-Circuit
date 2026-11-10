@@ -41,6 +41,7 @@
 | Settings | Ctrl+, or the gear at the bottom of the activity bar › Settings: theme, accent color (changes live), touch mode, interface size, canvas, window, the Console's font, size and line spacing (any font installed on the computer; monospaced ones first, with a search), bot, plugins, shortcuts |
 | Language | English and German come with the app: pick one on the first start page or in Settings › Appearance; it switches right away. Blocks (their names, descriptions and fields) stay in English |
 | Touch mode | Settings › Appearance (or the first start's Look step): bigger buttons, rows and pins with more room between them, for touch screens and pens |
+| Tabs by keyboard | Ctrl+W (File › Close Tab; change it in Settings › Shortcuts) closes the workspace, builder or page in front, as its × does; panels stay. Ctrl+1 to Ctrl+9 go to that tab of the area you are in (click into the Console first for the bottom panels' tabs); Ctrl+9 is its last tab |
 | Command palette | Ctrl+P or the search box in the title bar: run any command, open a workspace, or jump to a block |
 | Editor tabs | Every tab shows an icon before its name. The Embed Builder, Layout Builder, Modal Builder, Canvas Builder, Slash Commands and Bot settings open as tabs beside the workspaces; drag a tab onto any side or next to other tabs to dock it there. A line or a lit area shows where it goes. Closing a builder's tab cancels it |
 | Title bar | Drag to move, double-click to maximize, drag the window edges to resize; View › Use system title bar switches to the system one |

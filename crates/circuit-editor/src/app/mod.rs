@@ -238,6 +238,9 @@ pub struct CircuitApp {
     /// With two views in the side bar: the one folded away to its heading
     /// (true: the lower one).
     side_folded: Option<bool>,
+    /// Close the tab in front was asked for (its shortcut, File › Close Tab):
+    /// done where the tabs are drawn.
+    close_tab: bool,
     /// Whether the window was last given the start window's shape (not yet, at first).
     window_shaped: Option<bool>,
     /// For saving what egui remembers (see `memory`).
@@ -436,6 +439,7 @@ impl CircuitApp {
             bottom_before: None,
             side_before: None,
             side_folded: None,
+            close_tab: false,
             window_shaped: None,
             settings: Default::default(),
             restore: Default::default(),
@@ -590,6 +594,23 @@ impl eframe::App for CircuitApp {
             }
             if hit(Hotkey::OpenProject) {
                 self.open_project_dialog();
+            }
+            if hit(Hotkey::CloseTab) {
+                self.close_tab = true;
+            }
+            // Ctrl+1 to Ctrl+9: that tab of the area the user is in, as in a
+            // browser (9 is the last one). After the shortcuts above, so one
+            // of them set to such a key wins.
+            const DIGITS: [egui::Key; 9] = [egui::Key::Num1, egui::Key::Num2, egui::Key::Num3, egui::Key::Num4, egui::Key::Num5, egui::Key::Num6, egui::Key::Num7, egui::Key::Num8, egui::Key::Num9];
+            for (i, key) in DIGITS.into_iter().enumerate() {
+                if ctx.input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, key))
+                    && let Some(tab) = nth_tab(&mut self.dock, i + 1)
+                {
+                    self.dock.focus(&tab);
+                    if let Tab::Canvas(key) = &tab {
+                        self.ed.active_workspace = Some(key.clone());
+                    }
+                }
             }
         }
         watchdog::mark("in the bot and its server's messages");
@@ -808,6 +829,19 @@ impl eframe::App for CircuitApp {
                 keep_panel_sizes(main, size - before);
             }
             self.dock_size = Some(size);
+            // Close the tab in front, as its × does (a builder is cancelled,
+            // the last workspace leaves its placeholder).
+            if std::mem::take(&mut self.close_tab)
+                && let Some(tab) = tab_to_close(&self.dock)
+                && viewer.closeable(&tab)
+            {
+                match viewer.on_close(&tab) {
+                    Some(instead) => self.dock.replace(&tab, instead),
+                    None => {
+                        self.dock.remove(&tab);
+                    }
+                }
+            }
             watchdog::mark("in the tabs and windows");
             self.dock.show(ui, &theme, &mut viewer);
             watchdog::mark("in the windows of their own");
