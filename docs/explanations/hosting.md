@@ -49,6 +49,7 @@ With a Calagopus server chosen and signed in, a **Local | Remote** switch shows 
 
 - **Run** uploads what changed, then starts the server, so it runs the version you see. When it runs already, the button says **Restart**: it uploads, then restarts it.
 - **Stop** stops the server.
+- The canvas shows which blocks run there, how long they take and where one fails, as for a bot run from the editor. The bot is asked to say so only while the editor watches (through the panel's console, a minute at a time), hides its secrets itself, and leaves out what goes through the wires unless **See the values on the wires too** is on. It needs the bot uploaded by this version or a newer one.
 - The status bar shows the server's state (*Remote running*, *starting*, *stopping*, *stopped*), read every few seconds; hover it for the server's name, CPU and memory.
 
 Picking Remote stops the bot running here, so the two don't both answer. The switch is kept per project; **Local** puts Run back on this computer (the server keeps running).

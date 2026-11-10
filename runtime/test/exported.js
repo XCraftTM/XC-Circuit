@@ -84,6 +84,38 @@ function run(dir, args = [], env = {}) {
   assert.strictEqual(r.starts, 1, r.out);
   fs.rmSync(dir, { recursive: true, force: true });
 
+  // Watched from the editor: silent until asked, then which blocks ran,
+  // the values only when asked for, the bot's secrets hidden, and silent
+  // again by itself. The process that watches the bot stays in place.
+  dir = exported(`setInterval(() => emit({ said: "the key is " + process.env.XC_SECRET_KEY }), 100);`);
+  const watched = spawn(process.execPath, ["index.js"], { cwd: dir, env: { ...process.env, XC_SECRET_KEY: "sup3r-s3cret-value" }, stdio: ["pipe", "pipe", "pipe"] });
+  let printed = "";
+  watched.stdout.on("data", (d) => (printed += d));
+  watched.stderr.on("data", (d) => (printed += d));
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const events = () => printed.split(/\r?\n/).filter((l) => l.startsWith("@@xc ")).map((l) => JSON.parse(l.slice(5)));
+  for (let i = 0; i < 100 && !printed.includes("its setup failed"); i++) await sleep(100);
+  await sleep(500);
+  assert.strictEqual(events().length, 0, `nothing while nobody watches: ${printed}`);
+  watched.stdin.write("watch 1\n");
+  for (let i = 0; i < 50 && events().length === 0; i++) await sleep(100);
+  assert.ok(events().some((e) => e.t === "node" && e.ws === "main" && e.node === "a"), printed);
+  assert.ok(events().every((e) => e.outputs === undefined), "no values unless asked for");
+  await sleep(1500);
+  let before = events().length;
+  await sleep(500);
+  assert.strictEqual(events().length, before, "silent again by itself");
+  watched.stdin.write("something else\nwatch 30 values\n");
+  for (let i = 0; i < 50 && !events().some((e) => e.outputs); i++) await sleep(100);
+  const withValues = events().find((e) => e.outputs);
+  assert.ok(withValues && withValues.outputs.said.includes("[hidden secret]"), JSON.stringify(withValues));
+  assert.ok(!printed.split(/\r?\n/).filter((l) => l.startsWith("@@xc ")).join("\n").includes("sup3r-s3cret-value"), "the secret never leaves in what is watched");
+  watched.kill();
+  await new Promise((r) => watched.on("exit", r));
+  fs.rmSync(dir, { recursive: true, force: true });
+  const { hideSecrets } = require("../circuit-runtime.js");
+  assert.strictEqual(typeof hideSecrets("{}"), "string");
+
   console.log("exported test passed");
 })().catch((e) => {
   console.error(e);

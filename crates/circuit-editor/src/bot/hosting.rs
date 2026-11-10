@@ -124,6 +124,19 @@ pub struct Draft {
     servers_read: bool,
 }
 
+/// A connection to the remote's console that is only listened to: the bot
+/// there is asked to say which blocks run, again and again while the editor
+/// looks, and stops by itself when the editor doesn't ask any more.
+struct Ears {
+    console: calagopus::Console,
+    server: String,
+    values: bool,
+    /// When the bot was last asked; `None` until the console is connected.
+    asked: Option<Instant>,
+    /// Lines from before now are the console's memory, not news.
+    since: Instant,
+}
+
 pub struct HostingUi {
     pub draft: Option<Draft>,
     /// An upload or test running: what it is, and its messages.
@@ -147,13 +160,16 @@ pub struct HostingUi {
     controllable: Option<(String, bool)>,
     /// Stop on the server, under way.
     power: Option<Receiver<Result<(), String>>>,
+    /// The ear at the bot on its remote, while Remote is picked: its console,
+    /// read for which blocks ran.
+    ears: Option<Ears>,
     /// When `Editor::server_view` was last written.
     view_at: Option<Instant>,
 }
 
 impl HostingUi {
     pub fn new() -> Self {
-        HostingUi { draft: None, job: None, log: VecDeque::new(), outcome: None, seen_saves: None, again: false, sign_in: None, servers: None, console: None, remote: false, watch: None, controllable: None, power: None, view_at: None }
+        HostingUi { draft: None, job: None, log: VecDeque::new(), outcome: None, seen_saves: None, again: false, sign_in: None, servers: None, console: None, remote: false, watch: None, controllable: None, power: None, ears: None, view_at: None }
     }
 
     /// Bot › Remote…: the tab with the project's settings.
@@ -359,6 +375,47 @@ impl HostingUi {
         }
         if let Some(w) = &mut self.watch {
             w.poll(ctx);
+        }
+        // Watching the bot there: which blocks run, lit up as for a bot
+        // run from here. Only while Remote is picked.
+        if !self.remote {
+            self.ears = None;
+        } else {
+            let h = settings_of(ed);
+            if self.ears.as_ref().is_none_or(|e| e.server != h.server || e.values != h.watch_values)
+                && let Some(key) = secrets_of(ed).api_key
+            {
+                let console = calagopus::Console::open(calagopus::Panel::new(&h.panel, &key), h.server.clone());
+                self.ears = Some(Ears { console, server: h.server.clone(), values: h.watch_values, asked: None, since: Instant::now() });
+            }
+        }
+        if let Some(ears) = &mut self.ears {
+            while let Ok(event) = ears.console.events.try_recv() {
+                match event {
+                    calagopus::ConsoleEvent::Connected => {
+                        ears.asked = Some(Instant::now() - std::time::Duration::from_secs(3600));
+                        ears.since = Instant::now() + std::time::Duration::from_millis(1500);
+                    }
+                    calagopus::ConsoleEvent::Output(line) if Instant::now() >= ears.since => {
+                        let text = calagopus::plain(&line);
+                        if let Some(at) = text.find(circuit_runner::protocol::PREFIX) {
+                            let event = circuit_runner::protocol::parse_line(&text[at..]);
+                            if matches!(event, circuit_runner::protocol::BotEvent::Node { .. } | circuit_runner::protocol::BotEvent::Zone { .. }) {
+                                super::handle_event(ed, event);
+                                ctx.request_repaint();
+                            }
+                        }
+                    }
+                    calagopus::ConsoleEvent::Problem(_) => ears.asked = None,
+                    _ => {}
+                }
+            }
+            // Asked for a minute at a time, every half minute: when the
+            // editor goes away, the bot stops saying it by itself.
+            if ears.asked.is_some_and(|at| at.elapsed() > std::time::Duration::from_secs(30)) {
+                ears.console.send(if ears.values { "watch 60 values" } else { "watch 60" });
+                ears.asked = Some(Instant::now());
+            }
         }
         if let Some(rx) = &self.power
             && let Ok(result) = rx.try_recv()
@@ -839,6 +896,15 @@ impl HostingUi {
                             t!("Send the bot token"),
                             &tf!("Uploads .env with {variable} and the other secrets, so the bot can log in there. Turn it off to fill in .env on the remote yourself.", variable = token_env),
                         );
+                        if d.h.kind.is_panel() {
+                            kit::toggle_row(
+                                ui,
+                                &theme,
+                                &mut d.h.watch_values,
+                                t!("See the values on the wires too"),
+                                t!("With Remote picked beside Run, the canvas shows which blocks run there, how long they take and what fails. With this on, also what goes through the wires: real members' names and messages, sent to this computer while you watch."),
+                            );
+                        }
                         kit::hint(ui, &theme, t!("The remote needs Node.js 22 or newer and runs npm install itself (game panels' Node.js servers do that when they start). Its data/ folder is never touched."));
                     }
                     if busy.is_some() || !log.is_empty() {
@@ -1033,7 +1099,10 @@ impl ConsoleView {
                     self.heights.clear();
                 }
                 calagopus::ConsoleEvent::Output(line) => {
-                    self.push(line);
+                    // What the bot says for a watching editor isn't for reading.
+                    if !calagopus::plain(&line).contains(circuit_runner::protocol::PREFIX) {
+                        self.push(line);
+                    }
                 }
                 calagopus::ConsoleEvent::Status(s) => self.state = s,
                 calagopus::ConsoleEvent::Stats { memory, memory_limit, cpu } => self.stats = Some((memory, memory_limit, cpu)),

@@ -519,4 +519,62 @@ mod tests {
         }
         assert_eq!(panel.resources(&name).unwrap().state, "offline");
     }
+
+    /// A real bot (the runtime with a small project in it) on a host,
+    /// watched the way the editor does: asked through the console, it says
+    /// which blocks run, with its secret taken out (`XC_HOST_TEST` as
+    /// above). Skipped without a running host.
+    #[test]
+    fn a_bot_on_a_host_says_which_blocks_run() {
+        use crate::hosting::calagopus::{Console, ConsoleEvent, Panel, plain};
+        use crate::protocol::{BotEvent, PREFIX, parse_line};
+        let Some(file) = std::env::var_os("XC_HOST_TEST") else { return };
+        let text = std::fs::read_to_string(file).unwrap();
+        let mut lines = text.lines();
+        let (git, token) = (lines.next().unwrap(), lines.next().unwrap());
+        let panel = Panel::new(git.split("/git/").next().unwrap(), token);
+        let name = format!("watched{}", std::process::id());
+        // An exported bot: the project, then the runtime.
+        let runtime = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtime/circuit-runtime.js")).unwrap();
+        let event = r#"module.exports = { id: "t.tick", kind: "event", name: "Tick", outputs: {}, listen(ctx, emit) { setInterval(() => emit({ said: "the key is " + process.env.XC_SECRET_KEY }), 150); } };"#;
+        let bundle = json!({
+            "project": { "name": "T", "mode": "none", "settings": {} },
+            "blocks": { "t.tick": { "source": event, "file": "t/tick.js" } },
+            "libs": [],
+            "workspaces": { "main": { "name": "Main", "nodes": { "a": { "block": "t.tick@1", "at": [0, 0] } }, "links": [] } }
+        });
+        panel.write_file(&name, "/package.json", b"{ \"name\": \"watched\" }").unwrap();
+        panel.write_file(&name, "/.env", b"XC_SECRET_KEY=sup3r-s3cret-value\n").unwrap();
+        panel.write_file(&name, "/index.js", format!("const __XC_BUNDLE__ = {bundle};\n\n{runtime}").as_bytes()).unwrap();
+        panel.power(&name, "start").unwrap();
+        let console = Console::open(panel.clone(), name.clone());
+        let mut asked = false;
+        let (mut ran, mut with_value, mut leaked) = (false, false, false);
+        let until = Instant::now() + Duration::from_secs(25);
+        while Instant::now() < until && !(ran && with_value) {
+            match console.events.recv_timeout(Duration::from_millis(200)) {
+                Ok(ConsoleEvent::Connected) => {}
+                Ok(ConsoleEvent::Status(state)) if state == "running" && !asked => {
+                    // The bot needs a moment to listen.
+                    std::thread::sleep(Duration::from_millis(1500));
+                    console.send("watch 60 values");
+                    asked = true;
+                }
+                Ok(ConsoleEvent::Output(line)) => {
+                    let text = plain(&line);
+                    leaked |= text.contains("sup3r-s3cret-value") && text.contains(PREFIX);
+                    if let Some(at) = text.find(PREFIX)
+                        && let BotEvent::Node { ws, node, outputs, .. } = parse_line(&text[at..])
+                    {
+                        ran |= ws == "main" && node == "a";
+                        with_value |= outputs.is_some_and(|o| o.iter().any(|(_, v)| v.contains("[hidden secret]")));
+                    }
+                }
+                Ok(ConsoleEvent::Problem(p)) => panic!("{p}"),
+                _ => {}
+            }
+        }
+        let _ = panel.power(&name, "kill");
+        assert!(asked && ran && with_value && !leaked, "asked {asked}, ran {ran}, with its value {with_value}, leaked {leaked}");
+    }
 }

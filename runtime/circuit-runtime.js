@@ -33,6 +33,9 @@ class Runtime {
     this.bundle = bundle;
     this.opts = opts;
     this.debug = Boolean(opts.debug);
+    // An exported bot someone watches from the editor: until when, and
+    // whether the values on the wires go along (see listenForWatch).
+    this.watch = { until: 0, values: false };
     this.startedAt = Date.now();
     this.require = Module.createRequire(path.join(opts.depsRoot, "package.json"));
     this.blocks = new Map(); // block id -> definition object
@@ -63,7 +66,19 @@ class Runtime {
   }
 
   emit(type, data) {
-    if (this.debug) process.stdout.write(PROTOCOL + JSON.stringify({ t: type, ...data }) + "\n");
+    if (this.debug) {
+      process.stdout.write(PROTOCOL + JSON.stringify({ t: type, ...data }) + "\n");
+    } else if ((type === "node" || type === "zone") && Date.now() < this.watch.until) {
+      // Watched from afar: which blocks ran and what failed. The log is
+      // printed anyway. Secrets are hidden here, before anything leaves
+      // the machine the bot runs on.
+      process.stdout.write(PROTOCOL + hideSecrets(JSON.stringify({ t: type, ...data })) + "\n");
+    }
+  }
+
+  /** Whether the values on the wires are reported: to the editor that runs the bot, or to one that watches it and asked for them. */
+  showsValues() {
+    return this.debug || (this.watch.values && Date.now() < this.watch.until);
   }
 
   secret(name) {
@@ -484,7 +499,7 @@ class Graph {
     const run = new Run(this, outputs);
     run.setOutputs(node.id, outputs);
     this.rt.emit("node", { ws: this.key, node: node.id, phase: "enter", run: run.id });
-    this.rt.emit("node", { ws: this.key, node: node.id, phase: "exit", run: run.id, ms: 0, outputs: this.rt.debug ? previews(run.outputs.get(node.id)) : undefined });
+    this.rt.emit("node", { ws: this.key, node: node.id, phase: "exit", run: run.id, ms: 0, outputs: this.rt.showsValues() ? previews(run.outputs.get(node.id)) : undefined });
     const ended = this.rt.runStarted(outputs);
     return this.follow(run, node.id, "next")
       .then(
@@ -528,7 +543,7 @@ class Graph {
       const t0 = performance.now();
       const result = await node.def.run({ fields, ctx, node: { id: node.id, workspace: this.key } });
       if (result && typeof result === "object") run.setOutputs(node.id, result);
-      this.rt.emit("node", { ws: this.key, node: node.id, phase: "exit", run: run.id, ms: +(performance.now() - t0).toFixed(1), outputs: this.rt.debug ? previews(run.outputs.get(node.id)) : undefined });
+      this.rt.emit("node", { ws: this.key, node: node.id, phase: "exit", run: run.id, ms: +(performance.now() - t0).toFixed(1), outputs: this.rt.showsValues() ? previews(run.outputs.get(node.id)) : undefined });
       if (!node.def.flows) await this.follow(run, node.id, "next", path);
     } catch (e) {
       if (!e.__xcReported) {
@@ -576,7 +591,7 @@ class Graph {
     }
     const details = describeError(lastError, lastError.__xcNode);
     run.setOutputs(zoneId, { message: details.message, details });
-    this.rt.emit("zone", { ws: this.key, zone: zoneId, phase: "error", run: run.id, error: details.message, outputs: this.rt.debug ? previews({ message: details.message, details }) : undefined });
+    this.rt.emit("zone", { ws: this.key, zone: zoneId, phase: "error", run: run.id, error: details.message, outputs: this.rt.showsValues() ? previews({ message: details.message, details }) : undefined });
     const handlers = this.flowsOut.get(`${zoneId}.error`) || [];
     if (!handlers.length) {
       this.rt.log.warn(`${this.name} › Try ${zone.title || zoneId} caught: ${details.message}`);
@@ -606,7 +621,7 @@ class Graph {
           this.rt.emit("node", { ws: this.key, node: node.id, phase: "enter", run: run.id });
           const t0 = performance.now();
           const out = listsForCollections((await node.def.run({ fields, ctx: this.rt.ctxFor(run, node, path), node: { id: node.id, workspace: this.key } })) || {});
-          this.rt.emit("node", { ws: this.key, node: node.id, phase: "exit", run: run.id, ms: +(performance.now() - t0).toFixed(1), outputs: this.rt.debug ? previews(out) : undefined });
+          this.rt.emit("node", { ws: this.key, node: node.id, phase: "exit", run: run.id, ms: +(performance.now() - t0).toFixed(1), outputs: this.rt.showsValues() ? previews(out) : undefined });
           return out;
         })(),
       );
@@ -2865,6 +2880,51 @@ function watchBot() {
   run();
 }
 
+let knownSecrets = null;
+
+/**
+ * `text` (JSON) with the bot's secrets taken out: the token and everything
+ * else it got as a secret, as they are and as JSON writes them.
+ */
+function hideSecrets(text) {
+  if (!knownSecrets) {
+    const names = Object.keys(process.env).filter((n) => /^XC_SECRET_/.test(n) || /(^|_)(TOKEN|SECRET|PASSWORD|API_KEY)$/.test(n));
+    const values = names.map((n) => process.env[n]).filter((v) => typeof v === "string" && v.length >= 6);
+    knownSecrets = [...new Set(values.flatMap((v) => [v, JSON.stringify(v).slice(1, -1)]))].sort((a, b) => b.length - a.length);
+  }
+  for (const secret of knownSecrets) text = text.split(secret).join("[hidden secret]");
+  return text;
+}
+
+/**
+ * An exported bot can be watched from the editor: a line "watch 60" on its
+ * input (typed into a panel's console, or sent by the editor) makes it say
+ * which blocks run for the next 60 seconds; "watch 60 values" also what
+ * goes through the wires. The editor asks again while it looks; when it
+ * stops, the bot stops saying it by itself.
+ */
+function listenForWatch() {
+  if (process.stdin.isTTY) return;
+  let buffer = "";
+  try {
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk) => {
+      buffer += chunk;
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop().slice(-200);
+      for (const line of lines) {
+        const m = /^watch (\d{1,4})( values)?$/.exec(line.trim());
+        if (!m) continue;
+        const watch = { until: Date.now() + Math.min(Number(m[1]), 600) * 1000, values: Boolean(m[2]) };
+        for (const rt of runtimes) rt.watch = watch;
+      }
+    });
+    process.stdin.on("error", () => {});
+  } catch {
+    // No input to listen on (a service without one): it just can't be watched.
+  }
+}
+
 /** XC Circuit stops a running bot by writing "stop" to it (or by closing its input). */
 function listenForStop() {
   process.stdin.setEncoding("utf8");
@@ -2896,6 +2956,7 @@ if (typeof __XC_BUNDLE__ !== "undefined") {
     if (process.env.XC_BOT_CHILD && process.send) process.on("disconnect", () => shutdown(0));
     loadDotEnv(path.join(__dirname, ".env"));
     start(__XC_BUNDLE__, { debug: process.argv.includes("--debug"), depsRoot: __dirname, dataDir: path.join(__dirname, "data") });
+    if (!process.argv.includes("--debug")) listenForWatch();
   }
 } else if (require.main === module) {
   cli();
@@ -2904,4 +2965,5 @@ if (typeof __XC_BUNDLE__ !== "undefined") {
 module.exports = {
   restartWait,
   dotEnvValue,
+  hideSecrets,
   isPrivateAddress, guardedFetch, start, ungroupBlock, fillTemplate, fillValue, templated, isContextType, templateParts, snapshot, Timers, coerce, listsForCollections, compare, preview, Store, DbStore, Database, Databases, backupStore, listStoreBackups, prepareStoreFile, BACKUPS_KEPT };

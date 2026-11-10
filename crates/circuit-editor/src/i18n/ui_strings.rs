@@ -532,6 +532,8 @@ pub const UI_STRINGS: &[&str] = &[
     "Upload after every save",
     "Ctrl+S also puts the new version on the remote. Only files that changed are sent.",
     "Send the bot token",
+    "See the values on the wires too",
+    "With Remote picked beside Run, the canvas shows which blocks run there, how long they take and what fails. With this on, also what goes through the wires: real members' names and messages, sent to this computer while you watch.",
     "The remote needs Node.js 22 or newer and runs npm install itself (game panels' Node.js servers do that when they start). Its data/ folder is never touched.",
     "What happened",
     "Save and upload",

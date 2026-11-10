@@ -3,7 +3,7 @@
 The **XC Circuit Host** is a small server you run yourself, in a Docker container. It is for people who want their projects on a machine of their own instead of GitHub, and it is what live sessions go through.
 
 ::: warning New
-The Host is new in 0.3.0. Seeing in the editor which blocks ran is for a bot run from the editor and in live sessions; for a bot on the host, the console is what you get so far.
+The Host is new in 0.3.0.
 :::
 
 ## What it does
@@ -80,6 +80,8 @@ The host can run the bot itself, so it is online without your computer:
 3. Beside Run, pick **Remote**: Run, Restart and Stop now act on the bot on the host, and the status bar shows how it stands. **Bot › Remote console** shows what it prints, live, also what it printed before you looked.
 
 To log in, the bot needs its token on the host: with **Send the bot token** on (as it is to start with), the upload carries a `.env` with it, which lies in the host's data folder, readable by whoever runs the host. That is you. (The vault is another matter: what is in there, the host can't read.)
+
+With **Remote** picked, the canvas also shows **which blocks run** on the host, how long they take and where one fails, as for a bot run from the editor. The bot only says so while an editor watches (it is asked for a minute at a time and stops by itself), and it takes its secrets out before anything leaves the host. What goes through the wires holds real members' names and messages: it only comes along with **See the values on the wires too** in Bot › Remote….
 
 A bot that was running starts again by itself when the host restarts or its container is updated; one you stopped stays stopped. The bot's own data (`data/` in its folder: what it saved about members, its databases) is never touched by an upload.
 

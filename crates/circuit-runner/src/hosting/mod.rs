@@ -69,6 +69,10 @@ pub struct Hosting {
     pub include_token: bool,
     /// Calagopus: restart the server after an upload, so the new bot runs.
     pub restart: bool,
+    /// A panel or a host: while the editor watches the bot there, also see
+    /// the values that go through the wires (real members' names and
+    /// messages), not only which blocks ran.
+    pub watch_values: bool,
 }
 
 impl Default for Hosting {
@@ -86,6 +90,7 @@ impl Default for Hosting {
             auto_upload: false,
             include_token: true,
             restart: true,
+            watch_values: false,
         }
     }
 }
