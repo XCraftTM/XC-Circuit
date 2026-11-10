@@ -23,7 +23,7 @@ It has two modes, set with `XC_HOST_MODE`:
 
 You need a server with Docker and a reverse proxy that adds HTTPS, such as Nginx Proxy Manager.
 
-1. Get `host/` from the [repository](https://github.com/XCraftTM/XC-Circuit) and start it:
+1. Get [`host/docker-compose.yml`](https://github.com/XCraftTM/XC-Circuit/blob/main/host/docker-compose.yml) and start it. It uses the published image, `ghcr.io/xcrafttm/xc-circuit-host` (for x64 and ARM); in Portainer, a stack with the same file does it:
 
    ```bash
    docker compose -f host/docker-compose.yml up -d

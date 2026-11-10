@@ -9,9 +9,12 @@
 
 services:
   xc-circuit-host:
-    build:
-      context: ..
-      dockerfile: host/Dockerfile
+    # The published image. To build it yourself from this repository
+    # instead, take this line out and the four below in.
+    image: ghcr.io/xcrafttm/xc-circuit-host:latest
+    # build:
+    #   context: ..
+    #   dockerfile: host/Dockerfile
     container_name: xc-circuit-host
     restart: unless-stopped
     environment:
