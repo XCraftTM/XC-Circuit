@@ -118,6 +118,8 @@ pub struct Editor {
     /// Selected node as (workspace key, node id).
     pub selected: Option<(String, String)>,
     pub log: Vec<LogLine>,
+    /// How many lines the Console was ever given (it keeps the newest only).
+    pub log_count: u64,
     pub shapes: ShapeCache,
     pub views: HashMap<String, CanvasView>,
     /// The bot's server as plugins and agents see it (`xc.server()`), kept
@@ -215,6 +217,7 @@ impl Editor {
             reloads: 0,
             selected: None,
             log: Vec::new(),
+            log_count: 0,
             shapes: ShapeCache::default(),
             views: HashMap::new(),
             server_view: serde_json::Value::Null,
@@ -266,6 +269,7 @@ impl Editor {
     /// Adds a console line, keeping the newest 2000 (the oldest 500 go at once).
     pub fn push_log(&mut self, line: LogLine) {
         self.log.push(line);
+        self.log_count += 1;
         if self.log.len() > 2000 {
             self.log.drain(..500);
         }
@@ -1032,7 +1036,7 @@ fn explorer_args(path: &Path) -> [String; 2] {
     ["/select,".to_string(), path.to_string_lossy().replace('/', "\\")]
 }
 
-fn clock() -> String {
+pub fn clock() -> String {
     chrono::Local::now().format("%H:%M:%S").to_string()
 }
 

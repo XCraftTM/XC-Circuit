@@ -129,7 +129,9 @@ impl CircuitApp {
     pub(super) fn activity(&mut self, ui: &mut egui::Ui) {
         let t = self.ed.theme.clone();
         let bar = ui.max_rect();
-        ui.painter().vline(bar.right() - 0.5, bar.y_range(), egui::Stroke::new(1.0, t.line));
+        // The line towards the rest of the window.
+        let edge = if self.ed.prefs.side_right { bar.left() + 0.5 } else { bar.right() - 0.5 };
+        ui.painter().vline(edge, bar.y_range(), egui::Stroke::new(1.0, t.line));
         self.ed.ui_rects.insert("activity-bar".into(), bar);
         ui.spacing_mut().item_spacing.y = 2.0;
         let ctx = ui.ctx().clone();
@@ -470,7 +472,8 @@ impl CircuitApp {
     pub(super) fn side_bar(&mut self, ui: &mut egui::Ui, key: &str, tab: Tab, problems: &[panels::ProblemItem]) {
         let t = self.ed.theme.clone();
         let line = ui.max_rect();
-        ui.painter().vline(line.right() - 0.5, line.y_range(), egui::Stroke::new(1.0, t.line));
+        let edge = if self.ed.prefs.side_right { line.left() + 0.5 } else { line.right() - 0.5 };
+        ui.painter().vline(edge, line.y_range(), egui::Stroke::new(1.0, t.line));
         self.ed.ui_rects.insert("side-bar".into(), line);
         let full = ui.available_rect_before_wrap();
         ui.allocate_rect(full, egui::Sense::hover());

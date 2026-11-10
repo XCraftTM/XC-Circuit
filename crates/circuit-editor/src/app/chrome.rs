@@ -180,6 +180,7 @@ impl CircuitApp {
         }
 
         let mut right = ui.new_child(egui::UiBuilder::new().max_rect(bar).layout(egui::Layout::right_to_left(egui::Align::Center)));
+        self.bell(&mut right);
         if let Some(r) = &self.updater.available
             && status_item(&mut right, &t, Some(t.accent), &tf!("Update {version} available", version = r.version)).on_hover_text(t!("What's new, and the download")).clicked()
         {

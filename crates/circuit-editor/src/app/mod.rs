@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::bot::{BotState, BotUi};
 use crate::i18n::n;
-use crate::editor::{Action, Editor, Level};
+use crate::editor::{Action, Editor, Level, LogLine};
 use crate::editor::keymap::{self, Action as Hotkey};
 use crate::ui::palette::{Cmd, Item};
 use crate::{canvas, ui::dialog, ui::palette, pages::panels, canvas::picker};
@@ -35,6 +35,7 @@ mod files;
 use files::*;
 pub(crate) mod fps;
 mod menus;
+mod notices;
 mod plugins;
 mod projects;
 mod start;
@@ -228,6 +229,8 @@ pub struct CircuitApp {
     /// The panels hidden with their part of the window (the title bar's
     /// buttons), to show again; and what the side bar showed.
     hidden_panels: Vec<Tab>,
+    /// What happened that is worth a look: the corner's cards and the bell's list.
+    notices: notices::Notices,
     /// The bottom panels fill the window: how much of it the workspaces
     /// had before, to give back.
     bottom_before: Option<f32>,
@@ -426,6 +429,7 @@ impl CircuitApp {
             own_places: Default::default(),
             start_page: Default::default(),
             hidden_panels: Vec::new(),
+            notices: Default::default(),
             bottom_before: None,
             side_before: None,
             window_shaped: None,
@@ -871,6 +875,11 @@ impl eframe::App for CircuitApp {
         watchdog::mark("in dialogs");
         self.apply_actions();
         self.dialogs(&ctx);
+        self.collect_notices();
+        if !start && self.setup.is_none() {
+            watchdog::mark("in the notifications");
+            self.notices_ui(&ctx);
+        }
         self.bot.windows(&ctx, &mut self.ed);
         if !self.ed.prefs.system_titlebar && !start {
             crate::app::titlebar::frame_edges(&ctx, &theme);

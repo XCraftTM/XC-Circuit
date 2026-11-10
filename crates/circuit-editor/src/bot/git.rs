@@ -1002,6 +1002,11 @@ impl GitUi {
         self.state.as_ref().filter(|s| s.remote.is_some()).map_or(0, |s| s.changed.len().max(s.ahead) + s.behind)
     }
 
+    /// What Git is doing right now, in words (none while it rests).
+    pub fn busy_words(&self) -> Option<String> {
+        self.busy.map(|what| tf!("{what} …", what = busy_text(what)))
+    }
+
     /// Fetch, for the Git view's heading.
     pub fn can_fetch(&self) -> bool {
         self.ready() && self.conflicts.is_empty()
