@@ -9,6 +9,8 @@
 //! both sides changed the same file (or putting them together gave a file
 //! that no longer reads), the caller says which side's file to keep.
 
+pub mod github;
+
 use anyhow::{Context, Result, anyhow, bail};
 use git2::{Cred, FetchOptions, IndexEntry, IndexTime, Oid, PushOptions, RemoteCallbacks, Repository, Signature, StatusOptions, Tree, build::CheckoutBuilder};
 use std::collections::{BTreeSet, HashMap};

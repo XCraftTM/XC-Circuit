@@ -944,6 +944,7 @@ dependencies = [
  "anyhow",
  "git2",
  "serde_json",
+ "ureq",
 ]
 
 [[package]]

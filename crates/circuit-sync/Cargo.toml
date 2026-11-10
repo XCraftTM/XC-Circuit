@@ -11,6 +11,7 @@ publish.workspace = true
 [dependencies]
 anyhow.workspace = true
 serde_json.workspace = true
+ureq = "3"
 # libgit2, built in (users rarely have Git installed), over HTTPS only.
 git2 = { version = "0.21", default-features = false, features = ["https", "vendored-libgit2"] }
 
