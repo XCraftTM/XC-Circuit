@@ -373,31 +373,78 @@ assert.deepStrictEqual(
   assert.deepStrictEqual(read({ part: "components", row: "2", component: "1", componentPart: "options" }).result, ["One", "Two"]);
   assert.strictEqual(read({ part: "components", row: "4", component: "1" }).found, false);
 
-  // A Components V2 layout.
+  // A Components V2 layout, piece by piece.
   const layout = {
     components: [
+      json({ type: 10, content: "Welcome" }),
       json({
         type: 17,
         accent_color: 0xff0000,
         components: [
           { type: 10, content: "# Shop" },
-          { type: 9, components: [{ type: 10, content: "Sword: 5 coins" }], accessory: { type: 11, media: { url: "https://img/sword.png" } } },
-          { type: 12, items: [{ media: { url: "https://img/g1.png" } }, { media: { url: "https://img/g2.png" } }] },
-          { type: 1, components: [{ type: 2, label: "Buy", custom_id: "buy-sword", style: 1 }] },
+          { type: 9, components: [{ type: 10, content: "Sword: 5 coins" }, { type: 10, content: "Sharp." }], accessory: { type: 11, media: { url: "https://img/sword.png" }, description: "A sword" } },
+          { type: 9, components: [{ type: 10, content: "Shield" }], accessory: { type: 2, label: "Buy shield", custom_id: "buy-shield", style: 3 } },
+          { type: 12, items: [{ media: { url: "https://img/g1.png" }, description: "One" }, { media: { url: "https://img/g2.png" }, spoiler: true }] },
+          { type: 13, file: { url: "attachment://prices.pdf" }, spoiler: true },
+          { type: 1, components: [{ type: 2, label: "Buy", custom_id: "buy-sword", style: 1, emoji: { name: "ok", id: "7" } }, { type: 2, label: "Site", url: "https://shop", style: 5, disabled: true }] },
+          { type: 1, components: [{ type: 3, custom_id: "pick", placeholder: "Choose", options: [{ label: "One", value: "1" }, { label: "Two", value: "2" }] }] },
         ],
       }),
+      json({ type: 17, spoiler: true, components: [{ type: 10, content: "Second box" }] }),
     ],
   };
   const lay = (fields) => run("discord.read_message", { message: layout, part: "layout", ...fields });
-  assert.strictEqual(lay({}).result, "# Shop\nSword: 5 coins");
-  assert.deepStrictEqual(lay({ layoutPart: "texts" }).result, ["# Shop", "Sword: 5 coins"]);
-  assert.deepStrictEqual(lay({ layoutPart: "images" }).result, ["https://img/sword.png", "https://img/g1.png", "https://img/g2.png"]);
-  assert.deepStrictEqual(lay({ layoutPart: "buttons" }).result, ["Buy"]);
-  assert.deepStrictEqual(lay({ layoutPart: "customIds" }).result, ["buy-sword"]);
-  assert.strictEqual(lay({ layoutPart: "color" }).result, "#FF0000");
-  assert.deepStrictEqual(lay({ layoutPart: "text", then: "numbers" }).result, [5]);
+  // All its text, everywhere or in one container.
+  assert.strictEqual(lay({}).result, "Welcome\n# Shop\nSword: 5 coins\nSharp.\nShield\nSecond box");
+  assert.strictEqual(lay({ layoutIn: "2" }).result, "Second box");
+  assert.deepStrictEqual(lay({ layoutIn: "1", then: "numbers" }).result, [5]);
+  assert.deepStrictEqual(lay({ layoutIn: "3" }), { result: "", found: false });
+  // A text.
+  assert.strictEqual(lay({ layoutKind: "text" }).result, "Welcome");
+  assert.strictEqual(lay({ layoutKind: "text", layoutWhich: "2" }).result, "# Shop");
+  assert.strictEqual(lay({ layoutKind: "text", layoutWhich: "last" }).result, "Second box");
+  assert.strictEqual(lay({ layoutKind: "text", layoutIn: "1", layoutWhich: "1" }).result, "# Shop");
+  assert.deepStrictEqual(lay({ layoutKind: "text", layoutIn: "1", layoutWhich: "all" }).result, ["# Shop", "Sword: 5 coins", "Sharp.", "Shield"]);
+  assert.deepStrictEqual(lay({ layoutKind: "text", layoutWhich: "all", then: "regex", pattern: "^s\\w+" }).result, ["Sword", "Sharp", "Shield", "Second"]);
+  assert.deepStrictEqual(lay({ layoutKind: "text", layoutWhich: "9" }), { result: "", found: false });
+  // A section and what is beside it.
+  assert.strictEqual(lay({ layoutKind: "section" }).result, "Sword: 5 coins\nSharp.");
+  assert.deepStrictEqual(lay({ layoutKind: "section", layoutSection: "texts" }).result, ["Sword: 5 coins", "Sharp."]);
+  assert.strictEqual(lay({ layoutKind: "section", layoutSection: "accessory" }).result, "picture");
+  assert.strictEqual(lay({ layoutKind: "section", layoutSection: "accessoryUrl" }).result, "https://img/sword.png");
+  assert.strictEqual(lay({ layoutKind: "section", layoutWhich: "2", layoutSection: "accessory" }).result, "button");
+  assert.strictEqual(lay({ layoutKind: "section", layoutWhich: "2", layoutSection: "accessoryLabel" }).result, "Buy shield");
+  assert.strictEqual(lay({ layoutKind: "section", layoutWhich: "2", layoutSection: "accessoryId" }).result, "buy-shield");
+  assert.deepStrictEqual(lay({ layoutKind: "section", layoutWhich: "all", layoutSection: "accessory" }).result, ["picture", "button"]);
+  // A container.
+  assert.strictEqual(lay({ layoutKind: "container", layoutContainer: "color" }).result, "#FF0000");
+  assert.strictEqual(lay({ layoutKind: "container", layoutContainer: "pieces" }).result, 7);
+  assert.strictEqual(lay({ layoutKind: "container", layoutWhich: "2" }).result, "Second box");
+  assert.strictEqual(lay({ layoutKind: "container", layoutWhich: "2", layoutContainer: "spoiler" }).result, true);
+  assert.strictEqual(lay({ layoutKind: "container", layoutWhich: "2", layoutContainer: "color" }).result, "");
+  // A gallery, and pictures one by one (thumbnails and gallery pictures alike).
+  assert.deepStrictEqual(lay({ layoutKind: "gallery" }).result, ["https://img/g1.png", "https://img/g2.png"]);
+  assert.strictEqual(lay({ layoutKind: "gallery", layoutGallery: "count" }).result, 2);
+  assert.strictEqual(lay({ layoutKind: "picture" }).result, "https://img/sword.png");
+  assert.strictEqual(lay({ layoutKind: "picture", layoutPicture: "description" }).result, "A sword");
+  assert.strictEqual(lay({ layoutKind: "picture", layoutWhich: "3", layoutPicture: "spoiler" }).result, true);
+  assert.deepStrictEqual(lay({ layoutKind: "picture", layoutWhich: "all" }).result, ["https://img/sword.png", "https://img/g1.png", "https://img/g2.png"]);
+  // Buttons (a section's too), menus and files.
+  assert.strictEqual(lay({ layoutKind: "button" }).result, "Buy shield");
+  assert.deepStrictEqual(lay({ layoutKind: "button", layoutWhich: "all", layoutButton: "customId" }).result, ["buy-shield", "buy-sword", ""]);
+  assert.strictEqual(lay({ layoutKind: "button", layoutWhich: "2", layoutButton: "emoji" }).result, "<:ok:7>");
+  assert.strictEqual(lay({ layoutKind: "button", layoutWhich: "2", layoutButton: "style" }).result, "primary");
+  assert.strictEqual(lay({ layoutKind: "button", layoutWhich: "last", layoutButton: "url" }).result, "https://shop");
+  assert.strictEqual(lay({ layoutKind: "button", layoutWhich: "last", layoutButton: "disabled" }).result, true);
+  assert.strictEqual(lay({ layoutKind: "menu" }).result, "Choose");
+  assert.deepStrictEqual(lay({ layoutKind: "menu", layoutMenu: "values" }).result, ["1", "2"]);
+  assert.strictEqual(lay({ layoutKind: "menu", layoutMenu: "kind" }).result, "text");
+  assert.strictEqual(lay({ layoutKind: "file" }).result, "attachment://prices.pdf");
+  assert.strictEqual(lay({ layoutKind: "file", layoutFile: "name" }).result, "prices.pdf");
+  assert.strictEqual(lay({ layoutKind: "whole" }).result.length, 3);
+  assert.deepStrictEqual(lay({ layoutKind: "menu", layoutIn: "2" }), { result: "", found: false });
   // A layout's buttons are found as buttons too.
-  assert.deepStrictEqual(run("discord.read_message", { message: layout, part: "components", componentPart: "customId" }).result, ["buy-sword"]);
+  assert.deepStrictEqual(run("discord.read_message", { message: layout, part: "components", componentPart: "customId" }).result, ["buy-sword", "", "pick"]);
 
   // Attachments and mentions.
   assert.strictEqual(read({ part: "attachment" }).result, "https://cdn/a.png");
@@ -423,6 +470,20 @@ assert.deepStrictEqual(
   assert.strictEqual(shape({ then: "numbers" }).outputs.result.type, "list<number>");
   assert.strictEqual(shape({ then: "trim" }).outputs.result.type, "text");
   assert.strictEqual(shape({ part: "attachment", attachmentPart: "size" }).outputs.result.type, "number");
+  // A layout's steps: where, what kind of piece, which one, and what of it.
+  s = shape({ part: "layout" });
+  assert.strictEqual(s.outputs.result.type, "text");
+  assert.ok(!s.hide.includes("layoutIn") && !s.hide.includes("layoutKind") && s.hide.includes("layoutWhich") && s.hide.includes("layoutButton") && !s.hide.includes("then"));
+  s = shape({ part: "layout", layoutKind: "button", layoutWhich: "all", layoutButton: "disabled" });
+  assert.strictEqual(s.outputs.result.type, "list<boolean>");
+  assert.ok(!s.hide.includes("layoutWhich") && !s.hide.includes("layoutButton") && s.hide.includes("layoutMenu") && s.hide.includes("then"));
+  assert.ok(!("layoutText" in all["discord.read_message"].fields), "a text has only its text: no step for what of it");
+  assert.strictEqual(shape({ part: "layout", layoutKind: "text", layoutWhich: "all" }).outputs.result.type, "list<text>");
+  assert.strictEqual(shape({ part: "layout", layoutKind: "gallery" }).outputs.result.type, "list<text>");
+  assert.strictEqual(shape({ part: "layout", layoutKind: "container", layoutContainer: "pieces" }).outputs.result.type, "number");
+  assert.strictEqual(shape({ part: "layout", layoutKind: "whole" }).outputs.result.type, "list<object>");
+  assert.ok(shape({ part: "layout", layoutKind: "whole" }).hide.includes("layoutIn"));
+  assert.ok(shape({ part: "embed" }).hide.includes("layoutKind") && shape({ part: "embed" }).hide.includes("layoutSection"));
 }
 
 console.log(`${Object.keys(all).length} Discord blocks checked\ndiscord blocks test passed`);

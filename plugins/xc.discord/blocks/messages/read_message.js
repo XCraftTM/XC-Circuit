@@ -1,5 +1,5 @@
 // Read From Message: pick a part of a message step by step (its text, an
-// embed, a button, its layout, an attachment, who it mentions), then what
+// embed, a button, a piece of its layout, an attachment, who it mentions), then what
 // to take out of it (as it is, the mentions or links in it, what matches a
 // pattern …). The steps that don't belong to the part picked are hidden.
 
@@ -33,15 +33,105 @@ const COMPONENT_PARTS = {
   options: ["A menu's options (labels)", "list<text>"],
   whole: ["The whole component", "object"],
 };
-const LAYOUT_PARTS = {
-  text: ["All its text", "text"],
-  texts: ["Each text", "list<text>"],
-  images: ["Image URLs", "list<text>"],
-  buttons: ["Button labels", "list<text>"],
-  customIds: ["Custom ids", "list<text>"],
-  color: ["Accent colour", "text"],
-  whole: ["The whole layout", "list<object>"],
+// A Components V2 layout, piece by piece: what kinds of piece there are,
+// and for each kind what can be read from one: [label, type, how].
+const STYLES = { 1: "primary", 2: "secondary", 3: "success", 4: "danger", 5: "link", 6: "premium" };
+const MENUS = { 3: "text", 5: "user", 6: "role", 7: "mentionable", 8: "channel" };
+const emojiText = (e) => (e ? (e.id ? `<${e.animated ? "a" : ""}:${e.name}:${e.id}>` : e.name || "") : "");
+const textsIn = (c) => walk([c]).filter((x) => x.type === 10).map((x) => x.content || "");
+const LAYOUT = {
+  text: {
+    label: "A text",
+    is: (c) => c.type === 10,
+    parts: { content: ["Its text", "text", (c) => c.content || ""] },
+  },
+  section: {
+    label: "A section",
+    is: (c) => c.type === 9,
+    parts: {
+      text: ["All its text", "text", (c) => (c.components || []).map((x) => x.content || "").filter(Boolean).join("\n")],
+      texts: ["Each of its texts", "list<text>", (c) => (c.components || []).map((x) => x.content || "")],
+      accessory: ["What is beside it (button, picture or nothing)", "text", (c) => (c.accessory ? (c.accessory.type === 2 ? "button" : "picture") : "nothing")],
+      accessoryLabel: ["The button's label beside it", "text", (c) => (c.accessory?.type === 2 ? c.accessory.label || "" : "")],
+      accessoryId: ["The button's custom id beside it", "text", (c) => (c.accessory?.type === 2 ? c.accessory.custom_id || "" : "")],
+      accessoryUrl: ["The picture's or link's URL beside it", "text", (c) => c.accessory?.media?.url || c.accessory?.url || ""],
+      whole: ["The whole section", "object", (c) => c],
+    },
+  },
+  container: {
+    label: "A container",
+    is: (c) => c.type === 17,
+    parts: {
+      text: ["All its text", "text", (c) => textsIn(c).filter(Boolean).join("\n")],
+      texts: ["Each of its texts", "list<text>", (c) => textsIn(c)],
+      color: ["Accent colour", "text", (c) => hex(c.accent_color)],
+      spoiler: ["Is a spoiler", "boolean", (c) => Boolean(c.spoiler)],
+      pieces: ["How many pieces it has", "number", (c) => (c.components || []).length],
+      whole: ["The whole container", "object", (c) => c],
+    },
+  },
+  gallery: {
+    label: "A media gallery",
+    is: (c) => c.type === 12,
+    parts: {
+      urls: ["Its pictures' URLs", "list<text>", (c) => (c.items || []).map((i) => i.media?.url).filter(Boolean)],
+      descriptions: ["Its pictures' descriptions", "list<text>", (c) => (c.items || []).map((i) => i.description || "")],
+      count: ["How many pictures", "number", (c) => (c.items || []).length],
+      whole: ["The whole gallery", "object", (c) => c],
+    },
+  },
+  picture: {
+    label: "A picture (thumbnail or in a gallery)",
+    // A thumbnail is one; a gallery is as many as it has pictures.
+    each: (c) => (c.type === 11 ? [c] : c.type === 12 ? c.items || [] : []),
+    parts: {
+      url: ["URL", "text", (p) => p.media?.url || ""],
+      description: ["Description", "text", (p) => p.description || ""],
+      spoiler: ["Is a spoiler", "boolean", (p) => Boolean(p.spoiler)],
+      whole: ["The whole picture", "object", (p) => p],
+    },
+  },
+  button: {
+    label: "A button",
+    is: (c) => c.type === 2,
+    parts: {
+      label: ["Label", "text", (c) => c.label || ""],
+      customId: ["Custom id", "text", (c) => c.custom_id || ""],
+      url: ["Link", "text", (c) => c.url || ""],
+      emoji: ["Emoji", "text", (c) => emojiText(c.emoji)],
+      style: ["Style (primary, danger, link …)", "text", (c) => STYLES[c.style] || ""],
+      disabled: ["Is disabled", "boolean", (c) => Boolean(c.disabled)],
+      whole: ["The whole button", "object", (c) => c],
+    },
+  },
+  menu: {
+    label: "A select menu",
+    is: (c) => c.type in MENUS,
+    parts: {
+      placeholder: ["Placeholder", "text", (c) => c.placeholder || ""],
+      customId: ["Custom id", "text", (c) => c.custom_id || ""],
+      options: ["Its options' labels", "list<text>", (c) => (c.options || []).map((o) => o.label)],
+      values: ["Its options' values", "list<text>", (c) => (c.options || []).map((o) => o.value)],
+      kind: ["What it picks (text, user, role, channel …)", "text", (c) => MENUS[c.type]],
+      disabled: ["Is disabled", "boolean", (c) => Boolean(c.disabled)],
+      whole: ["The whole menu", "object", (c) => c],
+    },
+  },
+  file: {
+    label: "A file",
+    is: (c) => c.type === 13,
+    parts: {
+      url: ["URL", "text", (c) => c.file?.url || ""],
+      name: ["File name", "text", (c) => c.name || String(c.file?.url || "").split(/[/?#]/).filter(Boolean).pop() || ""],
+      spoiler: ["Is a spoiler", "boolean", (c) => Boolean(c.spoiler)],
+      whole: ["The whole file", "object", (c) => c],
+    },
+  },
 };
+// What to read from a layout: all of it at once, or one kind of piece.
+const LAYOUT_KINDS = { allText: "All its text", ...Object.fromEntries(Object.entries(LAYOUT).map(([k, v]) => [k, v.label])), whole: "The whole layout" };
+const partKey = (kind) => `layout${kind[0].toUpperCase()}${kind.slice(1)}`;
+const firstPart = (kind) => Object.keys(LAYOUT[kind].parts)[0];
 const ATTACHMENT_PARTS = { url: ["URL", "text"], name: ["File name", "text"], size: ["Size (bytes)", "number"], type: ["File type", "text"], whole: ["The whole attachment", "object"] };
 const MENTIONS = { users: ["Users", "list<discord.user>"], roles: ["Roles", "list<discord.role>"], channels: ["Channels", "list<discord.channel>"], everyone: ["@everyone or @here", "boolean"] };
 // What to take out of a text: its label, and what one text becomes ("text" or a list).
@@ -71,8 +161,13 @@ function picked(v) {
       return list((EMBED_PARTS[v.embedPart] || EMBED_PARTS.description)[1], many("embed"));
     case "components":
       return list((COMPONENT_PARTS[v.componentPart] || COMPONENT_PARTS.label)[1], many("row") || many("component"));
-    case "layout":
-      return (LAYOUT_PARTS[v.layoutPart] || LAYOUT_PARTS.text)[1];
+    case "layout": {
+      const kind = v.layoutKind in LAYOUT_KINDS ? v.layoutKind : "allText";
+      if (kind === "allText") return "text";
+      if (kind === "whole") return "list<object>";
+      const parts = LAYOUT[kind].parts;
+      return list((parts[v[partKey(kind)]] || parts[firstPart(kind)])[1], (v.layoutWhich || "1") === "all");
+    }
     case "attachment":
       return list((ATTACHMENT_PARTS[v.attachmentPart] || ATTACHMENT_PARTS.url)[1], many("attachment"));
     case "mentions":
@@ -163,7 +258,7 @@ function componentPart(c, part) {
     case "url":
       return c.url || "";
     case "emoji":
-      return c.emoji ? (c.emoji.id ? `<${c.emoji.animated ? "a" : ""}:${c.emoji.name}:${c.emoji.id}>` : c.emoji.name || "") : "";
+      return emojiText(c.emoji);
     case "kind":
       return menu ? "menu" : "button";
     case "disabled":
@@ -177,26 +272,29 @@ function componentPart(c, part) {
   }
 }
 
-function layoutPart(message, part) {
+/** The pieces of a layout that the steps pick, and what is read from each. */
+function layoutPart(message, v) {
   const top = (message.components || []).map(json);
-  const all = walk(top);
-  const texts = all.filter((c) => c.type === 10).map((c) => c.content || "");
-  switch (part) {
-    case "texts":
-      return texts;
-    case "images":
-      return all.flatMap((c) => (c.type === 11 ? [c.media?.url] : c.type === 12 ? (c.items || []).map((i) => i.media?.url) : [])).filter(Boolean);
-    case "buttons":
-      return all.filter((c) => c.type === 2 && c.label).map((c) => c.label);
-    case "customIds":
-      return all.map((c) => c.custom_id).filter(Boolean);
-    case "color":
-      return hex(all.find((c) => c.type === 17 && typeof c.accent_color === "number")?.accent_color);
-    case "whole":
-      return top;
-    default:
-      return texts.join("\n");
+  const kind = v.layoutKind in LAYOUT_KINDS ? v.layoutKind : "allText";
+  if (kind === "whole") return { value: top, found: top.length > 0 };
+  // Everywhere in the message, or in one of its containers only.
+  let scope = top;
+  if (v.layoutIn && v.layoutIn !== "anywhere") {
+    const container = walk(top).filter((c) => c.type === 17)[Number(v.layoutIn) - 1];
+    scope = container ? container.components || [] : [];
   }
+  const all = walk(scope);
+  if (kind === "allText") {
+    const texts = all.filter((c) => c.type === 10).map((c) => c.content || "");
+    return { value: texts.join("\n"), found: texts.length > 0 };
+  }
+  const { is, each, parts } = LAYOUT[kind];
+  const pieces = each ? all.flatMap(each) : all.filter(is);
+  const chosen = choose(pieces, v.layoutWhich || "1");
+  const read = (parts[v[partKey(kind)]] || parts[firstPart(kind)])[2];
+  const got = chosen.map(read);
+  const several = v.layoutWhich === "all";
+  return { value: several ? got.flat() : got.length ? got[0] : null, found: chosen.length > 0 };
 }
 
 /** What the steps before the last one give, and whether there was anything. */
@@ -218,10 +316,8 @@ function read(message, v) {
       const got = chosen.map((c) => componentPart(c, v.componentPart));
       return { value: one(several ? got.flat() : got, several), found: chosen.length > 0 };
     }
-    case "layout": {
-      const value = layoutPart(message, v.layoutPart);
-      return { value, found: (message.components || []).length > 0 };
-    }
+    case "layout":
+      return layoutPart(message, v);
     case "attachment": {
       const files = choose(values(message.attachments), v.attachment || "1");
       const part = (a) => ({ url: a.url, name: a.name, size: a.size, type: a.contentType || "" })[v.attachmentPart || "url"] ?? { url: a.url, name: a.name, size: a.size, type: a.contentType || "" };
@@ -307,7 +403,10 @@ module.exports = {
     row: { type: "select", pin: false, default: "any", label: "Which row", choices: { any: "Every row", ...numbered("Row 1", "Row", 5) }, description: "A message has up to 5 rows of buttons and menus." },
     component: { type: "select", pin: false, default: "all", label: "Which one", choices: { all: "Every button and menu", ...numbered("The first", "Number", 5) }, description: "A row has up to 5 buttons, or one menu." },
     componentPart: { type: "select", pin: false, default: "label", label: "Its", choices: labels(COMPONENT_PARTS), description: "What to read from the button or menu (a menu's label is its placeholder)." },
-    layoutPart: { type: "select", pin: false, default: "text", label: "Its", choices: labels(LAYOUT_PARTS), description: "What to read from a Components V2 layout." },
+    layoutIn: { type: "select", pin: false, default: "anywhere", label: "Look in", choices: { anywhere: "The whole message", ...numbered("Container 1", "Container", 5) }, description: "A layout's pieces can sit in containers (the boxes with a coloured edge): look in all of the message, or in one container only." },
+    layoutKind: { type: "select", pin: false, default: "allText", label: "For", choices: LAYOUT_KINDS, description: "What kind of piece to read: all the text at once, or a text, section, container, gallery, picture, button, menu or file." },
+    layoutWhich: { type: "select", pin: false, default: "1", label: "Which one", choices: numbered("The first", "Number", 10, { last: "The last", all: "Every one" }), description: "Counted from the top of the message (or of the container), in reading order." },
+    ...Object.fromEntries(Object.entries(LAYOUT).filter(([, k]) => Object.keys(k.parts).length > 1).map(([kind, k]) => [partKey(kind), { type: "select", pin: false, default: firstPart(kind), label: "Its", choices: labels(k.parts), description: `What to read from ${k.label.toLowerCase()}.` }])),
     attachment: { type: "select", pin: false, default: "1", label: "Which file", choices: numbered("First attachment", "Attachment", 10, { last: "Last attachment", all: "Every attachment" }), description: "A message has up to 10 attachments." },
     attachmentPart: { type: "select", pin: false, default: "url", label: "Its", choices: labels(ATTACHMENT_PARTS), description: "What to read from the file." },
     mention: { type: "select", pin: false, default: "users", label: "Who", choices: labels(MENTIONS), description: "Which mentions to give." },
@@ -325,7 +424,7 @@ module.exports = {
     const own = {
       embed: ["embed", "embedPart"],
       components: ["row", "component", "componentPart"],
-      layout: ["layoutPart"],
+      layout: ["layoutKind"],
       attachment: ["attachment", "attachmentPart"],
       mentions: ["mention"],
       content: [],
@@ -333,13 +432,21 @@ module.exports = {
     const shown = new Set(own[v.part] || []);
     if (v.part === "embed" && v.embedPart === "field") shown.add("fieldName");
     if (v.part === "embed" && v.embedPart === "fieldNumber") shown.add("fieldNumber");
+    if (v.part === "layout") {
+      const kind = v.layoutKind in LAYOUT_KINDS ? v.layoutKind : "allText";
+      if (kind !== "whole") shown.add("layoutIn");
+      if (kind in LAYOUT) {
+        shown.add("layoutWhich");
+        if (Object.keys(LAYOUT[kind].parts).length > 1) shown.add(partKey(kind));
+      }
+    }
     // The last step is for texts only.
     const before = picked(v);
     if (before === "text" || before === "list<text>") {
       shown.add("then");
       if (v.then === "regex") ["pattern", "take", "ignoreCase"].forEach((k) => shown.add(k));
     }
-    const steps = ["embed", "embedPart", "fieldName", "fieldNumber", "row", "component", "componentPart", "layoutPart", "attachment", "attachmentPart", "mention", "then", "pattern", "take", "ignoreCase"];
+    const steps = ["embed", "embedPart", "fieldName", "fieldNumber", "row", "component", "componentPart", "layoutIn", "layoutKind", "layoutWhich", ...Object.keys(LAYOUT).map(partKey), "attachment", "attachmentPart", "mention", "then", "pattern", "take", "ignoreCase"];
     return { hide: steps.filter((k) => !shown.has(k)), outputs: { result: { type: resultType(v), description: "What was read." } } };
   },
   run({ fields }) {
@@ -352,8 +459,10 @@ module.exports = {
     }
     if (before === "list<text>") {
       const each = (value || []).map((t) => take(String(t ?? ""), v));
-      // A step that gives a list for each text gives one list of them all.
-      return { result: each.some(Array.isArray) ? each.flat() : each, found };
+      // A step that gives a list for each text gives one list of them all;
+      // a pattern's match for each text leaves out the texts without one.
+      if (each.some(Array.isArray)) return { result: each.flat(), found };
+      return { result: v.then === "regex" ? each.filter((t) => t !== "") : each, found };
     }
     return { result: take(String(value ?? ""), v), found };
   },
