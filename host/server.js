@@ -345,6 +345,13 @@ async function start(options = settings()) {
     const child = spawn("git", ["http-backend"], { env });
     req.pipe(child.stdin);
     child.stdin.on("error", () => {});
+    // What Git complains about goes to the log: it is the only place that
+    // says why storing a project didn't work.
+    let complaint = "";
+    child.stderr.on("data", (chunk) => {
+      if (complaint.length < 4000) complaint += chunk.toString("utf8");
+    });
+    req.on("aborted", () => log(`Git ${req.method} ${id}.git${rest || ""}: the connection was cut before the request was complete`));
     let head = Buffer.alloc(0);
     let sent = false;
     child.stdout.on("data", (chunk) => {
@@ -369,7 +376,8 @@ async function start(options = settings()) {
       if (!sent) res.writeHead(500, { "Content-Type": "text/plain" });
       res.end("Git isn't available on this host.\n");
     });
-    child.on("close", () => {
+    child.on("close", (code) => {
+      if (complaint.trim() || code) log(`Git ${req.method} ${id}.git${rest || ""} ended with ${code}: ${complaint.trim() || "no message"}`);
       if (!sent) res.writeHead(500, { "Content-Type": "text/plain" });
       res.end();
     });
