@@ -64,7 +64,7 @@ Half of the code goes to the host, which lets the device in. The other half only
 
 With a project open, File › Host… has three buttons:
 
-- **Keep this project on the host** stores it there as a Git repository and keeps it in step from then on, exactly as [with GitHub](git.md); File › Git… opens to show it.
+- **Keep this project on the host** stores it there and keeps it in step from then on: every save goes to the host, and what another of your devices stores comes in by itself, as the host tells every connected device at once that something changed. The dialog then says that the project is kept there and how it stands. (It is the same as [with GitHub](git.md) underneath; File › Git… shows the details and the earlier versions.)
 - **Send its secrets** seals the bot token and the project's other secrets on this computer and puts them in the host's vault.
 - **Get its secrets** fetches them on another device and saves them in that computer's credential store. No more typing the token in on every device.
 
@@ -106,5 +106,6 @@ Everything but Git goes over one WebSocket at `/ws`, as JSON with a `t`:
 | `vault.get { project }` | `vault { blob, rev }` | |
 | `vault.put { project, blob, rev }` | `vault.kept { rev }` | `rev` is the one last seen: a newer one there refuses it. |
 | `key.put { for, blob }`, `key.get` | `keys { keys }` | A key wrapped for another device, kept until it fetches it. |
+| | `project.changed { project, by }` | Sent to every connected device when something was stored in a project: time to fetch. |
 
 What goes wrong comes back as `error { re, why }`. The source is one file, [`host/server.js`](https://github.com/XCraftTM/XC-Circuit/blob/main/host/server.js), with no dependencies beyond Node.js 24 and Git; `node host/test/host.js` runs its tests.

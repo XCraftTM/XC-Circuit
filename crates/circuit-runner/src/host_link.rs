@@ -340,6 +340,32 @@ impl Link {
         Ok(self.ask(json!({ "t": "vault.put", "project": project, "blob": sealed, "rev": rev }), "vault.kept")?["rev"].as_u64().unwrap_or(0))
     }
 
+    /// Waits for the host to say that something was stored in a project:
+    /// the project's name and the device that stored it. `None` when
+    /// nothing was within `within` (a sign of life went out instead, so
+    /// the connection stays).
+    pub fn next_change(&mut self, within: Duration) -> Result<Option<(String, String)>> {
+        let until = Instant::now() + within;
+        loop {
+            match self.socket.read() {
+                Ok(tungstenite::Message::Text(text)) => {
+                    let v: Value = serde_json::from_str(&text).unwrap_or_default();
+                    if v["t"] == "project.changed" {
+                        return Ok(Some((v["project"].as_str().unwrap_or_default().into(), v["by"].as_str().unwrap_or_default().into())));
+                    }
+                }
+                Ok(tungstenite::Message::Close(_)) => bail!("The host closed the connection."),
+                Ok(_) => {}
+                Err(tungstenite::Error::Io(e)) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
+                Err(e) => bail!("The connection to the host broke: {e}"),
+            }
+            if Instant::now() > until {
+                self.send(json!({ "t": "ping" }))?;
+                return Ok(None);
+            }
+        }
+    }
+
     /// Leaves a wrapped key for another device.
     pub fn key_put(&mut self, device: &str, wrapped: &str) -> Result<()> {
         self.ask(json!({ "t": "key.put", "for": device, "blob": wrapped }), "key.kept").map(|_| ())

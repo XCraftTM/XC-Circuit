@@ -549,6 +549,7 @@ impl CircuitApp {
             self.own_plugins_dialog(ctx, &theme);
         }
         self.new_project_chooser(ctx, &theme);
+        self.bot.live.join_dialog(ctx, &self.ed);
         if let Some(root) = self.bot.git.get_dialog(ctx, &mut self.ed) {
             self.switch_project(&root);
         }

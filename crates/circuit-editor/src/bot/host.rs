@@ -65,6 +65,14 @@ pub struct HostUi {
     said: Option<(bool, String)>,
     /// A project address to connect File › Git… to, for the app.
     pub keep: Option<String>,
+    /// The projects the host said were changed by another device: for the
+    /// app to fetch the open one.
+    pub changed: Vec<String>,
+    /// The ear at the host: what it heard, and the switch that stops it.
+    heard: Option<(Receiver<String>, Arc<AtomicBool>)>,
+    /// About the open project, from File › Git…, for this dialog to show:
+    /// where it is stored, how it stands, and what the last action said.
+    pub project: (Option<String>, Option<String>, Option<(bool, String)>),
 }
 
 /// The place in the credential store and in addresses: `circuit.example.com`.
@@ -85,9 +93,9 @@ fn said(e: anyhow::Error) -> String {
 fn save_pairing(address: &str, device: &str, name: &str, token: &str, key: Option<&VaultKey>) -> anyhow::Result<()> {
     let host = host_of(address);
     let entry = serde_json::json!({ "address": address, "device": device, "name": name, "token": token, "key": key.map(VaultKey::to_text) });
-    secrets::set_host_login(&host, &entry.to_string())?;
+    super::set_host_login(&host, &entry.to_string())?;
     // File › Git… signs in at this host with the same token.
-    secrets::set_sync_login(&host, name, token)?;
+    super::set_sync_login(&host, name, token)?;
     let _ = std::fs::create_dir_all(super::app_data_dir());
     std::fs::write(note_file(), serde_json::json!({ "address": address }).to_string())?;
     Ok(())
@@ -98,7 +106,7 @@ fn save_pairing(address: &str, device: &str, name: &str, token: &str, key: Optio
 fn load_pairing() -> Option<(Paired, String, Option<VaultKey>)> {
     let note: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(note_file()).ok()?).ok()?;
     let address = note["address"].as_str()?.to_string();
-    let entry: serde_json::Value = serde_json::from_str(&secrets::host_login(&host_of(&address))?).ok()?;
+    let entry: serde_json::Value = serde_json::from_str(&super::host_login(&host_of(&address))?).ok()?;
     let key = entry["key"].as_str().and_then(|k| VaultKey::from_text(k).ok());
     let paired = Paired { address, device: entry["device"].as_str()?.into(), name: entry["name"].as_str().unwrap_or_default().into(), has_key: key.is_some() };
     Some((paired, entry["token"].as_str()?.to_string(), key))
@@ -271,15 +279,56 @@ impl HostUi {
             }
             if let Some((paired, _, _)) = load_pairing() {
                 let host = host_of(&paired.address);
-                let _ = secrets::set_host_login(&host, "");
-                let _ = secrets::set_sync_login(&host, "", "");
+                let _ = super::set_host_login(&host, "");
+                let _ = super::set_sync_login(&host, "", "");
             }
             let _ = std::fs::remove_file(note_file());
             Done::Unpaired
         });
     }
 
+    /// Listens at the paired host for projects that other devices changed,
+    /// for as long as the app runs (started once; it finds its way back
+    /// after a lost connection, and gives up when the pairing is gone).
+    fn listen(&mut self) {
+        if self.heard.is_some() {
+            return;
+        }
+        let (tx, rx) = channel();
+        let stop = Arc::new(AtomicBool::new(false));
+        self.heard = Some((rx, stop.clone()));
+        thread::spawn(move || {
+            while !stop.load(Ordering::Relaxed) {
+                if let Ok((mut link, paired, _)) = linked() {
+                    while !stop.load(Ordering::Relaxed) {
+                        match link.next_change(Duration::from_secs(25)) {
+                            // Not what this device stored itself.
+                            Ok(Some((project, by))) if by != paired.device => {
+                                if tx.send(project).is_err() {
+                                    return;
+                                }
+                            }
+                            Ok(_) => {}
+                            Err(_) => break,
+                        }
+                    }
+                }
+                // Not paired, or the connection is gone: looked at again later.
+                for _ in 0..20 {
+                    if stop.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    thread::sleep(Duration::from_millis(500));
+                }
+            }
+        });
+    }
+
     pub fn poll(&mut self, ed: &mut Editor, ctx: &egui::Context) {
+        self.listen();
+        if let Some((heard, _)) = &self.heard {
+            self.changed.extend(heard.try_iter());
+        }
         if self.jobs.is_empty() {
             return;
         }
@@ -424,9 +473,22 @@ impl HostUi {
                             }
                             ui.add_space(8.0);
                             kit::section(ui, &theme, t!("This project"));
+                            // Kept here already: how it stands. Otherwise the
+                            // one button that does it all.
+                            let kept = self.project.0.as_deref().is_some_and(|at| at.starts_with(&format!("{}/git/", paired.address.trim_end_matches('/'))));
+                            if kept {
+                                kit::done_label(ui, t!("This project is kept on the host, and stays in step by itself."), theme.action);
+                                if let Some(status) = &self.project.1 {
+                                    ui.label(RichText::new(status).size(12.0).color(theme.text_muted));
+                                }
+                            } else if let Some((false, why)) = &self.project.2 {
+                                ui.label(RichText::new(why).color(theme.warning));
+                            }
                             ui.add_enabled_ui(has_project && busy.is_none(), |ui| {
                                 ui.horizontal_wrapped(|ui| {
-                                    keep = kit::secondary_button(ui, &theme, t!("Keep this project on the host")).on_hover_text(t!("Stores the project there as a Git repository, and keeps it in step from then on (File › Git…)")).clicked();
+                                    if !kept {
+                                        keep = kit::primary_button(ui, &theme, t!("Keep this project on the host")).on_hover_text(t!("Stores the project on the host. From then on every save goes there, and what your other devices store comes here, by itself.")).clicked();
+                                    }
                                     ui.add_enabled_ui(paired.has_key, |ui| {
                                         send = kit::secondary_button(ui, &theme, t!("Send its secrets")).on_hover_text(t!("Seals the bot token and the project's other secrets on this computer and puts them in the host's vault, for your other devices")).clicked();
                                         get = kit::secondary_button(ui, &theme, t!("Get its secrets")).on_hover_text(t!("Gets the project's secrets from the vault and saves them in this computer's credential store")).clicked();
@@ -611,7 +673,7 @@ mod tests {
         assert!(paired.has_key && ui.recovery.is_none(), "the key came from the other device: {:?}", ui.said);
         let mut first = other.join().unwrap();
         assert_eq!(load_pairing().map(|(p, _, k)| (p, k == Some(key.clone()))), Some((paired.clone(), true)));
-        assert!(secrets::sync_login(&host_of(&address)).is_some(), "File › Git… is signed in there too");
+        assert!(crate::bot::sync_login(&host_of(&address)).is_some(), "File › Git… is signed in there too");
 
         // A secret of the project: sealed, sent, gone here, and back.
         let project = ed.project.as_ref().unwrap();
@@ -635,7 +697,7 @@ mod tests {
         secrets::set(&root, "token", "").unwrap();
         ui.unpair();
         wait(&mut ui, &mut ed);
-        assert!(ui.paired.is_none() && load_pairing().is_none() && secrets::sync_login(&host_of(&address)).is_none());
+        assert!(ui.paired.is_none() && load_pairing().is_none() && crate::bot::sync_login(&host_of(&address)).is_none());
         assert!(!first.devices().unwrap().iter().any(|d| d.id == paired.device));
         let _ = std::fs::remove_dir_all(&dir);
     }

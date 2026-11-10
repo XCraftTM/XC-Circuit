@@ -47,7 +47,7 @@ The project's files are put together by what they hold, not line by line: every 
 
 Blocks are told apart by a fixed id, not by their number. When two people both add a "block 7", those are two blocks: the one already stored keeps the number, the other gets the next free one, and its wires and every `${#7.…}` that reads it follow.
 
-Only where both changed the **same setting** in different ways (or one deleted a block the other changed) XC Circuit **changes nothing** and asks, part by part: *main: block #4*, *main: name*. Choose for each whose version stays, **Mine** or **The stored one**; for a block there is also **Both**, which keeps yours and puts the other one beside it as a block of its own. Then press **Put together**. What you didn't pick stays in the repository's history.
+Only where both changed the **same setting** in different ways (or one deleted a block the other changed) XC Circuit **changes nothing** and asks, part by part, saying what it is about: *The note “Ideas” in Main: changed here, deleted in the stored version*, or *Block #4 (core.log) in Main: changed here and in the stored version, in different ways*. Choose for each whose version stays, **Mine** or **The stored one**; for a block there is also **Both**, which keeps yours and puts the other one beside it as a block of its own. Then press **Put together**. What you didn't pick stays in the repository's history.
 
 The two versions are put together in memory first; the project's folder only changes once the result is whole.
 

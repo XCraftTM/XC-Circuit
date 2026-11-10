@@ -1664,7 +1664,7 @@ The project's files are put together by what they hold, not line by line: every 
 
 Blocks are told apart by a fixed id, not by their number. When two people both add a "block 7", those are two blocks: the one already stored keeps the number, the other gets the next free one, and its wires and every `${#7.…}` that reads it follow.
 
-Only where both changed the **same setting** in different ways (or one deleted a block the other changed) XC Circuit **changes nothing** and asks, part by part: *main: block #4*, *main: name*. Choose for each whose version stays, **Mine** or **The stored one**; for a block there is also **Both**, which keeps yours and puts the other one beside it as a block of its own. Then press **Put together**. What you didn't pick stays in the repository's history.
+Only where both changed the **same setting** in different ways (or one deleted a block the other changed) XC Circuit **changes nothing** and asks, part by part, saying what it is about: *The note “Ideas” in Main: changed here, deleted in the stored version*, or *Block #4 (core.log) in Main: changed here and in the stored version, in different ways*. Choose for each whose version stays, **Mine** or **The stored one**; for a block there is also **Both**, which keeps yours and puts the other one beside it as a block of its own. Then press **Put together**. What you didn't pick stays in the repository's history.
 
 The two versions are put together in memory first; the project's folder only changes once the result is whole.
 
@@ -1752,7 +1752,7 @@ Half of the code goes to the host, which lets the device in. The other half only
 
 With a project open, File › Host… has three buttons:
 
-- **Keep this project on the host** stores it there as a Git repository and keeps it in step from then on, exactly as [with GitHub](git.md); File › Git… opens to show it.
+- **Keep this project on the host** stores it there and keeps it in step from then on: every save goes to the host, and what another of your devices stores comes in by itself, as the host tells every connected device at once that something changed. The dialog then says that the project is kept there and how it stands. (It is the same as [with GitHub](git.md) underneath; File › Git… shows the details and the earlier versions.)
 - **Send its secrets** seals the bot token and the project's other secrets on this computer and puts them in the host's vault.
 - **Get its secrets** fetches them on another device and saves them in that computer's credential store. No more typing the token in on every device.
 
@@ -1794,6 +1794,7 @@ Everything but Git goes over one WebSocket at `/ws`, as JSON with a `t`:
 | `vault.get { project }` | `vault { blob, rev }` | |
 | `vault.put { project, blob, rev }` | `vault.kept { rev }` | `rev` is the one last seen: a newer one there refuses it. |
 | `key.put { for, blob }`, `key.get` | `keys { keys }` | A key wrapped for another device, kept until it fetches it. |
+| | `project.changed { project, by }` | Sent to every connected device when something was stored in a project: time to fetch. |
 
 What goes wrong comes back as `error { re, why }`. The source is one file, [`host/server.js`](https://github.com/XCraftTM/XC-Circuit/blob/main/host/server.js), with no dependencies beyond Node.js 24 and Git; `node host/test/host.js` runs its tests.
 
@@ -1820,7 +1821,7 @@ The session meets at a **relay**: the public one (`https://xcrelay.xcrafttm.dev`
 
 ## Joining one
 
-**File › Live session…**, your name, paste the invitation, **Join**. The host's project opens. It is a copy for this session, kept in the app's own folder; it is saved at the host's, not at yours.
+On the start page: **Join a live session…**, your name, paste the invitation, **Join** (File › Live session… has the same). The host's project opens. It is a copy for this session, kept in the app's own folder; it is saved at the host's, not at yours. When the session is over, the copy closes and you are back on the start page.
 
 Host and guests need the **same version** of XC Circuit. If they differ, the guest isn't let in and is told who has to update.
 
@@ -1834,7 +1835,7 @@ Your app tries to get back in by itself, for about two minutes. Back in, you are
 
 ## Seeing each other
 
-Everyone has a colour. On the canvas you see the others' **pointers** with their names, in the workspace they are in, and a block someone has **selected** is framed in their colour with their name on it: so two people don't change the same block without noticing.
+Everyone has a colour. On the canvas you see the others' **pointers** with their names, gliding along as they move, in the workspace they are in, and a block someone has **selected** is framed in their colour with their name on it: so two people don't change the same block without noticing.
 
 ## What guests may do
 
@@ -1864,7 +1865,7 @@ Changes are put together the way they are when [two stored versions meet](git.md
 
 ## The bot, and ending
 
-The bot runs only at the host's: the token never leaves their computer. What it writes to the **Console** shows at every guest's too (secrets are hidden there as always), and File › Live session… says whether it runs. A guest the host ticked **The bot** for starts and stops it with their own Run and Stop; for the others, Run says that it is the host's to start.
+The bot runs only at the host's: the token never leaves their computer. What it writes to the **Console** shows at every guest's too (secrets are hidden there as always), and File › Live session… says whether it runs. A guest's Run button shows how the bot stands at the host's (Run, Starting…, Restart, with Stop beside it). A guest the host ticked **The bot** for starts and stops it with their own Run and Stop; for the others, Run says that it is the host's to start.
 
 Every guest sees **which blocks ran**, how long they took, and where one failed, lit up on the canvas as at the host's. The values on the wires are for guests with that tick only.
 
@@ -2023,7 +2024,7 @@ Blocks run in your bot, which is a normal Node.js program. A block can read file
 | Copy / Paste / Duplicate | Ctrl+C / Ctrl+V (at the mouse) / Ctrl+D; works across workspaces and projects. A `${#7.…}` in a pasted text points at the pasted copy of block #7 when it was copied along; Problems lists texts that use a block number the workspace doesn't have |
 | First start | The welcome page sets up Node.js (finds it, or installs it: winget or the official installer on Windows, a private copy on Linux), a theme and an accent; Help › Welcome and setup… opens it again |
 | Workspaces in order | Drag a workspace above or below another (a line shows where), or onto a folder to move it there. Drag a folder onto the middle of another to put it in there (folders go in folders, as deep as you like), onto its top or bottom edge to put it above or below, or onto the project row to bring it back to the top. While dragging, a label at the pointer says what letting go does ("Into Events", "Below Startup, in Commands"; red where it can't go), the dragged row stays faded in its place, a folder held over for a moment opens, and the list scrolls near its top and bottom edges. A folder's menu has **New folder here**; deleting a folder moves what's in it up a level. The order is saved with the project |
-| Side bar | The activity bar's icon picks what it shows (Workspaces, Stored Data, Plugins to start with); clicking the one shown folds it away. Two at once: drag an icon (or one of those tabs) onto the side bar's lower half, or right-click an icon › Show in the lower half; it shows under the first, and the line between them drags to share the height. Right-click a half's name to swap the halves, close one, or move it to the main area; clicking an icon that shows hides that half. The icons work like tabs: drag one to reorder them, or out onto the main area to make it a tab there. Drag a tab (Workspaces, Inspector, Console, Problems, the Server console, a plugin's panel) onto the activity bar to make it an icon. Right-click an icon › Move to the main area. View › Side bar and View › Panels tick what's open, as an icon or a tab: untick to take it away, tick to bring it back (Workspaces, Stored Data and Plugins into the activity bar, panels as a tab). Narrow, Settings and Bot settings show their pages as a dropdown |
+| Side bar | Git, Host and Live session can be dragged there too, like the panels. The activity bar's icon picks what it shows (Workspaces, Stored Data, Plugins to start with); clicking the one shown folds it away. Two at once: drag an icon (or one of those tabs) onto the side bar's lower half, or right-click an icon › Show in the lower half; it shows under the first, and the line between them drags to share the height. Right-click a half's name to swap the halves, close one, or move it to the main area; clicking an icon that shows hides that half. The icons work like tabs: drag one to reorder them, or out onto the main area to make it a tab there. Drag a tab (Workspaces, Inspector, Console, Problems, the Server console, a plugin's panel) onto the activity bar to make it an icon. Right-click an icon › Move to the main area. View › Side bar and View › Panels tick what's open, as an icon or a tab: untick to take it away, tick to bring it back (Workspaces, Stored Data and Plugins into the activity bar, panels as a tab). Narrow, Settings and Bot settings show their pages as a dropdown |
 | Tour | Help › Take the tour: build a tiny bot on a practice project. What to click next glows (the Add block button, the Math entry, the two pins to wire, the Inspector's fields, Run), the card says what to do right now and what went wrong, and Do it for me does any step. Skip any time; arrow keys move between steps |
 | Git | File › Git… keeps the project in a Git repository (GitHub, GitLab, Gitea …): **Store** records what changed and sends it, **Fetch** gets what is stored and puts the two together; files both sides changed are asked about. Sign in with GitHub in the browser, or with an access token. See [Keeping a project in Git](git.md). |
 | Live session | File › Live session… lets several people work in one project at once: one hosts (the project and the bot stay theirs), guests join with an invitation and may change what the host ticks for them. Sealed between the apps; the relay only passes it on. See [Live sessions](live.md). |

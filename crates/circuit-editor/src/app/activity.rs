@@ -116,6 +116,9 @@ impl CircuitApp {
                 Some(c) => tf!("Console of {server}", server = c.name),
                 None => t!("Remote console").into(),
             },
+            Tab::Git => "Git".into(),
+            Tab::Host => "Host".into(),
+            Tab::Live => t!("Live session").into(),
             other => Tab::PANELS.iter().find(|(t, _)| t == other).map(|(_, n)| crate::i18n::t(n).to_string()).unwrap_or_default(),
         }
     }
@@ -450,6 +453,25 @@ impl CircuitApp {
             }
             Tab::Problems => panels::problems(ui, &mut self.ed, problems.to_vec()),
             Tab::Plugin(plugin, panel) => self.plugin_host.panel_ui(ui, &mut self.ed, &plugin, &panel, running),
+            // In the side bar they are always at hand: opened when shown.
+            Tab::Git => {
+                if !self.bot.git.open {
+                    self.bot.git.open(&self.ed);
+                }
+                self.bot.git.tab(ui, &mut self.ed);
+            }
+            Tab::Host => {
+                if !self.bot.host.open {
+                    self.bot.host.open();
+                }
+                self.bot.host.tab(ui, &mut self.ed);
+            }
+            Tab::Live => {
+                if !self.bot.live.open {
+                    self.bot.live.open();
+                }
+                self.bot.live.tab(ui, &mut self.ed);
+            }
             Tab::ServerConsole => match &mut self.bot.hosting.console {
                 Some(c) => c.tab(ui, &self.ed),
                 // Not connected (no server chosen yet, or another project).

@@ -289,7 +289,11 @@ impl CircuitApp {
         for (tab, open, size) in wanted {
             // As big as it was last time (when it was a window of its own).
             let key = window_key(&tab);
+            // One that is an icon in the activity bar shows in the side bar,
+            // not as a window too.
+            let in_bar = tab.side_key().is_some_and(|k| self.ed.prefs.activity.contains(&k));
             match (open, self.dock.contains(&tab)) {
+                (true, false) if in_bar => {}
                 (true, false) => match self.ed.prefs.window_places.get(&key) {
                     // Where it was last, and as big (kept inside the window).
                     Some(r) => open_floating_at(&mut self.dock, ctx, tab, egui::Rect::from_min_size(egui::pos2(r[0], r[1]), egui::vec2(r[2], r[3]))),

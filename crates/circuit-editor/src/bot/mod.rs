@@ -234,6 +234,10 @@ impl BotUi {
 
     /// The state Run and the status bar show: the server's with Server picked.
     pub fn shown_state(&self) -> BotState {
+        // A guest of a live session: the bot at the host's.
+        if let Some(state) = self.live.guest_bot() {
+            return state;
+        }
         match (&self.hosting.watch, self.hosting.remote) {
             (Some(w), true) => w.bot_state(),
             _ => self.state,
@@ -555,6 +559,39 @@ pub fn remotes_dir() -> PathBuf {
     }
     let name = if cfg!(windows) { "XC Circuit" } else { "xc-circuit" };
     dirs::data_local_dir().unwrap_or_else(app_data_dir).join(name).join("remotes")
+}
+
+/// The name a place (github.com, a host) has in the system's credential
+/// store. An app started with a data folder of its own (`XC_CIRCUIT_DATA`)
+/// keeps its sign-ins apart: two of them on one computer are two devices,
+/// each with its own pairing, as on two computers.
+pub fn store_name(place: &str) -> String {
+    match std::env::var("XC_CIRCUIT_DATA").ok().filter(|d| !d.is_empty()) {
+        Some(dir) => {
+            let folder = dir.to_lowercase().replace('\\', "/");
+            let mark = folder.trim_end_matches('/').bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3));
+            format!("{place}@{mark:016x}")
+        }
+        None => place.to_string(),
+    }
+}
+
+/// The sign-in for a place projects are stored at ([`store_name`]).
+pub fn sync_login(place: &str) -> Option<(String, String)> {
+    circuit_runner::secrets::sync_login(&store_name(place))
+}
+
+pub fn set_sync_login(place: &str, user: &str, token: &str) -> anyhow::Result<()> {
+    circuit_runner::secrets::set_sync_login(&store_name(place), user, token)
+}
+
+/// This app's pairing with a host ([`store_name`]).
+pub fn host_login(host: &str) -> Option<String> {
+    circuit_runner::secrets::host_login(&store_name(host))
+}
+
+pub fn set_host_login(host: &str, entry: &str) -> anyhow::Result<()> {
+    circuit_runner::secrets::set_host_login(&store_name(host), entry)
 }
 
 pub fn app_data_dir() -> PathBuf {

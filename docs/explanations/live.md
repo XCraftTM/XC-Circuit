@@ -16,7 +16,7 @@ The session meets at a **relay**: the public one (`https://xcrelay.xcrafttm.dev`
 
 ## Joining one
 
-**File › Live session…**, your name, paste the invitation, **Join**. The host's project opens. It is a copy for this session, kept in the app's own folder; it is saved at the host's, not at yours.
+On the start page: **Join a live session…**, your name, paste the invitation, **Join** (File › Live session… has the same). The host's project opens. It is a copy for this session, kept in the app's own folder; it is saved at the host's, not at yours. When the session is over, the copy closes and you are back on the start page.
 
 Host and guests need the **same version** of XC Circuit. If they differ, the guest isn't let in and is told who has to update.
 
@@ -30,7 +30,7 @@ Your app tries to get back in by itself, for about two minutes. Back in, you are
 
 ## Seeing each other
 
-Everyone has a colour. On the canvas you see the others' **pointers** with their names, in the workspace they are in, and a block someone has **selected** is framed in their colour with their name on it: so two people don't change the same block without noticing.
+Everyone has a colour. On the canvas you see the others' **pointers** with their names, gliding along as they move, in the workspace they are in, and a block someone has **selected** is framed in their colour with their name on it: so two people don't change the same block without noticing.
 
 ## What guests may do
 
@@ -60,7 +60,7 @@ Changes are put together the way they are when [two stored versions meet](git.md
 
 ## The bot, and ending
 
-The bot runs only at the host's: the token never leaves their computer. What it writes to the **Console** shows at every guest's too (secrets are hidden there as always), and File › Live session… says whether it runs. A guest the host ticked **The bot** for starts and stops it with their own Run and Stop; for the others, Run says that it is the host's to start.
+The bot runs only at the host's: the token never leaves their computer. What it writes to the **Console** shows at every guest's too (secrets are hidden there as always), and File › Live session… says whether it runs. A guest's Run button shows how the bot stands at the host's (Run, Starting…, Restart, with Stop beside it). A guest the host ticked **The bot** for starts and stops it with their own Run and Stop; for the others, Run says that it is the host's to start.
 
 Every guest sees **which blocks ran**, how long they took, and where one failed, lit up on the canvas as at the host's. The values on the wires are for guests with that tick only.
 

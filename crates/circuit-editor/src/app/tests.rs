@@ -54,7 +54,7 @@ fn the_default_layout_leaves_the_side_bar_s_views_to_the_activity_bar() {
 fn activity_bar_keys_come_back_as_the_same_tab() {
     use crate::editor::prefs::SideView;
     let side = SideView::ALL.map(Tab::Side);
-    for tab in side.into_iter().chain([Tab::Inspector, Tab::Console, Tab::Problems, Tab::ServerConsole, Tab::Plugin("my.plugin".into(), "stats".into())]) {
+    for tab in side.into_iter().chain([Tab::Inspector, Tab::Console, Tab::Problems, Tab::ServerConsole, Tab::Git, Tab::Host, Tab::Live, Tab::Plugin("my.plugin".into(), "stats".into())]) {
         let key = tab.side_key().expect("it can");
         assert_eq!(Tab::from_side_key(&key), Some(tab));
     }

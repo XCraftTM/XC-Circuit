@@ -113,6 +113,13 @@ pub struct LiveUi {
     said: Option<(bool, String)>,
     /// A guest's copy of the session's project, for the app to open.
     pub arrive: Option<PathBuf>,
+    /// A guest's session ended: the copy is to be closed.
+    ended: bool,
+    /// The start page's Join a live session… is open.
+    joining: bool,
+    /// Where each of the others is drawn: their pointer glides there
+    /// instead of jumping from one place said to the next.
+    drawn: BTreeMap<String, [f32; 2]>,
     /// Where the others are, by their id.
     others: BTreeMap<String, Presence>,
     /// Where this app last said it is, and when.
@@ -160,9 +167,90 @@ impl LiveUi {
         }
     }
 
+    /// The start page's Join a live session…
+    pub fn ask_to_join(&mut self) {
+        self.open();
+        self.open = false;
+        self.joining = true;
+        self.said = None;
+    }
+
+    /// The window that asks for a name and an invitation, where no project
+    /// is open. Joined, the session's project opens; when the session is
+    /// over, it closes again.
+    pub fn join_dialog(&mut self, ctx: &egui::Context, ed: &Editor) {
+        if !self.joining {
+            return;
+        }
+        // In: the project takes over from here.
+        if matches!(self.session.as_ref().map(|s| &s.role), Some(Role::Guest { welcomed: true, .. })) {
+            self.joining = false;
+            return;
+        }
+        let theme = ed.theme.clone();
+        let icon = ed.reg.icons.get("user-plus").cloned();
+        let waiting = self.session.is_some();
+        let (mut join, mut cancel) = (false, false);
+        let closed = dialog::show(
+            ctx,
+            &theme,
+            dialog::Spec { id: "live-join", title: t!("Join a live session"), subtitle: Some(t!("Work in someone's project with them, while they have it open")), icon: icon.as_deref(), width: 560.0 },
+            |ui, part| match part {
+                Part::Body => {
+                    kit::field(ui, &theme, t!("Your name"), Some(t!("How the others see you.")), |ui| kit::text_input(ui, &mut self.name, "", false));
+                    kit::field(ui, &theme, t!("Invitation"), Some(t!("The text the host sent you. It starts with xc-live:")), |ui| kit::text_input(ui, &mut self.invite, "xc-live:…", false));
+                    kit::caption(ui, &theme, t!("The host's project opens here for as long as the session lasts. It is saved at the host's, and the bot runs there."));
+                    ui.add_space(6.0);
+                    if waiting {
+                        ui.horizontal(|ui| {
+                            ui.spinner();
+                            ui.label(RichText::new(t!("Joining…")).color(theme.text_muted));
+                        });
+                    } else if let Some((ok, text)) = &self.said {
+                        ui.label(RichText::new(text).color(if *ok { theme.action } else { theme.warning }));
+                    }
+                }
+                Part::Footer => {
+                    ui.add_enabled_ui(!waiting && !self.invite.trim().is_empty() && !self.name.trim().is_empty(), |ui| {
+                        join = kit::primary_button(ui, &theme, t!("Join")).clicked();
+                    });
+                    cancel = kit::secondary_button(ui, &theme, t!("Cancel")).clicked();
+                }
+            },
+        );
+        if join {
+            self.join();
+        }
+        if cancel || closed {
+            self.joining = false;
+            if waiting {
+                self.end();
+                self.said = None;
+            }
+        }
+    }
+
     /// Whether this app is a guest in a session: the bot runs at the host's.
     pub fn is_guest(&self) -> bool {
         matches!(self.session.as_ref().map(|s| &s.role), Some(Role::Guest { .. }))
+    }
+
+    /// For a guest: how the bot at the host's stands, as last told.
+    pub fn guest_bot(&self) -> Option<super::BotState> {
+        if !self.is_guest() {
+            return None;
+        }
+        Some(match self.bot.as_deref() {
+            Some("running") => super::BotState::Running,
+            Some("starting") => super::BotState::Starting,
+            _ => super::BotState::Stopped,
+        })
+    }
+
+    /// Whether a guest's session just ended: once, for the app to close
+    /// the copy and go back to the start page.
+    pub fn take_ended(&mut self) -> bool {
+        std::mem::take(&mut self.ended)
     }
 
     /// What the status bar says, in a session.
@@ -213,6 +301,8 @@ impl LiveUi {
     /// Ends the session (the host), or leaves it (a guest).
     pub fn end(&mut self) {
         self.retry = None;
+        self.ended = self.is_guest();
+        self.drawn.clear();
         self.others.clear();
         self.bot = None;
         if self.session.take().is_some() {
@@ -233,6 +323,10 @@ impl LiveUi {
 
     /// `bot` is how the bot stands here: `stopped`, `starting` or `running`.
     pub fn poll(&mut self, ed: &mut Editor, ctx: &egui::Context, bot: &str) {
+        if self.session.is_none() && !ed.live_others.is_empty() {
+            // No session, nobody to show.
+            ed.live_others.clear();
+        }
         let Some(session) = self.session.as_mut() else { return };
         // After a dropped connection: back in with the same invitation.
         if let Some((when, tries)) = self.retry
@@ -420,8 +514,10 @@ impl LiveUi {
             }
         }
         if let Some(why) = over {
+            self.ended = self.is_guest();
             self.session = None;
             self.retry = None;
+            self.drawn.clear();
             self.others.clear();
             ed.live_others.clear();
             self.bot = None;
@@ -470,7 +566,7 @@ impl LiveUi {
             };
             selected.truncate(200);
             let here = Presence { ws, at, selected, ..Default::default() };
-            if self.here.as_ref().is_none_or(|(last, when)| *last != here && when.elapsed() > Duration::from_millis(100)) {
+            if self.here.as_ref().is_none_or(|(last, when)| *last != here && when.elapsed() > Duration::from_millis(50)) {
                 match &session.role {
                     Role::Host { side, .. } => {
                         for (to, msg) in side.presence(here.clone()) {
@@ -555,8 +651,30 @@ impl LiveUi {
                 }
             }
         }
-        ed.live_others = self.others.values().filter_map(|o| Some(crate::editor::LiveOther { name: o.name.clone(), color: colour_of(&o.id), ws: o.ws.clone()?, at: o.at, selected: o.selected.clone() })).collect();
-        ctx.request_repaint_after(Duration::from_millis(if self.others.is_empty() { 250 } else { 60 }));
+        // Each pointer glides towards where its owner last said it is: a
+        // share of the way every frame, so it moves evenly between the few
+        // places a second that come over the wire.
+        let step = (ctx.input(|i| i.stable_dt).min(0.1) * 14.0).clamp(0.05, 1.0);
+        let mut moving = false;
+        self.drawn.retain(|id, _| self.others.get(id).is_some_and(|o| o.at.is_some()));
+        for (id, other) in &self.others {
+            let Some(to) = other.at else { continue };
+            let at = self.drawn.entry(id.clone()).or_insert(to);
+            let (dx, dy) = (to[0] - at[0], to[1] - at[1]);
+            // Far away (another part of the canvas): there at once.
+            if dx.abs() + dy.abs() > 1500.0 || dx.abs() + dy.abs() < 0.5 {
+                *at = to;
+            } else {
+                *at = [at[0] + dx * step, at[1] + dy * step];
+                moving = true;
+            }
+        }
+        ed.live_others = self.others.iter().filter_map(|(id, o)| Some(crate::editor::LiveOther { name: o.name.clone(), color: colour_of(&o.id), ws: o.ws.clone()?, at: self.drawn.get(id).copied(), selected: o.selected.clone() })).collect();
+        if moving {
+            ctx.request_repaint();
+        } else {
+            ctx.request_repaint_after(Duration::from_millis(if self.others.is_empty() { 250 } else { 60 }));
+        }
     }
 
     pub fn tab(&mut self, ui: &mut egui::Ui, ed: &mut Editor) {

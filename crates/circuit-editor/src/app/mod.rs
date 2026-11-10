@@ -112,6 +112,9 @@ impl Tab {
             Tab::Console => "console".into(),
             Tab::Problems => "problems".into(),
             Tab::ServerConsole => "server-console".into(),
+            Tab::Git => "git".into(),
+            Tab::Host => "host".into(),
+            Tab::Live => "live".into(),
             Tab::Plugin(plugin, panel) => format!("plugin:{plugin}:{panel}"),
             _ => return None,
         })
@@ -127,6 +130,9 @@ impl Tab {
             "console" => Tab::Console,
             "problems" => Tab::Problems,
             "server-console" => Tab::ServerConsole,
+            "git" => Tab::Git,
+            "host" => Tab::Host,
+            "live" => Tab::Live,
             _ => {
                 let (plugin, panel) = key.strip_prefix("plugin:")?.split_once(':')?;
                 Tab::Plugin(plugin.into(), panel.into())
@@ -556,10 +562,22 @@ impl eframe::App for CircuitApp {
             Some(circuit_sync::live::Power::Stop) => self.bot.stop_pressed(&mut self.ed),
             None => {}
         }
+        // A guest's session is over: the copy closes, back to the start page.
+        if self.bot.live.take_ended() && self.ed.project.as_ref().is_some_and(|p| p.root.starts_with(crate::bot::app_data_dir().join("sessions"))) {
+            self.close_project();
+        }
         // A guest's copy of a session's project has arrived: opened.
         if let Some(folder) = self.bot.live.arrive.take() {
             self.load_project(&folder);
         }
+        // The host said another device stored the open project: fetched.
+        for project in std::mem::take(&mut self.bot.host.changed) {
+            if self.bot.git.stored_at().is_some_and(|at| at.trim_end_matches('/').ends_with(&format!("/git/{project}.git"))) {
+                self.bot.git.fetch_now(&mut self.ed);
+            }
+        }
+        // What File › Host… shows about the open project.
+        self.bot.host.project = (self.bot.git.stored_at().map(str::to_string), self.bot.git.status().map(|(_, text)| text), self.bot.git.last_said().cloned());
         // Keep this project on the host: File › Git… does it.
         if let Some(address) = self.bot.host.keep.take() {
             self.bot.git.connect_to(&self.ed, address);

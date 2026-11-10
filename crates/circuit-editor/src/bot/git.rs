@@ -10,7 +10,6 @@ use std::sync::mpsc::{Receiver, channel};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use circuit_runner::secrets;
 use circuit_sync::github::{self, Answer};
 use circuit_sync::{Login, Merged, Side, State, Sync, Version, Who};
 use eframe::egui::{self, RichText};
@@ -71,6 +70,40 @@ fn copy_dir(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()>
         }
     }
     Ok(())
+}
+
+/// What a conflict is about, in words: which thing, in which workspace,
+/// and what each side did with it. `mine` and `theirs` are the two versions
+/// of the conflict's file.
+fn conflict_words(id: &str, mine: Option<&serde_json::Value>, theirs: Option<&serde_json::Value>) -> String {
+    let (file, part) = circuit_sync::conflict_parts(id);
+    let stem = file.trim_start_matches("workspaces/").trim_start_matches("commands/").trim_end_matches(".json");
+    let name_of = |v: Option<&serde_json::Value>| v.and_then(|v| v["name"].as_str()).map(str::to_string);
+    let workspace = name_of(mine).or_else(|| name_of(theirs)).unwrap_or_else(|| stem.to_string());
+    let Some((kind, key)) = part.split_once('/') else {
+        return match part {
+            "" => tf!("{file}: changed here and in the stored version, in different ways", file = file),
+            "name" => tf!("The name of the workspace {workspace}: “{mine}” here, “{theirs}” in the stored version", workspace = stem, mine = name_of(mine).unwrap_or_default(), theirs = name_of(theirs).unwrap_or_default()),
+            other => tf!("{what} of {workspace}: changed here and in the stored version, in different ways", what = other, workspace = workspace),
+        };
+    };
+    let at = |v: Option<&serde_json::Value>| v.and_then(|v| v.get(kind)).and_then(|k| k.get(key)).filter(|x| !x.is_null()).cloned();
+    let (here, there) = (at(mine), at(theirs));
+    let title = |v: &Option<serde_json::Value>| v.as_ref().and_then(|x| x["title"].as_str()).map(str::to_string);
+    let what = match kind {
+        "nodes" => {
+            let block = here.as_ref().or(there.as_ref()).and_then(|n| n["block"].as_str()).map(|b| b.split('@').next().unwrap_or(b).to_string()).unwrap_or_default();
+            tf!("Block #{number} ({block})", number = key, block = block)
+        }
+        "notes" => tf!("The note “{title}”", title = title(&here).or_else(|| title(&there)).unwrap_or_else(|| key.to_string())),
+        "zones" => tf!("The Try Zone “{title}”", title = title(&here).or_else(|| title(&there)).unwrap_or_else(|| key.to_string())),
+        other => format!("{other} {key}"),
+    };
+    match (here.is_some(), there.is_some()) {
+        (true, false) => tf!("{what} in {workspace}: changed here, deleted in the stored version", what = what, workspace = workspace),
+        (false, true) => tf!("{what} in {workspace}: deleted here, changed in the stored version", what = what, workspace = workspace),
+        _ => tf!("{what} in {workspace}: changed here and in the stored version, in different ways", what = what, workspace = workspace),
+    }
 }
 
 /// What in a text looks like a secret that shouldn't be stored where others
@@ -156,6 +189,8 @@ pub struct GitUi {
     /// The files both sides changed, and whose to keep.
     conflicts: Vec<String>,
     keep: HashMap<String, Side>,
+    /// What each of them is about, in words.
+    conflict_words: HashMap<String, String>,
     /// What the last action said, and whether it went well.
     said: Option<(bool, String)>,
     /// Get from Git: open while set.
@@ -201,7 +236,7 @@ fn login_of(host: &str) -> Login {
     if host.is_empty() {
         return Login::default();
     }
-    secrets::sync_login(host).map(|(user, token)| Login { user, token }).unwrap_or_default()
+    super::sync_login(host).map(|(user, token)| Login { user, token }).unwrap_or_default()
 }
 
 fn who_of(host: &str, login: &Login) -> Who {
@@ -257,18 +292,32 @@ impl GitUi {
                 _ => (Ok(None), Vec::new()),
             };
             let host = typed.or_else(|| state.as_ref().ok().and_then(|s| s.as_ref()).and_then(|s| s.remote.as_deref()).and_then(host_of));
-            let account = host.and_then(|h| secrets::sync_login(&h)).map(|(user, _)| if user.is_empty() { "…".to_string() } else { user });
+            let account = host.and_then(|h| super::sync_login(&h)).map(|(user, _)| if user.is_empty() { "…".to_string() } else { user });
             Done::Read(state, account, history)
         });
     }
 
-    /// Opens the dialog and connects the open project to `address`: for a
-    /// place the sign-in is known for already (a paired host).
+    /// Connects the open project to `address` without showing the dialog:
+    /// for a place the sign-in is known for already (a paired host). How
+    /// it went shows where it was asked for, by [`Self::status`] and
+    /// [`Self::last_said`].
     pub fn connect_to(&mut self, ed: &Editor, address: String) {
+        let shown = self.open;
         self.open(ed);
+        self.open = shown;
         self.address = address;
         self.step = 3;
         self.connect();
+    }
+
+    /// Where the open project is stored, if anywhere.
+    pub fn stored_at(&self) -> Option<&str> {
+        self.state.as_ref().and_then(|s| s.remote.as_deref())
+    }
+
+    /// What the last action said, and whether it went well.
+    pub fn last_said(&self) -> Option<&(bool, String)> {
+        self.said.as_ref()
     }
 
     fn connect(&mut self) {
@@ -492,6 +541,19 @@ impl GitUi {
                     self.keep.entry(part.clone()).or_insert(Side::Mine);
                 }
                 self.keep.retain(|k, _| parts.contains(k));
+                // What each is about: read from the two versions.
+                self.conflict_words.clear();
+                if let Ok(Some(sync)) = Sync::open(&root) {
+                    let mut read: HashMap<String, (Option<serde_json::Value>, Option<serde_json::Value>)> = HashMap::new();
+                    for id in &parts {
+                        let (file, _) = circuit_sync::conflict_parts(id);
+                        let (mine, theirs) = read.entry(file.to_string()).or_insert_with(|| match sync.versions(file) {
+                            Ok(v) => (v.mine.and_then(|b| serde_json::from_slice(&b).ok()), v.theirs.and_then(|b| serde_json::from_slice(&b).ok())),
+                            Err(_) => (None, None),
+                        });
+                        self.conflict_words.insert(id.clone(), conflict_words(id, mine.as_ref(), theirs.as_ref()));
+                    }
+                }
                 self.conflicts = parts;
                 self.said = None;
                 // Asked about now, also when this ran by itself.
@@ -541,14 +603,14 @@ impl GitUi {
         let Some(host) = host_of(&self.address) else { return };
         let (user, token) = (self.user.trim().to_string(), self.token.trim().to_string());
         self.token.clear();
-        self.run(Some("Signing in"), move || Done::SignedIn(secrets::set_sync_login(&host, &user, &token).map(|_| user).map_err(said)));
+        self.run(Some("Signing in"), move || Done::SignedIn(super::set_sync_login(&host, &user, &token).map(|_| user).map_err(said)));
     }
 
     fn sign_out(&mut self) {
         let Some(host) = host_of(&self.address) else { return };
         self.account = None;
         self.run(None, move || {
-            let _ = secrets::set_sync_login(&host, "", "");
+            let _ = super::set_sync_login(&host, "", "");
             Done::SignedIn(Err(String::new()))
         });
     }
@@ -712,7 +774,7 @@ impl GitUi {
                         self.run(Some("Signing in"), move || {
                             Done::SignedIn((|| {
                                 let name = github::account("https://api.github.com", &token)?;
-                                secrets::set_sync_login("github.com", &name, &token)?;
+                                super::set_sync_login("github.com", &name, &token)?;
                                 Ok(name)
                             })()
                             .map_err(said))
@@ -1069,14 +1131,10 @@ impl GitUi {
                         kit::note(ui, &icons, &theme, "warning", t!("Both sides changed the same thing"), t!("Nothing was changed yet. Choose for each whose version stays, then press Put together. For a block, Both keeps yours and adds the other one beside it. What you don't pick stays in the repository's history."));
                         ui.add_space(6.0);
                         for id in &self.conflicts {
-                            let (file, part) = circuit_sync::conflict_parts(id);
-                            let file = file.trim_start_matches("workspaces/").trim_end_matches(".json");
+                            let (_, part) = circuit_sync::conflict_parts(id);
                             let block = part.strip_prefix("nodes/");
-                            let label = match (block, part) {
-                                (Some(number), _) => tf!("{file}: block #{number}", file = file, number = number),
-                                (None, "") => file.to_string(),
-                                (None, part) => format!("{file}: {part}"),
-                            };
+                            let label = self.conflict_words.get(id).cloned().unwrap_or_else(|| id.clone());
+                            ui.label(RichText::new(label).size(12.5));
                             ui.horizontal(|ui| {
                                 let side = self.keep.entry(id.clone()).or_insert(Side::Mine);
                                 if kit::radio(ui, &theme, *side == Side::Mine, t!("Mine")).clicked() {
@@ -1088,8 +1146,8 @@ impl GitUi {
                                 if block.is_some() && kit::radio(ui, &theme, *side == Side::Both, t!("Both")).clicked() {
                                     *side = Side::Both;
                                 }
-                                ui.label(RichText::new(label).size(12.0));
                             });
+                            ui.add_space(4.0);
                         }
                     }
                     if let (true, Some(state)) = (connected, &self.state) {
@@ -1253,6 +1311,15 @@ mod tests {
         assert_eq!(name_of("https://github.com/you/my-bot.git"), "my-bot");
         assert_eq!(name_of("https://git.example.com/team/bot/"), "bot");
         assert_eq!(name_of("git@github.com:you/bot.git"), "");
+
+        // A conflict says what it is about.
+        let mine = serde_json::json!({ "name": "Main", "nodes": { "4": { "block": "core.log@1" } }, "notes": { "n2": { "title": "Test4" } } });
+        let theirs = serde_json::json!({ "name": "Start", "nodes": { "4": { "block": "core.log@1" } }, "notes": {} });
+        assert_eq!(conflict_words("workspaces/main.json#notes/n2", Some(&mine), Some(&theirs)), "The note “Test4” in Main: changed here, deleted in the stored version");
+        assert_eq!(conflict_words("workspaces/main.json#notes/n2", Some(&theirs), Some(&mine)), "The note “Test4” in Start: deleted here, changed in the stored version");
+        assert_eq!(conflict_words("workspaces/main.json#nodes/4", Some(&mine), Some(&theirs)), "Block #4 (core.log) in Main: changed here and in the stored version, in different ways");
+        assert_eq!(conflict_words("workspaces/main.json#name", Some(&mine), Some(&theirs)), "The name of the workspace main: “Main” here, “Start” in the stored version");
+        assert!(conflict_words("notes.txt", None, None).starts_with("notes.txt: changed here"));
     }
 
     /// Connect, Store and Fetch through the dialog's own steps, against a

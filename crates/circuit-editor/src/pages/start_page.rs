@@ -15,6 +15,8 @@ pub enum Pick {
     Open,
     /// Get a project from a Git repository.
     Get,
+    /// Join a live session with an invitation.
+    Join,
     Recent(PathBuf),
     Forget(String),
     Example,
@@ -96,6 +98,9 @@ pub fn show(ui: &mut Ui, theme: &Theme, state: &mut StartPage, recent: &[String]
                         }
                         if wide(ui, false, t!("Get from Git…")).clicked() {
                             pick = Some(Pick::Get);
+                        }
+                        if wide(ui, false, t!("Join a live session…")).clicked() {
+                            pick = Some(Pick::Join);
                         }
                         if has_example && wide(ui, false, t!("Open example: DemoBot")).clicked() {
                             pick = Some(Pick::Example);
