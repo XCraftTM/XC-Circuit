@@ -114,6 +114,10 @@ pub trait Host {
     fn project_data(&self, key: &str) -> Option<String>;
     fn set_project_data(&mut self, key: &str, json: &str) -> Result<(), String>;
     fn log(&mut self, level: Level, text: &str);
+    /// Shows a notification, and writes it to the Console.
+    fn notify(&mut self, level: Level, text: &str) {
+        self.log(level, text);
+    }
     /// Runs an editor command (`bot.run`, `bot.stop`, `file.save`) or another
     /// plugin's command. `by_user`: asked for from a command, a click or an
     /// agent's tool, not by the script on its own (a timer, a check, while

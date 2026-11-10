@@ -169,6 +169,8 @@
     success: log("success"),
     warn: log("warn"),
     error: log("error"),
+    /** Shows a notification (a card in the window's corner, kept behind the bell) and writes it to the Console. level: "info", "success", "warn" or "error". */
+    notify: (message, level = "info") => host("notify", String(level), text(message)),
     /** Runs an editor command ("bot.run", "bot.stop", "file.save") or a plugin's command, after this handler. */
     run: (id) => host("run", id),
     botRunning: () => host("botRunning"),

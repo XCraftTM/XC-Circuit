@@ -115,6 +115,9 @@ impl CircuitApp {
             }
         }
         let now = crate::editor::clock();
+        for (level, text) in std::mem::take(&mut self.ed.notes) {
+            self.notices.add(level, text, Go::Console, now.clone());
+        }
         let git = self.bot.git.busy_words().is_some();
         if self.notices.git_busy && !git && let Some((ok, text)) = self.bot.git.last_said().cloned() {
             self.notices.add(if ok { Level::Success } else { Level::Warn }, text, Go::Git, now.clone());

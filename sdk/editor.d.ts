@@ -100,6 +100,8 @@ export interface Xc {
   /** This plugin's own store, on this computer. */
   storage: { get(key: string): any; set(key: string, value: unknown): void };
   log(...parts: unknown[]): void;
+  /** Shows a notification (a card in the window's corner, kept behind the bell) and writes it to the Console. */
+  notify(message: unknown, level?: "info" | "success" | "warn" | "error"): void;
   success(...parts: unknown[]): void;
   warn(...parts: unknown[]): void;
   error(...parts: unknown[]): void;

@@ -138,7 +138,8 @@ impl DockViewer<Tab> for Viewer<'_> {
     }
 
     fn bar_buttons_width(&self, tabs: &[Tab]) -> f32 {
-        if tabs.iter().any(|t| t.side() == Side::Bottom) { 52.0 } else { 0.0 }
+        // Not in the tour, which needs its Console where it is.
+        if !self.ed.tour_parts && tabs.iter().any(|t| t.side() == Side::Bottom) { 52.0 } else { 0.0 }
     }
 
     /// The bottom panels: fill the window, and hide.

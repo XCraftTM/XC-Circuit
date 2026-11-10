@@ -60,7 +60,8 @@ Types for your code editor: `/// <reference types="@xc-circuit/sdk/editor" />` (
 | `xc.blockRects(workspace)` | where its blocks are and how big, as drawn: `{ id: [x, y, width, height] }` |
 | `xc.select(workspace, ids)` · `xc.reveal(workspace, id, zoom?)` | select · go to a block (at `zoom` percent, 25 to 200, when given) |
 | `xc.data.set(key, value)` · `xc.storage.set(key, value)` | save data (not the key `hosting`: the bot's server is the user's to set, in Bot › Remote…) |
-| `xc.log(…)` · `xc.success(…)` · `xc.warn(…)` · `xc.error(…)` | write to the Console |
+| `xc.log(…)` · `xc.success(…)` · `xc.warn(…)` · `xc.error(…)` | write to the Console (warnings and errors also show as a notification) |
+| `xc.notify(message, level?)` | shows a notification: a card in the window's corner, kept behind the bell; `level` is `"info"` (to start with), `"success"`, `"warn"` or `"error"` |
 | `xc.setBotSettings({ key: value })` | change Bot › Settings (not secrets), checked against each setting's type and choices; returns the keys changed |
 | `xc.run(id)` | run a command: a plugin's, or `"bot.run"`, `"bot.stop"`, `"file.save"`, `"server.upload"`, `"server.start"`, `"server.restart"`, `"server.stop"`, `"server.kill"`, `"run.local"`, `"run.server"`. Starting the bot or acting on its server (`bot.run`, `server.*`, `run.*`) only works from a command or a click (a button, a link, an overlay's `onClick`) or an agent's tool, not from a timer, a check or `render`: it throws there |
 | `xc.moveOverlay(id, x, y)` · `xc.overlayPosition(id)` | move an overlay |

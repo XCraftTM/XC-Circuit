@@ -235,6 +235,9 @@ pub struct CircuitApp {
     /// had before, to give back.
     bottom_before: Option<f32>,
     side_before: Option<String>,
+    /// With two views in the side bar: the one folded away to its heading
+    /// (true: the lower one).
+    side_folded: Option<bool>,
     /// Whether the window was last given the start window's shape (not yet, at first).
     window_shaped: Option<bool>,
     /// For saving what egui remembers (see `memory`).
@@ -432,6 +435,7 @@ impl CircuitApp {
             notices: Default::default(),
             bottom_before: None,
             side_before: None,
+            side_folded: None,
             window_shaped: None,
             settings: Default::default(),
             restore: Default::default(),

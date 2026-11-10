@@ -5,6 +5,9 @@
 
 use super::*;
 
+/// How tall a side view's heading is.
+const SIDE_HEAD: f32 = 34.0;
+
 /// An activity bar icon being dragged (its key).
 #[derive(Clone)]
 pub(super) struct ActivityDrag(pub(super) String);
@@ -299,7 +302,9 @@ impl CircuitApp {
         crate::ui::kit::describe_selected(&resp, egui::Role::Button, active, tip);
         let resp = if lifted { resp } else { resp.on_hover_text(tip).on_hover_cursor(egui::CursorIcon::PointingHand) };
         if active {
-            ui.painter().rect_filled(egui::Rect::from_min_size(rect.min, egui::vec2(2.0, rect.height())), 0.0, t.accent);
+            // The mark is on the bar's outer edge.
+            let x = if self.ed.prefs.side_right { rect.right() - 2.0 } else { rect.left() };
+            ui.painter().rect_filled(egui::Rect::from_min_size(egui::pos2(x, rect.top()), egui::vec2(2.0, rect.height())), 0.0, t.accent);
         }
         let color = if active || resp.hovered() { t.text } else { t.text_muted };
         let color = if lifted { crate::ui::theme::with_alpha(color, 70) } else { color };
@@ -479,22 +484,35 @@ impl CircuitApp {
         ui.allocate_rect(full, egui::Sense::hover());
         let lower = self.ed.prefs.side_lower.clone().filter(|k| k != key).and_then(|k| self.activity_tab(&k).map(|t| (k, t)));
         let Some((lower_key, lower_tab)) = lower else {
+            self.side_folded = None;
             self.side_section(ui, full, key, tab, problems, false);
             return;
         };
-        let split = full.top() + full.height() * self.ed.prefs.side_split;
+        // One of the two folded away to its heading: the other has the rest.
+        let split = match self.side_folded {
+            Some(false) => full.top() + SIDE_HEAD + 3.0,
+            Some(true) => full.bottom() - SIDE_HEAD - 3.0,
+            None => full.top() + full.height() * self.ed.prefs.side_split,
+        };
         let top = egui::Rect::from_min_max(full.min, egui::pos2(full.right(), split - 3.0));
         let bottom = egui::Rect::from_min_max(egui::pos2(full.left(), split + 3.0), full.max);
         self.side_section(ui, top, key, tab, problems, false);
         // The line between them: drag it to share the height differently.
-        let divider = egui::Rect::from_min_max(egui::pos2(full.left(), split - 3.0), egui::pos2(full.right() - 1.0, split + 3.0));
-        let drag = ui.interact(divider, egui::Id::unique("side-split"), egui::Sense::drag()).on_hover_cursor(egui::CursorIcon::ResizeVertical);
-        let color = if drag.hovered() || drag.dragged() { t.accent } else { t.line };
-        ui.painter().hline(divider.x_range(), split, egui::Stroke::new(if drag.dragged() { 2.0 } else { 1.0 }, color));
+        // A wider strip than the line it shows, so it is easy to take hold of.
+        let divider = egui::Rect::from_min_max(egui::pos2(full.left(), split - 5.0), egui::pos2(full.right() - 1.0, split + 5.0));
+        let drag = ui.interact(divider, egui::Id::unique("side-split"), egui::Sense::click_and_drag()).on_hover_cursor(egui::CursorIcon::ResizeVertical).on_hover_text(t!("Drag to share the height differently; double-click for half each"));
+        let held = drag.hovered() || drag.dragged();
+        ui.painter().hline(divider.x_range(), split, egui::Stroke::new(if held { 3.0 } else { 1.0 }, if held { t.accent } else { t.line }));
         if drag.dragged()
             && let Some(p) = ui.ctx().pointer_interact_pos()
         {
+            // Dragging it brings a folded view back.
+            self.side_folded = None;
             self.ed.prefs.side_split = ((p.y - full.top()) / full.height().max(1.0)).clamp(0.15, 0.85);
+        }
+        if drag.double_clicked() {
+            self.side_folded = None;
+            self.ed.prefs.side_split = 0.5;
         }
         self.side_section(ui, bottom, &lower_key, lower_tab, problems, true);
     }
@@ -505,9 +523,33 @@ impl CircuitApp {
         let t = self.ed.theme.clone();
         let split = self.ed.prefs.side_lower.is_some();
         let heading = self.panel_name(&tab);
-        let head_rect = egui::Rect::from_min_size(rect.min, egui::vec2(rect.width(), 34.0));
-        let head = ui.interact(head_rect, egui::Id::unique(("side-head", key)), egui::Sense::click());
-        ui.painter().text(head_rect.left_center() + egui::vec2(14.0, 0.0), egui::Align2::LEFT_CENTER, heading.to_uppercase(), egui::FontId::proportional(11.0), t.text_muted);
+        let head_rect = egui::Rect::from_min_size(rect.min, egui::vec2(rect.width(), SIDE_HEAD));
+        // Dragged by its name, a view goes to the other half, to another
+        // place in the activity bar, or out into the main area as a tab.
+        let head = ui.interact(head_rect, egui::Id::unique(("side-head", key)), egui::Sense::click_and_drag());
+        head.dnd_set_drag_payload(ActivityDrag(key.to_string()));
+        let folded = split && self.side_folded == Some(lower);
+        let lifted = egui::DragAndDrop::payload::<ActivityDrag>(ui.ctx()).is_some_and(|d| d.0 == key);
+        let ink = if lifted { crate::ui::theme::with_alpha(t.text_muted, 90) } else if head.hovered() { t.text } else { t.text_muted };
+        let mut x = head_rect.left() + 14.0;
+        if split {
+            // With two views, an arrow: a click on the name folds this one away.
+            let c = egui::pos2(x + 3.0, head_rect.center().y);
+            let line = egui::Stroke::new(1.4, ink);
+            if folded {
+                ui.painter().line_segment([c + egui::vec2(-1.5, -3.5), c + egui::vec2(2.0, 0.0)], line);
+                ui.painter().line_segment([c + egui::vec2(2.0, 0.0), c + egui::vec2(-1.5, 3.5)], line);
+            } else {
+                ui.painter().line_segment([c + egui::vec2(-3.5, -1.5), c + egui::vec2(0.0, 2.0)], line);
+                ui.painter().line_segment([c + egui::vec2(0.0, 2.0), c + egui::vec2(3.5, -1.5)], line);
+            }
+            x += 14.0;
+        }
+        ui.painter().text(egui::pos2(x, head_rect.center().y), egui::Align2::LEFT_CENTER, heading.to_uppercase(), egui::FontId::proportional(11.0), ink);
+        if head.clicked() && split {
+            self.side_folded = if folded { None } else { Some(lower) };
+        }
+        let head = head.on_hover_cursor(egui::CursorIcon::Grab).on_hover_text(if split { t!("Drag to move this view; click to fold it away") } else { t!("Drag to move this view: onto the lower half, the activity bar, or out as a tab") });
         let (mut out, mut close, mut swap, mut connect) = (false, false, false, false);
         let mut view_menu = |ui: &mut egui::Ui| {
             if split {
@@ -568,6 +610,8 @@ impl CircuitApp {
         view_ui.set_clip_rect(area.intersect(ui.clip_rect()));
         let ui = &mut view_ui;
         let running = self.bot.state != BotState::Stopped;
+        // Folded away, it is its heading only.
+        if !folded {
         match tab {
             Tab::Side(view) => {
                 if let Some(ask) = side_view_ui(ui, &mut self.ed, &mut self.stored, &mut self.plugin_host, running, problems, view) {
@@ -618,6 +662,7 @@ impl CircuitApp {
                 }
             },
             _ => {}
+        }
         }
         if connect {
             self.bot.hosting.open_console(&mut self.ed);

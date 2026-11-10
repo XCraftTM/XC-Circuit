@@ -120,6 +120,8 @@ pub struct Editor {
     pub log: Vec<LogLine>,
     /// How many lines the Console was ever given (it keeps the newest only).
     pub log_count: u64,
+    /// Notifications asked for (by plugins), for the app to show.
+    pub notes: Vec<(Level, String)>,
     pub shapes: ShapeCache,
     pub views: HashMap<String, CanvasView>,
     /// The bot's server as plugins and agents see it (`xc.server()`), kept
@@ -218,6 +220,7 @@ impl Editor {
             selected: None,
             log: Vec::new(),
             log_count: 0,
+            notes: Vec::new(),
             shapes: ShapeCache::default(),
             views: HashMap::new(),
             server_view: serde_json::Value::Null,

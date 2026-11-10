@@ -571,6 +571,10 @@ fn host_call(h: &mut dyn Host, method: &str, args: &str, by_user: bool) -> Resul
             h.log(level(&s(0)), &s(1));
             Value::Null
         }
+        "notify" => {
+            h.notify(level(&s(0)), &s(1));
+            Value::Null
+        }
         "run" => {
             h.run_command(&s(0), by_user)?;
             Value::Null

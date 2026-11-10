@@ -410,6 +410,15 @@ impl api::Host for EditorHost<'_> {
         self.ed.log(map_level(level), text);
     }
 
+    fn notify(&mut self, level: api::Level, text: &str) {
+        let level = map_level(level);
+        // The Console's warnings and errors are notifications by themselves.
+        if !matches!(level, Level::Warn | Level::Error) {
+            self.ed.notes.push((level, text.to_string()));
+        }
+        self.ed.log(level, text);
+    }
+
     fn run_command(&mut self, id: &str, by_user: bool) -> Result<(), String> {
         // Starting the bot, or sending it to its server, runs code and uses
         // the token. A plugin that didn't come with the app does that when
@@ -928,6 +937,27 @@ mod tests {
     use circuit_core::Project;
 
     use super::*;
+
+    /// `xc.notify` asks for a notification and writes to the Console; a
+    /// warning or an error is one by being in the Console, so it isn't
+    /// asked for twice.
+    #[test]
+    fn a_plugin_s_notification_reaches_the_app() {
+        let tmp = std::env::temp_dir().join(format!("xc-notify-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let dir = tmp.join("plugins").join("t.notify");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("plugin.toml"), "id = \"t.notify\"\nname = \"Notify Test\"\nversion = \"1.0.0\"\n\n[editor]\nscript = \"editor.js\"\n").unwrap();
+        std::fs::write(dir.join("editor.js"), "xc.command({ id: 't.tell', title: 'Tell', run() { xc.notify('Backup made', 'success'); xc.notify('Plain'); xc.notify('Careful', 'warn') } });").unwrap();
+        let mut ed = Editor::new(vec![tmp.join("plugins")], None).unwrap();
+        let mut host = PluginHost::new(BTreeMap::new());
+        host.sync(&mut ed, None);
+        assert!(host.run_command(&mut ed, "t.tell", true), "{:?}", ed.log);
+        assert_eq!(ed.notes, [(Level::Success, "Backup made".to_string()), (Level::Info, "Plain".to_string())]);
+        let last: Vec<(Level, &str)> = ed.log.iter().rev().take(3).rev().map(|l| (l.level, l.text.as_str())).collect();
+        assert_eq!(last, [(Level::Success, "Backup made"), (Level::Info, "Plain"), (Level::Warn, "Careful")]);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 
     /// Script plugins load without approval and reload when their file changes.
     #[test]
