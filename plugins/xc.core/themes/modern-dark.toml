@@ -1,0 +1,39 @@
+id = "modern-dark"
+name = "Modern Dark"
+base = "dark"
+
+[colors]
+frame = "#181818"
+panel = "#181818"
+panelHeader = "#222222"
+canvas = "#1F1F1F"
+canvasDots = "#FFFFFF12"
+node = "#252526"
+nodeHeader = "#2D2D30"
+nodeBorder = "#3C3C3C"
+field = "#313131"
+line = "#2B2B2B"
+text = "#CCCCCC"
+textMuted = "#9D9D9D"
+accent = "#0078D4"
+action = "#3FB950"
+statusBar = "#181818"
+statusText = "#CCCCCC"
+error = "#F85149"
+warning = "#CCA700"
+
+[pinColors]
+text = "#DCDCAA"
+number = "#4FC1FF"
+boolean = "#F48771"
+list = "#C586C0"
+object = "#4EC9B0"
+date = "#CE9178"
+any = "#9D9D9D"
+
+[shape]
+nodeRadius = 6
+wireWidth = 2.2
+
+[motion]
+speed = 1.0

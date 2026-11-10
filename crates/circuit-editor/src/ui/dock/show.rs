@@ -35,6 +35,13 @@ pub trait DockViewer<T> {
     }
     /// More entries for the tab's right-click menu.
     fn tab_menu(&mut self, _ui: &mut Ui, _tab: &T) {}
+    /// How wide the buttons are that an area with these tabs has at the
+    /// right end of its tab bar (0: none).
+    fn bar_buttons_width(&self, _tabs: &[T]) -> f32 {
+        0.0
+    }
+    /// Draws those buttons, right to left.
+    fn bar_buttons(&mut self, _ui: &mut Ui, _tabs: &[T]) {}
     /// Whether windows have the system's title bar and frame. Without, a
     /// tab's window of its own moves by its tab bar and has its own buttons.
     fn system_titlebar(&self) -> bool {
@@ -565,6 +572,16 @@ fn leaf_ui<T: Clone + PartialEq + Hash + std::fmt::Debug, V: DockViewer<T>>(ui: 
         if close_it {
             p.acts.push(Act::Close(tab.clone()));
         }
+    }
+
+    // The area's own buttons, over the end of its tab bar (the main area only).
+    let buttons = if window.is_none() { viewer.bar_buttons_width(&leaf.tabs) } else { 0.0 };
+    if buttons > 0.0 && bar.width() > buttons + 80.0 {
+        let place = Rect::from_min_max(pos2(bar.right() - buttons - 6.0, bar.top()), pos2(bar.right(), bar.bottom() - 1.0));
+        ui.painter().rect_filled(place, 0.0, t.frame);
+        let mut row = ui.new_child(UiBuilder::new().id_salt(("dock-bar-buttons", leaf.tabs.first())).max_rect(place.shrink2(vec2(4.0, 0.0))).layout(Layout::right_to_left(Align::Center)));
+        row.spacing_mut().item_spacing.x = 2.0;
+        viewer.bar_buttons(&mut row, &leaf.tabs);
     }
 
     // Clicking into an area makes its tab in front the one the user is in.

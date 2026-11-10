@@ -343,6 +343,7 @@ impl CircuitApp {
         if self.ed.project.is_some() && self.tour.is_none() && self.setup.is_none() {
             ui.spacing_mut().item_spacing.x = 0.0;
             self.layout_toggles(ui, &theme);
+            self.layout_menu(ui, &theme);
             ui.spacing_mut().item_spacing.x = 8.0;
             ui.add_space(6.0);
         }

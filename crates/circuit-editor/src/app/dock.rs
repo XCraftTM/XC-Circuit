@@ -28,6 +28,19 @@ pub(super) struct Viewer<'a> {
     /// Drawing a window of its own: Git shows its whole window there, and
     /// the short view as a tab or in the side bar.
     pub(super) in_window: bool,
+    /// The bottom panels' buttons: make them fill the window (or give the
+    /// room back), or hide them.
+    pub(super) bottom_ask: Option<BottomAsk>,
+    pub(super) bottom_filled: bool,
+    /// What a plugin's page asked for.
+    pub(super) page_ask: Option<crate::plugins::manager::SideAsk>,
+}
+
+/// What the buttons at the end of the bottom panels' tab bar ask for.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum BottomAsk {
+    Fill,
+    Hide,
 }
 
 /// The placeholder's buttons, in the canvas area while no workspace is open.
@@ -46,7 +59,7 @@ impl Tab {
             Tab::Problems => "alert",
             Tab::Settings => "settings",
             Tab::Backups => "clock",
-            Tab::Plugin(..) | Tab::Plugins => "plug",
+            Tab::Plugin(..) | Tab::Plugins | Tab::PluginPage(_) => "plug",
             Tab::EmbedBuilder => "embed",
             Tab::LayoutBuilder => "layers",
             Tab::ModalBuilder => "text",
@@ -114,12 +127,29 @@ impl DockViewer<Tab> for Viewer<'_> {
                 None => t!("Remote console").into(),
             },
             Tab::Plugins => t!("Plugins").into(),
+            Tab::PluginPage(id) => self.ed.reg.plugins.iter().chain(self.ed.reg.disabled.iter()).find(|p| p.manifest.id == *id).map(|p| p.manifest.name.clone()).unwrap_or_else(|| id.clone()),
             // With a project open it holds the place of its workspaces.
             Tab::Start if self.ed.project.is_some() => t!("No workspace").into(),
             Tab::Start => t!("Start").into(),
             Tab::WorkspaceExport => t!("Export workspaces").into(),
             Tab::WorkspaceImport => t!("Import workspaces").into(),
             Tab::Side(view) => view.name().into(),
+        }
+    }
+
+    fn bar_buttons_width(&self, tabs: &[Tab]) -> f32 {
+        if tabs.iter().any(|t| t.side() == Side::Bottom) { 52.0 } else { 0.0 }
+    }
+
+    /// The bottom panels: fill the window, and hide.
+    fn bar_buttons(&mut self, ui: &mut egui::Ui, _tabs: &[Tab]) {
+        let theme = self.ed.theme.clone();
+        if crate::ui::side::action(ui, &theme, &self.ed.reg.icons, "x", t!("Hide the bottom panels")).clicked() {
+            self.bottom_ask = Some(BottomAsk::Hide);
+        }
+        let (icon, tip) = if self.bottom_filled { ("fold", t!("Give the workspaces their room back")) } else { ("unfold", t!("Let the bottom panels fill the window")) };
+        if crate::ui::side::action(ui, &theme, &self.ed.reg.icons, icon, tip).clicked() {
+            self.bottom_ask = Some(BottomAsk::Fill);
         }
     }
 
@@ -221,6 +251,12 @@ impl DockViewer<Tab> for Viewer<'_> {
             }
             Tab::WorkspaceExport => crate::editor::exchange::export_tab(ui, self.ed),
             Tab::WorkspaceImport => crate::editor::exchange::import_tab(ui, self.ed),
+            Tab::PluginPage(id) => {
+                let theme = self.ed.theme.clone();
+                if let Some(ask) = crate::plugins::manager::page(ui, &theme, self.ed, self.plugin_host, id) {
+                    self.page_ask = Some(ask);
+                }
+            }
             // Only in layouts saved when plugins had a tab of their own: closed on load.
             Tab::Plugins => {}
         }

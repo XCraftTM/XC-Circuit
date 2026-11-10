@@ -76,6 +76,8 @@ pub enum Tab {
     /// A Calagopus server's state, power buttons and live console.
     ServerConsole,
     Plugins,
+    /// A plugin's page: what it is and adds, by its id.
+    PluginPage(String),
     WorkspaceExport,
     WorkspaceImport,
     /// The start page, while no project is open.
@@ -226,6 +228,9 @@ pub struct CircuitApp {
     /// The panels hidden with their part of the window (the title bar's
     /// buttons), to show again; and what the side bar showed.
     hidden_panels: Vec<Tab>,
+    /// The bottom panels fill the window: how much of it the workspaces
+    /// had before, to give back.
+    bottom_before: Option<f32>,
     side_before: Option<String>,
     /// Whether the window was last given the start window's shape (not yet, at first).
     window_shaped: Option<bool>,
@@ -421,6 +426,7 @@ impl CircuitApp {
             own_places: Default::default(),
             start_page: Default::default(),
             hidden_panels: Vec::new(),
+            bottom_before: None,
             side_before: None,
             window_shaped: None,
             settings: Default::default(),
@@ -689,6 +695,8 @@ impl eframe::App for CircuitApp {
             watchdog::mark("in the menus");
             self.menu_bar(ui)
         });
+        }
+        if !start && !self.ed.prefs.status_bar_hidden {
         egui::Panel::bottom("status")
             .exact_size(24.0)
             .frame(Frame::new().fill(theme.status_bar).inner_margin(Margin::symmetric(4, 0)))
@@ -720,8 +728,8 @@ impl eframe::App for CircuitApp {
         self.problem_count = problems.len();
         let bars = self.setup.is_none() && self.tour.is_none() && self.ed.project.is_some();
         if self.ed.prefs.activity_bar && bars {
-            egui::Panel::left("activity")
-                .exact_size(ACTIVITY_W)
+            let bar = if self.ed.prefs.side_right { egui::Panel::right("activity") } else { egui::Panel::left("activity") };
+            bar.exact_size(ACTIVITY_W)
                 .resizable(false)
                 .frame(Frame::new().fill(theme.frame).inner_margin(Margin::symmetric(0, 6)))
                 .show(ui, |ui| self.activity(ui));
@@ -730,8 +738,8 @@ impl eframe::App for CircuitApp {
         activity::tidy_side(&mut self.ed.prefs);
         let side = self.ed.prefs.side_shown.clone().filter(|k| self.ed.prefs.activity.contains(k)).and_then(|k| self.activity_tab(&k).map(|t| (k, t)));
         if bars && let Some((key, tab)) = side {
-            egui::Panel::left("side-bar")
-                .resizable(true)
+            let bar = if self.ed.prefs.side_right { egui::Panel::right("side-bar") } else { egui::Panel::left("side-bar") };
+            bar.resizable(true)
                 .default_size(270.0)
                 .size_range(200.0..=560.0)
                 .frame(Frame::new().fill(theme.panel))
@@ -778,6 +786,9 @@ impl eframe::App for CircuitApp {
                 canvases: self.dock.tabs().filter(|t| matches!(t, Tab::Canvas(_))).count(),
                 no_workspace: None,
                 in_window: false,
+                bottom_ask: None,
+                bottom_filled: self.bottom_before.is_some(),
+                page_ask: None,
             };
             let size = ui.available_size();
             if let Some(before) = self.dock_size
@@ -798,7 +809,8 @@ impl eframe::App for CircuitApp {
                 viewer.in_window = false;
             }
             let asks = std::mem::take(&mut viewer.asks);
-            let side_ask = viewer.side_ask.take();
+            let side_ask = viewer.side_ask.take().or(viewer.page_ask.take());
+            let bottom_ask = viewer.bottom_ask.take();
             let to_side = viewer.to_side.take();
             let closed_side = std::mem::take(&mut viewer.closed_side);
             if let Some(ask) = viewer.no_workspace.take() {
@@ -809,6 +821,14 @@ impl eframe::App for CircuitApp {
             }
             if let Some(ask) = side_ask {
                 self.plugins_side_ask(ask, ui.ctx());
+            }
+            match bottom_ask {
+                Some(BottomAsk::Hide) => {
+                    self.fill_bottom(false);
+                    self.toggle_part(WindowPart::Bottom);
+                }
+                Some(BottomAsk::Fill) => self.fill_bottom(self.bottom_before.is_none()),
+                None => {}
             }
             if let Some((tab, pos)) = to_side {
                 self.move_to_side(tab, pos);

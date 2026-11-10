@@ -23,6 +23,8 @@ pub enum SideAsk {
     Remove(String),
     /// Bring back an optional plugin that comes with the app (its id).
     AddBack(String),
+    /// Show a plugin's page (its id).
+    Open(String),
 }
 
 /// A plugin's state in a few words, and its colour.
@@ -129,7 +131,10 @@ pub fn side(ui: &mut egui::Ui, theme: &Theme, ed: &Editor, host: &PluginHost) ->
                     }
                 };
                 egui::Popup::menu(&gear).id(egui::Id::unique(("plugin-menu", &m.id))).show(|ui| menu(ui, &mut ask, &mut confirm));
-                resp.context_menu(|ui| menu(ui, &mut ask, &mut confirm));
+                if resp.clicked() && !gear.hovered() {
+                    ask = Some(SideAsk::Open(m.id.clone()));
+                }
+                resp.clone().on_hover_cursor(egui::CursorIcon::PointingHand).context_menu(|ui| menu(ui, &mut ask, &mut confirm));
                 if confirm.as_deref() == Some(m.id.as_str()) && !built_in {
                     Frame::new().inner_margin(Margin::symmetric(14, 6)).show(ui, |ui| {
                         ui.spacing_mut().item_spacing.y = 4.0;
@@ -178,6 +183,125 @@ pub fn side(ui: &mut egui::Ui, theme: &Theme, ed: &Editor, host: &PluginHost) ->
             d.insert_temp(confirm_id, id);
         }
         None => d.remove::<String>(confirm_id),
+    });
+    ask
+}
+
+/// A plugin's page, as a tab beside the workspaces: its picture, name and
+/// what it does on top, with the buttons for it; under them what it adds
+/// (blocks by category, kinds of bot, themes, commands and panels) and
+/// where it is. Returns what its buttons asked for.
+pub fn page(ui: &mut egui::Ui, theme: &Theme, ed: &Editor, host: &PluginHost, id: &str) -> Option<SideAsk> {
+    use crate::ui::side;
+    let mut ask = None;
+    ui.painter().rect_filled(ui.max_rect(), 0.0, theme.panel);
+    let found = ed.reg.plugins.iter().map(|p| (p, true)).chain(ed.reg.disabled.iter().map(|p| (p, false))).find(|(p, _)| p.manifest.id == id);
+    let Some((lp, on)) = found else {
+        side::note(ui, theme, t!("This plugin isn't installed any more."));
+        return None;
+    };
+    let m = &lp.manifest;
+    let built_in = ed.bundled_plugins.contains(&m.id);
+    let (status, color) = status_of(theme, lp, host, on);
+    egui::ScrollArea::vertical().id_salt(("plugin-page", id)).auto_shrink([false, false]).show(ui, |ui| {
+        Frame::new().inner_margin(Margin::symmetric(28, 24)).show(ui, |ui| {
+            ui.set_max_width(ui.available_width().min(860.0));
+            ui.horizontal(|ui| {
+                let (picture, _) = ui.allocate_exact_size(egui::vec2(84.0, 84.0), egui::Sense::hover());
+                let own_icon = m.icon.as_ref().map(|i| lp.dir.join(i)).filter(|p| p.is_file());
+                let letters: String = m.name.chars().filter(|c| c.is_alphanumeric()).take(2).collect::<String>().to_uppercase();
+                side::tile(ui, picture, if on { theme.accent } else { theme.text_muted }, own_icon.as_deref().or(ed.reg.icons.get("plug").map(|p| p.as_path())), &letters);
+                ui.add_space(12.0);
+                ui.vertical(|ui| {
+                    ui.spacing_mut().item_spacing.y = 4.0;
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(&m.name).size(22.0).color(theme.text));
+                        kit::pill(ui, &format!("v{}", m.version), theme.text_muted);
+                        if built_in {
+                            kit::pill(ui, t!("Built in"), theme.text_muted);
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        if !m.author.is_empty() {
+                            ui.label(RichText::new(&m.author).size(12.5).color(theme.accent));
+                            ui.label(RichText::new("·").color(theme.text_muted));
+                        }
+                        ui.label(RichText::new(status).size(12.5).color(color));
+                    });
+                    if !m.description.is_empty() {
+                        ui.add(egui::Label::new(RichText::new(&m.description).size(13.0).color(theme.text)).wrap());
+                    }
+                    ui.add_space(4.0);
+                    ui.horizontal(|ui| {
+                        if !built_in {
+                            let label = if on { t!("Turn off") } else { t!("Turn on") };
+                            if kit::primary_button(ui, theme, label).clicked() {
+                                ask = Some(SideAsk::Enable(m.id.clone(), !on));
+                            }
+                            if kit::secondary_button(ui, theme, t!("Remove…")).on_hover_text(t!("Asked about once more in the Plugins view")).clicked() {
+                                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique("plugin-remove"), m.id.clone()));
+                            }
+                        }
+                        if kit::secondary_button(ui, theme, t!("Show its folder")).clicked() {
+                            crate::editor::show_in_folder(&lp.dir);
+                        }
+                    });
+                });
+            });
+            if let Some(p) = host.plugins.iter().find(|p| p.id == m.id).filter(|p| p.status != Status::Loaded && on) {
+                ui.add_space(10.0);
+                ui.add(egui::Label::new(RichText::new(status_text(&p.status)).color(theme.warning)).wrap());
+            }
+            ui.add_space(18.0);
+            ui.painter().hline(ui.max_rect().x_range(), ui.cursor().top(), egui::Stroke::new(1.0, theme.line));
+            ui.add_space(14.0);
+            ui.spacing_mut().item_spacing.y = 4.0;
+            kit::section(ui, theme, t!("What it adds"));
+            // Its blocks, counted by category.
+            let mut by_category: std::collections::BTreeMap<String, usize> = Default::default();
+            for b in ed.reg.blocks.values().filter(|b| b.plugin == m.id) {
+                *by_category.entry(b.category.clone().unwrap_or_else(|| t!("Other").to_string())).or_default() += 1;
+            }
+            let blocks: usize = by_category.values().sum();
+            let mut rows: Vec<(String, String)> = Vec::new();
+            if blocks > 0 {
+                let list: Vec<String> = by_category.iter().map(|(c, n)| format!("{c} ({n})")).collect();
+                rows.push((tf!("{count} blocks", count = blocks), list.join(", ")));
+            }
+            if let Some(p) = host.plugins.iter().find(|p| p.id == m.id) {
+                if !p.commands().is_empty() {
+                    rows.push((t!("Commands").to_string(), p.commands().iter().map(|c| c.title.clone()).collect::<Vec<_>>().join(", ")));
+                }
+                if !p.panels().is_empty() {
+                    rows.push((t!("Panels").to_string(), p.panels().iter().map(|c| c.title.clone()).collect::<Vec<_>>().join(", ")));
+                }
+            }
+            // What else its plugin.toml lists, by how many of each.
+            let c = &m.contributes;
+            let others: Vec<String> = [(t!("kinds of bot"), c.build_modes.len()), (t!("themes"), c.themes.len()), (t!("translations"), c.locales.len())].iter().filter(|(_, n)| *n > 0).map(|(what, _)| what.to_string()).collect();
+            if !others.is_empty() {
+                rows.push((t!("Also").to_string(), others.join(", ")));
+            }
+            if rows.is_empty() {
+                ui.label(RichText::new(if on { t!("Nothing the editor lists.") } else { t!("Turned off: nothing, until it is turned on.") }).color(theme.text_muted));
+            }
+            egui::Grid::new(("plugin-adds", id)).num_columns(2).spacing([18.0, 6.0]).show(ui, |ui| {
+                for (what, text) in rows {
+                    ui.label(RichText::new(what).size(12.5).strong().color(theme.text));
+                    ui.add(egui::Label::new(RichText::new(text).size(12.5).color(theme.text_muted)).wrap());
+                    ui.end_row();
+                }
+            });
+            ui.add_space(14.0);
+            kit::section(ui, theme, t!("About"));
+            egui::Grid::new(("plugin-about", id)).num_columns(2).spacing([18.0, 6.0]).show(ui, |ui| {
+                for (what, text) in [("Id", m.id.clone()), (t!("Version"), m.version.clone()), (t!("Folder"), lp.dir.display().to_string())] {
+                    ui.label(RichText::new(what).size(12.5).strong().color(theme.text));
+                    ui.add(egui::Label::new(RichText::new(text).size(12.5).color(theme.text_muted)).wrap());
+                    ui.end_row();
+                }
+            });
+        });
     });
     ask
 }

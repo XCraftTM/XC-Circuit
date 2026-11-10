@@ -254,7 +254,7 @@ impl Editor {
             ws_export: None,
             ws_import: None,
         };
-        ed.set_theme(theme_id.unwrap_or("graphite"));
+        ed.set_theme(theme_id.unwrap_or("modern-dark"));
         ed.log_plugin_summary();
         Ok(ed)
     }

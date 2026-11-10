@@ -19,6 +19,12 @@ impl CircuitApp {
                 self.ed.prefs.disabled_plugins.retain(|p| *p != id);
                 self.reload_plugins(ctx);
             }
+            crate::plugins::manager::SideAsk::Open(id) => {
+                // In the start window there is nowhere for it.
+                if self.ed.project.is_some() {
+                    open_center(&mut self.dock, Tab::PluginPage(id));
+                }
+            }
             crate::plugins::manager::SideAsk::Reload => self.reload_plugins(ctx),
             crate::plugins::manager::SideAsk::Install => self.pick_plugin_zip(ctx),
             crate::plugins::manager::SideAsk::OpenFolder => {
@@ -289,11 +295,91 @@ impl CircuitApp {
         }
     }
 
+    /// Lets the bottom panels fill the window (the workspaces keep a strip),
+    /// or gives the workspaces the room they had.
+    pub(super) fn fill_bottom(&mut self, fill: bool) {
+        /// The split with the workspaces above and the bottom panels below.
+        fn find(node: &mut Node<Tab>) -> Option<&mut f32> {
+            let Node::Split(s) = node else { return None };
+            let bottom = |n: &Node<Tab>| n.leaves().iter().any(|l| l.tabs.iter().any(|t| t.side() == Side::Bottom));
+            if s.dir == Dir::Vertical && has_center(&s.first) && bottom(&s.second) && !has_center(&s.second) {
+                return Some(&mut s.fraction);
+            }
+            if bottom(&s.first) { find(&mut s.first) } else { find(&mut s.second) }
+        }
+        let Some(fraction) = self.dock.main.as_mut().and_then(find) else {
+            self.bottom_before = None;
+            return;
+        };
+        match (fill, self.bottom_before) {
+            (true, None) => {
+                self.bottom_before = Some(*fraction);
+                *fraction = 0.05;
+            }
+            (false, Some(before)) => {
+                *fraction = before;
+                self.bottom_before = None;
+            }
+            _ => {}
+        }
+    }
+
+    /// Customize Layout, the fourth button in the title bar: every part of
+    /// the window to tick, and the side the side bar is on.
+    pub(super) fn layout_menu(&mut self, ui: &mut egui::Ui, theme: &crate::ui::theme::Theme) {
+        let (rect, resp) = ui.allocate_exact_size(egui::vec2(28.0, ui.available_height().min(crate::app::titlebar::HEIGHT)), egui::Sense::click());
+        crate::ui::kit::describe(&resp, egui::Role::Button, t!("Customize Layout"));
+        let color = if resp.hovered() { theme.text } else { theme.text_muted };
+        if resp.hovered() {
+            ui.painter().rect_filled(rect.shrink2(egui::vec2(2.0, 6.0)), 4.0, crate::ui::theme::mix(theme.frame, theme.text, 0.1));
+        }
+        // The window in four pieces.
+        let frame = egui::Rect::from_center_size(rect.center(), egui::vec2(15.0, 12.0));
+        let ink = egui::Stroke::new(1.2, color);
+        let p = ui.painter();
+        p.rect_stroke(frame, 2.0, ink, egui::StrokeKind::Inside);
+        p.vline(frame.left() + 5.5, frame.y_range(), ink);
+        p.hline(egui::Rangef::new(frame.left() + 5.5, frame.right()), frame.center().y, ink);
+        let resp = resp.on_hover_text(t!("Customize Layout"));
+        egui::Popup::menu(&resp).width(250.0).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+            ui.label(RichText::new(t!("VISIBILITY")).size(10.5).color(theme.text_muted));
+            crate::ui::kit::checkbox(ui, theme, &mut self.ed.prefs.activity_bar, t!("Activity bar"));
+            for part in WindowPart::ALL {
+                let mut on = self.part_shown(part);
+                if crate::ui::kit::checkbox(ui, theme, &mut on, part.name()).clicked() {
+                    self.toggle_part(part);
+                }
+            }
+            let mut status = !self.ed.prefs.status_bar_hidden;
+            if crate::ui::kit::checkbox(ui, theme, &mut status, t!("Status bar")).clicked() {
+                self.ed.prefs.status_bar_hidden = !status;
+            }
+            ui.separator();
+            ui.label(RichText::new(t!("SIDE BAR POSITION")).size(10.5).color(theme.text_muted));
+            if crate::ui::kit::radio(ui, theme, !self.ed.prefs.side_right, t!("Left")).clicked() {
+                self.ed.prefs.side_right = false;
+            }
+            if crate::ui::kit::radio(ui, theme, self.ed.prefs.side_right, t!("Right")).clicked() {
+                self.ed.prefs.side_right = true;
+            }
+            ui.separator();
+            if crate::ui::kit::menu_item(ui, t!("Reset layout"), None, true).clicked() {
+                self.ed.prefs.side_right = false;
+                self.ed.prefs.status_bar_hidden = false;
+                self.ed.prefs.activity_bar = true;
+                self.reset_layout();
+                ui.close();
+            }
+        });
+    }
+
     /// The title bar's three buttons that hide and show the side bar, the
     /// bottom panels and the right ones, drawn as the window with that part
     /// filled in. Laid out right to left.
     pub(super) fn layout_toggles(&mut self, ui: &mut egui::Ui, theme: &crate::ui::theme::Theme) {
-        for part in [WindowPart::Right, WindowPart::Bottom, WindowPart::SideBar] {
+        // In the order the parts are in the window.
+        let order = if self.ed.prefs.side_right { [WindowPart::SideBar, WindowPart::Bottom, WindowPart::Right] } else { [WindowPart::Right, WindowPart::Bottom, WindowPart::SideBar] };
+        for part in order {
             let on = self.part_shown(part);
             let (rect, resp) = ui.allocate_exact_size(egui::vec2(28.0, ui.available_height().min(crate::app::titlebar::HEIGHT)), egui::Sense::click());
             crate::ui::kit::describe_selected(&resp, egui::Role::Button, on, part.name());
@@ -302,9 +388,10 @@ impl CircuitApp {
                 ui.painter().rect_filled(rect.shrink2(egui::vec2(2.0, 6.0)), 4.0, crate::ui::theme::mix(theme.frame, theme.text, 0.1));
             }
             let frame = egui::Rect::from_center_size(rect.center(), egui::vec2(15.0, 12.0));
+            let left = (part == WindowPart::SideBar) != self.ed.prefs.side_right;
             let piece = match part {
-                WindowPart::SideBar => frame.with_max_x(frame.left() + 5.0),
-                WindowPart::Right => frame.with_min_x(frame.right() - 5.0),
+                WindowPart::SideBar | WindowPart::Right if left => frame.with_max_x(frame.left() + 5.0),
+                WindowPart::SideBar | WindowPart::Right => frame.with_min_x(frame.right() - 5.0),
                 WindowPart::Bottom => frame.with_min_y(frame.bottom() - 4.5),
             };
             let p = ui.painter();
@@ -325,6 +412,8 @@ impl CircuitApp {
         let fresh = crate::editor::prefs::Prefs::default();
         self.ed.prefs.activity = fresh.activity;
         self.ed.prefs.side_shown = fresh.side_shown;
+        self.hidden_panels.clear();
+        self.bottom_before = None;
         let canvases: Vec<Tab> = self.dock.tabs().filter(|t| matches!(t, Tab::Canvas(_))).cloned().collect();
         self.dock = default_layout();
         for t in canvases {
