@@ -4,7 +4,7 @@ A bot only answers while it runs. Running it from the editor is fine while you b
 
 ## How it gets there
 
-Pick one in **Bot › Remote…**:
+Pick one in **Bot › Remote…** (**Your host** is the [XC Circuit Host](host.md), which runs the bot itself; the others are servers and panels of other makers):
 
 | | What you fill in | Good for |
 | --- | --- | --- |

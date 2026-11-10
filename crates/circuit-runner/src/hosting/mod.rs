@@ -27,6 +27,18 @@ pub enum Kind {
     /// Still read, so a project set to it says so instead of not opening.
     Ftp,
     Calagopus,
+    /// An XC Circuit Host that runs the bot itself. It is reached like a
+    /// panel (it answers the same calls), with a paired device's token as
+    /// the key: `panel` is its address, `server` the bot's name there.
+    Host,
+}
+
+impl Kind {
+    /// A place that also starts and stops the bot and shows its console:
+    /// a Calagopus panel, or a host.
+    pub fn is_panel(self) -> bool {
+        matches!(self, Kind::Calagopus | Kind::Host)
+    }
 }
 
 /// Where a project's bot is uploaded to, kept in the project (`data.hosting`).
@@ -110,6 +122,8 @@ impl Hosting {
             Kind::Calagopus if self.panel.trim().is_empty() => Some("Fill in the panel's address."),
             Kind::Calagopus if secrets.api_key.is_none() => Some("Sign in to the panel, or paste an API key."),
             Kind::Calagopus if self.server.is_empty() => Some("Choose the server."),
+            Kind::Host if self.panel.trim().is_empty() || secrets.api_key.is_none() => Some("Pair this computer with your host first (File › Host…)."),
+            Kind::Host if self.server.is_empty() => Some("Give the bot a name on the host."),
             _ => None,
         }
     }
@@ -118,6 +132,7 @@ impl Hosting {
     fn place(&self) -> String {
         match self.kind {
             Kind::Calagopus => format!("calagopus {} {} {}", self.panel.trim_end_matches('/'), self.server, self.folder),
+            Kind::Host => format!("host {} {}", self.panel.trim_end_matches('/'), self.server),
             kind => format!("{kind:?} {}@{}:{} {}", self.user, self.host, self.port(), self.folder),
         }
     }
@@ -233,7 +248,7 @@ fn open(hosting: &Hosting, secrets: &Secrets, known_hosts: &Path, log: &mut dyn 
     Ok(match hosting.kind {
         Kind::Sftp => Box::new(sftp::Sftp::open(hosting, secrets.password.as_deref(), known_hosts, log)?),
         Kind::Ftp => bail!(FTP_GONE),
-        Kind::Calagopus => Box::new(calagopus::Upload::open(hosting, secrets.api_key.as_deref().unwrap_or_default(), log)?),
+        Kind::Calagopus | Kind::Host => Box::new(calagopus::Upload::open(hosting, secrets.api_key.as_deref().unwrap_or_default(), log)?),
         Kind::None => bail!("Choose how the bot gets to its remote."),
     })
 }
@@ -245,7 +260,7 @@ pub fn test(hosting: &Hosting, secrets: &Secrets, known_hosts: &Path, log: &mut 
     }
     let mut remote = open(hosting, secrets, known_hosts, log)?;
     // Logging in was the test: nothing is restarted.
-    if hosting.kind == Kind::Calagopus {
+    if hosting.kind.is_panel() {
         return Ok(());
     }
     remote.finish(log)

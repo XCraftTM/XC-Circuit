@@ -34,6 +34,9 @@ const LIMITS = {
   codeMinutes: 10,
   keyDays: 30, // a key nobody fetched
   quietSeconds: 75, // without an answer to a ping
+  bots: 20, // that the host runs
+  botFile: 30 * 1024 * 1024, // one file of a bot
+  botLines: 300, // of a bot's console kept for whoever looks later
 };
 
 function settings(env = process.env) {
@@ -290,7 +293,7 @@ async function start(options = settings()) {
     return trusted && forwarded ? forwarded : direct;
   };
 
-  const status = () => ({ name: "xc-circuit-host", version: VERSION, protocol: PROTOCOL, mode, can: mode === "full" ? ["relay", "projects", "vault"] : ["relay"] });
+  const status = () => ({ name: "xc-circuit-host", version: VERSION, protocol: PROTOCOL, mode, can: mode === "full" ? ["relay", "projects", "vault", "bots"] : ["relay"] });
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, "http://host");
@@ -299,6 +302,7 @@ async function start(options = settings()) {
       return res.end(JSON.stringify(status()));
     }
     if (mode === "full" && url.pathname.startsWith("/git/")) return git(req, res, url);
+    if (mode === "full" && url.pathname.startsWith("/api/client/")) return panel(req, res, url);
     res.writeHead(404, { "Content-Type": "text/plain" });
     res.end("Not found\n");
   });
@@ -417,10 +421,297 @@ async function start(options = settings()) {
     });
   }
 
+  // ---- Running bots ----------------------------------------------------------
+  //
+  // A bot is an exported project (index.js, package.json, .env) in its own
+  // folder under bots/. The host installs its packages, starts it with
+  // Node.js, keeps what it prints, and starts it again after a restart of
+  // the host if it was running. The app reaches all of it the way it
+  // reaches a game panel (the Calagopus client API, as far as the app uses
+  // it), so Bot › Remote… works with a host as it does with a panel.
+
+  const bots = new Map(); // id → { id, dir, child, state, started, lines, watchers, stopping }
+  const botsDir = mode === "full" ? path.join(options.data, "bots") : null;
+  const consoleTokens = new Map(); // one-time token → { id, expires }
+  if (botsDir) fs.mkdirSync(botsDir, { recursive: true });
+
+  function botOf(id) {
+    let bot = bots.get(id);
+    if (!bot) {
+      bot = { id, dir: path.join(botsDir, id), child: null, state: "offline", started: 0, lines: [], watchers: new Set(), stopping: false };
+      bots.set(id, bot);
+    }
+    return bot;
+  }
+
+  const noteOf = (bot) => {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(bot.dir, ".xc-host.json"), "utf8"));
+    } catch {
+      return {};
+    }
+  };
+  const keepNote = (bot, change) => {
+    try {
+      fs.writeFileSync(path.join(bot.dir, ".xc-host.json"), JSON.stringify({ ...noteOf(bot), ...change }));
+    } catch {
+      // The folder is gone: nothing to note.
+    }
+  };
+
+  function botSays(bot, text) {
+    for (const line of String(text).split(/\r?\n/)) {
+      if (!line) continue;
+      bot.lines.push(line);
+      if (bot.lines.length > LIMITS.botLines) bot.lines.shift();
+      for (const watcher of bot.watchers) watcher.send({ event: "console output", args: [line] });
+    }
+  }
+
+  function botState(bot, state) {
+    bot.state = state;
+    for (const watcher of bot.watchers) watcher.send({ event: "status", args: [state] });
+  }
+
+  /// A file's place in the bot's folder, or null for a path that would
+  /// leave it. Its own data/ is the bot's alone: uploads never touch it.
+  function botPath(bot, file) {
+    const parts = String(file || "").split(/[\\/]+/).filter(Boolean);
+    if (!parts.length || parts.some((p) => p === ".." || p === "." || p.includes(":")) || parts[0] === "data" || parts[0] === ".xc-host.json") return null;
+    return path.join(bot.dir, ...parts);
+  }
+
+  function runBot(bot) {
+    bot.stopping = false;
+    const child = spawn(process.execPath, ["index.js"], { cwd: bot.dir, env: { ...process.env, XC_HOST: "1" }, stdio: ["pipe", "pipe", "pipe"] });
+    bot.child = child;
+    bot.started = Date.now();
+    botState(bot, "running");
+    child.stdout.on("data", (chunk) => botSays(bot, chunk.toString("utf8")));
+    child.stderr.on("data", (chunk) => botSays(bot, chunk.toString("utf8")));
+    child.stdin.on("error", () => {});
+    child.on("error", (e) => botSays(bot, `Couldn't start the bot: ${e.message}`));
+    child.on("close", (code) => {
+      if (bot.child !== child) return;
+      bot.child = null;
+      botSays(bot, bot.stopping ? "The bot stopped." : `The bot ended${code == null ? "" : ` (${code})`}.`);
+      botState(bot, "offline");
+      if (bot.again) {
+        bot.again = false;
+        startBot(bot);
+      }
+    });
+  }
+
+  function startBot(bot) {
+    if (bot.child || bot.state === "starting") return;
+    if (!fs.existsSync(path.join(bot.dir, "index.js"))) {
+      botSays(bot, "There is no bot here yet: upload it first.");
+      return;
+    }
+    keepNote(bot, { wanted: "running" });
+    // Its packages, when package.json asks for other ones than last time.
+    let wants = "";
+    try {
+      const pack = JSON.parse(fs.readFileSync(path.join(bot.dir, "package.json"), "utf8"));
+      const deps = pack.dependencies || {};
+      if (Object.keys(deps).length) wants = hash(JSON.stringify(deps));
+    } catch {
+      // No package.json, or not one: nothing to install.
+    }
+    if (!wants || noteOf(bot).installed === wants) return runBot(bot);
+    botState(bot, "starting");
+    botSays(bot, "Installing the bot's packages …");
+    const npm = spawn("npm", ["install", "--omit=dev", "--no-audit", "--no-fund"], { cwd: bot.dir, shell: process.platform === "win32" });
+    bot.installing = npm;
+    npm.stdout.on("data", (chunk) => botSays(bot, chunk.toString("utf8")));
+    npm.stderr.on("data", (chunk) => botSays(bot, chunk.toString("utf8")));
+    npm.on("error", (e) => botSays(bot, `npm isn't available on this host: ${e.message}`));
+    npm.on("close", (code) => {
+      bot.installing = null;
+      if (bot.stopping) return botState(bot, "offline");
+      if (code !== 0) {
+        botSays(bot, "The packages couldn't be installed: the bot wasn't started.");
+        return botState(bot, "offline");
+      }
+      keepNote(bot, { installed: wants });
+      runBot(bot);
+    });
+  }
+
+  function stopBot(bot, hard) {
+    keepNote(bot, { wanted: "stopped" });
+    bot.stopping = true;
+    bot.again = false;
+    if (bot.installing) bot.installing.kill();
+    const child = bot.child;
+    if (!child) return;
+    botState(bot, "stopping");
+    child.kill(hard ? "SIGKILL" : "SIGTERM");
+    // One that doesn't end by itself is ended.
+    if (!hard) setTimeout(() => bot.child === child && child.kill("SIGKILL"), 10_000).unref();
+  }
+
+  function powerBot(bot, action) {
+    if (action === "start") return startBot(bot);
+    if (action === "stop") return stopBot(bot, false);
+    if (action === "kill") return stopBot(bot, true);
+    if (action === "restart") {
+      if (!bot.child) return startBot(bot);
+      stopBot(bot, false);
+      keepNote(bot, { wanted: "running" });
+      bot.again = true;
+    }
+  }
+
+  /// A bot's memory, where the system says (Linux): bytes.
+  function botMemory(bot) {
+    try {
+      const status = fs.readFileSync(`/proc/${bot.child.pid}/status`, "utf8");
+      return Number(/VmRSS:\s+(\d+)/.exec(status)[1]) * 1024;
+    } catch {
+      return 0;
+    }
+  }
+
+  if (botsDir) {
+    // Back after a restart of the host: the bots that were running run again.
+    for (const id of fs.readdirSync(botsDir)) {
+      if (!PROJECT.test(id)) continue;
+      const bot = botOf(id);
+      if (noteOf(bot).wanted === "running") startBot(bot);
+    }
+  }
+
+  // The app's side of a game panel's API, for what the app uses of it.
+  function panel(req, res, url) {
+    const answer = (code, body) => {
+      res.writeHead(code, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+      res.end(JSON.stringify(body));
+    };
+    const bearer = /^Bearer (.+)$/.exec(req.headers.authorization || "");
+    const device = store.device(bearer ? bearer[1].trim() : "");
+    if (!device) return answer(401, { errors: ["Pair this device with the host first."] });
+    const parts = url.pathname.split("/").filter(Boolean).slice(2); // after api/client
+    if (parts[0] !== "servers") return answer(404, { errors: ["Not found"] });
+    if (parts.length === 1 && req.method === "GET") {
+      // Every bot there is, and every project kept here that could be one.
+      const names = new Set([...fs.readdirSync(botsDir), ...fs.readdirSync(projects).filter((n) => n.endsWith(".git")).map((n) => n.slice(0, -4))].filter((n) => PROJECT.test(n)));
+      const data = [...names].sort().map((id) => ({ uuid: id, uuid_short: id, name: id }));
+      return answer(200, { servers: { data, total: data.length } });
+    }
+    const id = parts[1];
+    if (!PROJECT.test(id || "")) return answer(404, { errors: ["A bot's name is lowercase letters, digits and dashes."] });
+    if (!bots.has(id) && !fs.existsSync(path.join(botsDir, id)) && fs.readdirSync(botsDir).length >= LIMITS.bots) return answer(409, { errors: [`This host runs at most ${LIMITS.bots} bots.`] });
+    const bot = botOf(id);
+    const what = parts.slice(2).join("/");
+    if (what === "resources" && req.method === "GET") {
+      return answer(200, { resources: { state: bot.state, memory_bytes: bot.child ? botMemory(bot) : 0, memory_limit_bytes: 0, cpu_absolute: 0, uptime: bot.child ? Date.now() - bot.started : 0 } });
+    }
+    if (what === "websocket" && req.method === "GET") {
+      const token = random(24);
+      consoleTokens.set(token, { id, expires: Date.now() + 60_000 });
+      const secure = (req.headers["x-forwarded-proto"] || "").includes("https");
+      return answer(200, { url: `${secure ? "wss" : "ws"}://${req.headers.host}/bot-console/${id}`, token });
+    }
+    if (req.method !== "POST") return answer(404, { errors: ["Not found"] });
+    const chunks = [];
+    let size = 0;
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size <= LIMITS.botFile) chunks.push(chunk);
+    });
+    req.on("end", () => {
+      if (size > LIMITS.botFile) return answer(413, { errors: ["That file is too big for this host."] });
+      const body = Buffer.concat(chunks);
+      const json = () => {
+        try {
+          return JSON.parse(body.toString("utf8"));
+        } catch {
+          return {};
+        }
+      };
+      try {
+        if (what === "power") {
+          const action = String(json().action);
+          if (!["start", "stop", "restart", "kill"].includes(action)) return answer(422, { errors: ["That isn't something a bot can be told."] });
+          powerBot(bot, action);
+          return answer(200, {});
+        }
+        if (what === "command") {
+          if (bot.child) bot.child.stdin.write(`${String(json().command || "")}\n`);
+          return answer(200, {});
+        }
+        if (what === "files/write") {
+          const to = botPath(bot, url.searchParams.get("file"));
+          if (!to) return answer(422, { errors: ["That isn't a place in the bot's folder."] });
+          fs.mkdirSync(path.dirname(to), { recursive: true });
+          fs.writeFileSync(to, body);
+          return answer(200, {});
+        }
+        if (what === "files/create-directory") {
+          const { root, name } = json();
+          const to = botPath(bot, `${root || ""}/${name || ""}`);
+          if (!to) return answer(422, { errors: ["That isn't a place in the bot's folder."] });
+          fs.mkdirSync(to, { recursive: true });
+          return answer(200, {});
+        }
+        return answer(404, { errors: ["Not found"] });
+      } catch (e) {
+        log(`Bot ${id}, ${what}: ${e && e.message}`);
+        return answer(500, { errors: ["The host couldn't do that."] });
+      }
+    });
+  }
+
+  /// A bot's live console, as a game panel's: what it printed lately, then
+  /// every line as it comes, its state, and now and then its memory.
+  function botConsole(raw, key, address, id) {
+    const accept = crypto.createHash("sha1").update(key + GUID).digest("base64");
+    raw.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
+    const socket = new Socket(raw, address);
+    sockets.add(socket);
+    count(address, 1);
+    const bot = botOf(id);
+    let allowed = false;
+    socket.onMessage = (text) => {
+      let message;
+      try {
+        message = JSON.parse(text);
+      } catch {
+        return;
+      }
+      const args = Array.isArray(message.args) ? message.args : [];
+      if (message.event === "auth") {
+        const token = consoleTokens.get(String(args[0]));
+        consoleTokens.delete(String(args[0]));
+        if (!token || token.id !== id || token.expires < Date.now()) return socket.send({ event: "jwt error", args: ["This console's ticket isn't good (any more)."] });
+        allowed = true;
+        bot.watchers.add(socket);
+        socket.send({ event: "auth success", args: [] });
+        return socket.send({ event: "status", args: [bot.state] });
+      }
+      if (!allowed) return;
+      if (message.event === "send logs") for (const line of bot.lines) socket.send({ event: "console output", args: [line] });
+      if (message.event === "send command" && bot.child) bot.child.stdin.write(`${String(args[0] || "")}\n`);
+      if (message.event === "set state") powerBot(bot, String(args[0]));
+    };
+    socket.onClose = () => {
+      sockets.delete(socket);
+      count(address, -1);
+      bot.watchers.delete(socket);
+    };
+  }
+
   server.on("upgrade", (req, raw) => {
     const url = new URL(req.url, "http://host");
     const key = req.headers["sec-websocket-key"];
     const address = addressOf(req);
+    const consoleOf = /^\/bot-console\/([^/]+)$/.exec(url.pathname);
+    if (mode === "full" && consoleOf && PROJECT.test(consoleOf[1]) && key && (req.headers.upgrade || "").toLowerCase() === "websocket") {
+      if ((perAddress.get(address) || 0) >= LIMITS.connectionsPerAddress) return raw.end("HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n");
+      return botConsole(raw, key, address, consoleOf[1]);
+    }
     if (url.pathname !== "/ws" || !key || (req.headers.upgrade || "").toLowerCase() !== "websocket") {
       raw.end("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
       return;
@@ -595,6 +886,12 @@ async function start(options = settings()) {
       if (now - socket.heard > LIMITS.quietSeconds * 1000) socket.close(1001, "quiet");
       else socket.ping();
     }
+    for (const [token, ticket] of consoleTokens) if (ticket.expires < now) consoleTokens.delete(token);
+    for (const bot of bots.values()) {
+      if (!bot.child || !bot.watchers.size) continue;
+      const stats = JSON.stringify({ memory_bytes: botMemory(bot), memory_limit_bytes: 0, cpu_absolute: 0 });
+      for (const watcher of bot.watchers) watcher.send({ event: "stats", args: [stats] });
+    }
   }, options.beatMs || 30_000);
   beat.unref();
 
@@ -609,6 +906,13 @@ async function start(options = settings()) {
         close: () =>
           new Promise((done) => {
             clearInterval(beat);
+            // The bots end with the host; which were running is noted, so
+            // they run again when it is back.
+            for (const bot of bots.values()) {
+              if (bot.installing) bot.installing.kill();
+              if (bot.child) bot.child.kill("SIGTERM");
+              bot.child = null;
+            }
             for (const socket of sockets) socket.close(1001, "closing");
             server.close(() => {
               if (store) store.close();

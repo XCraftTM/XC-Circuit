@@ -166,7 +166,7 @@ test("devices are paired, and keep secrets the host can't read", async () => {
   let host = await start({ mode: "full", port: 0, address: "127.0.0.1", data: dir, trusted: [], log: (l) => lines.push(l) });
   try {
     const status = await (await fetch(`http://127.0.0.1:${host.port}/status`)).json();
-    assert.deepEqual(status.can, ["relay", "projects", "vault"]);
+    assert.deepEqual(status.can, ["relay", "projects", "vault", "bots"]);
     const code = host.setupCode();
     assert.match(code, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
     assert.ok(lines.some((l) => l.includes(code)), "the first code is in the log");
@@ -305,6 +305,96 @@ test("projects are Git repositories, for paired devices only", { skip: spawnSync
     assert.equal(early.before, 0, "no answer while the upload is still coming");
     assert.ok(early.got > 0, "and one once it is there");
     device.close();
+  } finally {
+    await host.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a bot is uploaded, runs on the host, and says what it prints", async () => {
+  const dir = dataDir("bots");
+  let host = await start({ mode: "full", port: 0, address: "127.0.0.1", data: dir, trusted: [], log: quiet });
+  try {
+    const device = await app(host.port);
+    device.send({ t: "pair", code: host.setupCode(), name: "Laptop" });
+    const { token } = await device.next("paired");
+    device.close();
+    const base = `http://127.0.0.1:${host.port}/api/client/servers`;
+    const call = async (method, where, body, key = token) => {
+      const res = await fetch(`${base}${where}`, { method, headers: { Authorization: `Bearer ${key}`, "Content-Type": typeof body === "string" ? "text/plain" : "application/json" }, body: body == null ? undefined : typeof body === "string" ? body : JSON.stringify(body) });
+      return { status: res.status, body: await res.json().catch(() => ({})) };
+    };
+    assert.equal((await call("GET", "", null, "wrong")).status, 401);
+    assert.equal((await call("GET", "/my-bot/resources")).body.resources.state, "offline");
+
+    // The app uploads the exported bot, file by file.
+    const bot = 'console.log("Bot ready"); process.stdin.on("data", (d) => console.log("heard " + String(d).trim())); setInterval(() => {}, 1000); process.on("SIGTERM", () => process.exit(0));';
+    assert.equal((await call("POST", "/my-bot/files/write?file=%2Findex.js", bot)).status, 200);
+    assert.equal((await call("POST", "/my-bot/files/write?file=%2Fpackage.json", '{ "name": "bot" }')).status, 200);
+    assert.equal((await call("POST", "/my-bot/files/write?file=%2F.env", "DISCORD_TOKEN=x")).status, 200);
+    assert.equal(fs.readFileSync(path.join(dir, "bots", "my-bot", "index.js"), "utf8"), bot);
+    // Not outside its folder, and not into the bot's own data.
+    for (const bad of ["%2F..%2F..%2Fhost.sqlite", "..%2Fx.js", "%2Fdata%2Fstore.json", "C%3A%2Fx"]) {
+      assert.equal((await call("POST", `/my-bot/files/write?file=${bad}`, "x")).status, 422, bad);
+    }
+    assert.equal((await call("POST", "/..%2Fx/power", { action: "start" })).status, 404);
+    assert.deepEqual((await call("GET", "")).body.servers.data.map((s) => s.uuid), ["my-bot"]);
+
+    // Started: running, and its console says what it printed, also to
+    // someone who looks later.
+    assert.equal((await call("POST", "/my-bot/power", { action: "dance" })).status, 422);
+    assert.equal((await call("POST", "/my-bot/power", { action: "start" })).status, 200);
+    const waitFor = async (state) => {
+      for (let i = 0; i < 100; i++) {
+        const r = (await call("GET", "/my-bot/resources")).body.resources;
+        if (r.state === state) return r;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      throw new Error(`never ${state}`);
+    };
+    await waitFor("running");
+    const ticket = (await call("GET", "/my-bot/websocket")).body;
+    const lines = [];
+    const states = [];
+    const consoleOf = (url, token) =>
+      new Promise((resolve, reject) => {
+        const ws = new WebSocket(url);
+        ws.onerror = () => reject(new Error("no console"));
+        ws.onopen = () => ws.send(JSON.stringify({ event: "auth", args: [token] }));
+        ws.onmessage = (e) => {
+          const m = JSON.parse(e.data);
+          if (m.event === "auth success") {
+            ws.send(JSON.stringify({ event: "send logs", args: [] }));
+            resolve(ws);
+          }
+          if (m.event === "jwt error") reject(new Error(m.args[0]));
+          if (m.event === "console output") lines.push(m.args[0]);
+          if (m.event === "status") states.push(m.args[0]);
+        };
+      });
+    const ws = await consoleOf(ticket.url, ticket.token);
+    await assert.rejects(consoleOf(ticket.url, ticket.token), /isn't good/, "a ticket is good once");
+    const until = async (check) => {
+      for (let i = 0; i < 100 && !check(); i++) await new Promise((r) => setTimeout(r, 50));
+      assert.ok(check(), `lines ${JSON.stringify(lines)}, states ${JSON.stringify(states)}`);
+    };
+    await until(() => lines.includes("Bot ready") && states.includes("running"));
+    ws.send(JSON.stringify({ event: "send command", args: ["hello"] }));
+    await until(() => lines.includes("heard hello"));
+
+    // The host restarts: the bot that was running runs again.
+    ws.close();
+    await host.close();
+    host = await start({ mode: "full", port: 0, address: "127.0.0.1", data: dir, trusted: [], log: quiet });
+    const again = `http://127.0.0.1:${host.port}/api/client/servers`;
+    const state = async () => (await (await fetch(`${again}/my-bot/resources`, { headers: { Authorization: `Bearer ${token}` } })).json()).resources.state;
+    for (let i = 0; i < 100 && (await state()) !== "running"; i++) await new Promise((r) => setTimeout(r, 50));
+    assert.equal(await state(), "running");
+    // Stopped: it stays stopped, also after another restart.
+    await fetch(`${again}/my-bot/power`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ action: "kill" }) });
+    for (let i = 0; i < 100 && (await state()) !== "offline"; i++) await new Promise((r) => setTimeout(r, 50));
+    assert.equal(await state(), "offline");
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dir, "bots", "my-bot", ".xc-host.json"), "utf8")).wanted, "stopped");
   } finally {
     await host.close();
     fs.rmSync(dir, { recursive: true, force: true });

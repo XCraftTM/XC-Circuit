@@ -214,7 +214,7 @@ impl CircuitApp {
                 if kit::menu_item(ui, t!("Upload to the remote"), self.shortcut_shown(Hotkey::Upload), configured && self.bot.hosting.busy().is_none()).clicked() {
                     self.bot.hosting.upload(&mut self.ed);
                 }
-                let calagopus = has_project && crate::bot::hosting::settings_of(&self.ed).kind == circuit_runner::hosting::Kind::Calagopus;
+                let calagopus = has_project && crate::bot::hosting::settings_of(&self.ed).kind.is_panel();
                 if calagopus && kit::menu_item(ui, t!("Remote console"), self.shortcut_shown(Hotkey::ServerConsole), true).clicked() {
                     self.bot.hosting.open_console(&mut self.ed);
                 }

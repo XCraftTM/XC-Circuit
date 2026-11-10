@@ -26,7 +26,7 @@ impl CircuitApp {
             if crate::bot::hosting::HostingUi::configured(&self.ed) {
                 items.push(Item::new(t!("Bot"), t!("Upload to the remote"), Cmd::Upload).shortcut(self.key_label(Hotkey::Upload)));
             }
-            if crate::bot::hosting::settings_of(&self.ed).kind == circuit_runner::hosting::Kind::Calagopus {
+            if crate::bot::hosting::settings_of(&self.ed).kind.is_panel() {
                 items.push(Item::new(t!("Bot"), t!("Remote console"), Cmd::ServerConsole).shortcut(self.key_label(Hotkey::ServerConsole)));
             }
             items.push(Item::new(t!("File"), "Save", Cmd::Save).shortcut(self.key_label(Hotkey::Save)));

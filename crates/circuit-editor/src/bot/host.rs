@@ -112,6 +112,12 @@ fn load_pairing() -> Option<(Paired, String, Option<VaultKey>)> {
     Some((paired, entry["token"].as_str()?.to_string(), key))
 }
 
+/// The paired host's address and this device's token, for a bot that runs
+/// there (Bot › Remote…).
+pub fn pairing() -> Option<(String, String)> {
+    load_pairing().map(|(paired, token, _)| (paired.address, token))
+}
+
 /// A connection to the paired host, said hello to.
 fn linked() -> anyhow::Result<(Link, Paired, Option<VaultKey>)> {
     let (paired, token, key) = load_pairing().ok_or_else(|| anyhow::anyhow!("This computer isn't paired with a host."))?;

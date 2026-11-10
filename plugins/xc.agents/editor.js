@@ -196,7 +196,7 @@ tool({
 
 tool({
   name: "get_server",
-  description: "The bot's server (Bot › Remote…): how it uploads (sftp, ftp, calagopus or none), where, whether Run acts there (runTarget: local or server) and can (canRunThere: a Calagopus server with a key), the server's state (running, starting, stopping, offline) with CPU and memory, the last upload, and the server console's last lines when its tab is open. savedHere is false when the settings came with the project's files and the user hasn't saved them on this computer: nothing is sent to such a server. Never passwords or keys.",
+  description: "The bot's server (Bot › Remote…): how it uploads (host, calagopus, sftp or none), where, whether Run acts there (runTarget: local or server) and can (canRunThere: a Calagopus server with a key), the server's state (running, starting, stopping, offline) with CPU and memory, the last upload, and the server console's last lines when its tab is open. savedHere is false when the settings came with the project's files and the user hasn't saved them on this computer: nothing is sent to such a server. Never passwords or keys.",
   input: schema({}),
   run() {
     needProject();

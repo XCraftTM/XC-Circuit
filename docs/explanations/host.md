@@ -2,8 +2,8 @@
 
 The **XC Circuit Host** is a small server you run yourself, in a Docker container. It is for people who want their projects on a machine of their own instead of GitHub, and it is what live sessions go through.
 
-::: warning Work in progress
-The container is here and tested, and from XC Circuit you can pair with it, keep projects on it and carry a project's secrets between your devices. [Live sessions](live.md) can meet at your host instead of the public relay. Running the bot on the host is still being built.
+::: warning New
+The Host is new in 0.3.0. Seeing in the editor which blocks ran is for a bot run from the editor and in live sessions; for a bot on the host, the console is what you get so far.
 :::
 
 ## What it does
@@ -13,10 +13,11 @@ The container is here and tested, and from XC Circuit you can pair with it, keep
 | **Projects** | Your projects with every version, as Git repositories: XC Circuit keeps in step with it the same way as with GitHub. |
 | **Vault** | Your bots' secrets (token, passwords), **encrypted by your devices**. The host can't read them, and neither can someone who gets hold of its data. |
 | **Relay** | Nothing: it passes the messages of a live session from one app to the others. |
+| **Bots** | The bots you tell it to run: it installs their packages, starts them, keeps what they print, and starts them again after its own restart. |
 
 It has two modes, set with `XC_HOST_MODE`:
 
-- **`full`** (the default): all three. It needs a data folder (a volume); without one it doesn't start, and says so, instead of writing into the container where an update would wipe it.
+- **`full`** (the default): all four. It needs a data folder (a volume); without one it doesn't start, and says so, instead of writing into the container where an update would wipe it.
 - **`relay`**: only the relay. Nothing is kept, no volume is needed. This is what a public relay runs.
 
 ## Setting it up
@@ -36,7 +37,7 @@ You need a server with Docker and a reverse proxy that adds HTTPS, such as Nginx
 3. Open `https://circuit.example.com/status`. It answers with its mode and protocol version:
 
    ```json
-   { "name": "xc-circuit-host", "version": "0.3.0", "protocol": 1, "mode": "full", "can": ["relay", "projects", "vault"] }
+   { "name": "xc-circuit-host", "version": "0.3.0", "protocol": 1, "mode": "full", "can": ["relay", "projects", "vault", "bots"] }
    ```
 
 4. Pair your first device. There is no password to start with: the host prints a code in its log, good for ten minutes (restart it for a new one):
@@ -70,6 +71,18 @@ With a project open, File › Host… has three buttons:
 
 The passwords for uploading the bot from one computer (Bot › Remote…) don't travel: they belong to that computer.
 
+## Running the bot on the host
+
+The host can run the bot itself, so it is online without your computer:
+
+1. **Bot › Remote…**, choose **Your host**. Where it is and who you are comes from the pairing; the bot gets the project's name there (you can change it).
+2. **Save and upload**. The host gets the bot as [an exported folder](hosting.md), installs its packages and starts it. With **Upload after every save**, every save puts the new version there and restarts the bot.
+3. Beside Run, pick **Remote**: Run, Restart and Stop now act on the bot on the host, and the status bar shows how it stands. **Bot › Remote console** shows what it prints, live, also what it printed before you looked.
+
+To log in, the bot needs its token on the host: with **Send the bot token** on (as it is to start with), the upload carries a `.env` with it, which lies in the host's data folder, readable by whoever runs the host. That is you. (The vault is another matter: what is in there, the host can't read.)
+
+A bot that was running starts again by itself when the host restarts or its container is updated; one you stopped stays stopped. The bot's own data (`data/` in its folder: what it saved about members, its databases) is never touched by an upload.
+
 On another device, get the project with **File › Get from Git…** and the address `https://circuit.example.com/git/my-bot.git`; once paired, that device is signed in there already.
 
 ## Settings
@@ -85,7 +98,7 @@ On another device, get the project with **File › Get from Git…** and the add
 
 - **Backups are yours to make.** Everything is in the data volume: copy it while the container is stopped, or with a snapshot.
 - **The proxy sees the traffic**, as it adds the HTTPS. That is fine: secrets are encrypted by your devices before they are sent, and live sessions are encrypted between the apps.
-- **Limits** keep one person from filling it up: 16 guests in a session, 4 sessions and 32 connections per address, 256 KB per message, 64 KB of secrets per project. A code for pairing runs out after 10 minutes; a key nobody fetched, after 30 days.
+- **Limits** keep one person from filling it up: 20 bots, 30 MB per file of a bot, 16 guests in a session, 4 sessions and 32 connections per address, 256 KB per message, 64 KB of secrets per project. A code for pairing runs out after 10 minutes; a key nobody fetched, after 30 days.
 - The host and the app are updated on their own, so they tell each other their **protocol version** first.
 - A sign of life goes both ways every 30 seconds, as proxies cut connections that say nothing (Nginx after 60 seconds).
 
@@ -107,5 +120,7 @@ Everything but Git goes over one WebSocket at `/ws`, as JSON with a `t`:
 | `vault.put { project, blob, rev }` | `vault.kept { rev }` | `rev` is the one last seen: a newer one there refuses it. |
 | `key.put { for, blob }`, `key.get` | `keys { keys }` | A key wrapped for another device, kept until it fetches it. |
 | | `project.changed { project, by }` | Sent to every connected device when something was stored in a project: time to fetch. |
+
+The bots are reached the way a game panel is (the part of the Calagopus client API the app uses, under `/api/client/servers/<bot>/…`: `resources`, `power`, `command`, `files/write`, `websocket` for the live console), with a paired device's token as the key.
 
 What goes wrong comes back as `error { re, why }`. The source is one file, [`host/server.js`](https://github.com/XCraftTM/XC-Circuit/blob/main/host/server.js), with no dependencies beyond Node.js 24 and Git; `node host/test/host.js` runs its tests.

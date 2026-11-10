@@ -476,4 +476,47 @@ mod tests {
         assert!(Link::open(address).unwrap().hello(&second_token).is_err());
         assert!(Link::open("ftp://x").is_err() && Link::open("http://127.0.0.1:9").is_err());
     }
+
+    /// The host runs a bot, and the app reaches it the way it reaches a
+    /// game panel: the same calls Bot › Remote… makes (`XC_HOST_TEST` as
+    /// above). Skipped without a running host.
+    #[test]
+    fn a_host_runs_a_bot_like_a_panel() {
+        use crate::hosting::calagopus::{Console, ConsoleEvent, Panel, plain};
+        let Some(file) = std::env::var_os("XC_HOST_TEST") else { return };
+        let text = std::fs::read_to_string(file).unwrap();
+        let mut lines = text.lines();
+        let (git, token) = (lines.next().unwrap(), lines.next().unwrap());
+        let address = git.split("/git/").next().unwrap();
+        let panel = Panel::new(address, token);
+        let name = format!("bot{}", std::process::id());
+        assert!(Panel::new(address, "wrong").servers().unwrap_err().to_string().contains("401"));
+        assert_eq!(panel.resources(&name).unwrap().state, "offline");
+        panel.write_file(&name, "/package.json", b"{ \"name\": \"bot\" }").unwrap();
+        panel.write_file(&name, "/index.js", b"console.log('Bot ready'); setInterval(() => {}, 1000); process.on('SIGTERM', () => process.exit(0));").unwrap();
+        assert!(panel.write_file(&name, "/../x.js", b"x").is_err());
+        assert!(panel.servers().unwrap().iter().any(|s| s.uuid == name));
+        panel.power(&name, "start").unwrap();
+        let console = Console::open(panel.clone(), name.clone());
+        let (mut ready, mut running, mut connected) = (false, false, false);
+        let until = Instant::now() + Duration::from_secs(15);
+        while Instant::now() < until && !(ready && running && connected) {
+            match console.events.recv_timeout(Duration::from_millis(200)) {
+                Ok(ConsoleEvent::Connected) => connected = true,
+                Ok(ConsoleEvent::Output(line)) => ready |= plain(&line) == "Bot ready",
+                Ok(ConsoleEvent::Status(state)) => running |= state == "running",
+                Ok(ConsoleEvent::Problem(p)) => panic!("{p}"),
+                _ => {}
+            }
+        }
+        assert!(ready && running && connected, "ready {ready}, running {running}, connected {connected}");
+        let now = panel.resources(&name).unwrap();
+        assert!(now.state == "running" && now.uptime < 60_000, "{now:?}");
+        panel.power(&name, "kill").unwrap();
+        let until = Instant::now() + Duration::from_secs(10);
+        while Instant::now() < until && panel.resources(&name).unwrap().state != "offline" {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        assert_eq!(panel.resources(&name).unwrap().state, "offline");
+    }
 }

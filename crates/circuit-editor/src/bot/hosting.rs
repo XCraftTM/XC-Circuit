@@ -316,7 +316,7 @@ impl HostingUi {
         // none, or another server chosen) closes it.
         if self.console.as_ref().is_some_and(|c| {
             let h = settings_of(ed);
-            ed.project.is_none() || h.kind != Kind::Calagopus || h.server != c.server
+            ed.project.is_none() || !h.kind.is_panel() || h.server != c.server
         }) {
             self.console = None;
         }
@@ -337,7 +337,7 @@ impl HostingUi {
         {
             return *yes;
         }
-        let yes = h.kind == Kind::Calagopus && !h.server.is_empty() && !h.panel.trim().is_empty() && approved(ed) && secrets::get(&p.root, hosting::API_KEY).is_some();
+        let yes = h.kind.is_panel() && !h.server.is_empty() && !h.panel.trim().is_empty() && approved(ed) && secrets::get(&p.root, hosting::API_KEY).is_some();
         self.controllable = Some((key, yes));
         yes
     }
@@ -649,7 +649,7 @@ impl HostingUi {
     /// the last run comes back when the app starts.
     pub fn restore_console(&mut self, ed: &Editor) -> bool {
         let h = settings_of(ed);
-        let Some(key) = secrets_of(ed).api_key.filter(|_| h.kind == Kind::Calagopus && !h.server.is_empty()) else { return false };
+        let Some(key) = secrets_of(ed).api_key.filter(|_| h.kind.is_panel() && !h.server.is_empty()) else { return false };
         if self.console.as_ref().is_some_and(|c| c.server == h.server) {
             return true;
         }
@@ -675,6 +675,8 @@ impl HostingUi {
         // A server that came with the project's files and wasn't saved here:
         // said at the top, as Save is what lets the secrets go there.
         let another = (!approved(ed)).then(|| ed.reg.icons.clone());
+        // The name a bot of this project gets on a host.
+        let host_bot_name = ed.project.as_ref().map(|p| circuit_runner::host_link::project_address("", &p.meta.name).trim_start_matches("/git/").trim_end_matches(".git").to_string()).unwrap_or_default();
         let d = self.draft.as_mut().unwrap();
         dialog::tab(
             ui,
@@ -695,9 +697,27 @@ impl HostingUi {
                     }
                     kit::section(ui, &theme, t!("How it gets there"));
                     ui.horizontal_wrapped(|ui| {
-                        for (kind, label) in [(Kind::Sftp, t!("SFTP")), (Kind::Calagopus, t!("Calagopus panel")), (Kind::None, t!("Nowhere"))] {
-                            if kit::radio(ui, &theme, d.h.kind == kind, label).clicked() {
+                        for (kind, label) in [(Kind::Host, t!("Your host")), (Kind::Calagopus, t!("Calagopus panel")), (Kind::Sftp, t!("SFTP")), (Kind::None, t!("Nowhere"))] {
+                            if kit::radio(ui, &theme, d.h.kind == kind, label).clicked() && d.h.kind != kind {
                                 d.h.kind = kind;
+                                // Your host: where and as whom is known from
+                                // the pairing; the bot goes by the project's name.
+                                if kind == Kind::Host {
+                                    match super::host::pairing() {
+                                        Some((address, token)) => {
+                                            d.h.panel = address;
+                                            d.api_key = token;
+                                            d.h.server = host_bot_name.clone();
+                                            d.h.server_name = d.h.server.clone();
+                                            d.h.folder.clear();
+                                            d.h.restart = true;
+                                        }
+                                        None => {
+                                            d.h.panel.clear();
+                                            d.h.server.clear();
+                                        }
+                                    }
+                                }
                             }
                             ui.add_space(8.0);
                         }
@@ -793,6 +813,18 @@ impl HostingUi {
                             kit::field(ui, &theme, t!("Folder on the remote (optional)"), Some(t!("Empty: the server's own folder, where its start command looks.")), |ui| kit::text_input(ui, &mut d.h.folder, "", false));
                             kit::toggle_row(ui, &theme, &mut d.h.restart, t!("Restart the server after uploading"), t!("So the new version of the bot runs right away."));
                         }
+                        Kind::Host => {
+                            if d.h.panel.trim().is_empty() {
+                                ui.label(RichText::new(t!("Pair this computer with your host first: File › Host…")).color(theme.warning));
+                            } else {
+                                kit::done_label(ui, tf!("The bot runs on your host at {address}", address = d.h.panel), theme.action);
+                                if kit::field(ui, &theme, t!("The bot's name there"), Some(t!("Lowercase letters, digits and dashes. Each bot on the host has its own.")), |ui| kit::text_input(ui, &mut d.h.server, "my-bot", false)).changed() {
+                                    d.h.server = d.h.server.to_lowercase().chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').collect();
+                                    d.h.server_name = d.h.server.clone();
+                                }
+                                kit::caption(ui, &theme, t!("The host installs the bot's packages, starts it, and starts it again after its own restart. Run, Restart and Stop work from here once Remote is picked beside Run, and Bot › Remote console shows what the bot prints."));
+                            }
+                        }
                         Kind::None => {
                             ui.label(RichText::new(t!("Choose how the bot gets to the remote it runs on. Export (Bot › Export…) makes a folder to copy there by hand.")).color(theme.text_muted));
                         }
@@ -882,6 +914,8 @@ fn missing_text(english: &str) -> &'static str {
         "Fill in the panel's address." => t!("Fill in the panel's address."),
         "Sign in to the panel, or paste an API key." => t!("Sign in to the panel, or paste an API key."),
         "Choose the server." => t!("Choose the server."),
+        "Pair this computer with your host first (File › Host…)." => t!("Pair this computer with your host first (File › Host…)."),
+        "Give the bot a name on the host." => t!("Give the bot a name on the host."),
         _ => t!("Something is missing in the remote settings."),
     }
 }
@@ -889,7 +923,7 @@ fn missing_text(english: &str) -> &'static str {
 /// Where uploads go, in a few words.
 fn place_name(h: &Hosting) -> String {
     match h.kind {
-        Kind::Calagopus => if h.server_name.is_empty() { h.server.clone() } else { h.server_name.clone() },
+        Kind::Calagopus | Kind::Host => if h.server_name.is_empty() { h.server.clone() } else { h.server_name.clone() },
         _ => h.host.trim().to_string(),
     }
 }
