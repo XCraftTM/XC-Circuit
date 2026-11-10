@@ -154,7 +154,7 @@ mod tests {
     fn leaves_out_the_server_and_local_paths() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins").canonicalize().unwrap();
         let engine = circuit_plugins::BlockEngine::new().unwrap();
-        let reg = Registry::load(&[root.clone()], &engine);
+        let reg = Registry::load(std::slice::from_ref(&root), &engine);
         let dir = std::env::temp_dir().join(format!("xc-bundle-leak-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         let mut project = Project::create(&dir, "Leak", "discord-bot").unwrap();
