@@ -130,6 +130,14 @@ pub struct LiveUi {
     told_profile: Option<crate::bot::profile::BotProfile>,
     told_servers: BTreeMap<String, usize>,
     told_ran: Option<Instant>,
+    /// A guest: the invitation they came with, and after a dropped
+    /// connection, when to try again and the how-manieth time that is.
+    came_with: String,
+    retry: Option<(Instant, u32)>,
+    /// The host's plugins that don't come with the app: id, version, folder.
+    plugin_dirs: Vec<(String, String, PathBuf)>,
+    /// A guest: the parts of the host's plugins that have arrived, by id.
+    plugin_parts: BTreeMap<String, (String, Vec<Option<String>>)>,
     /// A guest: the server list and the profile the host gave, shown again
     /// when the guest's own (empty) read comes in over them.
     given_servers: Option<std::sync::Arc<Vec<crate::bot::servers::Server>>>,
@@ -176,7 +184,10 @@ impl LiveUi {
         let docs = docs_of(ed);
         match Wire::host(&self.relay) {
             Ok(wire) => {
-                let side = HostSide::new(self.name.trim(), VERSION, docs);
+                let mut side = HostSide::new(self.name.trim(), VERSION, docs);
+                // The plugins a guest may lack: all but the app's own.
+                self.plugin_dirs = ed.reg.plugins.iter().filter(|p| !ed.bundled_plugins.contains(&p.manifest.id) && !ed.optional_plugins.iter().any(|(id, _)| *id == p.manifest.id)).map(|p| (p.manifest.id.clone(), p.manifest.version.clone(), p.dir.clone())).collect();
+                side.plugins = self.plugin_dirs.iter().map(|(id, version, _)| (id.clone(), version.clone())).collect();
                 self.session = Some(Session { wire, role: Role::Host { side, files: other_files(&root), invite: None }, seen: Some(ed.history.revision()), looked: Instant::now() });
                 self.said = None;
             }
@@ -189,6 +200,9 @@ impl LiveUi {
         match Wire::join(&self.invite) {
             Ok(wire) => {
                 let folder = guest_folder(&self.invite);
+                self.came_with = self.invite.trim().to_string();
+                self.retry = None;
+                self.plugin_parts.clear();
                 self.session = Some(Session { wire, role: Role::Guest { side: GuestSide::new(), name: self.name.trim().to_string(), folder, welcomed: false }, seen: None, looked: Instant::now() });
                 self.said = None;
             }
@@ -198,6 +212,7 @@ impl LiveUi {
 
     /// Ends the session (the host), or leaves it (a guest).
     pub fn end(&mut self) {
+        self.retry = None;
         self.others.clear();
         self.bot = None;
         if self.session.take().is_some() {
@@ -219,6 +234,16 @@ impl LiveUi {
     /// `bot` is how the bot stands here: `stopped`, `starting` or `running`.
     pub fn poll(&mut self, ed: &mut Editor, ctx: &egui::Context, bot: &str) {
         let Some(session) = self.session.as_mut() else { return };
+        // After a dropped connection: back in with the same invitation.
+        if let Some((when, tries)) = self.retry
+            && Instant::now() >= when
+        {
+            if let Ok(wire) = Wire::join(&self.came_with) {
+                session.wire = wire;
+            }
+            // Under way: the next word from the wire decides what follows.
+            self.retry = Some((Instant::now() + Duration::from_secs(3600), tries));
+        }
         let mut over: Option<String> = None;
         for event in session.wire.events() {
             match (&mut session.role, event) {
@@ -249,6 +274,18 @@ impl LiveUi {
                     }
                     if arriving && let Some(guest) = side.guests.get(&id) {
                         ed.log(Level::Info, tf!("{name} joined the session", name = guest.name));
+                        // The plugins the guest may lack follow, in parts.
+                        for (plugin, version, dir) in &self.plugin_dirs {
+                            match pack_plugin(dir) {
+                                Some(text) => {
+                                    let parts: Vec<String> = text.as_bytes().chunks(120_000).map(|c| String::from_utf8_lossy(c).into_owned()).collect();
+                                    for (part, text) in parts.iter().enumerate() {
+                                        session.wire.send(Some(&id), serde_json::to_value(Msg::Plugin { id: plugin.clone(), version: version.clone(), part, parts: parts.len(), text: text.clone() }).unwrap_or_default());
+                                    }
+                                }
+                                None => ed.log(Level::Warn, tf!("The plugin {plugin} is too big to pass on to guests: they see its blocks as unknown.", plugin = plugin)),
+                            }
+                        }
                         // The newcomer learns where everyone is, and how the bot stands.
                         self.here = None;
                         self.told.1.clear();
@@ -264,7 +301,10 @@ impl LiveUi {
                         ed.log(Level::Info, notice);
                     }
                 }
-                (Role::Guest { name, .. }, Event::Joined) => session.wire.send(None, serde_json::to_value(GuestSide::hello(name, VERSION)).unwrap_or_default()),
+                (Role::Guest { name, side, welcomed, .. }, Event::Joined) => {
+                    let hello = if *welcomed { side.hello_again(name, VERSION) } else { GuestSide::hello(name, VERSION) };
+                    session.wire.send(None, serde_json::to_value(hello).unwrap_or_default());
+                }
                 (Role::Guest { side, folder, welcomed, .. }, Event::From { data, .. }) => {
                     let Ok(msg) = serde_json::from_value::<Msg>(data) else { continue };
                     let now = if *welcomed { docs_of(ed) } else { Docs::new() };
@@ -272,6 +312,13 @@ impl LiveUi {
                     if let Some(why) = turn.refused {
                         over = Some(why);
                         continue;
+                    }
+                    if turn.back {
+                        self.retry = None;
+                        // What changed here while away is looked at again, and sent.
+                        session.seen = None;
+                        self.said = Some((true, t!("Back in the session.").into()));
+                        ed.log(Level::Success, t!("Back in the session."));
                     }
                     if let Some((_, files, docs)) = turn.welcome {
                         // The copy to work in: written as a project, then opened.
@@ -337,9 +384,36 @@ impl LiveUi {
                                     ed.wire_values.insert((ws, node, pin), (value, Instant::now()));
                                 }
                             }
+                            Msg::Plugin { id, version, part, parts, text } => {
+                                if parts == 0 || parts > 200 || part >= parts {
+                                    continue;
+                                }
+                                let entry = self.plugin_parts.entry(id.clone()).or_insert_with(|| (version.clone(), vec![None; parts]));
+                                if entry.1.len() != parts {
+                                    *entry = (version.clone(), vec![None; parts]);
+                                }
+                                entry.1[part] = Some(text);
+                                if entry.1.iter().all(Option::is_some) {
+                                    let (version, pieces) = self.plugin_parts.remove(&id).unwrap_or_default();
+                                    let text: String = pieces.into_iter().flatten().collect();
+                                    // One this app has the same version of is used as it is.
+                                    let have = ed.reg.plugins.iter().any(|p| p.manifest.id == id && p.manifest.version == version && !p.dir.starts_with(&*folder));
+                                    if !have && unpack_plugin(folder, &id, &text).is_ok() {
+                                        // Someone else's code: the app asks before it loads.
+                                        ed.reload_plugins();
+                                    }
+                                }
+                            }
                             _ => {}
                         }
                     }
+                }
+                // A guest whose connection dropped tries to get back in,
+                // for a while; a session that is over is over.
+                (Role::Guest { welcomed, .. }, Event::Closed { why }) if *welcomed && !why.is_empty() && !why.contains("isn't open") && self.retry.is_none_or(|(_, tries)| tries < 40) => {
+                    let tries = self.retry.map_or(0, |(_, tries)| tries);
+                    self.retry = Some((Instant::now() + Duration::from_secs(3), tries + 1));
+                    self.said = Some((false, t!("The connection dropped. Trying to get back in…").into()));
                 }
                 (_, Event::Closed { why }) => over = Some(why),
                 _ => {}
@@ -347,6 +421,7 @@ impl LiveUi {
         }
         if let Some(why) = over {
             self.session = None;
+            self.retry = None;
             self.others.clear();
             ed.live_others.clear();
             self.bot = None;
@@ -363,7 +438,8 @@ impl LiveUi {
         // moved, a few times a second at most.
         let revision = ed.history.revision();
         let ready = match &session.role {
-            Role::Guest { welcomed, folder, .. } => *welcomed && ed.project.as_ref().is_some_and(|p| p.root == *folder),
+            // Not while the connection is away: nothing would arrive.
+            Role::Guest { welcomed, folder, .. } => *welcomed && self.retry.is_none() && ed.project.as_ref().is_some_and(|p| p.root == *folder),
             Role::Host { .. } => true,
         };
         if ready && session.seen != Some(revision) && session.looked.elapsed() > Duration::from_millis(200) {
@@ -651,7 +727,10 @@ impl LiveUi {
             }
             if let Some(id) = kick {
                 wire.kick(&id);
-                side.left(&id);
+                for (to, msg) in side.sent_away(&id) {
+                    wire.send(to.as_deref(), serde_json::to_value(&msg).unwrap_or_default());
+                }
+                self.others.remove(&id);
             }
         }
         if start {
@@ -667,6 +746,59 @@ impl LiveUi {
             self.open = false;
         }
     }
+}
+
+/// A plugin's files as one text, to pass on: each file by its path, as
+/// base64. `None` when it is more than a session should carry.
+fn pack_plugin(dir: &std::path::Path) -> Option<String> {
+    fn walk(dir: &std::path::Path, base: &std::path::Path, files: &mut BTreeMap<String, String>, total: &mut usize) -> Option<()> {
+        for entry in std::fs::read_dir(dir).ok()?.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') || name == "node_modules" {
+                continue;
+            }
+            let path = entry.path();
+            if entry.file_type().ok()?.is_dir() {
+                walk(&path, base, files, total)?;
+            } else {
+                let bytes = std::fs::read(&path).ok()?;
+                *total += bytes.len();
+                if *total > 4_000_000 {
+                    return None;
+                }
+                let rel = path.strip_prefix(base).ok()?.to_string_lossy().replace('\\', "/");
+                files.insert(rel, base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes));
+            }
+        }
+        Some(())
+    }
+    let mut files = BTreeMap::new();
+    walk(dir, dir, &mut files, &mut 0)?;
+    serde_json::to_string(&files).ok()
+}
+
+/// Writes a plugin the host passed on into the guest's copy, as one of the
+/// project's own plugins: those only load once the user said yes.
+fn unpack_plugin(folder: &std::path::Path, id: &str, text: &str) -> anyhow::Result<()> {
+    let plain = |part: &str| !part.is_empty() && part != "." && part != ".." && !part.contains([':', '\\']);
+    if !plain(id) || id.contains('/') {
+        anyhow::bail!("not a plugin's id");
+    }
+    let files: BTreeMap<String, String> = serde_json::from_str(text)?;
+    let to = folder.join("plugins").join(id);
+    let _ = std::fs::remove_dir_all(&to);
+    for (path, data) in files {
+        // Only plain paths: nothing that could land outside the folder.
+        if !path.split('/').all(plain) {
+            continue;
+        }
+        let file = to.join(&path);
+        if let Some(parent) = file.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(file, base64::Engine::decode(&base64::engine::general_purpose::STANDARD, data)?)?;
+    }
+    Ok(())
 }
 
 /// A colour for someone in the session: the same for the same person, one
@@ -787,6 +919,24 @@ mod tests {
         assert_eq!((opened.meta.name.as_str(), opened.workspaces["main"].nodes.len()), ("Bot", 2));
         assert_eq!(opened.meta.data["slashCommands"][0]["name"], "ping");
         assert!(guest_folder("xc-live:https://relay.example/0123abcd#KEY").ends_with("0123abcd"));
+
+        // A plugin goes over as text and lands among the copy's own
+        // plugins, which only load after a yes; nothing lands elsewhere.
+        let plugin = dir.join("my.plugin");
+        std::fs::create_dir_all(plugin.join("blocks").join("fun")).unwrap();
+        std::fs::create_dir_all(plugin.join("node_modules").join("x")).unwrap();
+        std::fs::write(plugin.join("plugin.toml"), "id = \"my.plugin\"\nname = \"Mine\"\nversion = \"1.0.0\"\n").unwrap();
+        std::fs::write(plugin.join("blocks").join("fun").join("hi.js"), [0u8, 159, 146, 150]).unwrap();
+        std::fs::write(plugin.join("node_modules").join("x").join("big.js"), "not passed on").unwrap();
+        let text = pack_plugin(&plugin).unwrap();
+        assert!(!text.contains("node_modules"));
+        unpack_plugin(&copy, "my.plugin", &text).unwrap();
+        assert_eq!(std::fs::read(copy.join("plugins/my.plugin/blocks/fun/hi.js")).unwrap(), [0u8, 159, 146, 150]);
+        assert_eq!(crate::editor::trust::own_plugins(&copy).iter().map(|o| o.id.as_str()).collect::<Vec<_>>(), ["my.plugin"]);
+        let evil = serde_json::json!({ "../../outside.js": "eA==", "ok.js": "eA==", "C:/x.js": "eA==" }).to_string();
+        unpack_plugin(&copy, "other", &evil).unwrap();
+        assert!(copy.join("plugins/other/ok.js").is_file() && !dir.join("outside.js").exists() && !copy.join("outside.js").exists());
+        assert!(unpack_plugin(&copy, "../x", &text).is_err() && unpack_plugin(&copy, "a/b", &text).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -910,6 +1060,16 @@ mod tests {
         host_ed.wire_values.insert(("main".into(), "1".into(), "result".into()), ("a member's message".into(), now));
         turn(&mut host, &mut host_ed, &mut guest, &mut guest_ed, &mut |_, _, _, ged| ged.activity.get(&("main".to_string(), "1".to_string())).is_some_and(|a| a.ms.map(|m| m.0) == Some(12.0)));
         assert!(guest_ed.wire_values.is_empty());
+
+        // The guest's connection drops, with a block of theirs not sent
+        // yet: they get back in as who they were, and the block arrives.
+        guest_ed.project.as_mut().unwrap().workspaces["main"].nodes.insert("7".into(), log("made while away"));
+        guest.retry = Some((Instant::now(), 1));
+        turn(&mut host, &mut host_ed, &mut guest, &mut guest_ed, &mut |_, _, g, _| g.retry.is_none() && g.said.as_ref().is_some_and(|(ok, text)| *ok && text.contains("Back in")));
+        turn(&mut host, &mut host_ed, &mut guest, &mut guest_ed, &mut |h, hed, _, _| {
+            let Some(Role::Host { side, .. }) = h.session.as_ref().map(|s| &s.role) else { return false };
+            side.guests.len() == 1 && side.guests.values().all(|g| g.name == "Grace" && g.perms.power && g.perms.servers) && hed.project.as_ref().unwrap().workspaces["main"].nodes.values().any(|n| n.values["message"] == "made while away")
+        });
 
         // The host ends it: over for the guest, whose copy stays open.
         host.end();

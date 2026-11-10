@@ -105,12 +105,33 @@ pub enum Power {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "m", rename_all = "snake_case")]
 pub enum Msg {
-    /// A guest, on arriving.
-    Hello { name: String, version: String },
+    /// A guest, on arriving. `ticket` is the one from an earlier
+    /// [`Msg::Welcome`] of this session, when the guest's connection
+    /// dropped and they are back: they are who they were, with what they
+    /// were allowed.
+    Hello {
+        name: String,
+        version: String,
+        #[serde(default)]
+        ticket: Option<String>,
+    },
     /// The host's answer: the project as it is, and what the guest may do.
     /// `files` are the project's other files (the project file, the
     /// commands), as they would be stored.
-    Welcome { host: String, files: BTreeMap<String, String>, docs: Docs, rev: u64, perms: Perms },
+    /// `ticket` lets this guest back in as themself after a dropped
+    /// connection; `plugins` are the host's plugins that don't come with
+    /// the app (id, version), which follow as [`Msg::Plugin`].
+    Welcome {
+        host: String,
+        files: BTreeMap<String, String>,
+        docs: Docs,
+        rev: u64,
+        perms: Perms,
+        #[serde(default)]
+        ticket: String,
+        #[serde(default)]
+        plugins: Vec<(String, String)>,
+    },
     /// The host doesn't let the guest in.
     Refused { why: String },
     /// A guest's document as it is now, made from the host's version `rev`.
@@ -147,6 +168,10 @@ pub enum Msg {
     /// Values that just went through wires: the workspace, the block, the
     /// pin, the value as text. For guests with the leave for it.
     Values { values: Vec<(String, String, String, String)> },
+    /// One of the host's plugins that doesn't come with the app, in parts:
+    /// its files by path (as base64), as JSON text cut into pieces. The
+    /// guest's app asks before it loads any of it.
+    Plugin { id: String, version: String, part: usize, parts: usize, text: String },
 }
 
 fn merge(key: &str, base: Option<&Value>, mine: &Value, theirs: &Value, keep: Side) -> Value {
@@ -204,6 +229,8 @@ pub struct HostTurn {
     pub power: Option<Power>,
     /// Something to tell the host.
     pub notice: Option<String>,
+    /// A guest arrived (or came back) and was let in.
+    pub arrived: bool,
 }
 
 pub struct HostSide {
@@ -214,13 +241,20 @@ pub struct HostSide {
     /// Earlier versions by document: the version number, and the state.
     past: HashMap<String, VecDeque<(u64, Option<Value>)>>,
     pub guests: BTreeMap<String, Guest>,
+    /// The ticket each guest was given, and the guests whose connection
+    /// dropped, by their ticket: back in, they are who they were.
+    issued: HashMap<String, String>,
+    away: HashMap<String, Guest>,
+    /// The host's plugins that don't come with the app (id, version), told
+    /// to a guest on arriving.
+    pub plugins: Vec<(String, String)>,
 }
 
 impl HostSide {
     /// `version` is the app's: a guest with another isn't let in.
     pub fn new(name: &str, version: &str, docs: Docs) -> HostSide {
         let past = docs.iter().map(|(k, v)| (k.clone(), VecDeque::from([(0, Some(v.clone()))]))).collect();
-        HostSide { name: name.into(), version: version.into(), docs, rev: 0, past, guests: BTreeMap::new() }
+        HostSide { name: name.into(), version: version.into(), docs, rev: 0, past, guests: BTreeMap::new(), issued: HashMap::new(), away: HashMap::new(), plugins: Vec::new() }
     }
 
     pub fn docs(&self) -> &Docs {
@@ -261,12 +295,25 @@ impl HostSide {
         out
     }
 
-    /// A guest left (or was sent away). Gives the news for the others.
+    /// A guest is gone: left, or their connection dropped. With their
+    /// ticket they can come back as who they were. Gives the news for the
+    /// others.
     pub fn left(&mut self, id: &str) -> Vec<(Option<String>, Msg)> {
         match self.guests.remove(id) {
-            Some(_) => vec![(None, Msg::Gone { id: id.to_string() })],
+            Some(guest) => {
+                if let Some(ticket) = self.issued.remove(id) {
+                    self.away.insert(ticket, guest);
+                }
+                vec![(None, Msg::Gone { id: id.to_string() })]
+            }
             None => Vec::new(),
         }
+    }
+
+    /// The host sent a guest away: their ticket is void.
+    pub fn sent_away(&mut self, id: &str) -> Vec<(Option<String>, Msg)> {
+        self.issued.remove(id);
+        self.left(id)
     }
 
     /// Where the host is, for the guests.
@@ -293,16 +340,32 @@ impl HostSide {
         let mut turn = HostTurn::default();
         let to = Some(from.to_string());
         match msg {
-            Msg::Hello { name, version } => {
+            Msg::Hello { name, version, ticket } => {
                 if version != self.version {
                     let who = if newer(&version, &self.version) { "the host" } else { "you" };
                     turn.send.push((to, Msg::Refused { why: format!("The session's host has XC Circuit {} and you have {version}: both need the same version, so {who} must update.", self.version) }));
                     return turn;
                 }
                 let name: String = name.trim().chars().take(40).collect();
-                let guest = Guest { name: if name.is_empty() { "Guest".into() } else { name }, perms: Perms::default() };
-                turn.send.push((to, Msg::Welcome { host: self.name.clone(), files: files.clone(), docs: self.docs.clone(), rev: self.rev, perms: guest.perms.clone() }));
+                // Back after a dropped connection: who they were. Anyone
+                // else starts as a watcher.
+                // The old connection may not be known to be gone yet when
+                // the new one is here: then it is taken over.
+                let still_here = ticket.as_ref().and_then(|t| self.issued.iter().find(|(_, issued)| *issued == t).map(|(id, _)| id.clone()));
+                let known = match still_here {
+                    Some(old) => {
+                        self.issued.remove(&old);
+                        turn.send.push((None, Msg::Gone { id: old.clone() }));
+                        self.guests.remove(&old)
+                    }
+                    None => ticket.and_then(|t| self.away.remove(&t)),
+                };
+                let guest = known.unwrap_or_else(|| Guest { name: if name.is_empty() { "Guest".into() } else { name }, perms: Perms::default() });
+                let ticket = new_ticket();
+                turn.send.push((to, Msg::Welcome { host: self.name.clone(), files: files.clone(), docs: self.docs.clone(), rev: self.rev, perms: guest.perms.clone(), ticket: ticket.clone(), plugins: self.plugins.clone() }));
+                self.issued.insert(from.to_string(), ticket);
                 self.guests.insert(from.to_string(), guest);
+                turn.arrived = true;
             }
             Msg::Propose { key, rev, state } => {
                 let Some(guest) = self.guests.get(from) else { return turn };
@@ -378,6 +441,13 @@ impl HostSide {
     }
 }
 
+/// A ticket nobody can guess: 128 random bits.
+fn new_ticket() -> String {
+    use std::hash::{BuildHasher, Hasher};
+    let part = || std::collections::hash_map::RandomState::new().build_hasher().finish();
+    format!("{:016x}{:016x}", part(), part())
+}
+
 /// Whether version `a` is newer than `b` (`0.3.1` against `0.3.0`).
 fn newer(a: &str, b: &str) -> bool {
     let parts = |v: &str| -> Vec<u64> { v.split(['.', '-']).map(|p| p.parse().unwrap_or(0)).collect() };
@@ -395,6 +465,11 @@ pub struct GuestTurn {
     pub notice: Option<String>,
     /// The session's project, on arriving.
     pub welcome: Option<(String, BTreeMap<String, String>, Docs)>,
+    /// Back in after a dropped connection: the copy stays, and follows
+    /// what happened meanwhile (`apply`).
+    pub back: bool,
+    /// The host's plugins that don't come with the app (id, version).
+    pub plugins: Vec<(String, String)>,
     /// Not let in: why.
     pub refused: Option<String>,
     /// Where someone else is now.
@@ -428,6 +503,8 @@ pub struct GuestSide {
     proposed: HashMap<String, Option<Value>>,
     pub perms: Perms,
     pub host: String,
+    /// What lets this guest back in as themself.
+    ticket: Option<String>,
 }
 
 impl GuestSide {
@@ -437,7 +514,12 @@ impl GuestSide {
 
     /// The first message, on arriving.
     pub fn hello(name: &str, version: &str) -> Msg {
-        Msg::Hello { name: name.into(), version: version.into() }
+        Msg::Hello { name: name.into(), version: version.into(), ticket: None }
+    }
+
+    /// The first message after a dropped connection: with the ticket.
+    pub fn hello_again(&self, name: &str, version: &str) -> Msg {
+        Msg::Hello { name: name.into(), version: version.into(), ticket: self.ticket.clone() }
     }
 
     /// The guest changed the project: `now` is all of it. Gives what to
@@ -459,13 +541,39 @@ impl GuestSide {
     pub fn receive(&mut self, msg: Msg, now: &Docs) -> GuestTurn {
         let mut turn = GuestTurn::default();
         match msg {
-            Msg::Welcome { host, files, docs, rev, perms } => {
+            Msg::Welcome { host, files, docs, rev, perms, ticket, plugins } => {
+                let again = !self.host.is_empty();
+                if again {
+                    // Back in: each document follows what happened
+                    // meanwhile, with what was changed here and not yet
+                    // taken kept on top (to be sent again).
+                    let keys: BTreeSet<String> = self.synced.keys().chain(docs.keys()).cloned().collect();
+                    for key in keys {
+                        let (mine, before, state) = (now.get(&key).cloned(), self.synced.get(&key).cloned(), docs.get(&key).cloned());
+                        let local = if mine == before {
+                            state.clone()
+                        } else {
+                            match (&mine, &state) {
+                                (_, None) => None,
+                                (None, Some(_)) => None,
+                                (Some(mine), Some(theirs)) => Some(merge(&key, before.as_ref(), mine, theirs, Side::Theirs)),
+                            }
+                        };
+                        if local != mine {
+                            turn.apply.push(Applied { key, before, after: state, local });
+                        }
+                    }
+                    turn.back = true;
+                } else {
+                    turn.welcome = Some((host.clone(), files, docs.clone()));
+                }
                 self.revs = docs.keys().map(|k| (k.clone(), rev)).collect();
-                self.synced = docs.clone();
+                self.synced = docs;
                 self.proposed.clear();
                 self.perms = perms;
-                self.host = host.clone();
-                turn.welcome = Some((host, files, docs));
+                self.host = host;
+                self.ticket = Some(ticket).filter(|t| !t.is_empty());
+                turn.plugins = plugins;
             }
             Msg::Refused { why } if self.host.is_empty() => turn.refused = Some(why),
             Msg::Refused { why } => turn.notice = Some(why),
@@ -473,7 +581,7 @@ impl GuestSide {
             Msg::Gone { id } => turn.gone = Some(id),
             Msg::Console { lines } => turn.console = lines,
             Msg::Bot { state } => turn.bot = Some(state),
-            msg @ (Msg::Profile { .. } | Msg::Servers { .. } | Msg::Ran { .. } | Msg::Values { .. }) => turn.show.push(msg),
+            msg @ (Msg::Profile { .. } | Msg::Servers { .. } | Msg::Ran { .. } | Msg::Values { .. } | Msg::Plugin { .. }) => turn.show.push(msg),
             Msg::Perms { perms } => {
                 self.perms = perms;
                 // What was refused before may be welcome now.
@@ -791,6 +899,61 @@ mod tests {
         // Older apps' leave has no word on servers and values: no.
         let old: Perms = serde_json::from_str(r#"{ "power": true }"#).unwrap();
         assert!(old.power && !old.servers && !old.values);
+    }
+
+    #[test]
+    fn a_guest_comes_back_after_a_dropped_connection() {
+        let mut t = start();
+        t.host.plugins = vec![("my.plugin".into(), "1.2.0".into())];
+        t.join("g1", "Grace", "0.3.0");
+        let send = t.host.allow("g1", Perms { blocks: Blocks::All, ..Default::default() });
+        t.deliver(send);
+        // Grace changes something that never gets through, the connection
+        // drops, and the host goes on meanwhile.
+        t.docs("g1").get_mut("main").unwrap()["nodes"]["2"] = node("g", "Grace's, unsent", [300, 0]);
+        let (side, docs, _) = t.guests.remove("g1").unwrap();
+        assert_eq!(t.host.left("g1"), vec![(None, Msg::Gone { id: "g1".into() })]);
+        t.host_docs.get_mut("main").unwrap()["nodes"]["1"]["values"]["message"] = "changed meanwhile".into();
+        t.host_sync();
+
+        // Back under a new id, with the ticket: let change blocks as before,
+        // the copy has the host's change, and Grace's block arrives after all.
+        let hello = side.hello_again("Grace", "0.3.0");
+        assert!(matches!(&hello, Msg::Hello { ticket: Some(t), .. } if t.len() == 32));
+        t.guests.insert("g9".into(), (side, docs, Vec::new()));
+        t.host_gets("g9", vec![hello]);
+        assert_eq!(t.host.guests["g9"], Guest { name: "Grace".into(), perms: Perms { blocks: Blocks::All, ..Default::default() } });
+        assert_eq!(t.guests["g9"].1["main"]["nodes"]["1"]["values"]["message"], "changed meanwhile");
+        t.guest_sync("g9");
+        assert!(t.same_everywhere() && t.host_docs["main"]["nodes"]["2"]["uid"] == "g", "{:#}", t.host_docs["main"]);
+
+        // Back before the host knew the old connection was gone: taken over.
+        let again = t.guests["g9"].0.hello_again("Grace", "0.3.0");
+        let files = t.files.clone();
+        let turn = t.host.receive("g11", again, &files);
+        assert!(turn.send.contains(&(None, Msg::Gone { id: "g9".into() })));
+        assert!(!t.host.guests.contains_key("g9") && t.host.guests["g11"].perms.blocks == Blocks::All);
+        let (side, docs, notes) = t.guests.remove("g9").unwrap();
+        t.guests.insert("g11".into(), (side, docs, notes));
+        t.deliver(turn.send);
+        assert!(t.host.left("g9").is_empty(), "the old connection's leaving changes nothing");
+        let (side, docs, notes) = t.guests.remove("g11").unwrap();
+        t.guests.insert("g9".into(), (side, docs, notes));
+        let back = t.host.guests.remove("g11").unwrap();
+        t.host.guests.insert("g9".into(), back);
+        let ticket = t.host.issued.remove("g11").unwrap();
+        t.host.issued.insert("g9".into(), ticket);
+
+        // A ticket is good once, and a stranger with a made-up one only watches.
+        t.join("g2", "Mallory", "0.3.0");
+        let turn = t.host.receive("g3", Msg::Hello { name: "Mallory".into(), version: "0.3.0".into(), ticket: Some("0".repeat(32)) }, &files);
+        assert!(turn.arrived && t.host.guests["g3"].perms == Perms::default());
+        assert!(matches!(&turn.send[0].1, Msg::Welcome { plugins, ticket, .. } if plugins == &[("my.plugin".to_string(), "1.2.0".to_string())] && ticket.len() == 32));
+        // Sent away: the ticket is void.
+        let again = t.guests["g9"].0.hello_again("Grace", "0.3.0");
+        t.host.sent_away("g9");
+        let turn = t.host.receive("g10", again, &files);
+        assert_eq!(t.host.guests["g10"].perms, Perms::default(), "{:?}", turn.send.len());
     }
 
     #[test]

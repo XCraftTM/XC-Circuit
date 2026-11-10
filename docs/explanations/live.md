@@ -2,8 +2,8 @@
 
 In a live session several people work in one project at the same time. One of them **hosts**: the project is theirs, it is saved on their computer, and the bot runs there. The others are **guests**: they see every change as it happens, and may change what the host lets them.
 
-::: warning Work in progress
-Sessions work for workspaces, blocks, wires, notes and slash commands; you see where the others are, and guests follow the bot: its console, which blocks ran, and the pickers for servers, channels and roles. Still to come: the host's plugins for guests who don't have them, and a guest finding their way back in after their connection dropped.
+::: warning New
+Live sessions are new in 0.3.0. Stored Data and where the bot is uploaded to stay with the host; a guest doesn't see them.
 :::
 
 ## Starting one
@@ -19,6 +19,14 @@ The session meets at a **relay**: the public one (`https://xcrelay.xcrafttm.dev`
 **File › Live session…**, your name, paste the invitation, **Join**. The host's project opens. It is a copy for this session, kept in the app's own folder; it is saved at the host's, not at yours.
 
 Host and guests need the **same version** of XC Circuit. If they differ, the guest isn't let in and is told who has to update.
+
+### Plugins the host has and you don't
+
+The plugins that come with XC Circuit are the same for everyone. Others the host uses (ones they installed, or the project's own) are passed on to you, into your copy of the project: they never replace a plugin of your own. They are someone else's code, so XC Circuit **asks before it loads them**, as with any project that brings plugins along. Say no and the session still works; blocks from those plugins then show as unknown. A plugin of more than 4 MB isn't passed on.
+
+### When your connection drops
+
+Your app tries to get back in by itself, for about two minutes. Back in, you are who you were, with what the host let you do; your copy catches up with what happened meanwhile, and what you changed while away is sent after all. If the host's own connection drops, the session is over.
 
 ## Seeing each other
 
