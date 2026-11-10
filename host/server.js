@@ -409,6 +409,11 @@ async function start(options = settings()) {
       // Git gave up before reading it all: what is still coming is let go.
       if (!arrived) req.resume();
       finish();
+      // Something was stored: the other devices hear of it at once, so
+      // they can fetch it without anyone pressing anything.
+      if (code === 0 && req.method === "POST" && rest === "/git-receive-pack") {
+        for (const other of sockets) if (other.device) other.send({ t: "project.changed", project: id, by: device.id });
+      }
     });
   }
 

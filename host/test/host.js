@@ -262,6 +262,11 @@ test("projects are Git repositories, for paired devices only", { skip: spawnSync
         execFile("git", all, { cwd, encoding: "utf8", env: { ...process.env, GIT_TERMINAL_PROMPT: "0" }, timeout: 20000 }, (error, stdout, stderr) => (error ? reject(new Error(`git ${args.join(" ")}: ${stderr || error.message}`)) : resolve(stdout)));
       });
     fs.mkdirSync(work);
+    // Another paired device is connected: it hears when something is stored.
+    device.send({ t: "invite" });
+    const other = await app(host.port);
+    other.send({ t: "pair", code: (await device.next("invited")).code, name: "Tablet" });
+    await other.next("paired");
     await git(work, "init", "-q", "-b", "main");
     fs.writeFileSync(path.join(work, "circuit.project.json"), '{ "name": "Bot" }\n');
     await git(work, "add", ".");
@@ -270,6 +275,10 @@ test("projects are Git repositories, for paired devices only", { skip: spawnSync
     const copy = path.join(dir, "copy");
     await git(dir, "clone", "-q", url, copy);
     assert.equal(fs.readFileSync(path.join(copy, "circuit.project.json"), "utf8"), '{ "name": "Bot" }\n');
+    const changed = await other.next("project.changed");
+    assert.equal(changed.project, "my-bot");
+    assert.ok(changed.by && changed.by !== undefined);
+    other.close();
     device.send({ t: "projects" });
     assert.deepEqual((await device.next("projects")).projects, ["my-bot"]);
 
