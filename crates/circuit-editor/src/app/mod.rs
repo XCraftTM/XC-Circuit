@@ -26,6 +26,7 @@ use crate::{canvas, ui::dialog, ui::palette, pages::panels, canvas::picker};
 
 mod activity;
 mod chrome;
+use chrome::WindowPart;
 mod commands;
 mod dialogs;
 mod dock;
@@ -36,6 +37,8 @@ pub(crate) mod fps;
 mod menus;
 mod plugins;
 mod projects;
+mod start;
+mod windows;
 #[cfg(test)]
 mod a11y;
 mod memory;
@@ -64,11 +67,11 @@ pub enum Tab {
     Export,
     /// Bot › Remote…: where the bot is uploaded to.
     Hosting,
-    /// File › Git…: the project in a Git repository.
+    /// Share › Git…: the project in a Git repository.
     Git,
-    /// File › Host…: pairing with an XC Circuit Host.
+    /// Share › Host…: pairing with an XC Circuit Host.
     Host,
-    /// File › Live session…
+    /// Share › Live session…
     Live,
     /// A Calagopus server's state, power buttons and live console.
     ServerConsole,
@@ -95,7 +98,7 @@ impl Tab {
         match self {
             Tab::Side(_) => Side::Left,
             Tab::Inspector | Tab::Plugin(..) => Side::Right,
-            Tab::Console | Tab::Problems => Side::Bottom,
+            Tab::Console | Tab::Problems | Tab::ServerConsole => Side::Bottom,
             _ => Side::Center,
         }
     }
@@ -216,6 +219,16 @@ pub struct CircuitApp {
     /// The panels and tabs while no project is open (only the start page
     /// shows then); back when a project opens.
     dock_before_start: Option<Dock<Tab>>,
+    /// Where each window of its own first went on the screen, while it is open.
+    own_places: std::collections::HashMap<String, (egui::Pos2, egui::Vec2)>,
+    /// The start window's page in view.
+    start_page: start::Page,
+    /// The panels hidden with their part of the window (the title bar's
+    /// buttons), to show again; and what the side bar showed.
+    hidden_panels: Vec<Tab>,
+    side_before: Option<String>,
+    /// Whether the window was last given the start window's shape (not yet, at first).
+    window_shaped: Option<bool>,
     /// For saving what egui remembers (see `memory`).
     egui: egui::Context,
     /// When to save the layout and settings next.
@@ -247,6 +260,15 @@ impl CircuitApp {
             Err(e) => panic!("could not start the block sandbox: {e:#}"),
         };
         ed.prefs = prefs;
+        if !ed.prefs.activity_shares {
+            ed.prefs.activity_shares = true;
+            for key in ["git", "live"] {
+                if !ed.prefs.activity.iter().any(|k| k == key) {
+                    let at = ed.prefs.activity.iter().position(|k| k == SideView::Plugins.key()).unwrap_or(ed.prefs.activity.len());
+                    ed.prefs.activity.insert(at, key.into());
+                }
+            }
+        }
         if let Err(e) = crate::ui::fonts::install_with(&cc.egui_ctx, ed.prefs.console_font.as_deref()) {
             ed.log(Level::Warn, format!("The Console's font wasn't loaded: {e}"));
         }
@@ -392,6 +414,11 @@ impl CircuitApp {
             tour: None,
             dock_before_tour: None,
             dock_before_start: None,
+            own_places: Default::default(),
+            start_page: Default::default(),
+            hidden_panels: Vec::new(),
+            side_before: None,
+            window_shaped: None,
             settings: Default::default(),
             restore: Default::default(),
             last_recovery: std::time::Instant::now(),
@@ -442,6 +469,8 @@ impl eframe::App for CircuitApp {
         {
             self.fps = Some(run);
         }
+        // Before the window is shown: the start window never shows as big as the app's.
+        self.shape_window(&ctx);
         self.reveal.frame(&ctx);
         self.poll_updates(&ctx);
         // Before anything is drawn: no frame shows the panels without a project.
@@ -576,9 +605,9 @@ impl eframe::App for CircuitApp {
                 self.bot.git.fetch_now(&mut self.ed);
             }
         }
-        // What File › Host… shows about the open project.
+        // What Share › Host… shows about the open project.
         self.bot.host.project = (self.bot.git.stored_at().map(str::to_string), self.bot.git.status().map(|(_, text)| text), self.bot.git.last_said().cloned());
-        // Keep this project on the host: File › Git… does it.
+        // Keep this project on the host: Share › Git… does it.
         if let Some(address) = self.bot.host.keep.take() {
             self.bot.git.connect_to(&self.ed, address);
         }
@@ -640,11 +669,17 @@ impl eframe::App for CircuitApp {
         }
 
         let theme = self.ed.theme.clone();
+        let start = self.start_shown();
+        if start {
+            watchdog::mark("in the start window");
+            egui::CentralPanel::default().frame(Frame::new().fill(theme.panel)).show(ui, |ui| self.start_window(ui));
+        }
         let (margin, height) = if self.ed.prefs.system_titlebar { (Margin::symmetric(8, 4), None) } else { (Margin { left: 8, right: 0, top: 0, bottom: 0 }, Some(crate::app::titlebar::HEIGHT)) };
         let mut top = egui::Panel::top("menu").frame(Frame::new().fill(theme.frame).inner_margin(margin));
         if let Some(h) = height {
             top = top.exact_size(h);
         }
+        if !start {
         top.show(ui, |ui| {
             crate::ui::theme::compact(ui.style_mut());
             watchdog::mark("in the menus");
@@ -657,6 +692,7 @@ impl eframe::App for CircuitApp {
                 watchdog::mark("in the status bar");
                 self.status_bar(ui)
             });
+        }
         let key = (self.ed.history.revision(), self.ed.reloads, self.ed.prefs.language.clone());
         if self.problems_found.as_ref().is_none_or(|(k, _)| *k != key) {
             watchdog::mark("working out the Problems list");
@@ -702,7 +738,9 @@ impl eframe::App for CircuitApp {
         }
         // Filled, so the dock's rounded panel corners show the frame color and not
         // whatever is behind the window's content.
-        if let Some(mut setup) = self.setup.take() {
+        if start {
+            // The start window is all there is.
+        } else if let Some(mut setup) = self.setup.take() {
             watchdog::mark("on the first start page (setup)");
             let done = egui::CentralPanel::default().frame(Frame::new().fill(theme.frame)).show(ui, |ui| crate::pages::setup::show(ui, &mut self.ed, &mut setup)).inner;
             match done {
@@ -718,8 +756,7 @@ impl eframe::App for CircuitApp {
         } else {
         egui::CentralPanel::default().frame(Frame::new().fill(theme.frame)).show(ui, |ui| {
             let running = self.bot.state != BotState::Stopped;
-            self.sync_dialog_tabs(ui.ctx());
-            let has_example = self.ed.examples_dir.as_ref().is_some_and(|e| e.join("DemoBot").is_dir());
+            let own = self.sync_dialog_tabs();
             let mut viewer = Viewer {
                 bot: &mut self.bot,
                 ed: &mut self.ed,
@@ -730,9 +767,6 @@ impl eframe::App for CircuitApp {
                 settings: &mut self.settings,
                 restore: &mut self.restore,
                 asks: Vec::new(),
-                start: &mut self.start,
-                has_example,
-                start_pick: None,
                 stored: &mut self.stored,
                 side_ask: None,
                 to_side: None,
@@ -752,8 +786,11 @@ impl eframe::App for CircuitApp {
             self.dock_size = Some(size);
             watchdog::mark("in the tabs and windows");
             self.dock.show(ui, &theme, &mut viewer);
+            watchdog::mark("in the windows of their own");
+            for tab in windows::show(ui.ctx(), &theme, &mut viewer, &own, &mut self.own_places) {
+                viewer.on_close(&tab);
+            }
             let asks = std::mem::take(&mut viewer.asks);
-            let start_pick = viewer.start_pick.take();
             let side_ask = viewer.side_ask.take();
             let to_side = viewer.to_side.take();
             let closed_side = std::mem::take(&mut viewer.closed_side);
@@ -773,9 +810,6 @@ impl eframe::App for CircuitApp {
                 self.ed.log(Level::Warn, t!("The panel layout was damaged, so it was put back together."));
             }
             self.settings_asks(asks, ui.ctx());
-            if let Some(pick) = start_pick {
-                self.start_page_pick(pick);
-            }
         });
         }
 
@@ -811,7 +845,7 @@ impl eframe::App for CircuitApp {
         self.apply_actions();
         self.dialogs(&ctx);
         self.bot.windows(&ctx, &mut self.ed);
-        if !self.ed.prefs.system_titlebar {
+        if !self.ed.prefs.system_titlebar && !start {
             crate::app::titlebar::frame_edges(&ctx, &theme);
         }
 

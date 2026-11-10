@@ -144,51 +144,53 @@ impl CircuitApp {
         if status_item(&mut left, &t, Some(dot), state).on_hover_text(tip).clicked() && has_project {
             if running { self.bot.stop_pressed(&mut self.ed) } else { self.bot.run_pressed(&mut self.ed, &ctx) }
         }
-        match self.ed.project.as_ref().map(|p| (p.meta.name.clone(), p.meta.mode.clone())) {
-            Some((name, mode_id)) => {
-                if status_item(&mut left, &t, None, &name).on_hover_text(t!("Bot settings")).clicked() {
-                    self.bot.open_settings(&mut self.ed);
-                }
-                let mode = self.ed.reg.mode(&mode_id).map(|m| (m.name.clone(), m.description.clone()));
-                let (mode_name, about) = match mode {
-                    Some(m) => m,
-                    None if mode_id == crate::editor::NO_MODE => (t!("Core blocks").to_string(), t!("No build mode: only the core blocks, no npm packages").to_string()),
-                    None => (mode_id, String::new()),
-                };
-                let r = status_item(&mut left, &t, None, &mode_name);
-                if !about.is_empty() {
-                    r.on_hover_text(about);
-                }
-            }
-            None => {
-                if status_item(&mut left, &t, None, t!("No project")).on_hover_text(t!("Open a project")).clicked() {
-                    self.open_project_dialog();
-                }
-            }
+        if !has_project && status_item(&mut left, &t, None, t!("No project")).on_hover_text(t!("Open a project")).clicked() {
+            self.open_project_dialog();
         }
-        let counts = tf!("{plugins} plugins · {blocks} blocks", plugins = self.ed.reg.plugins.len(), blocks = self.ed.reg.blocks.len());
-        if status_item(&mut left, &t, None, &counts).on_hover_text(t!("Manage plugins")).clicked() {
-            self.open_plugins();
+        // The project's repository: what waits to be stored or fetched.
+        if has_project
+            && let Some((waits, text)) = self.bot.git.status()
+            && status_item(&mut left, &t, waits.then_some(t.accent), &text).on_hover_text(t!("Share › Git…")).clicked()
+        {
+            self.bot.git.open(&self.ed);
+            self.show_shared(Tab::Git);
         }
-        if self.problem_count > 0 {
-            let label = if self.problem_count == 1 { t!("⚠ 1 problem").to_string() } else { tf!("⚠ {count} problems", count = self.problem_count) };
+        // Problems: how many, or that there are none.
+        if has_project {
+            let label = match self.problem_count {
+                0 => t!("No problems").to_string(),
+                1 => t!("⚠ 1 problem").to_string(),
+                count => tf!("⚠ {count} problems", count = count),
+            };
             if status_item(&mut left, &t, None, &label).on_hover_text(t!("Show the Problems panel")).clicked() {
                 self.show_panel(Tab::Problems);
             }
         }
+        // A live session: who is in it.
+        if let Some(text) = self.bot.live.status()
+            && status_item(&mut left, &t, Some(t.action), &text).on_hover_text(t!("Share › Live session…")).clicked()
+        {
+            self.bot.live.open();
+            self.show_shared(Tab::Live);
+        }
 
         let mut right = ui.new_child(egui::UiBuilder::new().max_rect(bar).layout(egui::Layout::right_to_left(egui::Align::Center)));
-        if status_item(&mut right, &t, None, &tf!("Theme: {name}", name = t.name)).on_hover_text(t!("Switch to the next theme")).clicked() {
-            let ids: Vec<String> = self.ed.reg.themes.iter().map(|x| x.id.clone()).collect();
-            if let Some(next) = ids.iter().position(|id| *id == t.id).map(|i| ids[(i + 1) % ids.len()].clone()) {
-                self.ed.set_theme(&next);
-                self.ed.theme.apply(&ctx);
-            }
-        }
         if let Some(r) = &self.updater.available
             && status_item(&mut right, &t, Some(t.accent), &tf!("Update {version} available", version = r.version)).on_hover_text(t!("What's new, and the download")).clicked()
         {
             self.updater.show = true;
+        }
+        // The kind of bot: its settings.
+        if let Some(mode_id) = self.ed.project.as_ref().map(|p| p.meta.mode.clone()) {
+            let mode = self.ed.reg.mode(&mode_id).map(|m| m.name.clone());
+            let mode_name = match mode {
+                Some(name) => name,
+                None if mode_id == crate::editor::NO_MODE => t!("Core blocks").to_string(),
+                None => mode_id,
+            };
+            if status_item(&mut right, &t, None, &mode_name).on_hover_text(t!("Bot settings")).clicked() {
+                self.bot.open_settings(&mut self.ed);
+            }
         }
         // Uploading to the bot's server: under way, or how the last one went.
         if has_project && crate::bot::hosting::HostingUi::configured(&self.ed) {
@@ -202,19 +204,6 @@ impl CircuitApp {
                 self.bot.hosting.open(&self.ed);
             }
         }
-        // A live session: who is in it.
-        if let Some(text) = self.bot.live.status()
-            && status_item(&mut right, &t, Some(t.action), &text).on_hover_text(t!("File › Live session…")).clicked()
-        {
-            self.bot.live.open();
-        }
-        // The project's repository: what waits to be stored or fetched.
-        if has_project && let Some((dot, text)) = self.bot.git.status() {
-            let dot = dot.then_some(t.accent);
-            if status_item(&mut right, &t, dot, &text).on_hover_text(t!("File › Git…")).clicked() {
-                self.bot.git.open(&self.ed);
-            }
-        }
         let saved = if self.ed.unsaved() {
             t!("Unsaved changes")
         } else if self.ed.saver.busy() {
@@ -225,6 +214,97 @@ impl CircuitApp {
         if status_item(&mut right, &t, None, saved).on_hover_text(t!("Save (Ctrl+S)")).clicked() && has_project {
             self.ed.save();
             self.bot.restart_if_running(&mut self.ed, &ctx);
+        }
+    }
+
+    /// Git, Host or Live session is opened from a menu or the status bar:
+    /// shown where it is (the side bar, when it is an icon in the activity bar).
+    pub(super) fn show_shared(&mut self, tab: Tab) {
+        if let Some(key) = tab.side_key().filter(|k| self.ed.prefs.activity.contains(k)) {
+            if self.ed.prefs.side_lower.as_deref() != Some(key.as_str()) {
+                self.ed.prefs.side_shown = Some(key);
+            }
+        } else if self.dock.contains(&tab) {
+            self.dock.focus(&tab);
+        }
+    }
+
+    /// Whether a part of the window shows: the side bar, the panels at the
+    /// bottom, or the ones on the right.
+    pub(super) fn part_shown(&self, part: WindowPart) -> bool {
+        match part {
+            WindowPart::SideBar => self.ed.prefs.side_shown.is_some(),
+            WindowPart::Bottom => self.dock.main.as_ref().is_some_and(|m| m.leaves().iter().any(|l| l.tabs.iter().any(|t| t.side() == Side::Bottom))),
+            WindowPart::Right => self.dock.main.as_ref().is_some_and(|m| m.leaves().iter().any(|l| l.tabs.iter().any(|t| t.side() == Side::Right))),
+        }
+    }
+
+    /// Hides a part of the window, or shows it again with what it had.
+    pub(super) fn toggle_part(&mut self, part: WindowPart) {
+        let shown = self.part_shown(part);
+        match part {
+            WindowPart::SideBar if shown => self.side_before = self.ed.prefs.side_shown.take(),
+            WindowPart::SideBar => {
+                let back = self.side_before.take().filter(|k| self.ed.prefs.activity.contains(k)).or_else(|| self.ed.prefs.activity.first().cloned());
+                self.ed.prefs.side_shown = back;
+            }
+            WindowPart::Bottom | WindowPart::Right => {
+                let side = if part == WindowPart::Bottom { Side::Bottom } else { Side::Right };
+                if shown {
+                    let tabs: Vec<Tab> = self.dock.main.iter().flat_map(|m| m.leaves()).flat_map(|l| l.tabs.clone()).filter(|t| t.side() == side).collect();
+                    close_tabs(&mut self.dock, |t| t.side() == side);
+                    self.hidden_panels.retain(|t| t.side() != side);
+                    self.hidden_panels.extend(tabs);
+                } else {
+                    let mut tabs: Vec<Tab> = self.hidden_panels.iter().filter(|t| t.side() == side).cloned().collect();
+                    self.hidden_panels.retain(|t| t.side() != side);
+                    // One that became an icon in the activity bar meanwhile stays there.
+                    tabs.retain(|t| !t.side_key().is_some_and(|k| self.ed.prefs.activity.contains(&k)));
+                    if tabs.is_empty() {
+                        tabs = if side == Side::Bottom { vec![Tab::Console, Tab::Problems] } else { vec![Tab::Inspector] };
+                        tabs.retain(|t| !t.side_key().is_some_and(|k| self.ed.prefs.activity.contains(&k)));
+                    }
+                    let first = tabs.first().cloned();
+                    for tab in tabs {
+                        place_panel(&mut self.dock, tab);
+                    }
+                    if let Some(first) = first {
+                        self.dock.focus(&first);
+                    }
+                }
+            }
+        }
+    }
+
+    /// The title bar's three buttons that hide and show the side bar, the
+    /// bottom panels and the right ones, drawn as the window with that part
+    /// filled in. Laid out right to left.
+    pub(super) fn layout_toggles(&mut self, ui: &mut egui::Ui, theme: &crate::ui::theme::Theme) {
+        for part in [WindowPart::Right, WindowPart::Bottom, WindowPart::SideBar] {
+            let on = self.part_shown(part);
+            let (rect, resp) = ui.allocate_exact_size(egui::vec2(28.0, ui.available_height().min(crate::app::titlebar::HEIGHT)), egui::Sense::click());
+            crate::ui::kit::describe_selected(&resp, egui::Role::Button, on, part.name());
+            let color = if resp.hovered() { theme.text } else { theme.text_muted };
+            if resp.hovered() {
+                ui.painter().rect_filled(rect.shrink2(egui::vec2(2.0, 6.0)), 4.0, crate::ui::theme::mix(theme.frame, theme.text, 0.1));
+            }
+            let frame = egui::Rect::from_center_size(rect.center(), egui::vec2(15.0, 12.0));
+            let piece = match part {
+                WindowPart::SideBar => frame.with_max_x(frame.left() + 5.0),
+                WindowPart::Right => frame.with_min_x(frame.right() - 5.0),
+                WindowPart::Bottom => frame.with_min_y(frame.bottom() - 4.5),
+            };
+            let p = ui.painter();
+            p.rect_stroke(frame, 2.0, egui::Stroke::new(1.2, color), egui::StrokeKind::Inside);
+            if on {
+                p.rect_filled(piece, 1.0, color);
+            } else {
+                p.rect_stroke(piece, 1.0, egui::Stroke::new(1.0, color), egui::StrokeKind::Inside);
+            }
+            let tip = if on { tf!("Hide: {part}", part = part.name()) } else { tf!("Show: {part}", part = part.name()) };
+            if resp.on_hover_text(tip).clicked() {
+                self.toggle_part(part);
+            }
         }
     }
 
@@ -267,45 +347,42 @@ impl CircuitApp {
         }
     }
 
-    /// The editors that used to be dialogs are tabs: one is shown while its
-    /// draft exists, and closed once it is saved or cancelled.
-    pub(super) fn sync_dialog_tabs(&mut self, ctx: &egui::Context) {
+    /// What is open besides the workspaces and panels, each where it
+    /// belongs: the builders and the bot's settings are tabs in the middle,
+    /// the remote's console a panel at the bottom, and what is set up once
+    /// and closed again a window of its own. Returns those windows.
+    pub(super) fn sync_dialog_tabs(&mut self) -> Vec<Tab> {
         let wanted = [
-            (Tab::EmbedBuilder, self.ed.embed_edit.is_some(), egui::vec2(1060.0, 760.0)),
-            (Tab::LayoutBuilder, self.ed.layout_edit.is_some(), egui::vec2(1240.0, 800.0)),
-            (Tab::ModalBuilder, self.ed.modal_edit.is_some(), egui::vec2(1200.0, 800.0)),
-            (Tab::CanvasBuilder, self.ed.canvas_edit.is_some(), egui::vec2(1280.0, 820.0)),
-            (Tab::SlashCommands, self.ed.slash_edit.is_some(), egui::vec2(1320.0, 720.0)),
-            (Tab::BotSettings, self.bot.settings.is_some(), egui::vec2(820.0, 620.0)),
-            (Tab::Export, self.bot.export.is_some(), egui::vec2(560.0, 620.0)),
-            (Tab::Hosting, self.bot.hosting.draft.is_some(), egui::vec2(680.0, 760.0)),
-            (Tab::Git, self.bot.git.open, egui::vec2(680.0, 760.0)),
-            (Tab::Host, self.bot.host.open, egui::vec2(680.0, 720.0)),
-            (Tab::Live, self.bot.live.open, egui::vec2(680.0, 720.0)),
-            (Tab::ServerConsole, self.bot.hosting.console.is_some(), egui::vec2(900.0, 560.0)),
-            (Tab::WorkspaceExport, self.ed.ws_export.is_some(), egui::vec2(660.0, 680.0)),
-            (Tab::WorkspaceImport, self.ed.ws_import.is_some(), egui::vec2(660.0, 680.0)),
+            (Tab::EmbedBuilder, self.ed.embed_edit.is_some()),
+            (Tab::LayoutBuilder, self.ed.layout_edit.is_some()),
+            (Tab::ModalBuilder, self.ed.modal_edit.is_some()),
+            (Tab::CanvasBuilder, self.ed.canvas_edit.is_some()),
+            (Tab::SlashCommands, self.ed.slash_edit.is_some()),
+            (Tab::BotSettings, self.bot.settings.is_some()),
+            (Tab::Export, self.bot.export.is_some()),
+            (Tab::Hosting, self.bot.hosting.draft.is_some()),
+            (Tab::Git, self.bot.git.open),
+            (Tab::Host, self.bot.host.open),
+            (Tab::Live, self.bot.live.open),
+            (Tab::ServerConsole, self.bot.hosting.console.is_some()),
+            (Tab::WorkspaceExport, self.ed.ws_export.is_some()),
+            (Tab::WorkspaceImport, self.ed.ws_import.is_some()),
         ];
-        for (tab, open, size) in wanted {
-            // As big as it was last time (when it was a window of its own).
-            let key = window_key(&tab);
-            // One that is an icon in the activity bar shows in the side bar,
-            // not as a window too.
+        let mut own = Vec::new();
+        for (tab, open) in wanted {
+            // One that is an icon in the activity bar shows in the side bar.
             let in_bar = tab.side_key().is_some_and(|k| self.ed.prefs.activity.contains(&k));
             match (open, self.dock.contains(&tab)) {
-                (true, false) if in_bar => {}
-                (true, false) => match self.ed.prefs.window_places.get(&key) {
-                    // Where it was last, and as big (kept inside the window).
-                    Some(r) => open_floating_at(&mut self.dock, ctx, tab, egui::Rect::from_min_size(egui::pos2(r[0], r[1]), egui::vec2(r[2], r[3]))),
-                    None => open_floating(&mut self.dock, ctx, tab, size),
-                },
+                (true, false) if in_bar || self.hidden_panels.contains(&tab) => {}
+                (true, false) if tab.own_window().is_some() => own.push(tab),
+                (true, false) => place_panel(&mut self.dock, tab),
                 (false, true) => {
                     self.dock.remove(&tab);
                 }
-                (true, true) => remember_place(&self.dock, &mut self.ed.prefs.window_places, &tab, key),
                 _ => {}
             }
         }
+        own
     }
 
     pub(super) fn apply_actions(&mut self) {
@@ -334,18 +411,27 @@ impl CircuitApp {
     }
 }
 
-/// The name a window's size is kept under: its tab's kind.
+/// The name a window of its own is known by: its tab's kind.
 pub(super) fn window_key(tab: &Tab) -> String {
     format!("{tab:?}")
 }
 
-/// Keeps where `tab`'s window inside the app (one with only it) is and how
-/// big, for the next time it opens.
-pub(super) fn remember_place(dock: &crate::ui::dock::Dock<Tab>, places: &mut std::collections::BTreeMap<String, [f32; 4]>, tab: &Tab, key: String) {
-    let Some(w) = dock.windows.iter().find(|w| w.os.is_none() && w.node.leaves().len() == 1 && w.node.contains(tab)) else { return };
-    let place = [w.pos.x.round(), w.pos.y.round(), w.size.x.round(), w.size.y.round()];
-    if places.get(&key) != Some(&place) {
-        places.insert(key, place);
-    }
+/// The parts of the window that the title bar's buttons hide and show.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum WindowPart {
+    SideBar,
+    Bottom,
+    Right,
 }
 
+impl WindowPart {
+    pub(super) const ALL: [WindowPart; 3] = [WindowPart::SideBar, WindowPart::Bottom, WindowPart::Right];
+
+    pub(super) fn name(self) -> &'static str {
+        match self {
+            WindowPart::SideBar => t!("Side bar"),
+            WindowPart::Bottom => t!("Bottom panels"),
+            WindowPart::Right => t!("Right panels"),
+        }
+    }
+}

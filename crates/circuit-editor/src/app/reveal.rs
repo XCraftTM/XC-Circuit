@@ -26,6 +26,12 @@ pub fn defer_maximize(builder: egui::ViewportBuilder) -> egui::ViewportBuilder {
     builder
 }
 
+/// Whether the window was to be maximized, and no longer is: the start
+/// window, which shows instead of a project, never is.
+pub fn take_maximize() -> bool {
+    MAXIMIZE.swap(false, Ordering::Relaxed)
+}
+
 /// Frames drawn before the window is shown (one at its maximized size too).
 const FRAMES: u32 = 4;
 /// Shown after this long in any case, should frames stop while it is cloaked.

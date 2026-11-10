@@ -1,4 +1,4 @@
-//! File › Git…: keeping the project in a Git repository (GitHub, GitLab,
+//! Share › Git…: keeping the project in a Git repository (GitHub, GitLab,
 //! Gitea …), to have it on several computers and to work on it with others.
 //! Store records what changed and sends it; Fetch gets what is stored there
 //! and puts the two together. The work itself is `circuit_sync`'s; the
@@ -257,7 +257,7 @@ impl GitUi {
         Self::default()
     }
 
-    /// File › Git…
+    /// Share › Git…
     pub fn open(&mut self, ed: &Editor) {
         let Some(project) = &ed.project else { return };
         if self.root.as_deref() != Some(project.root.as_path()) {

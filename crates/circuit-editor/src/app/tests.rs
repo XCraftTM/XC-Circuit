@@ -44,7 +44,7 @@ fn the_default_layout_leaves_the_side_bar_s_views_to_the_activity_bar() {
     assert!(dock.find(|t| matches!(t, Tab::Side(_))).is_none());
     assert_eq!(leaves(&dock), [vec![Tab::Inspector], vec![Tab::Console, Tab::Problems]]);
     let prefs = crate::editor::prefs::Prefs::default();
-    assert_eq!(prefs.activity, ["workspaces", "stored-data", "plugins"]);
+    assert_eq!(prefs.activity, ["workspaces", "stored-data", "git", "live", "plugins"]);
     assert_eq!(prefs.side_shown.as_deref(), Some("workspaces"));
 }
 
@@ -236,35 +236,20 @@ fn the_side_bar_shows_a_second_view_below() {
     assert_eq!(p.side_split, 0.85);
 }
 
-/// A builder's window opens where it was last and as big, by its kind,
-/// kept inside the app's window; a window it shares with other tabs, or one
-/// of its own outside the app, isn't counted.
+/// A builder opens as a tab beside the workspaces, the remote's console
+/// with the panels at the bottom; neither floats over the canvas.
 #[test]
-fn builder_windows_remember_their_place() {
-    use super::chrome::{remember_place, window_key};
-    let mut dock: Dock<Tab> = Dock::new(vec![Tab::Inspector]);
-    dock.add_window(vec![Tab::EmbedBuilder], egui::Rect::from_min_size(egui::pos2(50.0, 50.0), egui::vec2(900.0, 640.0)));
-    let mut places = std::collections::BTreeMap::new();
-    let key = window_key(&Tab::EmbedBuilder);
-    assert_eq!(key, "EmbedBuilder");
-    dock.windows[0].pos = egui::pos2(349.6, 98.2);
-    dock.windows[0].size = egui::vec2(1340.4, 900.6);
-    remember_place(&dock, &mut places, &Tab::EmbedBuilder, key.clone());
-    assert_eq!(places[&key], [350.0, 98.0, 1340.0, 901.0]);
-    // Out in a window of its own: its place there isn't the in-app one.
-    dock.windows[0].os = Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(400.0, 300.0)));
-    dock.windows[0].size = egui::vec2(400.0, 300.0);
-    remember_place(&dock, &mut places, &Tab::EmbedBuilder, key.clone());
-    assert_eq!(places[&key], [350.0, 98.0, 1340.0, 901.0]);
-    // Saved with the settings, and read back.
-    let prefs = crate::editor::prefs::Prefs { window_places: places, ..Default::default() };
-    let back: crate::editor::prefs::Prefs = serde_json::from_str(&serde_json::to_string(&prefs).unwrap()).unwrap();
-    assert_eq!(back.window_places[&key], [350.0, 98.0, 1340.0, 901.0]);
-    // In a smaller window it's moved (and shrunk) to stay inside.
-    use super::dock::fit_inside;
-    let area = egui::Rect::from_min_size(egui::pos2(0.0, 30.0), egui::vec2(1200.0, 800.0));
-    let r = fit_inside(egui::Rect::from_min_size(egui::pos2(900.0, 600.0), egui::vec2(1340.0, 900.0)), area);
-    assert!(area.contains_rect(r), "{r:?}");
-    let same = egui::Rect::from_min_size(egui::pos2(100.0, 100.0), egui::vec2(500.0, 400.0));
-    assert_eq!(fit_inside(same, area), same, "one that fits stays where it was");
+fn builders_open_in_the_middle_and_the_remote_console_at_the_bottom() {
+    let mut dock = default_layout();
+    open_canvas(&mut dock, "main".into());
+    place_panel(&mut dock, Tab::EmbedBuilder);
+    place_panel(&mut dock, Tab::BotSettings);
+    place_panel(&mut dock, Tab::ServerConsole);
+    assert!(dock.windows.is_empty(), "nothing floats");
+    let all = leaves(&dock);
+    let middle = all.iter().find(|l| l.contains(&Tab::Canvas("main".into()))).unwrap();
+    assert!(middle.contains(&Tab::EmbedBuilder) && middle.contains(&Tab::BotSettings), "{middle:?}");
+    let bottom = all.iter().find(|l| l.contains(&Tab::Console)).unwrap();
+    assert!(bottom.contains(&Tab::ServerConsole), "{bottom:?}");
+    assert_eq!(super::chrome::window_key(&Tab::Export), "Export");
 }

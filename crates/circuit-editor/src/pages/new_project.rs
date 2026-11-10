@@ -23,7 +23,7 @@ pub struct NewProject {
     pub name: String,
     pub location: String,
     /// Kept in a Git repository: the project goes into the app's own folder
-    /// for those, and File › Git… opens once it is made.
+    /// for those, and Share › Git… opens once it is made.
     pub in_git: bool,
     /// A folder just chosen with Browse…, to be remembered for next time
     /// even if this project isn't made.
@@ -34,6 +34,8 @@ pub struct NewProject {
     /// The last look at the folder the project goes in: for which name and
     /// location, when, and what it found.
     checked: Option<(String, String, std::time::Instant, Result<PathBuf, String>)>,
+    /// Where its window first went on the screen, and how big.
+    place: Option<(egui::Pos2, egui::Vec2)>,
 }
 
 /// What the window asked for when it closed.
@@ -151,13 +153,18 @@ pub fn default_location(open_project: Option<&Path>) -> PathBuf {
 const SIDEBAR_W: f32 = 200.0;
 const HEIGHT: f32 = 600.0;
 
-pub fn show(ctx: &egui::Context, theme: &Theme, state: &mut NewProject, reg: &Registry, templates: &[Template]) -> Option<Outcome> {
+/// The New Project window: a window of its own beside the app's (or the
+/// start window), with the kinds of project on the left and the form on
+/// the right. `system_frame`: with the system's title bar.
+pub fn show(ctx: &egui::Context, theme: &Theme, state: &mut NewProject, reg: &Registry, templates: &[Template], system_frame: bool) -> Option<Outcome> {
     let mut outcome = None;
     let target = state.target_now();
-    let close = dialog::show(
-        ctx,
+    let place = *state.place.get_or_insert_with(|| dialog::centered_now(ctx, egui::vec2(880.0, 760.0)));
+    let icon = reg.icons.get("folder-plus").cloned();
+    let close = dialog::own_window(ctx, theme, dialog::Own { key: "new-project", title: t!("New project"), icon: icon.as_deref(), place, system_frame }, |ui| dialog::tab(
+        ui,
         theme,
-        dialog::Spec { id: "new-project", title: t!("New project"), subtitle: None, icon: None, width: 820.0 },
+        dialog::Spec { id: "new-project", title: t!("New project"), subtitle: Some(t!("What kind of bot, its name, and where it is kept")), icon: None, width: 820.0 },
         |ui, part| match part {
             dialog::Part::Body => {
                 ui.horizontal_top(|ui| {
@@ -186,7 +193,7 @@ pub fn show(ctx: &egui::Context, theme: &Theme, state: &mut NewProject, reg: &Re
                 }
             }
         },
-    );
+    ));
     if close && outcome.is_none() {
         outcome = Some(Outcome::Cancel);
     }
@@ -245,7 +252,7 @@ fn form(ui: &mut Ui, theme: &Theme, state: &mut NewProject, reg: &Registry, temp
     kit::field(ui, theme, t!("Name"), None, |ui| kit::text_input(ui, &mut state.name, "", false));
     ui.horizontal_wrapped(|ui| {
         for (git, label, tip) in [
-            (false, t!("Only on this computer"), t!("A folder you choose. You can still put it in a Git repository later (File › Git…).")),
+            (false, t!("Only on this computer"), t!("A folder you choose. You can still put it in a Git repository later (Share › Git…).")),
             (true, t!("In a Git repository"), t!("For several computers, or to work on it with others: on GitHub, GitLab or Gitea. XC Circuit keeps the project's folder itself, and asks for the repository next.")),
         ] {
             if kit::radio(ui, theme, state.in_git == git, label).on_hover_text(tip).clicked() && state.in_git != git {

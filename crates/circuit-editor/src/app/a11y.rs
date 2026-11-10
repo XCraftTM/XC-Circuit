@@ -104,9 +104,15 @@ fn the_first_start_page_names_its_controls() {
 
 #[test]
 fn the_start_page_names_its_controls() {
-    let h = window("start", false);
+    let mut h = window("start", false);
     let mut missing = Vec::new();
     look(&h, "Start page", &mut missing);
+    // Each of the start window's pages.
+    for page in [start::Page::Live, start::Page::Host, start::Page::Plugins, start::Page::Learn, start::Page::Settings] {
+        h.state_mut().pick_start_page(page);
+        settle(&mut h);
+        look(&h, &format!("Start window, {page:?}"), &mut missing);
+    }
     report(missing);
 }
 
@@ -160,7 +166,7 @@ fn hand_drawn_controls_are_found_by_name() {
         }
     };
     // The title bar, the activity bar, the dock's tabs, a block on the canvas.
-    for name in ["Minimize", "Maximize", "Close", "Search commands, workspaces and blocks", "Workspaces", "Settings (Ctrl+,)"] {
+    for name in ["Minimize", "Maximize", "Close", "Search commands, workspaces and blocks", "Workspaces", "Git", "Live session", "Manage", "Side bar", "Bottom panels", "Right panels"] {
         find(&h, Role::Button, name);
     }
     find(&h, Role::Tab, "Inspector");

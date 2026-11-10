@@ -127,7 +127,7 @@ impl Hosting {
             Kind::Calagopus if self.panel.trim().is_empty() => Some("Fill in the panel's address."),
             Kind::Calagopus if secrets.api_key.is_none() => Some("Sign in to the panel, or paste an API key."),
             Kind::Calagopus if self.server.is_empty() => Some("Choose the server."),
-            Kind::Host if self.panel.trim().is_empty() || secrets.api_key.is_none() => Some("Pair this computer with your host first (File › Host…)."),
+            Kind::Host if self.panel.trim().is_empty() || secrets.api_key.is_none() => Some("Pair this computer with your host first (Share › Host…)."),
             Kind::Host if self.server.is_empty() => Some("Give the bot a name on the host."),
             _ => None,
         }

@@ -186,15 +186,45 @@ impl CircuitApp {
         }
         self.activity_slots = slots;
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
-            if self.activity_item(ui, "settings", t!("Settings (Ctrl+,)"), self.dock.contains(&Tab::Settings)) {
-                self.toggle_settings();
-            }
+            let gear = self.activity_button(ui, "settings", t!("Manage"), self.dock.contains(&Tab::Settings), false, egui::Sense::click());
+            self.gear_menu(&gear);
         });
     }
 
-    /// One activity bar icon that's only clicked. Returns true when it is.
-    pub(super) fn activity_item(&self, ui: &mut egui::Ui, icon: &str, tip: &str, active: bool) -> bool {
-        self.activity_button(ui, icon, tip, active, false, egui::Sense::click()).clicked()
+    /// The gear's menu at the bottom of the activity bar: the search, the
+    /// settings pages, plugins, themes and updates.
+    fn gear_menu(&mut self, gear: &egui::Response) {
+        let theme = self.ed.theme.clone();
+        let has_project = self.ed.project.is_some();
+        egui::Popup::menu(gear).width(240.0).show(|ui| {
+            use crate::ui::kit::menu_item;
+            if menu_item(ui, t!("Command Palette…"), Some(self.key_label(Hotkey::CommandPalette)), true).clicked() {
+                self.palette = Some(Default::default());
+            }
+            ui.separator();
+            if menu_item(ui, t!("Settings"), Some(self.key_label(Hotkey::Settings)), true).clicked() {
+                self.toggle_settings();
+            }
+            if menu_item(ui, t!("Bot settings"), self.shortcut_shown(Hotkey::BotSettings), has_project).clicked() {
+                self.bot.open_settings(&mut self.ed);
+            }
+            if menu_item(ui, t!("Plugins"), None, true).clicked() {
+                self.open_plugins();
+            }
+            ui.menu_button(t!("Themes"), |ui| {
+                let themes: Vec<(String, String)> = self.ed.reg.themes.iter().map(|t| (t.id.clone(), t.name.clone())).collect();
+                for (id, name) in themes {
+                    if crate::ui::kit::radio(ui, &theme, self.ed.theme.id == id, name).clicked() {
+                        self.ed.set_theme(&id);
+                        self.ed.theme.apply(ui.ctx());
+                    }
+                }
+            });
+            ui.separator();
+            if menu_item(ui, t!("Check for Updates…"), None, true).clicked() {
+                self.check_for_updates();
+            }
+        });
     }
 
     /// One activity bar icon: marked when `active`, faint while `lifted` (dragged).

@@ -1,10 +1,10 @@
 # Keeping a project in Git
 
-A project is a folder of small text files, so it fits well in a Git repository: on GitHub, GitLab, Gitea or any other place that speaks Git over HTTPS. That gives you the bot on several computers, a history of every version, and a way to work on it with others. **File › Git…** does it from inside XC Circuit; you don't need Git installed.
+A project is a folder of small text files, so it fits well in a Git repository: on GitHub, GitLab, Gitea or any other place that speaks Git over HTTPS. That gives you the bot on several computers, a history of every version, and a way to work on it with others. **Share › Git…** does it from inside XC Circuit; you don't need Git installed.
 
 ## Setting it up
 
-**File › Git…** leads you through it the first time: what is stored and what never is, an account (with a button to make one on GitHub), a repository (with a button to make one), and then the form:
+**Share › Git…** leads you through it the first time: what is stored and what never is, an account (with a button to make one on GitHub), a repository (with a button to make one), and then the form:
 
 1. Paste the repository's **HTTPS address** (the page shows it under *Code* or *Clone*; it starts with `https://`, not `git@`).
 2. Sign in:
@@ -16,13 +16,13 @@ The sign-in is kept in your system's credential store, one per place (`github.co
 
 ## A project without a folder of its own
 
-A project kept in a Git repository doesn't need a folder you look after. **File › New Project…** offers **In a Git repository** beside **Only on this computer**, and **Get from Git…** offers **Kept by XC Circuit**: the project then lives in the app's own folder (on Windows under `%LOCALAPPDATA%\XC Circuit\remotes`), as a complete copy you can work on without a network, and stays in your recent projects. **Show the folder** in File › Git… opens it. Choose a folder of your own instead when the project has files you reach by their path, such as pictures.
+A project kept in a Git repository doesn't need a folder you look after. **File › New Project…** offers **In a Git repository** beside **Only on this computer**, and **Get from Git…** offers **Kept by XC Circuit**: the project then lives in the app's own folder (on Windows under `%LOCALAPPDATA%\XC Circuit\remotes`), as a complete copy you can work on without a network, and stays in your recent projects. **Show the folder** in Share › Git… opens it. Choose a folder of your own instead when the project has files you reach by their path, such as pictures.
 
-**Disconnect…** in File › Git… forgets the repository: the project and its history stay on the computer, and what is stored there stays there. **Disconnect and keep as a folder…** also moves a project out of the app's folder into one you choose. **Remove from this computer…** deletes a copy the app keeps, after asking once more: what is in the repository stays, but changes not stored yet and the bot's own data on that computer are gone for good.
+**Disconnect…** in Share › Git… forgets the repository: the project and its history stay on the computer, and what is stored there stays there. **Disconnect and keep as a folder…** also moves a project out of the app's folder into one you choose. **Remove from this computer…** deletes a copy the app keeps, after asking once more: what is in the repository stays, but changes not stored yet and the bot's own data on that computer are gone for good.
 
 ## Store and Fetch
 
-Once connected, XC Circuit keeps the two in step **by itself**: every save is stored and sent, what others stored comes in with it, and when the project opens the newest version is fetched first. Without a network you just keep working; the next save catches up. **Keep in step by itself** in File › Git… turns that off for this computer; then it happens when you press:
+Once connected, XC Circuit keeps the two in step **by itself**: every save is stored and sent, what others stored comes in with it, and when the project opens the newest version is fetched first. Without a network you just keep working; the next save catches up. **Keep in step by itself** in Share › Git… turns that off for this computer; then it happens when you press:
 
 - **Store** saves the project, records what changed since the last time (with the few words you give it) and sends it to the repository.
 - **Fetch** gets what is stored there and puts it together with what you have here. Your own changes are recorded first, so nothing of yours is lost.
@@ -31,7 +31,7 @@ When newer changes are stored there, Store says so: press **Fetch** first, then 
 
 ## Earlier versions
 
-Every Store is a version. **Earlier versions** in File › Git… lists the newest ones with their words, who stored them and when. **Go back to this** makes the project what it was then, as a new version on top: nothing in between is lost, and you can go back to where you were the same way.
+Every Store is a version. **Earlier versions** in Share › Git… lists the newest ones with their words, who stored them and when. **Go back to this** makes the project what it was then, as a new version on top: nothing in between is lost, and you can go back to where you were the same way.
 
 ## Before something secret is stored
 
@@ -39,7 +39,7 @@ When a block holds something that looks like a secret (a webhook address, a bot 
 
 ## On another computer
 
-**File › Get from Git…** (also on the start page) brings a stored project onto a computer: paste the repository's address, choose where its folder goes, sign in if the repository is private, and press **Get the project**. It opens right away. Then fill in the bot token once in **Bot › Settings**; it was never stored.
+**File › Get from Git…** (also **Get from Git** in the start window) brings a stored project onto a computer: paste the repository's address, choose where its folder goes, sign in if the repository is private, and press **Get the project**. It opens right away. Then fill in the bot token once in **Bot › Settings**; it was never stored.
 
 ## When both changed the same thing
 
@@ -59,7 +59,7 @@ Never stored: the `.circuit/` folder. That is this computer's part: where the bo
 
 ## Good to know
 
-- A repository you set up yourself with Git works too: File › Git… uses it as it is, and adds `.circuit/` to its `.gitignore`.
+- A repository you set up yourself with Git works too: Share › Git… uses it as it is, and adds `.circuit/` to its `.gitignore`.
 - Files are stored byte for byte, whatever line-ending setting your own Git has, so a project is the same on Windows and Linux.
 - When a project opens, XC Circuit looks whether newer versions are stored there (nothing is changed), so the status bar can say **Git: 2 to fetch**.
-- The status bar shows how the project stands: **Git: stored**, or how many changes wait to be stored or fetched. Click it to open File › Git…. Store, Fetch and the dialog can each get a shortcut in Settings › Shortcuts.
+- The status bar shows how the project stands: **Git: stored**, or how many changes wait to be stored or fetched. Click it to open Share › Git…. Store, Fetch and the dialog can each get a shortcut in Settings › Shortcuts.

@@ -38,6 +38,85 @@ pub fn show(ctx: &egui::Context, theme: &Theme, spec: Spec, mut content: impl Fn
     close || response.should_close()
 }
 
+/// Where a window of `size` goes to sit over the middle of the app's window
+/// (`over`, on the screen), kept on the `monitor` when that is known.
+pub fn centered(over: Option<egui::Rect>, monitor: Option<egui::Vec2>, size: egui::Vec2) -> (egui::Pos2, egui::Vec2) {
+    let size = match monitor {
+        Some(m) => size.min(m - vec2(80.0, 120.0)).max(vec2(420.0, 320.0)),
+        None => size,
+    };
+    let pos = match over {
+        Some(r) => (r.center() - size / 2.0).max(egui::pos2(0.0, 0.0)),
+        None => egui::pos2(120.0, 80.0),
+    };
+    (pos, size)
+}
+
+/// [`centered`] over the window `ctx` is drawing now.
+pub fn centered_now(ctx: &egui::Context, size: egui::Vec2) -> (egui::Pos2, egui::Vec2) {
+    let (over, monitor) = ctx.input(|i| (i.viewport().outer_rect, i.viewport().monitor_size));
+    centered(over, monitor, size)
+}
+
+/// What a window of its own is: the name it is known by, its title and
+/// icon, where it first goes on the screen and how big (the system keeps
+/// it after), and whether it has the system's frame instead of the app's
+/// title bar.
+pub struct Own<'a> {
+    pub key: &'a str,
+    pub title: &'a str,
+    pub icon: Option<&'a Path>,
+    pub place: (egui::Pos2, egui::Vec2),
+    pub system_frame: bool,
+}
+
+/// A window of its own, beside the app's: for what is set up once and
+/// closed again. `add` draws what is under its title bar. Returns true
+/// when it was asked to close.
+pub fn own_window(ctx: &egui::Context, theme: &Theme, own: Own, add: impl FnOnce(&mut Ui)) -> bool {
+    let Own { key, title, icon, place, system_frame } = own;
+    // Inside the app's window (where the system has no windows to give), it gets egui's frame.
+    let framed = system_frame || ctx.embed_viewports();
+    let builder = egui::ViewportBuilder::default()
+        .with_title(format!("{title} · XC Circuit"))
+        .with_position(place.0)
+        .with_inner_size(place.1)
+        .with_min_inner_size(vec2(420.0, 320.0))
+        .with_decorations(framed);
+    let mut add = Some(add);
+    ctx.show_viewport_immediate(egui::ViewportId::from_hash_of(("own-window", key)), builder, |ui, _| {
+        let all = ui.max_rect();
+        ui.painter().rect_filled(all, 0.0, theme.panel);
+        let mut body = all;
+        if !framed {
+            let bar = egui::Rect::from_min_size(all.min, vec2(all.width(), crate::app::titlebar::HEIGHT));
+            body.min.y = bar.bottom();
+            ui.painter().rect_filled(bar, 0.0, theme.frame);
+            ui.painter().hline(bar.x_range(), bar.bottom() - 0.5, Stroke::new(1.0, theme.line));
+            let mut row = ui.new_child(egui::UiBuilder::new().id_salt("own-window-bar").max_rect(bar).layout(Layout::left_to_right(Align::Center)));
+            crate::app::titlebar::drag_region(&mut row, bar);
+            row.add_space(12.0);
+            if let Some(icon) = icon {
+                row.add(egui::Image::from_uri(file_uri(icon)).tint(theme.text_muted).fit_to_exact_size(vec2(16.0, 16.0)));
+                row.add_space(4.0);
+            }
+            row.add(egui::Label::new(RichText::new(title).size(12.5).color(theme.text)).selectable(false));
+            let mut right = ui.new_child(egui::UiBuilder::new().id_salt("own-window-buttons").max_rect(bar).layout(Layout::right_to_left(Align::Center)));
+            right.spacing_mut().item_spacing.x = 0.0;
+            crate::app::titlebar::window_buttons(&mut right, theme);
+        }
+        let mut inner = ui.new_child(egui::UiBuilder::new().id_salt("own-window-body").max_rect(body).layout(Layout::top_down(Align::Min)));
+        inner.set_clip_rect(body);
+        if let Some(add) = add.take() {
+            add(&mut inner);
+        }
+        if !framed {
+            crate::app::titlebar::frame_edges(ui.ctx(), theme);
+        }
+        ui.ctx().input(|i| i.viewport().close_requested())
+    })
+}
+
 /// Shows a dialog inside a dock tab: it can be docked on any side, stacked with
 /// other tabs or dragged out into its own window. For editors and settings. The
 /// tab's own × closes it. The body scrolls; the footer stays at the bottom.

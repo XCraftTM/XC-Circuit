@@ -504,7 +504,7 @@ impl CircuitApp {
         let Some(mut state) = self.new_project.take() else { return };
         // Read once, when the window opens.
         let templates = state.starters.take().unwrap_or_else(|| crate::pages::new_project::templates(self.ed.examples_dir.as_deref(), &self.ed.reg));
-        let outcome = crate::pages::new_project::show(ctx, theme, &mut state, &self.ed.reg, &templates);
+        let outcome = crate::pages::new_project::show(ctx, theme, &mut state, &self.ed.reg, &templates, self.ed.prefs.system_titlebar);
         state.starters = Some(templates);
         // A folder chosen with Browse… is where the next project goes too.
         if let Some(dir) = state.browsed.take() {
@@ -549,7 +549,6 @@ impl CircuitApp {
             self.own_plugins_dialog(ctx, &theme);
         }
         self.new_project_chooser(ctx, &theme);
-        self.bot.live.join_dialog(ctx, &self.ed);
         if let Some(root) = self.bot.git.get_dialog(ctx, &mut self.ed) {
             self.switch_project(&root);
         }

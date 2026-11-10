@@ -30,7 +30,7 @@ pub enum Action {
     Upload,
     ServerConsole,
     ServerSettings,
-    /// File › Git…, and its two actions.
+    /// Share › Git…, and its two actions.
     Git,
     GitStore,
     GitFetch,
@@ -143,7 +143,7 @@ impl Action {
             Action::ServerConsole => t!("Remote console"),
             Action::ServerSettings => t!("Remote settings (Bot › Remote…)"),
             Action::ToggleRemote => t!("Switch Run between this computer and the remote"),
-            Action::Git => t!("Git (File › Git…)"),
+            Action::Git => t!("Git (Share › Git…)"),
             Action::GitStore => t!("Store the project in its repository"),
             Action::GitFetch => t!("Fetch what is stored in the repository"),
             Action::Undo => t!("Undo"),

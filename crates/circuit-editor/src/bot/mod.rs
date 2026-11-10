@@ -113,11 +113,11 @@ pub struct BotUi {
     question: Option<(String, String, Vec<circuit_runner::protocol::Choice>)>,
     /// Uploading to the bot's server, and a Calagopus server's console.
     pub hosting: hosting::HostingUi,
-    /// File › Git…: the project in a Git repository.
+    /// Share › Git…: the project in a Git repository.
     pub git: git::GitUi,
-    /// File › Host…: this computer and an XC Circuit Host.
+    /// Share › Host…: this computer and an XC Circuit Host.
     pub host: host::HostUi,
-    /// File › Live session…: working in one project together.
+    /// Share › Live session…: working in one project together.
     pub live: live::LiveUi,
 }
 

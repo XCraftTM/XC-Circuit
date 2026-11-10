@@ -1,4 +1,4 @@
-//! File › Host…: pairing this computer with an XC Circuit Host (the
+//! Share › Host…: pairing this computer with an XC Circuit Host (the
 //! container people run themselves), keeping a project on it, and carrying
 //! a project's secrets between the paired devices through its vault. The
 //! host only ever gets them sealed (`circuit_runner::host_link`).
@@ -63,14 +63,14 @@ pub struct HostUi {
     busy: Option<&'static str>,
     jobs: Vec<Receiver<Done>>,
     said: Option<(bool, String)>,
-    /// A project address to connect File › Git… to, for the app.
+    /// A project address to connect Share › Git… to, for the app.
     pub keep: Option<String>,
     /// The projects the host said were changed by another device: for the
     /// app to fetch the open one.
     pub changed: Vec<String>,
     /// The ear at the host: what it heard, and the switch that stops it.
     heard: Option<(Receiver<String>, Arc<AtomicBool>)>,
-    /// About the open project, from File › Git…, for this dialog to show:
+    /// About the open project, from Share › Git…, for this dialog to show:
     /// where it is stored, how it stands, and what the last action said.
     pub project: (Option<String>, Option<String>, Option<(bool, String)>),
 }
@@ -94,7 +94,7 @@ fn save_pairing(address: &str, device: &str, name: &str, token: &str, key: Optio
     let host = host_of(address);
     let entry = serde_json::json!({ "address": address, "device": device, "name": name, "token": token, "key": key.map(VaultKey::to_text) });
     super::set_host_login(&host, &entry.to_string())?;
-    // File › Git… signs in at this host with the same token.
+    // Share › Git… signs in at this host with the same token.
     super::set_sync_login(&host, name, token)?;
     let _ = std::fs::create_dir_all(super::app_data_dir());
     std::fs::write(note_file(), serde_json::json!({ "address": address }).to_string())?;
@@ -143,7 +143,7 @@ impl HostUi {
         Self::default()
     }
 
-    /// File › Host…
+    /// Share › Host…
     pub fn open(&mut self) {
         self.open = true;
         if self.name.is_empty() {
@@ -506,7 +506,7 @@ impl HostUi {
                             kit::section(ui, &theme, t!("Your devices"));
                             match &self.adding {
                                 Some(code) => {
-                                    ui.label(t!("On the other device, open File › Host… and type in this code:"));
+                                    ui.label(t!("On the other device, open Share › Host… and type in this code:"));
                                     ui.horizontal(|ui| {
                                         ui.label(RichText::new(code).monospace().size(22.0).strong());
                                         if kit::secondary_button(ui, &theme, t!("Copy")).clicked() {
@@ -679,7 +679,7 @@ mod tests {
         assert!(paired.has_key && ui.recovery.is_none(), "the key came from the other device: {:?}", ui.said);
         let mut first = other.join().unwrap();
         assert_eq!(load_pairing().map(|(p, _, k)| (p, k == Some(key.clone()))), Some((paired.clone(), true)));
-        assert!(crate::bot::sync_login(&host_of(&address)).is_some(), "File › Git… is signed in there too");
+        assert!(crate::bot::sync_login(&host_of(&address)).is_some(), "Share › Git… is signed in there too");
 
         // A secret of the project: sealed, sent, gone here, and back.
         let project = ed.project.as_ref().unwrap();
@@ -696,7 +696,7 @@ mod tests {
         wait(&mut ui, &mut ed);
         assert_eq!(secrets::get(&root, "token").as_deref(), Some("bot-token-for-the-test"), "{:?}", ui.said);
 
-        // Keeping the project there: the address File › Git… connects to.
+        // Keeping the project there: the address Share › Git… connects to.
         assert_eq!(host_link::project_address(&paired.address, "My Bot"), format!("{address}/git/my-bot.git"));
 
         // Unpairing: off the host's list, nothing kept here.

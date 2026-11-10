@@ -46,7 +46,7 @@ You need a server with Docker and a reverse proxy that adds HTTPS, such as Nginx
    docker compose -f host/docker-compose.yml logs xc-circuit-host
    ```
 
-   In XC Circuit, open **File › Host…**, fill in the host's address and that code, and press **Pair**.
+   In XC Circuit, open **Share › Host…**, fill in the host's address and that code, and press **Pair**.
 
 ## Your devices
 
@@ -54,8 +54,8 @@ The first device makes the **key your secrets are sealed with**, and shows it on
 
 Every further device comes in through one that is paired already:
 
-1. On the paired device: **File › Host… › Add a device**. It shows a code of 16 letters and digits. Leave that window open.
-2. On the new device: **File › Host…**, the host's address and that code, **Pair**.
+1. On the paired device: **Share › Host… › Add a device**. It shows a code of 16 letters and digits. Leave that window open.
+2. On the new device: **Share › Host…**, the host's address and that code, **Pair**.
 
 Half of the code goes to the host, which lets the device in. The other half only travels from one screen to the other keyboard: the two devices use it to pass the key on, so the host can't get at it even if it tried.
 
@@ -63,9 +63,9 @@ Half of the code goes to the host, which lets the device in. The other half only
 
 ## A project on the host
 
-With a project open, File › Host… has three buttons:
+With a project open, Share › Host… has three buttons:
 
-- **Keep this project on the host** stores it there and keeps it in step from then on: every save goes to the host, and what another of your devices stores comes in by itself, as the host tells every connected device at once that something changed. The dialog then says that the project is kept there and how it stands. (It is the same as [with GitHub](git.md) underneath; File › Git… shows the details and the earlier versions.)
+- **Keep this project on the host** stores it there and keeps it in step from then on: every save goes to the host, and what another of your devices stores comes in by itself, as the host tells every connected device at once that something changed. The dialog then says that the project is kept there and how it stands. (It is the same as [with GitHub](git.md) underneath; Share › Git… shows the details and the earlier versions.)
 - **Send its secrets** seals the bot token and the project's other secrets on this computer and puts them in the host's vault.
 - **Get its secrets** fetches them on another device and saves them in that computer's credential store. No more typing the token in on every device.
 

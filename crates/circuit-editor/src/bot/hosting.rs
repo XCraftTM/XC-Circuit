@@ -872,7 +872,7 @@ impl HostingUi {
                         }
                         Kind::Host => {
                             if d.h.panel.trim().is_empty() {
-                                ui.label(RichText::new(t!("Pair this computer with your host first: File › Host…")).color(theme.warning));
+                                ui.label(RichText::new(t!("Pair this computer with your host first: Share › Host…")).color(theme.warning));
                             } else {
                                 kit::done_label(ui, tf!("The bot runs on your host at {address}", address = d.h.panel), theme.action);
                                 if kit::field(ui, &theme, t!("The bot's name there"), Some(t!("Lowercase letters, digits and dashes. Each bot on the host has its own.")), |ui| kit::text_input(ui, &mut d.h.server, "my-bot", false)).changed() {
@@ -980,7 +980,7 @@ fn missing_text(english: &str) -> &'static str {
         "Fill in the panel's address." => t!("Fill in the panel's address."),
         "Sign in to the panel, or paste an API key." => t!("Sign in to the panel, or paste an API key."),
         "Choose the server." => t!("Choose the server."),
-        "Pair this computer with your host first (File › Host…)." => t!("Pair this computer with your host first (File › Host…)."),
+        "Pair this computer with your host first (Share › Host…)." => t!("Pair this computer with your host first (Share › Host…)."),
         "Give the bot a name on the host." => t!("Give the bot a name on the host."),
         _ => t!("Something is missing in the remote settings."),
     }

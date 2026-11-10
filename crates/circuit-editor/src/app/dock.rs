@@ -12,9 +12,6 @@ pub(super) struct Viewer<'a> {
     pub(super) settings: &'a mut crate::pages::settings::SettingsView,
     pub(super) restore: &'a mut crate::pages::restore::RestoreView,
     pub(super) asks: Vec<crate::pages::settings::Ask>,
-    pub(super) start: &'a mut crate::pages::start_page::StartPage,
-    pub(super) has_example: bool,
-    pub(super) start_pick: Option<crate::pages::start_page::Pick>,
     /// The Stored Data tab's state.
     pub(super) stored: &'a mut crate::pages::stored::StoredView,
     /// What the Plugins tab's buttons asked for (handled by the app).
@@ -198,13 +195,8 @@ impl DockViewer<Tab> for Viewer<'_> {
                 let key = key.clone();
                 canvas::show(ui, self.ed, &key);
             }
-            Tab::Start if self.ed.project.is_some() => self.no_workspace = no_workspace(ui, self.ed),
-            Tab::Start => {
-                let recent = self.ed.prefs.recent_projects.clone();
-                if let Some(pick) = crate::pages::start_page::show(ui, &self.ed.theme, self.start, &recent, &self.ed.reg, self.has_example) {
-                    self.start_pick = Some(pick);
-                }
-            }
+            // Without a project the start window shows, not the tabs.
+            Tab::Start => self.no_workspace = no_workspace(ui, self.ed),
             // The builders keep a size they work at; a smaller tab or window scrolls.
             Tab::EmbedBuilder => at_least(ui, tab.min_width(), |ui| crate::builders::embed::tab(ui, self.ed)),
             Tab::LayoutBuilder => at_least(ui, tab.min_width(), |ui| crate::builders::layout::tab(ui, self.ed)),
@@ -361,33 +353,6 @@ pub(super) fn default_layout() -> Dock<Tab> {
         main.split(Edge::Top, 0.76, vec![Tab::Inspector]);
     }
     dock
-}
-
-/// Opens a tab in a window of its own over the middle of the app. It can be
-/// docked from there like any other tab.
-pub(super) fn open_floating(dock: &mut Dock<Tab>, ctx: &egui::Context, tab: Tab, size: egui::Vec2) {
-    let area = ctx.content_rect();
-    let size = size.min(area.size() - egui::vec2(48.0, 48.0)).max(egui::vec2(320.0, 240.0));
-    dock.add_window(vec![tab.clone()], egui::Rect::from_min_size(area.center() - size / 2.0, size));
-    dock.focus(&tab);
-}
-
-/// Opens a tab in a window of its own at `rect`, moved and shrunk to stay
-/// inside the app's window (which may be smaller than when it was there).
-pub(super) fn open_floating_at(dock: &mut Dock<Tab>, ctx: &egui::Context, tab: Tab, rect: egui::Rect) {
-    let area = ctx.content_rect();
-    let rect = fit_inside(rect, area);
-    dock.add_window(vec![tab.clone()], rect);
-    dock.focus(&tab);
-}
-
-/// `rect` moved (and if it must, shrunk) to lie inside `area`, a little in
-/// from its edges.
-pub(super) fn fit_inside(rect: egui::Rect, area: egui::Rect) -> egui::Rect {
-    let room = area.shrink(8.0);
-    let size = rect.size().min(room.size()).max(egui::vec2(320.0, 240.0));
-    let min = rect.min.clamp(room.min, (room.max - size).max(room.min));
-    egui::Rect::from_min_size(min, size)
 }
 
 /// Opens a side panel next to the open tabs of its kind (the bottom panels

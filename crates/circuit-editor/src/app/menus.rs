@@ -1,4 +1,4 @@
-//! The menu bar: File, Edit, View, Bot, Plugins and Help.
+//! The menu bar: File, Edit, View, Bot, Share, Plugins and Help.
 
 use crate::ui::kit;
 use super::*;
@@ -75,8 +75,8 @@ impl CircuitApp {
                         }
                     });
                 });
-                if kit::menu_item(ui, t!("Close Project"), None, self.ed.project.is_some()).clicked() {
-                    self.close_project();
+                if kit::menu_item(ui, t!("Get from Git…"), None, true).clicked() {
+                    self.get_from_git();
                 }
                 ui.separator();
                 if kit::menu_item(ui, t!("Save"), Some(self.key_label(Hotkey::Save)), self.ed.project.is_some()).clicked() {
@@ -89,29 +89,17 @@ impl CircuitApp {
                 if kit::menu_item(ui, t!("Export workspaces…"), None, self.ed.project.as_ref().is_some_and(|p| !p.workspaces.is_empty())).clicked() {
                     crate::editor::exchange::open_export(&mut self.ed, crate::editor::exchange::Preselect::All);
                 }
-                ui.separator();
-                if kit::menu_item(ui, t!("Get from Git…"), None, true).clicked() {
-                    self.get_from_git();
-                }
-                if kit::menu_item(ui, "Git…", None, self.ed.project.is_some()).clicked() {
-                    self.bot.git.open(&self.ed);
-                }
-                if kit::menu_item(ui, "Host…", None, true).clicked() {
-                    self.bot.host.open();
-                }
-                if kit::menu_item(ui, t!("Live session…"), None, true).clicked() {
-                    self.bot.live.open();
-                }
                 if kit::menu_item(ui, t!("Restore from backup…"), None, self.ed.project.is_some()).clicked() {
                     open_center(&mut self.dock, Tab::Backups);
                 }
+                ui.separator();
                 if kit::menu_item(ui, t!("Settings…"), Some(self.key_label(Hotkey::Settings)), true).clicked() {
                     self.open_settings();
                 }
-                if kit::menu_item(ui, t!("Reload Plugins"), None, true).clicked() {
-                    self.reload_plugins(ui.ctx());
-                }
                 ui.separator();
+                if kit::menu_item(ui, t!("Close Project"), None, self.ed.project.is_some()).on_hover_text(t!("Back to the start window")).clicked() {
+                    self.close_project();
+                }
                 if kit::menu_item(ui, t!("Exit"), None, true).clicked() {
                     ui.ctx().send_viewport_cmd(ViewportCommand::Close);
                 }
@@ -167,6 +155,14 @@ impl CircuitApp {
                     }
                 }
                 ui.separator();
+                ui.label(RichText::new(t!("LAYOUT")).size(10.5).color(theme.text_muted));
+                for part in WindowPart::ALL {
+                    let mut on = self.part_shown(part);
+                    if kit::checkbox(ui, &theme, &mut on, part.name()).clicked() {
+                        self.toggle_part(part);
+                    }
+                }
+                ui.separator();
                 ui.label(RichText::new(t!("THEME")).size(10.5).color(theme.text_muted));
                 let themes: Vec<(String, String)> = self.ed.reg.themes.iter().map(|t| (t.id.clone(), t.name.clone())).collect();
                 for (id, name) in themes {
@@ -219,6 +215,28 @@ impl CircuitApp {
                     self.bot.hosting.open_console(&mut self.ed);
                 }
             }).response);
+            tops.push(ui.menu_button(t!("Share"), |ui| {
+                if kit::menu_item(ui, "Git…", self.shortcut_shown(Hotkey::Git), has_project).on_hover_text(t!("Keep the project in a Git repository: on GitHub, GitLab, or your host")).clicked() {
+                    self.bot.git.open(&self.ed);
+                    self.show_shared(Tab::Git);
+                }
+                let stored = has_project && self.bot.git.status().is_some();
+                if kit::menu_item(ui, t!("Store now"), self.shortcut_shown(Hotkey::GitStore), stored).clicked() {
+                    self.bot.git.store_now(&mut self.ed);
+                }
+                if kit::menu_item(ui, t!("Fetch now"), self.shortcut_shown(Hotkey::GitFetch), stored).clicked() {
+                    self.bot.git.fetch_now(&mut self.ed);
+                }
+                ui.separator();
+                if kit::menu_item(ui, "Host…", None, true).on_hover_text(t!("A small server of your own, for your projects and secrets on all your devices")).clicked() {
+                    self.bot.host.open();
+                    self.show_shared(Tab::Host);
+                }
+                if kit::menu_item(ui, t!("Live session…"), None, true).on_hover_text(t!("Work in one project together, at the same time")).clicked() {
+                    self.bot.live.open();
+                    self.show_shared(Tab::Live);
+                }
+            }).response);
             tops.push(ui.menu_button(t!("Plugins"), |ui| {
                 let mut any = false;
                 for i in 0..self.plugin_host.plugins.len() {
@@ -257,6 +275,9 @@ impl CircuitApp {
                 }
                 if kit::menu_item(ui, t!("Install from Zip…"), None, true).clicked() {
                     self.pick_plugin_zip(ui.ctx());
+                }
+                if kit::menu_item(ui, t!("Reload Plugins"), None, true).clicked() {
+                    self.reload_plugins(ui.ctx());
                 }
                 if kit::menu_item(ui, t!("Manage Plugins…"), None, true).clicked() {
                     self.open_plugins();
@@ -319,6 +340,12 @@ impl CircuitApp {
             crate::app::titlebar::window_buttons(ui, &theme);
             ui.spacing_mut().item_spacing.x = 8.0;
             ui.add_space(10.0);
+        }
+        if self.ed.project.is_some() && self.tour.is_none() {
+            ui.spacing_mut().item_spacing.x = 0.0;
+            self.layout_toggles(ui, &theme);
+            ui.spacing_mut().item_spacing.x = 8.0;
+            ui.add_space(6.0);
         }
         let state = self.bot.shown_state();
         let remote = self.bot.hosting.remote;

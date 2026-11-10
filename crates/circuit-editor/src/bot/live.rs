@@ -1,4 +1,4 @@
-//! File › Live session…: working in one project together, live.
+//! Share › Live session…: working in one project together, live.
 //!
 //! The host's project is the one true one; guests get a copy to work in
 //! (in the app's own folder) that follows it. The exchange is
@@ -115,8 +115,6 @@ pub struct LiveUi {
     pub arrive: Option<PathBuf>,
     /// A guest's session ended: the copy is to be closed.
     ended: bool,
-    /// The start page's Join a live session… is open.
-    joining: bool,
     /// Where each of the others is drawn: their pointer glides there
     /// instead of jumping from one place said to the next.
     drawn: BTreeMap<String, [f32; 2]>,
@@ -156,7 +154,7 @@ impl LiveUi {
         Self::default()
     }
 
-    /// File › Live session…
+    /// Share › Live session…
     pub fn open(&mut self) {
         self.open = true;
         if self.name.is_empty() {
@@ -167,32 +165,23 @@ impl LiveUi {
         }
     }
 
-    /// The start page's Join a live session…
-    pub fn ask_to_join(&mut self) {
+    /// The start window's Live session page is picked: a name to begin with.
+    pub fn ready_to_join(&mut self) {
         self.open();
         self.open = false;
-        self.joining = true;
         self.said = None;
     }
 
-    /// The window that asks for a name and an invitation, where no project
-    /// is open. Joined, the session's project opens; when the session is
-    /// over, it closes again.
-    pub fn join_dialog(&mut self, ctx: &egui::Context, ed: &Editor) {
-        if !self.joining {
-            return;
-        }
-        // In: the project takes over from here.
-        if matches!(self.session.as_ref().map(|s| &s.role), Some(Role::Guest { welcomed: true, .. })) {
-            self.joining = false;
-            return;
-        }
+    /// The start window's Live session page, where no project is open: a
+    /// name and an invitation. Joined, the session's project opens; when
+    /// the session is over, it closes again.
+    pub fn join_page(&mut self, ui: &mut egui::Ui, ed: &Editor) {
         let theme = ed.theme.clone();
         let icon = ed.reg.icons.get("user-plus").cloned();
         let waiting = self.session.is_some();
         let (mut join, mut cancel) = (false, false);
-        let closed = dialog::show(
-            ctx,
+        dialog::tab(
+            ui,
             &theme,
             dialog::Spec { id: "live-join", title: t!("Join a live session"), subtitle: Some(t!("Work in someone's project with them, while they have it open")), icon: icon.as_deref(), width: 560.0 },
             |ui, part| match part {
@@ -200,6 +189,7 @@ impl LiveUi {
                     kit::field(ui, &theme, t!("Your name"), Some(t!("How the others see you.")), |ui| kit::text_input(ui, &mut self.name, "", false));
                     kit::field(ui, &theme, t!("Invitation"), Some(t!("The text the host sent you. It starts with xc-live:")), |ui| kit::text_input(ui, &mut self.invite, "xc-live:…", false));
                     kit::caption(ui, &theme, t!("The host's project opens here for as long as the session lasts. It is saved at the host's, and the bot runs there."));
+                    kit::caption(ui, &theme, t!("To host a session yourself, open your project first: Share › Live session…"));
                     ui.add_space(6.0);
                     if waiting {
                         ui.horizontal(|ui| {
@@ -214,19 +204,18 @@ impl LiveUi {
                     ui.add_enabled_ui(!waiting && !self.invite.trim().is_empty() && !self.name.trim().is_empty(), |ui| {
                         join = kit::primary_button(ui, &theme, t!("Join")).clicked();
                     });
-                    cancel = kit::secondary_button(ui, &theme, t!("Cancel")).clicked();
+                    if waiting {
+                        cancel = kit::secondary_button(ui, &theme, t!("Cancel")).clicked();
+                    }
                 }
             },
         );
         if join {
             self.join();
         }
-        if cancel || closed {
-            self.joining = false;
-            if waiting {
-                self.end();
-                self.said = None;
-            }
+        if cancel {
+            self.end();
+            self.said = None;
         }
     }
 

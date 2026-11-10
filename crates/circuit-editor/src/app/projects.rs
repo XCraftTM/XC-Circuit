@@ -73,14 +73,8 @@ impl CircuitApp {
             Pick::New => self.new_project_dialog(),
             Pick::Open => self.open_project_dialog(),
             Pick::Get => self.get_from_git(),
-            Pick::Join => self.bot.live.ask_to_join(),
             Pick::Recent(dir) => self.open_recent(&dir),
             Pick::Forget(path) => self.ed.prefs.forget_project(&path),
-            Pick::Example => {
-                if let Some(example) = self.ed.examples_dir.as_deref().and_then(writable_example) {
-                    self.switch_project(&example);
-                }
-            }
         }
     }
 
