@@ -45,6 +45,19 @@ pub enum Level {
     Mcp,
 }
 
+/// Someone else in a live session, as the canvas shows them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LiveOther {
+    pub name: String,
+    pub color: eframe::egui::Color32,
+    /// The workspace they are in.
+    pub ws: String,
+    /// Their pointer, in the canvas's own measure.
+    pub at: Option<[f32; 2]>,
+    /// The blocks they have selected.
+    pub selected: Vec<String>,
+}
+
 #[derive(Clone, Debug)]
 pub struct LogLine {
     pub time: String,
@@ -119,6 +132,8 @@ pub struct Editor {
     /// The last value each output gave while the bot ran, as a short text,
     /// and when: (workspace, block or zone, output) → value.
     pub wire_values: HashMap<(String, String, String), (String, std::time::Instant)>,
+    /// The others in a live session: where each is, for the canvas to show.
+    pub live_others: Vec<LiveOther>,
     /// What the Problems panel says about each block, shown on the block
     /// too: workspace → block → what's wrong. Kept current by the app.
     pub node_problems: HashMap<String, HashMap<String, Vec<String>>>,
@@ -208,6 +223,7 @@ impl Editor {
             active_workspace: None,
             activity: HashMap::new(),
             wire_values: HashMap::new(),
+            live_others: Vec::new(),
             node_problems: HashMap::new(),
             multi: HashSet::new(),
             selected_notes: HashSet::new(),

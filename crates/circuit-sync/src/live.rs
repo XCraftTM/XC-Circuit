@@ -67,6 +67,31 @@ impl Perms {
     }
 }
 
+/// Where someone in the session is: for the others to see.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Presence {
+    /// Who: a guest's id, or `host`. The host fills it in.
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    /// The workspace they are in.
+    pub ws: Option<String>,
+    /// Their pointer there, in the canvas's own measure.
+    pub at: Option<[f32; 2]>,
+    /// The blocks they have selected there.
+    #[serde(default)]
+    pub selected: Vec<String>,
+}
+
+/// What a guest with the leave for it asks of the bot at the host's.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Power {
+    Start,
+    Stop,
+}
+
 /// What the two sides tell each other.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "m", rename_all = "snake_case")]
@@ -89,6 +114,16 @@ pub enum Msg {
     Reset { key: String, rev: u64, state: Option<Value>, why: String },
     /// What the guest may do from now on.
     Perms { perms: Perms },
+    /// Where someone is. A guest's own goes to the host, who passes it on.
+    Presence(Presence),
+    /// Someone left: their pointer goes.
+    Gone { id: String },
+    /// A guest asks for the bot to be started or stopped at the host's.
+    Power { action: Power },
+    /// What the bot at the host's wrote to the console: the level, the text.
+    Console { lines: Vec<(String, String)> },
+    /// Whether the bot at the host's runs: `stopped`, `starting`, `running`.
+    Bot { state: String },
 }
 
 fn merge(key: &str, base: Option<&Value>, mine: &Value, theirs: &Value, keep: Side) -> Value {
@@ -140,6 +175,12 @@ pub struct HostTurn {
     /// Documents a guest changed: the key, what it was and what it is now
     /// (`None`: deleted). For the project in the window to follow.
     pub changed: Vec<(String, Option<Value>, Option<Value>)>,
+    /// Where a guest is now.
+    pub presence: Option<Presence>,
+    /// A guest who may asked for the bot to be started or stopped.
+    pub power: Option<Power>,
+    /// Something to tell the host.
+    pub notice: Option<String>,
 }
 
 pub struct HostSide {
@@ -197,9 +238,19 @@ impl HostSide {
         out
     }
 
-    /// A guest left (or was sent away).
-    pub fn left(&mut self, id: &str) {
-        self.guests.remove(id);
+    /// A guest left (or was sent away). Gives the news for the others.
+    pub fn left(&mut self, id: &str) -> Vec<(Option<String>, Msg)> {
+        match self.guests.remove(id) {
+            Some(_) => vec![(None, Msg::Gone { id: id.to_string() })],
+            None => Vec::new(),
+        }
+    }
+
+    /// Where the host is, for the guests.
+    pub fn presence(&self, mut here: Presence) -> Vec<(Option<String>, Msg)> {
+        here.id = "host".into();
+        here.name = self.name.clone();
+        vec![(None, Msg::Presence(here))]
     }
 
     /// Changes what a guest may do, and tells them.
@@ -279,6 +330,25 @@ impl HostSide {
                     turn.send.push((to, Msg::Update { key, rev: now_rev, state: now }));
                 }
             }
+            Msg::Presence(mut here) => {
+                let Some(guest) = self.guests.get(from) else { return turn };
+                here.id = from.to_string();
+                here.name = guest.name.clone();
+                // To the others, not back to where it came from.
+                for other in self.guests.keys().filter(|id| id.as_str() != from) {
+                    turn.send.push((Some(other.clone()), Msg::Presence(here.clone())));
+                }
+                turn.presence = Some(here);
+            }
+            Msg::Power { action } => {
+                let Some(guest) = self.guests.get(from) else { return turn };
+                if guest.perms.power {
+                    turn.power = Some(action);
+                    turn.notice = Some(format!("{} {} the bot", guest.name, if action == Power::Start { "started" } else { "stopped" }));
+                } else {
+                    turn.send.push((to, Msg::Refused { why: "You may not start or stop the bot in this session.".into() }));
+                }
+            }
             _ => {}
         }
         turn
@@ -304,6 +374,14 @@ pub struct GuestTurn {
     pub welcome: Option<(String, BTreeMap<String, String>, Docs)>,
     /// Not let in: why.
     pub refused: Option<String>,
+    /// Where someone else is now.
+    pub presence: Option<Presence>,
+    /// Someone who left: their id.
+    pub gone: Option<String>,
+    /// What the bot at the host's wrote: the level, the text.
+    pub console: Vec<(String, String)>,
+    /// Whether the bot at the host's runs.
+    pub bot: Option<String>,
 }
 
 /// One document changed by the host, for the guest's project to follow.
@@ -363,7 +441,12 @@ impl GuestSide {
                 self.host = host.clone();
                 turn.welcome = Some((host, files, docs));
             }
-            Msg::Refused { why } => turn.refused = Some(why),
+            Msg::Refused { why } if self.host.is_empty() => turn.refused = Some(why),
+            Msg::Refused { why } => turn.notice = Some(why),
+            Msg::Presence(here) => turn.presence = Some(here),
+            Msg::Gone { id } => turn.gone = Some(id),
+            Msg::Console { lines } => turn.console = lines,
+            Msg::Bot { state } => turn.bot = Some(state),
             Msg::Perms { perms } => {
                 self.perms = perms;
                 // What was refused before may be welcome now.
@@ -400,7 +483,7 @@ impl GuestSide {
                 }
                 turn.notice = Some(why);
             }
-            Msg::Hello { .. } | Msg::Propose { .. } => {}
+            Msg::Hello { .. } | Msg::Propose { .. } | Msg::Power { .. } => {}
         }
         turn
     }
@@ -636,9 +719,46 @@ mod tests {
         assert!(t.same_everywhere() && t.host_docs["main"]["nodes"]["1"]["values"]["message"] == "the host says");
 
         // A guest who left is forgotten; what they did stays.
-        t.host.left("g2");
+        let send = t.host.left("g2");
         t.guests.remove("g2");
+        assert_eq!(send, vec![(None, Msg::Gone { id: "g2".into() })]);
         assert!(!t.host.guests.contains_key("g2") && t.same_everywhere());
+    }
+
+    #[test]
+    fn pointers_power_and_the_console() {
+        let mut t = start();
+        t.join("g1", "Grace", "0.3.0");
+        t.join("g2", "Linus", "0.3.0");
+        let files = t.files.clone();
+        // A guest's pointer goes to the host and the other guest, with the
+        // name the host knows them by, whatever they sent.
+        let here = Presence { id: "host".into(), name: "Someone else".into(), ws: Some("main".into()), at: Some([10.0, 20.0]), selected: vec!["1".into()] };
+        let turn = t.host.receive("g1", Msg::Presence(here), &files);
+        let seen = Presence { id: "g1".into(), name: "Grace".into(), ws: Some("main".into()), at: Some([10.0, 20.0]), selected: vec!["1".into()] };
+        assert_eq!(turn.presence, Some(seen.clone()));
+        assert_eq!(turn.send, vec![(Some("g2".to_string()), Msg::Presence(seen.clone()))]);
+        let got = t.guests.get_mut("g2").unwrap().0.receive(Msg::Presence(seen.clone()), &Docs::new());
+        assert_eq!(got.presence, Some(seen));
+        assert_eq!(t.host.presence(Presence::default()), vec![(None, Msg::Presence(Presence { id: "host".into(), name: "Ada".into(), ..Default::default() }))]);
+        assert_eq!(t.guests.get_mut("g2").unwrap().0.receive(Msg::Gone { id: "g1".into() }, &Docs::new()).gone.as_deref(), Some("g1"));
+        assert!(t.host.receive("stranger", Msg::Presence(Presence::default()), &files).presence.is_none());
+
+        // The bot: only with the leave for it.
+        let turn = t.host.receive("g1", Msg::Power { action: Power::Start }, &files);
+        assert!(turn.power.is_none() && matches!(&turn.send[0].1, Msg::Refused { why } if why.contains("start or stop the bot")));
+        let told = t.guests.get_mut("g1").unwrap().0.receive(turn.send[0].1.clone(), &Docs::new());
+        assert!(told.refused.is_none() && told.notice.is_some(), "told, and still in the session");
+        let send = t.host.allow("g1", Perms { power: true, ..Default::default() });
+        t.deliver(send);
+        let turn = t.host.receive("g1", Msg::Power { action: Power::Stop }, &files);
+        assert_eq!((turn.power, turn.notice.as_deref()), (Some(Power::Stop), Some("Grace stopped the bot")));
+
+        // What the bot writes, and whether it runs, reach the guests.
+        let guest = &mut t.guests.get_mut("g1").unwrap().0;
+        let turn = guest.receive(Msg::Console { lines: vec![("info".into(), "Bot ready".into())] }, &Docs::new());
+        assert_eq!(turn.console, vec![("info".to_string(), "Bot ready".to_string())]);
+        assert_eq!(guest.receive(Msg::Bot { state: "running".into() }, &Docs::new()).bot.as_deref(), Some("running"));
     }
 
     #[test]

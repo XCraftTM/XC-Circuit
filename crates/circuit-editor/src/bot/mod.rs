@@ -195,7 +195,7 @@ impl BotUi {
     pub fn run_pressed(&mut self, ed: &mut Editor, ctx: &egui::Context) {
         // A guest's copy has no token, and two bots must not answer.
         if self.live.is_guest() {
-            ed.log(Level::Warn, t!("The bot runs at the session's host: only they can start it."));
+            self.live.ask_power(ed, circuit_sync::live::Power::Start);
             return;
         }
         if self.hosting.remote {
@@ -207,6 +207,10 @@ impl BotUi {
 
     /// Stop, as the Stop button does it (see [`BotUi::run_pressed`]).
     pub fn stop_pressed(&mut self, ed: &mut Editor) {
+        if self.live.is_guest() {
+            self.live.ask_power(ed, circuit_sync::live::Power::Stop);
+            return;
+        }
         if self.hosting.remote {
             self.hosting.stop_remote(ed);
         } else {

@@ -544,7 +544,18 @@ impl eframe::App for CircuitApp {
         self.bot.hosting.poll(&mut self.ed, &ctx);
         self.bot.git.poll(&mut self.ed, &ctx);
         self.bot.host.poll(&mut self.ed, &ctx);
-        self.bot.live.poll(&mut self.ed, &ctx);
+        let bot = match self.bot.state {
+            crate::bot::BotState::Stopped => "stopped",
+            crate::bot::BotState::Starting => "starting",
+            crate::bot::BotState::Running => "running",
+        };
+        self.bot.live.poll(&mut self.ed, &ctx, bot);
+        // A guest who may asked for the bot to be started or stopped.
+        match self.bot.live.power.take() {
+            Some(circuit_sync::live::Power::Start) => self.bot.run_pressed(&mut self.ed, &ctx),
+            Some(circuit_sync::live::Power::Stop) => self.bot.stop_pressed(&mut self.ed),
+            None => {}
+        }
         // A guest's copy of a session's project has arrived: opened.
         if let Some(folder) = self.bot.live.arrive.take() {
             self.load_project(&folder);

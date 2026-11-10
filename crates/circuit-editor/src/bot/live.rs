@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use circuit_core::Workspace;
 use circuit_runner::live_link::{Event, PUBLIC_RELAY, Wire};
-use circuit_sync::live::{Blocks, Docs, GuestSide, HostSide, META, Msg, Perms};
+use circuit_sync::live::{Blocks, Docs, GuestSide, HostSide, META, Msg, Perms, Power, Presence};
 use circuit_sync::{Side, json};
 use eframe::egui::{self, RichText};
 use serde_json::Value;
@@ -113,6 +113,17 @@ pub struct LiveUi {
     said: Option<(bool, String)>,
     /// A guest's copy of the session's project, for the app to open.
     pub arrive: Option<PathBuf>,
+    /// Where the others are, by their id.
+    others: BTreeMap<String, Presence>,
+    /// Where this app last said it is, and when.
+    here: Option<(Presence, Instant)>,
+    /// A guest asked for the bot to be started or stopped: for the app.
+    pub power: Option<Power>,
+    /// How much of the console the guests have (the host), and the bot's
+    /// state they were last told.
+    told: (usize, String),
+    /// The bot at the host's, as a guest was last told.
+    bot: Option<String>,
 }
 
 impl LiveUi {
@@ -177,13 +188,26 @@ impl LiveUi {
 
     /// Ends the session (the host), or leaves it (a guest).
     pub fn end(&mut self) {
+        self.others.clear();
+        self.bot = None;
         if self.session.take().is_some() {
             self.said = Some((true, t!("The session is over.").into()));
         }
     }
 
     /// Every frame: what came over the wire, and what changed here.
-    pub fn poll(&mut self, ed: &mut Editor, ctx: &egui::Context) {
+    /// A guest's Run or Stop: asked of the host, when the guest may.
+    pub fn ask_power(&mut self, ed: &mut Editor, action: Power) {
+        let Some(Session { wire, role: Role::Guest { side, .. }, .. }) = self.session.as_ref() else { return };
+        if side.perms.power {
+            wire.send(None, serde_json::to_value(Msg::Power { action }).unwrap_or_default());
+        } else {
+            ed.log(Level::Warn, t!("The bot runs at the session's host: only they can start it."));
+        }
+    }
+
+    /// `bot` is how the bot stands here: `stopped`, `starting` or `running`.
+    pub fn poll(&mut self, ed: &mut Editor, ctx: &egui::Context, bot: &str) {
         let Some(session) = self.session.as_mut() else { return };
         let mut over: Option<String> = None;
         for event in session.wire.events() {
@@ -193,7 +217,10 @@ impl LiveUi {
                     if let Some(guest) = side.guests.get(&id) {
                         ed.log(Level::Info, tf!("{name} left the session", name = guest.name));
                     }
-                    side.left(&id);
+                    for (to, msg) in side.left(&id) {
+                        session.wire.send(to.as_deref(), serde_json::to_value(&msg).unwrap_or_default());
+                    }
+                    self.others.remove(&id);
                 }
                 (Role::Host { side, files, .. }, Event::From { id, data }) => {
                     let Ok(msg) = serde_json::from_value::<Msg>(data) else { continue };
@@ -212,6 +239,18 @@ impl LiveUi {
                     }
                     if arriving && let Some(guest) = side.guests.get(&id) {
                         ed.log(Level::Info, tf!("{name} joined the session", name = guest.name));
+                        // The newcomer learns where everyone is, and how the bot stands.
+                        self.here = None;
+                        self.told.1.clear();
+                    }
+                    if let Some(here) = turn.presence {
+                        self.others.insert(here.id.clone(), here);
+                    }
+                    if let Some(action) = turn.power {
+                        self.power = Some(action);
+                    }
+                    if let Some(notice) = turn.notice {
+                        ed.log(Level::Info, notice);
                     }
                 }
                 (Role::Guest { name, .. }, Event::Joined) => session.wire.send(None, serde_json::to_value(GuestSide::hello(name, VERSION)).unwrap_or_default()),
@@ -246,6 +285,18 @@ impl LiveUi {
                         ed.log(Level::Warn, notice.clone());
                         self.said = Some((false, notice));
                     }
+                    if let Some(here) = turn.presence {
+                        self.others.insert(here.id.clone(), here);
+                    }
+                    if let Some(id) = turn.gone {
+                        self.others.remove(&id);
+                    }
+                    for (level, text) in turn.console {
+                        ed.log(level_of(&level), text);
+                    }
+                    if let Some(state) = turn.bot {
+                        self.bot = Some(state);
+                    }
                 }
                 (_, Event::Closed { why }) => over = Some(why),
                 _ => {}
@@ -253,6 +304,9 @@ impl LiveUi {
         }
         if let Some(why) = over {
             self.session = None;
+            self.others.clear();
+            ed.live_others.clear();
+            self.bot = None;
             let text = if why.is_empty() { t!("The session is over.").to_string() } else { tf!("The session is over: {why}", why = why) };
             ed.log(Level::Info, text.clone());
             self.said = Some((why.is_empty(), text));
@@ -282,7 +336,51 @@ impl LiveUi {
                 }
             }
         }
-        ctx.request_repaint_after(Duration::from_millis(250));
+        // Where this one is, for the others: said when it changed, ten times
+        // a second at most.
+        if ready {
+            let ws = ed.active_workspace.clone().filter(|k| ed.project.as_ref().is_some_and(|p| p.workspaces.contains_key(k)));
+            let at = ws.as_ref().and_then(|k| ed.views.get(k)).and_then(|v| v.pointer).map(|p| [p.x.round(), p.y.round()]);
+            let mut selected: Vec<String> = match (&ed.selected, &ws) {
+                (Some((k, id)), Some(ws)) if k == ws => ed.multi.iter().cloned().chain([id.clone()]).collect::<BTreeSet<String>>().into_iter().collect(),
+                _ => Vec::new(),
+            };
+            selected.truncate(200);
+            let here = Presence { ws, at, selected, ..Default::default() };
+            if self.here.as_ref().is_none_or(|(last, when)| *last != here && when.elapsed() > Duration::from_millis(100)) {
+                match &session.role {
+                    Role::Host { side, .. } => {
+                        for (to, msg) in side.presence(here.clone()) {
+                            session.wire.send(to.as_deref(), serde_json::to_value(&msg).unwrap_or_default());
+                        }
+                    }
+                    Role::Guest { .. } => session.wire.send(None, serde_json::to_value(Msg::Presence(here.clone())).unwrap_or_default()),
+                }
+                self.here = Some((here, Instant::now()));
+            }
+        }
+        // The host passes on what the bot wrote, and whether it runs.
+        if let Role::Host { side, .. } = &session.role
+            && !side.guests.is_empty()
+        {
+            if ed.log.len() < self.told.0 {
+                self.told.0 = 0;
+            }
+            let lines: Vec<(String, String)> = ed.log[self.told.0..].iter().take(100).map(|l| (level_name(l.level).to_string(), l.text.clone())).collect();
+            if !lines.is_empty() {
+                self.told.0 += lines.len();
+                session.wire.send(None, serde_json::to_value(Msg::Console { lines }).unwrap_or_default());
+            }
+            if self.told.1 != bot {
+                self.told.1 = bot.to_string();
+                session.wire.send(None, serde_json::to_value(Msg::Bot { state: bot.to_string() }).unwrap_or_default());
+            }
+        } else if matches!(session.role, Role::Host { .. }) {
+            // Nobody to tell: what was written before a guest came stays here.
+            self.told = (ed.log.len(), String::new());
+        }
+        ed.live_others = self.others.values().filter_map(|o| Some(crate::editor::LiveOther { name: o.name.clone(), color: colour_of(&o.id), ws: o.ws.clone()?, at: o.at, selected: o.selected.clone() })).collect();
+        ctx.request_repaint_after(Duration::from_millis(if self.others.is_empty() { 250 } else { 60 }));
     }
 
     pub fn tab(&mut self, ui: &mut egui::Ui, ed: &mut Editor) {
@@ -357,6 +455,7 @@ impl LiveUi {
                                 ui.label(RichText::new(&guest.name).strong());
                                 let mut perms = guest.perms.clone();
                                 ui.horizontal_wrapped(|ui| {
+                                    kit::checkbox(ui, &theme, &mut perms.power, t!("The bot (start, stop)"));
                                     kit::checkbox(ui, &theme, &mut perms.commands, t!("Slash commands"));
                                     kit::checkbox(ui, &theme, &mut perms.workspaces, t!("Workspaces"));
                                     let mut all = perms.blocks == Blocks::All;
@@ -396,6 +495,9 @@ impl LiveUi {
                                 kit::done_label(ui, tf!("You are in {name}'s session", name = side.host), theme.action);
                                 let p = &side.perms;
                                 let mut may: Vec<&str> = Vec::new();
+                                if p.power {
+                                    may.push(t!("the bot"));
+                                }
                                 if p.commands {
                                     may.push(t!("slash commands"));
                                 }
@@ -408,6 +510,13 @@ impl LiveUi {
                                     Blocks::None => {}
                                 }
                                 ui.label(if may.is_empty() { t!("You are watching: the host hasn't let you change anything yet.").to_string() } else { tf!("You may change: {list}", list = may.join(", ")) });
+                                if let Some(state) = &self.bot {
+                                    ui.label(match state.as_str() {
+                                        "running" => t!("The bot is running at the host's."),
+                                        "starting" => t!("The bot is starting at the host's."),
+                                        _ => t!("The bot is stopped."),
+                                    });
+                                }
                                 kit::caption(ui, &theme, t!("The project is saved at the host's, and the bot runs there. Your copy is only for this session."));
                             } else {
                                 ui.horizontal(|ui| {
@@ -455,6 +564,34 @@ impl LiveUi {
         if close {
             self.open = false;
         }
+    }
+}
+
+/// A colour for someone in the session: the same for the same person, one
+/// of a few that stand out on the canvas.
+fn colour_of(id: &str) -> egui::Color32 {
+    const COLOURS: [(u8, u8, u8); 6] = [(0xE9, 0x5A, 0x8C), (0xF0, 0x8A, 0x24), (0x8E, 0x6C, 0xEF), (0x2B, 0xA8, 0x7E), (0x3D, 0x8B, 0xFD), (0xD9, 0x48, 0x41)];
+    let n = id.bytes().fold(0usize, |n, b| n.wrapping_mul(31).wrapping_add(b as usize));
+    let (r, g, b) = COLOURS[n % COLOURS.len()];
+    egui::Color32::from_rgb(r, g, b)
+}
+
+fn level_name(level: Level) -> &'static str {
+    match level {
+        Level::Info => "info",
+        Level::Success => "success",
+        Level::Warn => "warn",
+        Level::Error => "error",
+        Level::Mcp => "mcp",
+    }
+}
+
+fn level_of(name: &str) -> Level {
+    match name {
+        "success" => Level::Success,
+        "warn" => Level::Warn,
+        "error" => Level::Error,
+        _ => Level::Info,
     }
 }
 
@@ -574,11 +711,11 @@ mod tests {
         let turn = |host: &mut LiveUi, host_ed: &mut Editor, guest: &mut LiveUi, guest_ed: &mut Editor, until: &mut dyn FnMut(&LiveUi, &Editor, &LiveUi, &Editor) -> bool| {
             for _ in 0..400 {
                 host_ed.history.track(host_ed.project.as_ref().unwrap(), true);
-                host.poll(host_ed, &ctx);
+                host.poll(host_ed, &ctx, "stopped");
                 if let Some(project) = guest_ed.project.as_ref() {
                     guest_ed.history.track(project, true);
                 }
-                guest.poll(guest_ed, &ctx);
+                guest.poll(guest_ed, &ctx, "stopped");
                 if let Some(folder) = guest.arrive.take() {
                     guest_ed.open_project(&folder);
                 }
@@ -620,10 +757,38 @@ mod tests {
         let said = |ed: &Editor| -> BTreeSet<String> { ed.project.as_ref().unwrap().workspaces["main"].nodes.values().map(|n| format!("{} {}", n.uid, n.values["message"])).collect() };
         turn(&mut host, &mut host_ed, &mut guest, &mut guest_ed, &mut |_, hed, _, ged| said(hed).len() == 2 && said(hed) == said(ged));
 
+        // Where the guest is shows at the host's: the workspace, the
+        // pointer, and the block they have selected.
+        let block = guest_ed.project.as_ref().unwrap().workspaces["main"].nodes.keys().next().unwrap().clone();
+        guest_ed.active_workspace = Some("main".into());
+        guest_ed.selected = Some(("main".into(), block.clone()));
+        guest_ed.views.entry("main".into()).or_default().pointer = Some(egui::pos2(120.0, 80.0));
+        turn(&mut host, &mut host_ed, &mut guest, &mut guest_ed, &mut |_, hed, _, _| hed.live_others.iter().any(|o| o.name == "Grace" && o.ws == "main" && o.at == Some([120.0, 80.0]) && o.selected == [block.clone()]));
+        host_ed.active_workspace = Some("main".into());
+        turn(&mut host, &mut host_ed, &mut guest, &mut guest_ed, &mut |_, _, _, ged| ged.live_others.iter().any(|o| o.name == "Ada" && o.ws == "main"));
+
+        // What the host's console says reaches the guest.
+        host_ed.log(Level::Success, "Bot ready, says the host's console");
+        turn(&mut host, &mut host_ed, &mut guest, &mut guest_ed, &mut |_, _, _, ged| ged.log.iter().any(|l| l.text == "Bot ready, says the host's console" && l.level == Level::Success));
+
+        // The bot: a guest's Run is refused until the host allows it.
+        guest.ask_power(&mut guest_ed, Power::Start);
+        assert!(guest_ed.log.last().unwrap().text.contains("only they can start it") && host.power.is_none());
+        if let Some(Session { wire, role: Role::Host { side, .. }, .. }) = host.session.as_mut() {
+            let id = side.guests.keys().next().unwrap().clone();
+            for (to, msg) in side.allow(&id, Perms { blocks: Blocks::All, power: true, ..Default::default() }) {
+                wire.send(to.as_deref(), serde_json::to_value(&msg).unwrap());
+            }
+        }
+        turn(&mut host, &mut host_ed, &mut guest, &mut guest_ed, &mut |_, _, g, _| matches!(g.session.as_ref().map(|s| &s.role), Some(Role::Guest { side, .. }) if side.perms.power));
+        guest.ask_power(&mut guest_ed, Power::Start);
+        turn(&mut host, &mut host_ed, &mut guest, &mut guest_ed, &mut |h, _, _, _| h.power == Some(Power::Start));
+        assert!(host_ed.log.iter().any(|l| l.text == "Grace started the bot"));
+
         // The host ends it: over for the guest, whose copy stays open.
         host.end();
         turn(&mut host, &mut host_ed, &mut guest, &mut guest_ed, &mut |_, _, g, _| !g.is_guest());
-        assert!(guest.said.as_ref().unwrap().1.contains("over"));
+        assert!(guest.said.as_ref().unwrap().1.contains("over") && guest_ed.live_others.is_empty(), "and the pointers are gone");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

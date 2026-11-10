@@ -212,7 +212,7 @@ fn edge_push(outer: Rect, p: Pos2) -> Vec2 {
 }
 
 pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
-    let Editor { reg, engine, theme, project, shapes, views, selected, edited, picker, active_workspace, activity, wire_values, multi, selected_notes, recording_frame, define_ctx, node_problems, embed_edit, layout_edit, modal_edit, canvas_edit, selected_wire, prefs, ui_rects, tour_parts, .. } = ed;
+    let Editor { reg, engine, theme, project, shapes, views, selected, edited, picker, active_workspace, activity, wire_values, multi, selected_notes, recording_frame, define_ctx, node_problems, live_others, embed_edit, layout_edit, modal_edit, canvas_edit, selected_wire, prefs, ui_rects, tour_parts, .. } = ed;
     let Some(project) = project.as_mut() else { return };
     let mode = reg.mode(&project.meta.mode).or_else(|| reg.modes.first());
     let Some(ws) = project.workspaces.get_mut(ws_key) else {
@@ -658,6 +658,15 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             painter.rect_stroke(layout.rect.expand(3.0), radius + 3.0, Stroke::new(3.0, with_alpha(theme.action, (lit * 200.0) as u8)), StrokeKind::Outside);
         }
         painter.rect(layout.rect, radius, theme.node, border, StrokeKind::Inside);
+        // Selected by someone else in the session: framed in their colour,
+        // with their name, so two don't work on one block unawares.
+        if let Some(other) = live_others.iter().find(|o| o.ws == ws_key && o.selected.iter().any(|s| s == id)) {
+            painter.rect_stroke(layout.rect.expand(3.0), radius + 3.0, Stroke::new(2.0, other.color), StrokeKind::Outside);
+            let galley = painter.layout_no_wrap(other.name.clone(), FontId::proportional(10.5), Color32::WHITE);
+            let tag = Rect::from_min_size(layout.rect.right_top() + vec2(-galley.size().x - 10.0, -galley.size().y - 9.0), galley.size() + vec2(10.0, 4.0));
+            painter.rect_filled(tag, 4.0, other.color);
+            painter.galley(tag.min + vec2(5.0, 2.0), galley, Color32::WHITE);
+        }
         // How long it took the last time it ran, above its top-right corner, for a while.
         if def.is_some_and(|d| d.kind != BlockKind::Event)
             && let Some((ms, alpha)) = recent(id).and_then(|a| a.time_shown())
@@ -1269,6 +1278,19 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                     });
                 });
         });
+    }
+
+    // The others' pointers, over everything on the canvas.
+    for other in live_others.iter().filter(|o| o.ws == ws_key) {
+        let Some([x, y]) = other.at else { continue };
+        let tip = pos2(x, y);
+        let scale = 1.0 / view.zoom.max(0.25);
+        let arrow = vec![tip, tip + vec2(0.0, 16.0) * scale, tip + vec2(4.5, 12.0) * scale, tip + vec2(11.5, 11.5) * scale];
+        painter.add(Shape::convex_polygon(arrow, other.color, Stroke::new(1.0 * scale, Color32::WHITE)));
+        let galley = painter.layout_no_wrap(other.name.clone(), FontId::proportional(11.0 * scale), Color32::WHITE);
+        let tag = Rect::from_min_size(tip + vec2(12.0, 14.0) * scale, galley.size() + vec2(10.0, 4.0) * scale);
+        painter.rect_filled(tag, 4.0 * scale, other.color);
+        painter.galley(tag.min + vec2(5.0, 2.0) * scale, galley, Color32::WHITE);
     }
 
     // Toolbar, bottom left.

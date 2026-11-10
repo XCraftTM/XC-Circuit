@@ -3,7 +3,7 @@
 In a live session several people work in one project at the same time. One of them **hosts**: the project is theirs, it is saved on their computer, and the bot runs there. The others are **guests**: they see every change as it happens, and may change what the host lets them.
 
 ::: warning Work in progress
-Sessions work for workspaces, blocks, wires, notes and slash commands. Still to come: seeing the others' pointers and what they have selected, guests starting the bot at the host's and reading its console, the host's plugins for guests who don't have them, and pickers (channels, roles) for guests.
+Sessions work for workspaces, blocks, wires, notes and slash commands; you see where the others are, and guests read the bot's console. Still to come: which blocks ran and the values on the wires for guests, the host's plugins for guests who don't have them, and pickers (channels, roles) for guests.
 :::
 
 ## Starting one
@@ -20,12 +20,17 @@ The session meets at a **relay**: the public one (`https://xcrelay.xcrafttm.dev`
 
 Host and guests need the **same version** of XC Circuit. If they differ, the guest isn't let in and is told who has to update.
 
+## Seeing each other
+
+Everyone has a colour. On the canvas you see the others' **pointers** with their names, in the workspace they are in, and a block someone has **selected** is framed in their colour with their name on it: so two people don't change the same block without noticing.
+
 ## What guests may do
 
 A new guest only **watches**. The host ticks, per guest, what they may change, and can change that at any time:
 
 | | Lets a guest |
 | --- | --- |
+| **The bot (start, stop)** | start and stop the bot, which runs at the host's; Run and Stop in the guest's window do it |
 | **Slash commands** | make, change and delete commands |
 | **Workspaces** | make, rename, move, turn on and off, and delete workspaces |
 | **Blocks, everywhere** | change blocks, wires and notes in every workspace |
@@ -45,6 +50,6 @@ Changes are put together the way they are when [two stored versions meet](git.md
 
 ## The bot, and ending
 
-The bot runs only at the host's: the token never leaves their computer. A guest's Run says so.
+The bot runs only at the host's: the token never leaves their computer. What it writes to the **Console** shows at every guest's too (secrets are hidden there as always), and File › Live session… says whether it runs. A guest the host ticked **The bot** for starts and stops it with their own Run and Stop; for the others, Run says that it is the host's to start.
 
 **End the session** (the host) ends it for everyone; **Leave the session** (a guest) only for that guest. When the host's app closes or loses its connection, the session is over. A guest's copy stays open as it was, but it is only a copy: what counts is the host's project.
