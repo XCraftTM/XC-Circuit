@@ -1325,10 +1325,12 @@ class Store {
     const key = storeKey(parts);
     const bucket = () => getOrObj(this.data, key);
     return {
-      get: async (k, fallback) => (k in bucket() ? bucket()[k] : fallback),
-      has: async (k) => k in bucket(),
+      // By the bucket's own names only: every object also answers to
+      // `constructor`, `toString` and the like, which nobody stored.
+      get: async (k, fallback) => (owns(bucket(), k) ? readOwn(bucket(), k) : fallback),
+      has: async (k) => owns(bucket(), k),
       set: async (k, v) => {
-        bucket()[k] = v;
+        putOwn(bucket(), k, v);
         this.changed(key, k);
       },
       delete: async (k) => {
@@ -1337,15 +1339,18 @@ class Store {
       },
       inc: async (k, by = 1) => {
         const b = bucket();
-        b[k] = (Number(b[k]) || 0) + Number(by);
+        const now = (Number(readOwn(b, k)) || 0) + Number(by);
+        putOwn(b, k, now);
         this.changed(key, k);
-        return b[k];
+        return now;
       },
       push: async (k, v) => {
         const b = bucket();
-        b[k] = Array.isArray(b[k]) ? [...b[k], v] : [v];
+        const was = readOwn(b, k);
+        const now = Array.isArray(was) ? [...was, v] : [v];
+        putOwn(b, k, now);
         this.changed(key, k);
-        return b[k];
+        return now;
       },
       keys: async () => Object.keys(bucket()),
     };
@@ -1896,7 +1901,7 @@ class DbStore extends Store {
     const rows = await store.db.loadStore();
     for (const r of rows) {
       try {
-        getOrObj(store.data, r.bucket)[r.name] = JSON.parse(r.value);
+        putOwn(getOrObj(store.data, r.bucket), r.name, JSON.parse(r.value));
       } catch {
         rt.log.warn(`Stored value ${r.name} of ${r.bucket} in ${store.db.name} isn't JSON; it's left out.`);
       }
@@ -1912,7 +1917,7 @@ class DbStore extends Store {
         for (const [bucket, values] of Object.entries(old)) {
           if (!values || typeof values !== "object") continue;
           for (const [name, value] of Object.entries(values)) {
-            getOrObj(store.data, bucket)[name] = value;
+            putOwn(getOrObj(store.data, bucket), name, value);
             store.dirty.set(`${bucket}\u0000${name}`, [bucket, name]);
             count++;
           }
@@ -1953,7 +1958,7 @@ class DbStore extends Store {
       for (const [bucket, name] of batch) {
         const values = this.data[bucket];
         try {
-          await this.db.writeStore(bucket, name, values && name in values ? values[name] : undefined);
+          await this.db.writeStore(bucket, name, values && owns(values, name) ? readOwn(values, name) : undefined);
         } catch (e) {
           if (!this.dirty.has(`${bucket}\u0000${name}`)) this.dirty.set(`${bucket}\u0000${name}`, [bucket, name]);
           this.rt.log.error(`Could not save stored data: ${e.message}`);
@@ -2672,8 +2677,31 @@ function getOr(map, key, make) {
 }
 
 function getOrObj(obj, key) {
-  if (!obj[key] || typeof obj[key] !== "object") obj[key] = {};
-  return obj[key];
+  const found = readOwn(obj, key);
+  if (found && typeof found === "object") return found;
+  putOwn(obj, key, {});
+  return readOwn(obj, key);
+}
+
+/** Whether `key` is the object's own: not `constructor` or `toString`, which every object has. */
+function owns(obj, key) {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+/** The object's own `key`, or undefined. */
+function readOwn(obj, key) {
+  if (!owns(obj, key)) return undefined;
+  return key === "__proto__" ? Object.getOwnPropertyDescriptor(obj, key).value : obj[key];
+}
+
+/**
+ * Sets the object's own `key`. Also `__proto__`, which a plain assignment
+ * takes for what the object inherits from: the value wasn't kept, and
+ * everything in it then showed up under the object's other names.
+ */
+function putOwn(obj, key, value) {
+  if (key === "__proto__") Object.defineProperty(obj, key, { value, writable: true, enumerable: true, configurable: true });
+  else obj[key] = value;
 }
 
 function splitPin(s) {
