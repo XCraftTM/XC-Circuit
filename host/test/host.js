@@ -272,6 +272,29 @@ test("projects are Git repositories, for paired devices only", { skip: spawnSync
     assert.equal(fs.readFileSync(path.join(copy, "circuit.project.json"), "utf8"), '{ "name": "Bot" }\n');
     device.send({ t: "projects" });
     assert.deepEqual((await device.next("projects")).projects, ["my-bot"]);
+
+    // As a reverse proxy sends an upload: nothing may come back before all
+    // of it is there, or the proxy stops sending and cuts the connection.
+    const net = require("node:net");
+    const body = Buffer.alloc(3_000_000, 1);
+    const early = await new Promise((resolve, reject) => {
+      const socket = net.connect(host.port, "127.0.0.1");
+      let got = 0;
+      let before = -1;
+      socket.on("data", (chunk) => (got += chunk.length));
+      socket.on("error", reject);
+      socket.on("connect", () => {
+        socket.write(`POST /git/my-bot.git/git-receive-pack HTTP/1.1\r\nHost: x\r\n${auth}\r\nContent-Type: application/x-git-receive-pack-request\r\nContent-Length: ${body.length}\r\nConnection: close\r\n\r\n`);
+        socket.write(body.subarray(0, 1000));
+        setTimeout(() => {
+          before = got;
+          socket.write(body.subarray(1000));
+        }, 700);
+      });
+      socket.on("close", () => resolve({ before, got }));
+    });
+    assert.equal(early.before, 0, "no answer while the upload is still coming");
+    assert.ok(early.got > 0, "and one once it is there");
     device.close();
   } finally {
     await host.close();

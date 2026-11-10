@@ -352,34 +352,63 @@ async function start(options = settings()) {
       if (complaint.length < 4000) complaint += chunk.toString("utf8");
     });
     req.on("aborted", () => log(`Git ${req.method} ${id}.git${rest || ""}: the connection was cut before the request was complete`));
+    // Nothing goes back before the whole request is here. Git starts its
+    // answer early, and a reverse proxy that sees an answer stops sending
+    // the rest of an upload and cuts the connection (Nginx does): storing
+    // anything bigger than its buffers failed behind one.
     let head = Buffer.alloc(0);
     let sent = false;
-    child.stdout.on("data", (chunk) => {
-      if (sent) return res.write(chunk);
-      head = Buffer.concat([head, chunk]);
-      const end = head.indexOf("\r\n\r\n");
-      if (end < 0) return;
-      const headers = {};
-      let code = 200;
-      for (const line of head.subarray(0, end).toString("latin1").split("\r\n")) {
-        const at = line.indexOf(":");
-        const name = line.slice(0, at).trim();
-        const value = line.slice(at + 1).trim();
-        if (name.toLowerCase() === "status") code = parseInt(value, 10) || 200;
-        else if (name) headers[name] = value;
+    let arrived = false;
+    let ended = false;
+    const answer = () => {
+      if (!arrived) return;
+      if (!sent) {
+        const end = head.indexOf("\r\n\r\n");
+        if (end < 0) return;
+        const headers = {};
+        let code = 200;
+        for (const line of head.subarray(0, end).toString("latin1").split("\r\n")) {
+          const at = line.indexOf(":");
+          const name = line.slice(0, at).trim();
+          const value = line.slice(at + 1).trim();
+          if (name.toLowerCase() === "status") code = parseInt(value, 10) || 200;
+          else if (name) headers[name] = value;
+        }
+        res.writeHead(code, headers);
+        res.write(head.subarray(end + 4));
+        head = Buffer.alloc(0);
+        sent = true;
+      } else if (head.length) {
+        res.write(head);
+        head = Buffer.alloc(0);
       }
-      res.writeHead(code, headers);
-      res.write(head.subarray(end + 4));
-      sent = true;
+    };
+    const finish = () => {
+      if (!ended || !arrived) return;
+      answer();
+      if (!sent) res.writeHead(500, { "Content-Type": "text/plain" });
+      res.end();
+    };
+    req.on("end", () => {
+      arrived = true;
+      answer();
+      finish();
+    });
+    child.stdout.on("data", (chunk) => {
+      head = Buffer.concat([head, chunk]);
+      answer();
     });
     child.on("error", () => {
       if (!sent) res.writeHead(500, { "Content-Type": "text/plain" });
+      sent = true;
       res.end("Git isn't available on this host.\n");
     });
     child.on("close", (code) => {
       if (complaint.trim() || code) log(`Git ${req.method} ${id}.git${rest || ""} ended with ${code}: ${complaint.trim() || "no message"}`);
-      if (!sent) res.writeHead(500, { "Content-Type": "text/plain" });
-      res.end();
+      ended = true;
+      // Git gave up before reading it all: what is still coming is let go.
+      if (!arrived) req.resume();
+      finish();
     });
   }
 
