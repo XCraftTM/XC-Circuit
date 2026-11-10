@@ -679,8 +679,10 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
             // mistake in a ${#4.…} or an empty required field is seen while
             // building, not only by whoever opens the Problems panel.
             let ink = Color32::from_rgb(0x1E, 0x1F, 0x22);
-            let galley = painter.layout_no_wrap(text, FontId::proportional(11.5), ink);
-            let pill = Rect::from_min_size(layout.rect.left_bottom() + vec2(0.0, 6.0), galley.size() + vec2(16.0, 8.0));
+            // As wide as the block and no wider, on as many lines as it
+            // takes: beside it is the next block, with a note of its own.
+            let galley = painter.layout(text, FontId::proportional(11.5), ink, (layout.rect.width() - 16.0).max(120.0));
+            let pill = Rect::from_min_size(layout.rect.left_bottom() + vec2(0.0, 6.0), vec2(layout.rect.width().max(136.0), galley.size().y + 8.0));
             painter.rect_filled(pill, 6.0, theme.warning);
             painter.galley(pill.min + vec2(8.0, 4.0), galley, ink);
         }
@@ -1537,11 +1539,11 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     }
 }
 
-/// A block's problems on one line under it: the first, cut to fit, and how
-/// many more there are.
+/// A block's problems for the note under it: the first (cut when it is very
+/// long), and how many more there are.
 fn problem_line(list: &[String]) -> Option<String> {
     let first = list.first()?;
-    let cut: String = first.chars().take(72).collect();
+    let cut: String = first.chars().take(160).collect();
     let dots = if cut.len() < first.len() { "…" } else { "" };
     let more = if list.len() > 1 { format!("  +{}", list.len() - 1) } else { String::new() };
     Some(format!("{cut}{dots}{more}"))
