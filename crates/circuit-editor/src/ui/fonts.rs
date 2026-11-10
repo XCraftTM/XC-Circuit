@@ -76,10 +76,23 @@ fn color_emoji() -> Option<Arc<FontData>> {
             let (data, index) = only_emoji(blob.data(), font.index())?;
             let mut data = FontData::from_owned(data);
             data.index = index;
+            data.tweak = emoji_tweak();
             Some(Arc::new(data))
         })
     })
     .clone()
+}
+
+/// How far down the colour emoji are drawn, as a share of the text's size.
+/// The emoji fonts draw them standing on the line the letters stand on,
+/// as tall as a capital and more, so beside small letters they look lifted;
+/// a little lower, their middle is the middle of the capitals, as Discord
+/// and browsers show them. Found by eye against Segoe UI Emoji: 0 leaves
+/// them lifted, 0.2 hangs them under the line.
+const EMOJI_DOWN: f32 = 0.12;
+
+fn emoji_tweak() -> egui::FontTweak {
+    egui::FontTweak { y_offset_factor: EMOJI_DOWN, ..Default::default() }
 }
 
 /// Whether `c` stays text when it comes without the emoji variation
@@ -281,6 +294,9 @@ mod tests {
             return;
         };
         eprintln!("emoji font read in {:?}", started.elapsed());
+        // Drawn a little lower than the font puts them, on the text's line.
+        assert_eq!(font.tweak.y_offset_factor, EMOJI_DOWN);
+        assert!((0.05..0.2).contains(&EMOJI_DOWN));
         let face = skrifa::FontRef::from_index((*font.font).as_ref(), font.index).unwrap();
         use skrifa::MetadataProvider;
         let map = face.charmap();
