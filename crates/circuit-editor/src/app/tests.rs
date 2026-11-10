@@ -44,7 +44,7 @@ fn the_default_layout_leaves_the_side_bar_s_views_to_the_activity_bar() {
     assert!(dock.find(|t| matches!(t, Tab::Side(_))).is_none());
     assert_eq!(leaves(&dock), [vec![Tab::Inspector], vec![Tab::Console, Tab::Problems]]);
     let prefs = crate::editor::prefs::Prefs::default();
-    assert_eq!(prefs.activity, ["workspaces", "stored-data", "git", "live", "plugins"]);
+    assert_eq!(prefs.activity, ["workspaces", "search", "git", "stored-data", "live", "plugins"]);
     assert_eq!(prefs.side_shown.as_deref(), Some("workspaces"));
 }
 

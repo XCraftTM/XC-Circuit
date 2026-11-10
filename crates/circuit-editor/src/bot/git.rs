@@ -996,6 +996,144 @@ impl GitUi {
         });
     }
 
+    /// How many things wait in the project's repository: changes to store
+    /// and versions to fetch. For the activity bar's icon.
+    pub fn waiting_count(&self) -> usize {
+        self.state.as_ref().filter(|s| s.remote.is_some()).map_or(0, |s| s.changed.len().max(s.ahead) + s.behind)
+    }
+
+    /// Fetch, for the Git view's heading.
+    pub fn can_fetch(&self) -> bool {
+        self.ready() && self.conflicts.is_empty()
+    }
+
+    /// The Git view of the side bar: what to say about this version and
+    /// Store on top, then what changed here and the versions stored so far.
+    /// Setting it up, signing in and choosing between two versions are in
+    /// the Git window (Share › Git…), which its buttons open.
+    pub fn side(&mut self, ui: &mut egui::Ui, ed: &mut Editor) {
+        use crate::ui::side;
+        let theme = ed.theme.clone();
+        let icons = ed.reg.icons.clone();
+        let connected = self.state.as_ref().is_some_and(|s| s.remote.is_some());
+        if ed.project.is_none() {
+            side::note(ui, &theme, t!("Open a project to keep it in Git."));
+            return;
+        }
+        if !connected {
+            side::note(ui, &theme, t!("This project isn't kept in a Git repository yet. In one, it is on all your computers, others can work on it with you, and every stored version stays."));
+            egui::Frame::new().inner_margin(egui::Margin::symmetric(12, 4)).show(ui, |ui| {
+                ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), kit::input_height(ui)), egui::Layout::top_down_justified(egui::Align::Min), |ui| {
+                    if kit::primary_button(ui, &theme, t!("Set up Git…")).clicked() {
+                        self.open(ed);
+                    }
+                });
+            });
+            return;
+        }
+        let (changed, ahead, behind, branch) = self.state.as_ref().map(|s| (s.changed.clone(), s.ahead, s.behind, s.branch.clone())).unwrap_or_default();
+        let busy = self.busy;
+        let (mut store, mut fetch, mut window) = (false, false, false);
+        let mut back = None;
+        egui::Frame::new().inner_margin(egui::Margin { left: 12, right: 12, top: 4, bottom: 8 }).show(ui, |ui| {
+            ui.spacing_mut().item_spacing.y = 6.0;
+            ui.add_sized([ui.available_width(), kit::input_height(ui)], egui::TextEdit::singleline(&mut self.message).hint_text(tf!("What changed? (stored on \"{branch}\")", branch = branch)).background_color(theme.field));
+            let wide = |ui: &mut egui::Ui, primary: bool, text: &str, enabled: bool| {
+                ui.add_enabled_ui(enabled, |ui| ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), kit::input_height(ui)), egui::Layout::top_down_justified(egui::Align::Min), |ui| if primary { kit::primary_button(ui, &theme, text) } else { kit::secondary_button(ui, &theme, text) }).inner).inner
+            };
+            let to_store = changed.len().max(ahead);
+            let label = if to_store > 0 { tf!("Store ({count})", count = to_store) } else { t!("Store").to_string() };
+            if wide(ui, true, &label, busy.is_none() && self.conflicts.is_empty()).on_hover_text(t!("Saves the project, records what changed and sends it to the repository")).clicked() {
+                store = true;
+            }
+            if behind > 0 && wide(ui, false, &tf!("Fetch ({count})", count = behind), busy.is_none() && self.conflicts.is_empty()).on_hover_text(t!("Gets what is stored in the repository and puts it together with yours")).clicked() {
+                fetch = true;
+            }
+            if !self.conflicts.is_empty() {
+                ui.add(egui::Label::new(RichText::new(t!("Both sides changed the same thing. Choose whose version stays.")).size(12.0).color(theme.warning)).wrap());
+                window |= wide(ui, false, t!("Choose…"), true).clicked();
+            } else if !self.secrets.is_empty() {
+                ui.add(egui::Label::new(RichText::new(t!("Something in a block looks like a secret. Look before storing.")).size(12.0).color(theme.warning)).wrap());
+                window |= wide(ui, false, t!("Look…"), true).clicked();
+            }
+            if let Some(what) = busy {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label(RichText::new(tf!("{what} …", what = busy_text(what))).size(12.0).color(theme.text_muted));
+                });
+            } else if let Some((ok, text)) = &self.said {
+                ui.add(egui::Label::new(RichText::new(text).size(12.0).color(if *ok { theme.action } else { theme.warning })).wrap());
+            }
+        });
+        egui::ScrollArea::vertical().id_salt("git-side").auto_shrink([false, false]).show(ui, |ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            side::section(ui, &theme, "git-changes", t!("Changes"), Some(changed.len()), |_| {}, |ui| {
+                if changed.is_empty() {
+                    side::note(ui, &theme, if ahead > 0 { t!("Everything is recorded; Store sends it.") } else { t!("Nothing changed since the last Store.") });
+                }
+                for file in &changed {
+                    let (rect, resp) = side::row(ui, &theme, 24.0, false);
+                    let (name, place, icon) = changed_words(ed, file);
+                    if let Some(path) = icons.get(icon) {
+                        egui::Image::from_uri(crate::editor::file_uri(path)).tint(theme.text_muted).paint_at(ui, egui::Rect::from_center_size(egui::pos2(rect.left() + 22.0, rect.center().y), egui::vec2(14.0, 14.0)));
+                    }
+                    let font = egui::FontId::proportional(12.5);
+                    let name = side::fitted(ui, &name, font.clone(), rect.width() - 60.0);
+                    let w = ui.painter().text(egui::pos2(rect.left() + 36.0, rect.center().y), egui::Align2::LEFT_CENTER, &name, font, theme.text).width();
+                    let room = rect.width() - 36.0 - w - 34.0;
+                    if room > 30.0 {
+                        ui.painter().text(egui::pos2(rect.left() + 36.0 + w + 8.0, rect.center().y), egui::Align2::LEFT_CENTER, side::fitted(ui, place, egui::FontId::proportional(11.0), room), egui::FontId::proportional(11.0), theme.text_muted);
+                    }
+                    ui.painter().text(egui::pos2(rect.right() - 14.0, rect.center().y), egui::Align2::RIGHT_CENTER, "M", egui::FontId::proportional(11.0), theme.warning);
+                    resp.on_hover_text(file);
+                }
+            });
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or_default();
+            side::section(ui, &theme, "git-history", t!("Stored versions"), Some(self.history.len()), |_| {}, |ui| {
+                if self.history.is_empty() {
+                    side::note(ui, &theme, t!("None yet."));
+                }
+                for (i, version) in self.history.iter().enumerate() {
+                    let (rect, resp) = side::row(ui, &theme, 38.0, false);
+                    // The line of versions, a dot for each (the newest filled).
+                    let x = rect.left() + 20.0;
+                    let p = ui.painter();
+                    p.vline(x, rect.y_range(), egui::Stroke::new(1.5, crate::ui::theme::with_alpha(theme.accent, 120)));
+                    if i == 0 {
+                        p.circle_filled(egui::pos2(x, rect.top() + 13.0), 4.0, theme.accent);
+                    } else {
+                        p.circle(egui::pos2(x, rect.top() + 13.0), 3.5, theme.panel, egui::Stroke::new(1.5, theme.accent));
+                    }
+                    let font = egui::FontId::proportional(12.5);
+                    p.text(egui::pos2(x + 14.0, rect.top() + 5.0), egui::Align2::LEFT_TOP, side::fitted(ui, &version.message, font.clone(), rect.width() - 48.0), font, theme.text);
+                    let by = format!("{} · {}", version.who, crate::bot::ago(Duration::from_secs((now - version.when).max(0) as u64)));
+                    p.text(egui::pos2(x + 14.0, rect.top() + 21.0), egui::Align2::LEFT_TOP, side::fitted(ui, &by, egui::FontId::proportional(11.0), rect.width() - 48.0), egui::FontId::proportional(11.0), theme.text_muted);
+                    let resp = resp.on_hover_text(format!("{}\n{by}\n{}", version.message, &version.id[..version.id.len().min(10)]));
+                    if i > 0 && busy.is_none() {
+                        resp.context_menu(|ui| {
+                            if kit::menu_item(ui, t!("Go back to this"), None, true).on_hover_text(t!("Makes the project what it was then, as a new version: nothing in between is lost")).clicked() {
+                                back = Some(version.id.clone());
+                                ui.close();
+                            }
+                        });
+                    }
+                }
+            });
+        });
+        if store {
+            self.store(ed);
+        }
+        if fetch {
+            self.fetch(ed);
+        }
+        if window {
+            self.open(ed);
+        }
+        if let Some(id) = back {
+            self.go_back(ed, id);
+        }
+    }
+
     pub fn tab(&mut self, ui: &mut egui::Ui, ed: &mut Editor) {
         if !self.open {
             return;
@@ -1283,6 +1421,25 @@ impl GitUi {
         if close {
             self.open = false;
         }
+    }
+}
+
+/// A changed file of the project in words: what it is called in the
+/// editor, where it belongs, and an icon for it.
+fn changed_words(ed: &Editor, file: &str) -> (String, &'static str, &'static str) {
+    let stem = |f: &str| f.rsplit('/').next().unwrap_or(f).trim_end_matches(".json").to_string();
+    if let Some(key) = file.strip_prefix("workspaces/") {
+        let key = key.trim_end_matches(".json");
+        let name = ed.project.as_ref().and_then(|p| p.workspaces.get(key)).map(|w| w.name.clone()).unwrap_or_else(|| key.to_string());
+        (name, t!("Workspace"), "workspace")
+    } else if file.starts_with("commands/") {
+        (format!("/{}", stem(file)), t!("Slash command"), "slash")
+    } else if file == circuit_core::project::PROJECT_FILE {
+        (t!("Bot settings").to_string(), t!("Project"), "bolt")
+    } else if file.starts_with("plugins/") {
+        (stem(file), t!("Plugin"), "plug")
+    } else {
+        (file.rsplit('/').next().unwrap_or(file).to_string(), t!("File"), "note")
     }
 }
 

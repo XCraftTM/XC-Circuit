@@ -25,6 +25,9 @@ pub(super) struct Viewer<'a> {
     pub(super) canvases: usize,
     /// What the placeholder for a workspace asked for.
     pub(super) no_workspace: Option<NoWorkspace>,
+    /// Drawing a window of its own: Git shows its whole window there, and
+    /// the short view as a tab or in the side bar.
+    pub(super) in_window: bool,
 }
 
 /// The placeholder's buttons, in the canvas area while no workspace is open.
@@ -153,7 +156,8 @@ impl DockViewer<Tab> for Viewer<'_> {
             Tab::BotSettings => self.bot.settings = None,
             Tab::Export => self.bot.export = None,
             Tab::Hosting => self.bot.hosting.draft = None,
-            Tab::Git => self.bot.git.open = false,
+            Tab::Git if self.in_window => self.bot.git.open = false,
+            Tab::Git => {}
             Tab::Host => self.bot.host.open = false,
             Tab::Live => self.bot.live.open = false,
             Tab::ServerConsole => self.bot.hosting.console = None,
@@ -206,7 +210,8 @@ impl DockViewer<Tab> for Viewer<'_> {
             Tab::BotSettings => self.bot.settings_tab(ui, self.ed),
             Tab::Export => self.bot.export_tab(ui, self.ed),
             Tab::Hosting => self.bot.hosting.tab(ui, self.ed),
-            Tab::Git => self.bot.git.tab(ui, self.ed),
+            Tab::Git if self.in_window => self.bot.git.tab(ui, self.ed),
+            Tab::Git => self.bot.git.side(ui, self.ed),
             Tab::Host => self.bot.host.tab(ui, self.ed),
             Tab::Live => self.bot.live.tab(ui, self.ed),
             Tab::ServerConsole => {
@@ -280,6 +285,10 @@ pub(super) fn side_view_ui(
                 }
             }
             crate::pages::sidebar::panel(ui, ed, &counts);
+            None
+        }
+        SideView::Search => {
+            crate::pages::search::panel(ui, ed);
             None
         }
         SideView::StoredData => {

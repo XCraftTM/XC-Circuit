@@ -34,7 +34,9 @@ pub(super) fn show(ctx: &egui::Context, theme: &crate::ui::theme::Theme, viewer:
         let system_frame = viewer.system_titlebar();
         let asked = dialog::own_window(ctx, theme, dialog::Own { key: &key, title: &title, icon: icon.as_deref(), place, system_frame }, |ui| {
             crate::app::watchdog::mark(format!("in the {title} window"));
+            viewer.in_window = true;
             viewer.ui(ui, tab);
+            viewer.in_window = false;
         });
         if asked {
             closed.push(tab.clone());

@@ -218,7 +218,6 @@ impl CircuitApp {
             tops.push(ui.menu_button(t!("Share"), |ui| {
                 if kit::menu_item(ui, "Git…", self.shortcut_shown(Hotkey::Git), has_project).on_hover_text(t!("Keep the project in a Git repository: on GitHub, GitLab, or your host")).clicked() {
                     self.bot.git.open(&self.ed);
-                    self.show_shared(Tab::Git);
                 }
                 let stored = has_project && self.bot.git.status().is_some();
                 if kit::menu_item(ui, t!("Store now"), self.shortcut_shown(Hotkey::GitStore), stored).clicked() {
@@ -341,7 +340,7 @@ impl CircuitApp {
             ui.spacing_mut().item_spacing.x = 8.0;
             ui.add_space(10.0);
         }
-        if self.ed.project.is_some() && self.tour.is_none() {
+        if self.ed.project.is_some() && self.tour.is_none() && self.setup.is_none() {
             ui.spacing_mut().item_spacing.x = 0.0;
             self.layout_toggles(ui, &theme);
             ui.spacing_mut().item_spacing.x = 8.0;

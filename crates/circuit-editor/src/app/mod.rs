@@ -262,9 +262,13 @@ impl CircuitApp {
         ed.prefs = prefs;
         if !ed.prefs.activity_shares {
             ed.prefs.activity_shares = true;
-            for key in ["git", "live"] {
+            // Search and Git after Workspaces, Live session before Plugins.
+            for (key, after) in [("git", true), ("search", true), ("live", false)] {
                 if !ed.prefs.activity.iter().any(|k| k == key) {
-                    let at = ed.prefs.activity.iter().position(|k| k == SideView::Plugins.key()).unwrap_or(ed.prefs.activity.len());
+                    let at = match after {
+                        true => ed.prefs.activity.iter().position(|k| k == SideView::Workspaces.key()).map_or(0, |i| i + 1),
+                        false => ed.prefs.activity.iter().position(|k| k == SideView::Plugins.key()).unwrap_or(ed.prefs.activity.len()),
+                    };
                     ed.prefs.activity.insert(at, key.into());
                 }
             }
@@ -773,6 +777,7 @@ impl eframe::App for CircuitApp {
                 closed_side: Vec::new(),
                 canvases: self.dock.tabs().filter(|t| matches!(t, Tab::Canvas(_))).count(),
                 no_workspace: None,
+                in_window: false,
             };
             let size = ui.available_size();
             if let Some(before) = self.dock_size
@@ -788,7 +793,9 @@ impl eframe::App for CircuitApp {
             self.dock.show(ui, &theme, &mut viewer);
             watchdog::mark("in the windows of their own");
             for tab in windows::show(ui.ctx(), &theme, &mut viewer, &own, &mut self.own_places) {
+                viewer.in_window = true;
                 viewer.on_close(&tab);
+                viewer.in_window = false;
             }
             let asks = std::mem::take(&mut viewer.asks);
             let side_ask = viewer.side_ask.take();
@@ -973,7 +980,7 @@ fn status_item(ui: &mut egui::Ui, theme: &crate::ui::theme::Theme, dot: Option<e
 
 /// The texts typed into a block, for the search: (field label, text). Texts
 /// inside embeds, layouts and lists count; picked choices don't.
-fn block_texts(def: Option<&circuit_core::block::BlockDef>, values: &serde_json::Map<String, serde_json::Value>) -> Vec<(String, String)> {
+pub(crate) fn block_texts(def: Option<&circuit_core::block::BlockDef>, values: &serde_json::Map<String, serde_json::Value>) -> Vec<(String, String)> {
     fn strings(v: &serde_json::Value, out: &mut Vec<String>) {
         match v {
             serde_json::Value::String(s) if !s.trim().is_empty() => out.push(s.clone()),

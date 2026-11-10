@@ -138,12 +138,28 @@ impl CircuitApp {
         let tab_drag = self.dock.dragged().filter(|t| t.side_key().is_some_and(|k| !self.ed.prefs.activity.contains(&k))).cloned();
         let mut slots = Vec::new();
         let mut out = None;
+        let mut hide = None;
         for key in self.ed.prefs.activity.clone() {
             let Some(tab) = self.activity_tab(&key) else { continue };
             let shown = self.ed.prefs.side_shown.as_deref() == Some(key.as_str()) || self.ed.prefs.side_lower.as_deref() == Some(key.as_str());
             let name = self.panel_name(&tab);
             let lifted = icon_drag.as_deref() == Some(key.as_str());
             let resp = self.activity_button(ui, tab.icon(), &name, shown, lifted, egui::Sense::click_and_drag());
+            // How much waits there: changes to store or fetch, problems.
+            let count = match &tab {
+                Tab::Git => self.bot.git.waiting_count(),
+                Tab::Problems => self.problem_count,
+                _ => 0,
+            };
+            if count > 0 && !lifted {
+                let text = if count > 99 { "99+".to_string() } else { count.to_string() };
+                let galley = ui.painter().layout_no_wrap(text, egui::FontId::proportional(9.5), egui::Color32::WHITE);
+                let size = egui::vec2((galley.size().x + 8.0).max(16.0), 15.0);
+                let badge = egui::Rect::from_center_size(resp.rect.center() + egui::vec2(9.0, 9.0), size);
+                ui.painter().rect_filled(badge, 8.0, if tab == Tab::Problems { t.warning } else { t.accent });
+                let ink = if tab == Tab::Problems { egui::Color32::from_rgb(40, 26, 0) } else { egui::Color32::from_rgb(4, 24, 30) };
+                ui.painter().galley_with_override_text_color(badge.center() - galley.size() / 2.0, galley, ink);
+            }
             slots.push((key.clone(), resp.rect));
             resp.dnd_set_drag_payload(ActivityDrag(key.clone()));
             if resp.clicked() {
@@ -160,6 +176,12 @@ impl CircuitApp {
                     out = Some(key.clone());
                     ui.close();
                 }
+                if crate::ui::kit::menu_item(ui, tf!("Hide '{name}'", name = name), None, true).clicked() {
+                    hide = Some(tab.clone());
+                    ui.close();
+                }
+                ui.separator();
+                self.activity_menu(ui);
             });
             if below {
                 show_in_side(&mut self.ed.prefs, &key, true);
@@ -168,6 +190,12 @@ impl CircuitApp {
         if let Some(key) = out {
             self.move_to_main(&key, None);
         }
+        if let Some(tab) = hide {
+            self.set_panel_open(tab, false);
+        }
+        // The rest of the bar: its menu on a right-click.
+        let rest = ui.available_rect_before_wrap();
+        ui.interact(rest, egui::Id::unique("activity-rest"), egui::Sense::click()).context_menu(|ui| self.activity_menu(ui));
         // Something that can come here being dragged: the bar lights up (for a
         // tab), and over it a line shows where it would go.
         if icon_drag.is_some() || tab_drag.is_some() {
@@ -189,6 +217,40 @@ impl CircuitApp {
             let gear = self.activity_button(ui, "settings", t!("Manage"), self.dock.contains(&Tab::Settings), false, egui::Sense::click());
             self.gear_menu(&gear);
         });
+    }
+
+    /// The activity bar's own menu: everything that can be an icon in it,
+    /// ticked while it is one (or open as a tab), and the bar itself.
+    fn activity_menu(&mut self, ui: &mut egui::Ui) {
+        let theme = self.ed.theme.clone();
+        let mut list: Vec<(Tab, String)> = SideView::ALL.iter().map(|v| (Tab::Side(*v), v.name().to_string())).collect();
+        for tab in [Tab::Git, Tab::Live, Tab::Host, Tab::Inspector, Tab::Console, Tab::Problems] {
+            let name = self.panel_name(&tab);
+            list.push((tab, name));
+        }
+        for p in &self.plugin_host.plugins {
+            for panel in p.panels() {
+                list.push((Tab::Plugin(p.id.clone(), panel.id.clone()), panel.title.clone()));
+            }
+        }
+        for (tab, name) in list {
+            let mut on = self.panel_present(&tab);
+            if crate::ui::kit::checkbox(ui, &theme, &mut on, name).clicked() {
+                // Ticked here, it becomes an icon in the bar.
+                match (on, tab.side_key()) {
+                    (true, Some(key)) if !self.dock.contains(&tab) => {
+                        put_in_activity(&mut self.ed.prefs.activity, &key, None);
+                        show_in_side(&mut self.ed.prefs, &key, false);
+                    }
+                    _ => self.set_panel_open(tab, on),
+                }
+            }
+        }
+        ui.separator();
+        if crate::ui::kit::menu_item(ui, t!("Hide the activity bar"), None, true).on_hover_text(t!("View › Show activity bar brings it back")).clicked() {
+            self.ed.prefs.activity_bar = false;
+            ui.close();
+        }
     }
 
     /// The gear's menu at the bottom of the activity bar: the search, the
@@ -444,7 +506,7 @@ impl CircuitApp {
         let head = ui.interact(head_rect, egui::Id::unique(("side-head", key)), egui::Sense::click());
         ui.painter().text(head_rect.left_center() + egui::vec2(14.0, 0.0), egui::Align2::LEFT_CENTER, heading.to_uppercase(), egui::FontId::proportional(11.0), t.text_muted);
         let (mut out, mut close, mut swap, mut connect) = (false, false, false, false);
-        head.context_menu(|ui| {
+        let mut view_menu = |ui: &mut egui::Ui| {
             if split {
                 if crate::ui::kit::menu_item(ui, if lower { t!("Move to the upper half") } else { t!("Move to the lower half") }, None, true).clicked() {
                     swap = true;
@@ -459,7 +521,43 @@ impl CircuitApp {
                 out = true;
                 ui.close();
             }
-        });
+        };
+        head.context_menu(&mut view_menu);
+        // At the heading's right end: the menu, and before it the view's own buttons.
+        let icons = self.ed.reg.icons.clone();
+        let mut bar = ui.new_child(egui::UiBuilder::new().id_salt(("side-head-bar", key)).max_rect(head_rect.shrink2(egui::vec2(8.0, 0.0))).layout(egui::Layout::right_to_left(egui::Align::Center)));
+        bar.spacing_mut().item_spacing.x = 2.0;
+        let more = crate::ui::side::action(&mut bar, &t, &icons, "more", t!("More…"));
+        egui::Popup::menu(&more).id(egui::Id::unique(("side-head-menu", key))).show(&mut view_menu);
+        let mut side_ask = None;
+        match &tab {
+            Tab::Side(SideView::Plugins) => {
+                if crate::ui::side::action(&mut bar, &t, &icons, "folder", t!("Open the folder your own plugins go in")).clicked() {
+                    side_ask = Some(crate::plugins::manager::SideAsk::OpenFolder);
+                }
+                if crate::ui::side::action(&mut bar, &t, &icons, "repeat", t!("Load plugin files again")).clicked() {
+                    side_ask = Some(crate::plugins::manager::SideAsk::Reload);
+                }
+                if crate::ui::side::action(&mut bar, &t, &icons, "plus", t!("Install a plugin from a .zip file (or drop the file on the window)")).clicked() {
+                    side_ask = Some(crate::plugins::manager::SideAsk::Install);
+                }
+            }
+            Tab::Git => {
+                if crate::ui::side::action(&mut bar, &t, &icons, "settings", t!("Git's window: where it is stored, signing in, keeping in step")).clicked() {
+                    self.bot.git.open(&self.ed);
+                }
+                if self.bot.git.can_fetch() && crate::ui::side::action(&mut bar, &t, &icons, "repeat", t!("Fetch what is stored in the repository")).clicked() {
+                    self.bot.git.fetch_now(&mut self.ed);
+                }
+            }
+            Tab::Problems if self.problem_count > 0 => {
+                crate::ui::side::badge(&mut bar, &t, self.problem_count);
+            }
+            _ => {}
+        }
+        if let Some(ask) = side_ask {
+            self.plugins_side_ask(ask, ui.ctx());
+        }
         // It draws in a box of its part's size: whatever it holds, the side
         // bar keeps the width it was given (or dragged to).
         let area = egui::Rect::from_min_max(egui::pos2(rect.left(), head_rect.bottom()), rect.max);
@@ -483,13 +581,9 @@ impl CircuitApp {
             }
             Tab::Problems => panels::problems(ui, &mut self.ed, problems.to_vec()),
             Tab::Plugin(plugin, panel) => self.plugin_host.panel_ui(ui, &mut self.ed, &plugin, &panel, running),
+            // The short view; Git's window has the rest.
+            Tab::Git => self.bot.git.side(ui, &mut self.ed),
             // In the side bar they are always at hand: opened when shown.
-            Tab::Git => {
-                if !self.bot.git.open {
-                    self.bot.git.open(&self.ed);
-                }
-                self.bot.git.tab(ui, &mut self.ed);
-            }
             Tab::Host => {
                 if !self.bot.host.open {
                     self.bot.host.open();

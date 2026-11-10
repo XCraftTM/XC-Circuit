@@ -159,17 +159,19 @@ fn same_folder(a: &str, b: &str) -> bool {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SideView {
     Workspaces,
+    Search,
     StoredData,
     Plugins,
 }
 
 impl SideView {
-    pub const ALL: [SideView; 3] = [SideView::Workspaces, SideView::StoredData, SideView::Plugins];
+    pub const ALL: [SideView; 4] = [SideView::Workspaces, SideView::Search, SideView::StoredData, SideView::Plugins];
 
     /// The name, in the activity bar's tooltips and the side bar's heading.
     pub fn name(self) -> &'static str {
         match self {
             SideView::Workspaces => t!("Workspaces"),
+            SideView::Search => t!("Search"),
             SideView::StoredData => t!("Stored Data"),
             SideView::Plugins => t!("Plugins"),
         }
@@ -179,6 +181,7 @@ impl SideView {
     pub fn key(self) -> &'static str {
         match self {
             SideView::Workspaces => "workspaces",
+            SideView::Search => "search",
             SideView::StoredData => "stored-data",
             SideView::Plugins => "plugins",
         }
@@ -191,6 +194,7 @@ impl SideView {
     pub fn icon(self) -> &'static str {
         match self {
             SideView::Workspaces => "layers",
+            SideView::Search => "search",
             SideView::StoredData => "database",
             SideView::Plugins => "plug",
         }
@@ -199,7 +203,7 @@ impl SideView {
 
 impl Default for Prefs {
     fn default() -> Self {
-        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), activity: ["workspaces", "stored-data", "git", "live", "plugins"].map(String::from).to_vec(), side_shown: Some(SideView::Workspaces.key().into()), side_lower: None, side_split: 0.5, disabled_plugins: Vec::new(), removed_plugins: Vec::new(), console_font: None, console_font_size: CONSOLE_FONT_SIZE, console_line_spacing: CONSOLE_LINE_SPACING, new_project_location: None, recent_projects: Vec::new(), check_updates: true, skipped_update: None, snap_to_grid: false, recent_blocks: Vec::new(), favorite_blocks: Vec::new(), shortcuts: Default::default(), last_crash_seen: 0, remote_bots: Vec::new(), approved_servers: Default::default(), trusted_plugins: Default::default(), window_places: Default::default(), start_window: false, activity_shares: true, main_window: None, main_maximized: false, lighter_parts: Default::default(), lighter_auto: true, accessibility: true, settings_save_after_secs: SETTINGS_SAVE_AFTER_SECS, recovery_secs: RECOVERY_SECS, undo_steps: UNDO_STEPS }
+        Prefs { accent: None, ui_scale: 1.0, show_grid: true, wire_width: None, auto_restart: true, reopen_last_project: true, activity_bar: true, system_titlebar: false, node_path: None, setup_done: false, backups: true, backup_keep: 20, backup_days: 14, touch: false, language: crate::i18n::ENGLISH.into(), activity: ["workspaces", "search", "git", "stored-data", "live", "plugins"].map(String::from).to_vec(), side_shown: Some(SideView::Workspaces.key().into()), side_lower: None, side_split: 0.5, disabled_plugins: Vec::new(), removed_plugins: Vec::new(), console_font: None, console_font_size: CONSOLE_FONT_SIZE, console_line_spacing: CONSOLE_LINE_SPACING, new_project_location: None, recent_projects: Vec::new(), check_updates: true, skipped_update: None, snap_to_grid: false, recent_blocks: Vec::new(), favorite_blocks: Vec::new(), shortcuts: Default::default(), last_crash_seen: 0, remote_bots: Vec::new(), approved_servers: Default::default(), trusted_plugins: Default::default(), window_places: Default::default(), start_window: false, activity_shares: true, main_window: None, main_maximized: false, lighter_parts: Default::default(), lighter_auto: true, accessibility: true, settings_save_after_secs: SETTINGS_SAVE_AFTER_SECS, recovery_secs: RECOVERY_SECS, undo_steps: UNDO_STEPS }
     }
 }
 

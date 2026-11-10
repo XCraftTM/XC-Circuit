@@ -150,10 +150,9 @@ impl CircuitApp {
         // The project's repository: what waits to be stored or fetched.
         if has_project
             && let Some((waits, text)) = self.bot.git.status()
-            && status_item(&mut left, &t, waits.then_some(t.accent), &text).on_hover_text(t!("Share › Git…")).clicked()
+            && status_item(&mut left, &t, waits.then_some(t.accent), &text).on_hover_text(t!("Show the Git view")).clicked()
         {
-            self.bot.git.open(&self.ed);
-            self.show_shared(Tab::Git);
+            self.show_git();
         }
         // Problems: how many, or that there are none.
         if has_project {
@@ -226,6 +225,20 @@ impl CircuitApp {
             }
         } else if self.dock.contains(&tab) {
             self.dock.focus(&tab);
+        }
+    }
+
+    /// Shows the Git view where it is: the side bar or its tab; without
+    /// either, Git's window opens.
+    pub(super) fn show_git(&mut self) {
+        if self.ed.prefs.activity.iter().any(|k| k == "git") {
+            if self.ed.prefs.side_lower.as_deref() != Some("git") {
+                self.ed.prefs.side_shown = Some("git".into());
+            }
+        } else if self.dock.contains(&Tab::Git) {
+            self.dock.focus(&Tab::Git);
+        } else {
+            self.bot.git.open(&self.ed);
         }
     }
 
@@ -370,6 +383,13 @@ impl CircuitApp {
         ];
         let mut own = Vec::new();
         for (tab, open) in wanted {
+            // Git's window is apart from its short view (a tab or in the side bar).
+            if tab == Tab::Git {
+                if open {
+                    own.push(tab);
+                }
+                continue;
+            }
             // One that is an icon in the activity bar shows in the side bar.
             let in_bar = tab.side_key().is_some_and(|k| self.ed.prefs.activity.contains(&k));
             match (open, self.dock.contains(&tab)) {

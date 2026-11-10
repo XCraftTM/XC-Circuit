@@ -5,6 +5,7 @@ pub mod panels;
 pub mod restore;
 pub mod settings;
 pub mod setup;
+pub mod search;
 pub mod sidebar;
 pub mod start_page;
 pub mod stored;

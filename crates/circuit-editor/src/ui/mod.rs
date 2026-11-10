@@ -8,5 +8,6 @@ pub mod inputs;
 pub mod kit;
 pub mod notes;
 pub mod palette;
+pub mod side;
 pub mod theme;
 pub mod widgets;
