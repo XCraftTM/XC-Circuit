@@ -100,6 +100,7 @@ The fields of Bot › Settings, by key. Runtime libraries and blocks read them w
 | `pattern` | A regular expression the value must match; checked as you type. |
 | `patternHint` | What to say when it doesn't. |
 | `sensitive` | `true` hides a text setting behind the eye button, like a secret. |
+| `private` | `true` for a value that belongs to whoever set it, not to the bot: the address of a server of theirs, an id of an account of theirs, a safety switch. It is saved on their computer (`.circuit/local.json`), not in the shared project, so sharing or syncing a project neither gives it away nor turns a switch on for someone else. The bot gets it like any other setting. Secrets are private anyway. |
 | `choices` | For `select`: the values and what the list shows, `{ json = "JSON file", sqlite = "SQLite" }`, in that order. |
 | `min`, `max` | For `number` and `slider`: the smallest and largest value. |
 

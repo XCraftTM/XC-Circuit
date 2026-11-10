@@ -489,6 +489,40 @@ fn a_project_s_own_plugins_wait_for_a_yes() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// Settings a plugin marks private (a dev server's id, the address of a
+/// server) are saved on this computer, not in the shared project file.
+#[test]
+fn private_settings_stay_on_this_computer() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let dir = std::env::temp_dir().join(format!("xc-private-settings-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    Project::create(&dir, "P", "discord-bot").unwrap();
+    let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+    ed.open_project(&dir);
+    let private = ed.project.as_ref().unwrap().private_settings.clone();
+    for key in ["devServer", "spotifyClientId", "twitchClientId", "sshHost", "rconHost", "dockerHost", "serverToolsAllowed", "serverGivenAllowed", "databaseGivenAllowed"] {
+        assert!(private.iter().any(|k| k == key), "{key} is private: {private:?}");
+    }
+    assert!(!private.iter().any(|k| k == "prefix" || k == "shards" || k == "token"), "{private:?}");
+
+    let settings = &mut ed.project.as_mut().unwrap().meta.settings;
+    settings.insert("prefix".into(), serde_json::json!("?"));
+    settings.insert("devServer".into(), serde_json::json!("123456789012345678"));
+    settings.insert("serverToolsAllowed".into(), serde_json::json!(true));
+    ed.project.as_mut().unwrap().save().unwrap();
+    let shared = std::fs::read_to_string(dir.join(circuit_core::project::PROJECT_FILE)).unwrap();
+    assert!(shared.contains("\"prefix\": \"?\"") && !shared.contains("devServer") && !shared.contains("serverToolsAllowed"), "{shared}");
+    let local = std::fs::read_to_string(dir.join(".circuit").join("local.json")).unwrap();
+    assert!(local.contains("123456789012345678") && local.contains("serverToolsAllowed"), "{local}");
+
+    // The bot still gets them all.
+    ed.open_project(&dir);
+    let bundle = circuit_runner::build_bundle(ed.project.as_ref().unwrap(), &ed.reg, ed.mode()).unwrap();
+    assert_eq!(bundle.value["project"]["settings"]["devServer"], "123456789012345678");
+    assert_eq!(bundle.value["project"]["settings"]["serverToolsAllowed"], true);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// Copies a file, or a folder with what's in it.
 fn copy_all(from: &std::path::Path, to: &std::path::Path) {
     if from.is_dir() {

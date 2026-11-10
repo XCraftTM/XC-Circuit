@@ -328,6 +328,12 @@ impl Editor {
             self.plugin_ask = false;
         }
         (self.plugins_waiting, self.plugins_refused) = (waiting, refused);
+        // Which of the bot's settings are private (the plugins say): kept on
+        // this computer when the project is saved.
+        let private = self.project.as_ref().and_then(|p| self.reg.mode(&p.meta.mode)).map(|mode| self.reg.bot_settings(mode).private_keys());
+        if let (Some(project), Some(private)) = (self.project.as_mut(), private) {
+            project.private_settings = private;
+        }
         self.apply_language();
         self.shapes.clear();
         self.shapes.forget_too_slow();

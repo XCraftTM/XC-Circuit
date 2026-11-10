@@ -10,7 +10,7 @@ description = "Keys for On New Post's Twitch and Kick alerts. The other sources 
 order = 45
 
 [settings]
-twitchClientId = { page = "alerts", group = "Twitch", label = "Client ID", placeholder = "Optional", description = "At dev.twitch.tv › Your Console › Applications, register an application (any name, category Chat Bot, OAuth Redirect URL http://localhost) and copy its Client ID.", pattern = '[a-z0-9]{20,40}', patternHint = "A Twitch client ID is 30 lowercase letters and digits." }
+twitchClientId = { private = true, page = "alerts", group = "Twitch", label = "Client ID", placeholder = "Optional", description = "At dev.twitch.tv › Your Console › Applications, register an application (any name, category Chat Bot, OAuth Redirect URL http://localhost) and copy its Client ID.", pattern = '[a-z0-9]{20,40}', patternHint = "A Twitch client ID is 30 lowercase letters and digits." }
 twitchClientSecret = { type = "secret", page = "alerts", group = "Twitch", label = "Client secret", placeholder = "Optional", description = "The same application's secret (New Secret)." }
-kickClientId = { page = "alerts", group = "Kick", label = "Client ID", placeholder = "Optional", description = "At kick.com › Settings › Developer, create an app (Redirect URL http://localhost) and copy its Client ID." }
+kickClientId = { private = true, page = "alerts", group = "Kick", label = "Client ID", placeholder = "Optional", description = "At kick.com › Settings › Developer, create an app (Redirect URL http://localhost) and copy its Client ID." }
 kickClientSecret = { type = "secret", page = "alerts", group = "Kick", label = "Client secret", placeholder = "Optional", description = "The same app's Client Secret." }

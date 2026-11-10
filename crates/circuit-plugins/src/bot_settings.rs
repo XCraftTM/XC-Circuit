@@ -69,6 +69,15 @@ impl Setting {
     pub fn is_secret(&self) -> bool {
         self.kind() == "secret"
     }
+
+    /// `private = true`: the value belongs to whoever set it, not to the bot
+    /// (the address of a server of theirs, an id of an account of theirs, a
+    /// safety switch). It is kept on their computer, not in the shared
+    /// project, so a project that is shared or synced neither gives it away
+    /// nor brings someone else's along.
+    pub fn is_private(&self) -> bool {
+        self.spec.get("private").and_then(Value::as_bool).unwrap_or(false)
+    }
 }
 
 /// Everything Bot › Settings shows for a build mode.
@@ -83,6 +92,11 @@ pub struct BotSettings {
 }
 
 impl BotSettings {
+    /// The keys of the private settings (see [`Setting::is_private`]).
+    pub fn private_keys(&self) -> Vec<String> {
+        self.settings.iter().filter(|s| s.is_private() && !s.is_secret()).map(|s| s.key.clone()).collect()
+    }
+
     pub fn on_page<'a>(&'a self, page: &'a str) -> impl Iterator<Item = &'a Setting> {
         self.settings.iter().filter(move |s| s.page == page)
     }
