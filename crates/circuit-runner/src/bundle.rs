@@ -26,6 +26,25 @@ pub fn database_dependencies(settings: &Map<String, Value>) -> IndexMap<String, 
     DATABASE_DRIVERS.iter().filter(|(kind, ..)| kinds.contains(kind)).map(|(_, package, version)| (package.to_string(), version.to_string())).collect()
 }
 
+/// A plugin file as the bundle names it: the plugin's id and the path inside
+/// the plugin (`xc.core/blocks/debug/log.js`). Never the path on this
+/// computer: the bundle is what an exported bot is made of, and that path has
+/// the user's name and folders in it.
+fn shown_file(reg: &Registry, plugin: &str, file: &std::path::Path) -> String {
+    // The folder and the file may be written differently (through a link, or
+    // one of them the long way on Windows): compared as the system sees them, too.
+    let dir = reg.plugins.iter().find(|p| p.manifest.id == plugin).map(|p| p.dir.clone());
+    let inside = dir.and_then(|dir| {
+        let as_written = file.strip_prefix(&dir).map(|rel| rel.to_path_buf()).ok();
+        as_written.or_else(|| Some(file.canonicalize().ok()?.strip_prefix(dir.canonicalize().ok()?).ok()?.to_path_buf()))
+    });
+    let rel = match inside {
+        Some(rel) => rel.to_string_lossy().replace('\\', "/"),
+        None => file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+    };
+    format!("{plugin}/{rel}")
+}
+
 /// Collects the project's workspaces, the source of every block it uses and the
 /// mode's runtime libraries.
 pub fn build_bundle(project: &Project, reg: &Registry, mode: Option<&BuildMode>) -> Result<Bundle> {
@@ -48,7 +67,7 @@ pub fn build_bundle(project: &Project, reg: &Registry, mode: Option<&BuildMode>)
             let bytes = fs::read(&file).with_context(|| format!("reading {}, which {} needs", file.display(), def.name))?;
             assets.insert(name.clone(), Value::String(base64::engine::general_purpose::STANDARD.encode(bytes)));
         }
-        let mut entry = json!({ "source": source, "file": def.source.display().to_string(), "plugin": def.plugin });
+        let mut entry = json!({ "source": source, "file": shown_file(reg, &def.plugin, &def.source), "plugin": def.plugin });
         if !assets.is_empty() {
             entry["assets"] = Value::Object(assets);
         }
@@ -81,7 +100,7 @@ pub fn build_bundle(project: &Project, reg: &Registry, mode: Option<&BuildMode>)
             anyhow::bail!("runtime library `{spec}` is outside the plugin's folder: a plugin only has its own files");
         }
         let source = fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
-        libs.push(json!({ "source": source, "file": path.display().to_string() }));
+        libs.push(json!({ "source": source, "file": shown_file(reg, plugin_id, &path) }));
     }
 
     // Pin types that convert into others, for the runtime to apply on wires,
@@ -103,12 +122,17 @@ pub fn build_bundle(project: &Project, reg: &Registry, mode: Option<&BuildMode>)
         settings.insert(key.clone(), value.clone());
     }
 
+    // The project's data without where Bot › Server… uploads it (address,
+    // user name, folder): the bot has no use for it, and exports get shared.
+    let mut data = project.meta.data.clone();
+    data.remove("hosting");
+
     let value = json!({
         "project": {
             "name": project.meta.name,
             "mode": project.meta.mode,
             "settings": settings,
-            "data": project.meta.data,
+            "data": data,
             "tokenEnv": mode.map(|m| m.token_env()).unwrap_or("DISCORD_TOKEN"),
         },
         "blocks": blocks,
@@ -123,6 +147,34 @@ pub fn build_bundle(project: &Project, reg: &Registry, mode: Option<&BuildMode>)
 mod tests {
     use super::*;
     use circuit_core::{Node, Workspace};
+
+    /// The bundle (so an exported index.js) has neither the server the bot
+    /// is uploaded to nor the folders of this computer in it.
+    #[test]
+    fn leaves_out_the_server_and_local_paths() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins").canonicalize().unwrap();
+        let engine = circuit_plugins::BlockEngine::new().unwrap();
+        let reg = Registry::load(&[root.clone()], &engine);
+        let dir = std::env::temp_dir().join(format!("xc-bundle-leak-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let mut project = Project::create(&dir, "Leak", "discord-bot").unwrap();
+        project.meta.data.insert("hosting".into(), json!({ "kind": "sftp", "host": "203.0.113.7", "user": "erik", "folder": "/home/erik/bot" }));
+        project.meta.data.insert("slashCommands".into(), json!([{ "name": "ping", "description": "Pong" }]));
+        let mut ws = Workspace::new("Main");
+        ws.nodes.insert("a".into(), Node { block: "core.on_start@1".into(), ..Default::default() });
+        ws.nodes.insert("b".into(), Node { block: "core.log@1".into(), ..Default::default() });
+        project.workspaces.insert("main".into(), ws);
+        let bundle = build_bundle(&project, &reg, reg.mode("discord-bot")).unwrap();
+        let text = serde_json::to_string(&bundle.value).unwrap();
+        assert!(!text.contains("203.0.113.7") && !text.contains("/home/erik/bot"), "the server stays out");
+        assert!(bundle.value["project"]["data"]["slashCommands"].is_array(), "the rest of the data is there");
+        assert_eq!(bundle.value["blocks"]["core.log"]["file"], "xc.core/blocks/debug/log.js");
+        let libs: Vec<&str> = bundle.value["libs"].as_array().unwrap().iter().filter_map(|l| l["file"].as_str()).collect();
+        assert!(libs.contains(&"xc.discord/runtime/discord.js"), "{libs:?}");
+        let here = root.parent().unwrap().to_string_lossy().replace('\\', "/");
+        assert!(!text.replace("\\\\", "/").contains(&here), "no path of this computer");
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     /// A workspace that is turned off isn't in the bot, and neither are
     /// blocks only it uses.

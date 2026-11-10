@@ -7,6 +7,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 ### Fixed
 - **Stored values named like `constructor` or `toString` work like any other**: every JavaScript object answers to a few names by itself. Get Stored Value gave a function instead of the fallback for a name such as `constructor` that was never stored, and Has Stored Value said yes. A value stored as `__proto__` wasn't kept at all, and what was in it then showed up under the bucket's other names. That mattered where the name comes from what people type (a tag command, say). Only names that were really stored count now.
 - **An exported bot reads secrets with a `#` or quotes in them correctly**: the export wrote each secret into `.env` as it is, but the bot reads ` #…` as a comment and takes quotes off. A database password such as `#secret1` came back empty, `pa ss #1` as `pa ss`, and the bot then failed to log in with no hint why. Such values are written in quotes now, and read back whole. A `.env` you filled in yourself is read as before.
+- **An exported bot no longer carries your server and your folders**: `index.js` held everything of Bot › Server… (address, port, user name, folder) and, for each block, the full path of its file on your computer, which has your Windows user name in it. Neither is needed to run the bot, and exported bots get shared. Both are left out now; blocks are named by their plugin and file (`xc.core/blocks/debug/log.js`).
 
 ## 0.2.10
 
