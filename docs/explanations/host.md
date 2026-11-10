@@ -3,7 +3,7 @@
 The **XC Circuit Host** is a small server you run yourself, in a Docker container. It is for people who want their projects on a machine of their own instead of GitHub, and it is what live sessions go through.
 
 ::: warning Work in progress
-The container is here and tested, and from XC Circuit you can pair with it, keep projects on it and carry a project's secrets between your devices. Live sessions and running the bot on the host are still being built: the host already passes a session's messages on.
+The container is here and tested, and from XC Circuit you can pair with it, keep projects on it and carry a project's secrets between your devices. [Live sessions](live.md) can meet at your host instead of the public relay. Running the bot on the host is still being built.
 :::
 
 ## What it does

@@ -6,6 +6,7 @@ pub(crate) mod databases;
 pub mod git;
 pub mod host;
 pub mod hosting;
+pub mod live;
 pub mod remote;
 mod settings;
 
@@ -116,11 +117,13 @@ pub struct BotUi {
     pub git: git::GitUi,
     /// File › Host…: this computer and an XC Circuit Host.
     pub host: host::HostUi,
+    /// File › Live session…: working in one project together.
+    pub live: live::LiveUi,
 }
 
 impl BotUi {
     pub fn new() -> Self {
-        BotUi { state: BotState::Stopped, session: None, old: None, restart: None, settings: None, export: None, jobs: Vec::new(), events: Vec::new(), question: None, hosting: hosting::HostingUi::new(), git: git::GitUi::new(), host: host::HostUi::new() }
+        BotUi { state: BotState::Stopped, session: None, old: None, restart: None, settings: None, export: None, jobs: Vec::new(), events: Vec::new(), question: None, hosting: hosting::HostingUi::new(), git: git::GitUi::new(), host: host::HostUi::new(), live: live::LiveUi::new() }
     }
 
     /// Starts the bot, or restarts it: a running bot is stopped first, and the
@@ -190,6 +193,11 @@ impl BotUi {
     /// Run (or Restart), as the Run button does it: here, or with Server
     /// picked beside it, on the bot's server.
     pub fn run_pressed(&mut self, ed: &mut Editor, ctx: &egui::Context) {
+        // A guest's copy has no token, and two bots must not answer.
+        if self.live.is_guest() {
+            ed.log(Level::Warn, t!("The bot runs at the session's host: only they can start it."));
+            return;
+        }
         if self.hosting.remote {
             self.hosting.run_remote(ed);
         } else {

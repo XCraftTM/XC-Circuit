@@ -68,6 +68,8 @@ pub enum Tab {
     Git,
     /// File › Host…: pairing with an XC Circuit Host.
     Host,
+    /// File › Live session…
+    Live,
     /// A Calagopus server's state, power buttons and live console.
     ServerConsole,
     Plugins,
@@ -542,6 +544,11 @@ impl eframe::App for CircuitApp {
         self.bot.hosting.poll(&mut self.ed, &ctx);
         self.bot.git.poll(&mut self.ed, &ctx);
         self.bot.host.poll(&mut self.ed, &ctx);
+        self.bot.live.poll(&mut self.ed, &ctx);
+        // A guest's copy of a session's project has arrived: opened.
+        if let Some(folder) = self.bot.live.arrive.take() {
+            self.load_project(&folder);
+        }
         // Keep this project on the host: File › Git… does it.
         if let Some(address) = self.bot.host.keep.take() {
             self.bot.git.connect_to(&self.ed, address);

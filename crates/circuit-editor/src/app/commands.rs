@@ -38,6 +38,7 @@ impl CircuitApp {
         items.push(Item::new(t!("File"), t!("Open Project…"), Cmd::OpenProject).shortcut(self.key_label(Hotkey::OpenProject)));
         items.push(Item::new(t!("File"), t!("Get from Git…"), Cmd::GetFromGit));
         items.push(Item::new(t!("File"), "Host…", Cmd::Host));
+        items.push(Item::new(t!("File"), t!("Live session…"), Cmd::Live));
         let open = self.ed.project.as_ref().map(|p| p.root.display().to_string());
         for path in self.ed.prefs.recent_projects.iter().filter(|p| Some(*p) != open.as_ref()) {
             let name = Path::new(path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
@@ -147,6 +148,7 @@ impl CircuitApp {
             Cmd::Git => self.bot.git.open(&self.ed),
             Cmd::GetFromGit => self.get_from_git(),
             Cmd::Host => self.bot.host.open(),
+            Cmd::Live => self.bot.live.open(),
             Cmd::Upload => self.bot.hosting.upload(&mut self.ed),
             Cmd::ServerConsole => self.bot.hosting.open_console(&mut self.ed),
             Cmd::ImportWorkspaces => crate::editor::exchange::pick_import(&mut self.ed),

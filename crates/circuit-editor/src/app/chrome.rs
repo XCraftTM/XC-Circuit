@@ -202,6 +202,12 @@ impl CircuitApp {
                 self.bot.hosting.open(&self.ed);
             }
         }
+        // A live session: who is in it.
+        if let Some(text) = self.bot.live.status()
+            && status_item(&mut right, &t, Some(t.action), &text).on_hover_text(t!("File › Live session…")).clicked()
+        {
+            self.bot.live.open();
+        }
         // The project's repository: what waits to be stored or fetched.
         if has_project && let Some((dot, text)) = self.bot.git.status() {
             let dot = dot.then_some(t.accent);
@@ -275,6 +281,7 @@ impl CircuitApp {
             (Tab::Hosting, self.bot.hosting.draft.is_some(), egui::vec2(680.0, 760.0)),
             (Tab::Git, self.bot.git.open, egui::vec2(680.0, 760.0)),
             (Tab::Host, self.bot.host.open, egui::vec2(680.0, 720.0)),
+            (Tab::Live, self.bot.live.open, egui::vec2(680.0, 720.0)),
             (Tab::ServerConsole, self.bot.hosting.console.is_some(), egui::vec2(900.0, 560.0)),
             (Tab::WorkspaceExport, self.ed.ws_export.is_some(), egui::vec2(660.0, 680.0)),
             (Tab::WorkspaceImport, self.ed.ws_import.is_some(), egui::vec2(660.0, 680.0)),

@@ -35,6 +35,8 @@ pub enum Cmd {
     GetFromGit,
     /// File › Host…
     Host,
+    /// File › Live session…
+    Live,
     Upload,
     ServerConsole,
     ImportWorkspaces,

@@ -145,6 +145,24 @@ impl Histories {
         }
     }
 
+    /// Takes in a change to a workspace that someone else made (in a live
+    /// session): `now` is the workspace with it. It is no step of one's
+    /// own, so Undo doesn't take it back; and every earlier step gets the
+    /// change too (`with` gives what a state becomes with it), so going
+    /// back only takes back one's own work.
+    pub fn take_in(&mut self, key: &str, now: &Workspace, with: impl Fn(&Workspace) -> Workspace) {
+        if let Some(h) = self.workspaces.get_mut(key) {
+            for (state, _) in h.undo.iter_mut().chain(h.redo.iter_mut()) {
+                *state = with(state);
+            }
+            h.last = now.clone();
+            // Another state than the saved one, all the same.
+            self.next += 1;
+            h.version = self.next;
+        }
+        self.revision += 1;
+    }
+
     /// Keeps at most `limit` steps per workspace (and for the project's
     /// settings) from now on: Settings › Editor. Fewer than before forgets
     /// the oldest steps at once, and the memory their copies took.

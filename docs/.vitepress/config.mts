@@ -90,6 +90,7 @@ export default defineConfig({
             { text: "Putting your bot on a server", link: "/explanations/hosting" },
             { text: "Keeping a project in Git", link: "/explanations/git" },
             { text: "The Host: a place of your own", link: "/explanations/host" },
+            { text: "Live sessions: working together", link: "/explanations/live" },
             { text: "AI agents (MCP)", link: "/explanations/ai-agents" },
             { text: "Tokens and safety", link: "/explanations/safety" },
             { text: "Everything the editor does", link: "/explanations/editor-reference" },
