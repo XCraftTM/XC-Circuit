@@ -579,15 +579,17 @@ fn a_wire_held_at_an_edge_moves_the_canvas() {
     assert!(!view.edge_pan(outer, pos2(500.0, 350.0), 1.0 / 60.0));
 }
 
-/// Zoomed out, a note's title and description grow on the canvas so they
-/// stay readable on screen; zoomed in, they keep their own size.
+/// A note's heading is the same part of the note at every zoom: its edit
+/// button keeps its size on screen while zoomed in, and zoomed out stops
+/// growing on the canvas at what the title's line has room for.
 #[test]
-fn note_texts_stay_readable_zoomed_out() {
-    use super::notes::text_sizes;
-    assert_eq!(text_sizes(1.0), (15.0, 12.5));
-    assert_eq!(text_sizes(2.0), (15.0, 12.5), "zoomed in: their own size");
-    let (title, desc) = text_sizes(0.25);
-    assert_eq!((title * 0.25, desc * 0.25), (14.0, 11.0), "at 25%: 14 and 11 on screen");
+fn a_note_s_heading_doesn_t_grow_when_zoomed_out() {
+    use super::notes::edit_button_size;
+    assert_eq!(edit_button_size(22.0, 2.0), 11.0, "zoomed in: 22 on screen");
+    assert_eq!(edit_button_size(22.0, 1.0), 22.0);
+    let far = edit_button_size(22.0, 0.25);
+    assert!(far < 30.0, "at 25% it would be 88 on the canvas and push the heading over the blocks: {far}");
+    assert_eq!(far, edit_button_size(22.0, 0.1), "and no bigger further out");
 }
 
 /// Moves blocks in the examples and templates apart where they overlap (a

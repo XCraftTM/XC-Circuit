@@ -25,37 +25,33 @@ pub(super) struct NoteSelection<'a> {
 /// A note's title and description sizes on the canvas (in its own units).
 const TITLE_SIZE: f32 = 15.0;
 const DESC_SIZE: f32 = 12.5;
-/// The least they show as on screen, zoomed out.
-const TITLE_ON_SCREEN: f32 = 14.0;
-const DESC_ON_SCREEN: f32 = 11.0;
 
-/// The title's and description's sizes at a zoom: their own, or bigger when
-/// zoomed out so they show at least as big as TITLE_ON_SCREEN and
-/// DESC_ON_SCREEN.
-pub(super) fn text_sizes(zoom: f32) -> (f32, f32) {
-    let zoom = zoom.max(0.01);
-    (TITLE_SIZE.max(TITLE_ON_SCREEN / zoom), DESC_SIZE.max(DESC_ON_SCREEN / zoom))
+/// How big a note's edit button is on the canvas at a zoom: as big on
+/// screen as `on_screen` while zoomed in, but never bigger on the canvas
+/// than the title's line has room for. So a note's heading is the same
+/// part of the note at every zoom: zooming out makes it smaller with the
+/// blocks, and doesn't let it grow over them.
+pub(super) fn edit_button_size(on_screen: f32, zoom: f32) -> f32 {
+    (on_screen / zoom.max(0.01)).min(TITLE_SIZE * 1.3 + 10.0)
 }
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, ws_key: &str, blocks: &[NodeLayout], theme: &Theme, reg: &Registry, view: &mut CanvasView, edited: &mut bool, sel: NoteSelection, snap_to_grid: bool) {
     let ctx = cui.ctx().clone();
     let zoom = view.zoom;
-    // As big on screen at every zoom, like the Try Zone's gear.
-    let button = if theme.touch { ZONE_BUTTON_TOUCH } else { ZONE_BUTTON } / zoom;
+    let button = edit_button_size(if theme.touch { ZONE_BUTTON_TOUCH } else { ZONE_BUTTON }, zoom);
     let mut delete: Option<String> = None;
     let ids: Vec<String> = ws.notes.keys().cloned().collect();
     for nid in ids {
         let Some(note) = ws.notes.get(&nid).cloned() else { continue };
         let r = note_rect(&note);
         let color = note.color.as_deref().and_then(|c| Color32::from_hex(c).ok()).unwrap_or(theme.accent);
-        // Zoomed out, the title and description stay readable on screen
-        // (like a map's labels), as the edit button does; the room around
-        // them grows along.
-        let (title_size, desc_size) = text_sizes(zoom);
-        let k = title_size / TITLE_SIZE;
-        let pad = 14.0 * k;
-        let gap = 10.0 * k;
+        // The title and description are a part of the note like its blocks:
+        // they get smaller and bigger with the zoom, and the note looks the
+        // same at every one.
+        let (title_size, desc_size) = (TITLE_SIZE, DESC_SIZE);
+        let pad = 14.0;
+        let gap = 10.0;
         let text_w = (r.width() - 2.0 * pad).max(20.0);
         let title = if note.title.trim().is_empty() { t!("Note").to_string() } else { note.title.clone() };
         let job = egui::text::LayoutJob::simple(title, crate::ui::fonts::bold(title_size), theme.text, (text_w - button - 8.0).max(20.0));
@@ -64,13 +60,8 @@ pub(super) fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, 
         // taller than the title makes the line taller (no room above it).
         let line = title_g.size().y.max(button - gap);
         let desc = |size: f32| (!note.text.trim().is_empty()).then(|| painter.layout(note.text.clone(), FontId::proportional(size), theme.text_muted, text_w));
-        let height = |g: &Option<std::sync::Arc<egui::Galley>>| gap + line + g.as_ref().map_or(0.0, |g| 4.0 * k + g.size().y) + gap;
-        let mut desc_g = desc(desc_size);
-        // A bigger description mustn't cover the blocks: when it would take
-        // more than half the note, it keeps its own size.
-        if desc_size > DESC_SIZE && height(&desc_g) > r.height() * 0.5 {
-            desc_g = desc(DESC_SIZE);
-        }
+        let height = |g: &Option<std::sync::Arc<egui::Galley>>| gap + line + g.as_ref().map_or(0.0, |g| 4.0 + g.size().y) + gap;
+        let desc_g = desc(desc_size);
         let header_h = height(&desc_g).min(r.height());
         let header = Rect::from_min_size(r.min, vec2(r.width(), header_h));
 
@@ -83,7 +74,7 @@ pub(super) fn draw_notes(cui: &Ui, painter: &egui::Painter, ws: &mut Workspace, 
         let title_h = title_g.size().y;
         inside.galley(header.min + vec2(pad, gap + (line - title_h) / 2.0), title_g, theme.text);
         if let Some(g) = desc_g {
-            inside.galley(header.min + vec2(pad, gap + line + 4.0 * k), g, theme.text_muted);
+            inside.galley(header.min + vec2(pad, gap + line + 4.0), g, theme.text_muted);
         }
         // A grip in the bottom-right corner.
         for i in 1..=2 {
