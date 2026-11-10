@@ -55,7 +55,7 @@ impl Tab {
             Tab::BotSettings => "bolt",
             Tab::Export | Tab::WorkspaceExport => "package",
             Tab::Hosting => "server",
-            Tab::Git => "branch",
+            Tab::Git => "git",
             Tab::ServerConsole => "terminal",
             Tab::WorkspaceImport => "folder-plus",
             Tab::Start => "block",

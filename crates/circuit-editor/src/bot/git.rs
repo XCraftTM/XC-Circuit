@@ -381,7 +381,7 @@ impl GitUi {
                         if let Some(root) = self.root.clone() {
                             ed.open_project(&root);
                         }
-                        let text = tf!("Fetched: {count} files changed.", count = files.len());
+                        let text = tf!("Fetched. Files changed: {count}", count = files.len());
                         ed.log(Level::Success, text.clone());
                         self.said = Some((true, text));
                     }
@@ -525,7 +525,7 @@ impl GitUi {
         }
         self.get.as_ref()?;
         let theme = ed.theme.clone();
-        let icon = ed.reg.icons.get("branch").cloned();
+        let icon = ed.reg.icons.get("git").cloned();
         let busy = self.busy;
         let host = host_of(&self.address);
         let signed_in = self.account.is_some();
@@ -633,7 +633,7 @@ impl GitUi {
         }
         let theme = ed.theme.clone();
         let icons = ed.reg.icons.clone();
-        let icon = icons.get("branch").cloned();
+        let icon = icons.get("git").cloned();
         let busy = self.busy;
         let host = host_of(&self.address);
         let remote = self.state.as_ref().and_then(|s| s.remote.clone());
@@ -675,7 +675,7 @@ impl GitUi {
                             ui.label(RichText::new(t!("Nothing changed here since the last Store.")).color(theme.text_muted));
                         }
                         if !state.changed.is_empty() {
-                            ui.label(tf!("{count} files changed here:", count = state.changed.len()));
+                            ui.label(tf!("Files changed here: {count}", count = state.changed.len()));
                             for file in state.changed.iter().take(8) {
                                 ui.label(RichText::new(format!("  {file}")).monospace().size(11.5).color(theme.text_muted));
                             }
@@ -684,10 +684,10 @@ impl GitUi {
                             }
                         }
                         if state.ahead > 0 {
-                            ui.label(tf!("{count} versions stored here are not sent yet.", count = state.ahead));
+                            ui.label(tf!("Stored here, not sent yet: {count}", count = state.ahead));
                         }
                         if state.behind > 0 {
-                            ui.label(tf!("{count} newer versions are stored there: press Fetch.", count = state.behind));
+                            ui.label(tf!("Newer versions stored there: {count}. Press Fetch.", count = state.behind));
                         }
                         ui.add_space(6.0);
                         kit::field(ui, &theme, t!("What did you change?"), Some(t!("A few words that go with this version, such as: a welcome message.")), |ui| kit::text_input(ui, &mut self.message, "", false));

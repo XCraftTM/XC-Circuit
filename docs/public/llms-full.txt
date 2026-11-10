@@ -1643,7 +1643,7 @@ When newer changes are stored there, Store says so: press **Fetch** first, then 
 
 ## When both changed the same thing
 
-Changes to different files, or to different parts of one file, are put together without asking. Where both sides changed the same part of a file, XC Circuit **changes nothing** and lists those files. Choose for each whose version stays, **Mine** or **The stored one**, then press **Put together**. The version you didn't pick stays in the repository's history.
+The project's files are put together by what they hold, not line by line: blocks by their number, wires one by one, every setting of a block on its own. So two people can work in the same workspace: one changes a block's message while the other adds blocks and wires, and both arrive. Where a block sits never stands in the way; if both moved it, yours stays. Only where both changed the **same setting** in different ways (or one deleted a block the other changed) XC Circuit **changes nothing** and lists those files. Choose for each whose version stays, **Mine** or **The stored one**, then press **Put together**. The version you didn't pick stays in the repository's history.
 
 The two versions are put together in memory first; the project's folder only changes once the result is whole. A file that would no longer read after both changes went in counts as changed by both, and is asked about too.
 

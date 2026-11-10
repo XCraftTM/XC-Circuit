@@ -10,6 +10,7 @@
 //! that no longer reads), the caller says which side's file to keep.
 
 pub mod github;
+pub mod json;
 
 use anyhow::{Context, Result, anyhow, bail};
 use git2::{Cred, FetchOptions, IndexEntry, IndexTime, Oid, PushOptions, RemoteCallbacks, Repository, Signature, StatusOptions, Tree, build::CheckoutBuilder};
@@ -95,7 +96,7 @@ impl Sync {
                 // Also in a repository someone made by hand: this computer's
                 // part (where the bot is uploaded to, its data) stays here.
                 keep_ignored(root)?;
-                Ok(Some(Sync { repo }))
+                Ok(Some(Sync { repo: keep_bytes(repo, root)? }))
             }
             Err(e) if e.code() == git2::ErrorCode::NotFound => Ok(None),
             Err(e) => Err(e).with_context(|| format!("opening the repository in {}", root.display())),
@@ -113,8 +114,7 @@ impl Sync {
             }
         };
         keep_ignored(root)?;
-        sync.keep_bytes()?;
-        Ok(sync)
+        Ok(Sync { repo: keep_bytes(sync.repo, root)? })
     }
 
     /// Makes an empty repository to store projects in, in the new folder
@@ -131,23 +131,13 @@ impl Sync {
         let mut fetch = FetchOptions::new();
         fetch.remote_callbacks(callbacks(login));
         let repo = git2::build::RepoBuilder::new().fetch_options(fetch).clone(url, root).map_err(|e| explain(e, "getting the project"))?;
-        let sync = Sync { repo };
-        sync.keep_bytes()?;
+        let sync = Sync { repo: keep_bytes(repo, root)? };
+        // Written again, now byte for byte.
         if sync.tip().is_some() {
             sync.checkout()?;
         }
         keep_ignored(root)?;
         Ok(sync)
-    }
-
-    /// Files go in and out byte for byte, whatever this computer's Git is
-    /// set to (Git for Windows turns line ends around by default): a
-    /// project's files are the same on every computer.
-    fn keep_bytes(&self) -> Result<()> {
-        let mut config = self.repo.config()?.open_level(git2::ConfigLevel::Local)?;
-        config.set_bool("core.autocrlf", false)?;
-        config.set_bool("core.safecrlf", false)?;
-        Ok(())
     }
 
     /// Sets where the project is stored.
@@ -290,6 +280,36 @@ impl Sync {
         // Both changed something: put them together in memory.
         let mut index = self.repo.merge_commits(&mine, &theirs, None)?;
         let mut unsure: BTreeSet<String> = BTreeSet::new();
+        let (my_tree, their_tree) = (mine.tree()?, theirs.tree()?);
+        // The project's files are put together by what they hold, not line
+        // by line: blocks by their number, wires as a set, each setting on
+        // its own. Lines know nothing of that, and can pair up the wrong
+        // braces.
+        let base_tree = self.repo.merge_base(mine.id(), theirs.id()).ok().and_then(|id| self.repo.find_commit(id).ok()).and_then(|c| c.tree().ok());
+        let both: Vec<String> = {
+            let theirs_changed = paths_of(&self.repo, base_tree.as_ref(), &their_tree)?;
+            paths_of(&self.repo, base_tree.as_ref(), &my_tree)?.into_iter().filter(|p| p.ends_with(".json") && theirs_changed.contains(p)).collect()
+        };
+        for path in both {
+            let read = |tree: &Tree| -> Option<(serde_json::Value, i32)> {
+                let entry = tree.get_path(Path::new(&path)).ok()?;
+                let blob = self.repo.find_blob(entry.id()).ok()?;
+                Some((serde_json::from_slice(blob.content()).ok()?, entry.filemode()))
+            };
+            let (Some((a, mode)), Some((b, _))) = (read(&my_tree), read(&their_tree)) else { continue };
+            let base = base_tree.as_ref().and_then(read).map(|(v, _)| v);
+            match json::merge(base.as_ref(), &a, &b) {
+                Some(merged) => {
+                    let mut text = serde_json::to_string_pretty(&merged)?;
+                    text.push('\n');
+                    let id = self.repo.blob(text.as_bytes())?;
+                    index.conflict_remove(Path::new(&path)).ok();
+                    index.remove_path(Path::new(&path)).ok();
+                    index.add(&entry(&path, id, mode as u32))?;
+                }
+                None => drop(unsure.insert(path)),
+            }
+        }
         for conflict in index.conflicts()? {
             let c = conflict?;
             if let Some(path) = [c.our, c.their, c.ancestor].into_iter().flatten().next().and_then(|e| String::from_utf8(e.path).ok()) {
@@ -297,7 +317,6 @@ impl Sync {
             }
         }
         // A JSON file put together from both that no longer reads is one too.
-        let (my_tree, their_tree) = (mine.tree()?, theirs.tree()?);
         for entry in index.iter().filter(|e| (e.flags >> 12) & 3 == 0) {
             let Ok(path) = String::from_utf8(entry.path.clone()) else { continue };
             let same = |tree: &Tree| tree.get_path(Path::new(&path)).is_ok_and(|e| e.id() == entry.id);
@@ -315,7 +334,7 @@ impl Sync {
             index.remove_path(Path::new(path)).ok();
             // A side that deleted the file: it stays deleted.
             if let Ok(e) = from.get_path(Path::new(path)) {
-                index.add(&IndexEntry { ctime: IndexTime::new(0, 0), mtime: IndexTime::new(0, 0), dev: 0, ino: 0, mode: e.filemode() as u32, uid: 0, gid: 0, file_size: 0, id: e.id(), flags: 0, flags_extended: 0, path: path.as_bytes().to_vec() })?;
+                index.add(&entry(path, e.id(), e.filemode() as u32))?;
             }
         }
         let tree = self.repo.find_tree(index.write_tree_to(&self.repo)?)?;
@@ -341,6 +360,26 @@ impl Sync {
         };
         Ok(Versions { mine: read(self.tip()), theirs: read(self.stored_tip()?) })
     }
+}
+
+/// Files go in and out byte for byte, whatever this computer's Git is set
+/// to (Git for Windows turns line ends around by default): a project's
+/// files are the same on every computer. The repository is opened again
+/// after the setting changed, as an open one keeps the old setting.
+fn keep_bytes(repo: Repository, root: &Path) -> Result<Repository> {
+    let mut config = repo.config()?.open_level(git2::ConfigLevel::Local)?;
+    if config.get_bool("core.autocrlf").ok() == Some(false) {
+        return Ok(repo);
+    }
+    config.set_bool("core.autocrlf", false)?;
+    config.set_bool("core.safecrlf", false)?;
+    drop(config);
+    drop(repo);
+    Ok(Repository::open(root)?)
+}
+
+fn entry(path: &str, id: Oid, mode: u32) -> IndexEntry {
+    IndexEntry { ctime: IndexTime::new(0, 0), mtime: IndexTime::new(0, 0), dev: 0, ino: 0, mode, uid: 0, gid: 0, file_size: 0, id, flags: 0, flags_extended: 0, path: path.as_bytes().to_vec() }
 }
 
 /// What a Send is told when newer changes are stored there.
@@ -580,6 +619,78 @@ mod tests {
         let keep = HashMap::from([("workspaces/main.json".to_string(), Side::Mine)]);
         assert!(matches!(b.merge(&keep, &who("b")).unwrap(), Merged::Updated(_)));
         assert_eq!(fs::read_to_string(b_dir.join("workspaces/main.json")).unwrap(), file("{", "    \"k\": 1", "}"), "B's file as B had it");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Two people work in one workspace: their changes go together by what
+    /// the file holds. Only the same setting changed two ways is asked about.
+    #[test]
+    fn a_workspace_is_put_together_by_its_blocks() {
+        let (dir, url) = scene("blocks");
+        let (a_dir, b_dir) = (dir.join("a"), dir.join("b"));
+        let none = Login::default();
+        let ws = |v: serde_json::Value| serde_json::to_string_pretty(&v).unwrap() + "\n";
+        let json = serde_json::json!({ "name": "Main", "nodes": {
+            "1": { "block": "e@1", "at": [0, 0] },
+            "2": { "block": "log@1", "at": [300, 0], "values": { "message": "hi", "level": "info" } }
+        }, "links": ["1.next > 2.in"] });
+        fs::create_dir_all(&a_dir).unwrap();
+        write(&a_dir, "workspaces/main.json", &ws(json.clone()));
+        let a = Sync::start(&a_dir).unwrap();
+        a.set_remote(&url).unwrap();
+        a.store("First", &who("a")).unwrap();
+        a.send(&none).unwrap();
+        let b = Sync::get(&url, &b_dir, &none).unwrap();
+
+        // A: changes the message, moves block 2, adds block 3 and its wire.
+        let mut at_a = json.clone();
+        at_a["nodes"]["2"]["values"]["message"] = "hello".into();
+        at_a["nodes"]["2"]["at"] = serde_json::json!([300, 200]);
+        at_a["nodes"]["3"] = serde_json::json!({ "block": "log@1", "at": [600, 0] });
+        at_a["links"] = serde_json::json!(["1.next > 2.in", "2.next > 3.in"]);
+        write(&a_dir, "workspaces/main.json", &ws(at_a));
+        a.store("A", &who("a")).unwrap();
+        a.send(&none).unwrap();
+        // B: changes the level, moves block 2 elsewhere, adds block 4 and a
+        // wire, renames the workspace, adds a note.
+        let mut at_b = json.clone();
+        at_b["name"] = "Welcome".into();
+        at_b["nodes"]["2"]["values"]["level"] = "warn".into();
+        at_b["nodes"]["2"]["at"] = serde_json::json!([900, 900]);
+        at_b["nodes"]["4"] = serde_json::json!({ "block": "e@1", "at": [0, 400] });
+        at_b["links"] = serde_json::json!(["1.next > 2.in", "4.next > 2.in"]);
+        at_b["notes"] = serde_json::json!({ "n1": { "title": "Note", "rect": [0, 0, 10, 10] } });
+        write(&b_dir, "workspaces/main.json", &ws(at_b));
+        b.store("B", &who("b")).unwrap();
+        b.fetch(&none).unwrap();
+        assert_eq!(b.merge(&HashMap::new(), &who("b")).unwrap(), Merged::Updated(vec!["workspaces/main.json".into()]));
+        let text = fs::read_to_string(b_dir.join("workspaces/main.json")).unwrap();
+        let got: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(got, serde_json::json!({ "name": "Welcome", "nodes": {
+            "1": { "block": "e@1", "at": [0, 0] },
+            "2": { "block": "log@1", "at": [900, 900], "values": { "message": "hello", "level": "warn" } },
+            "4": { "block": "e@1", "at": [0, 400] },
+            "3": { "block": "log@1", "at": [600, 0] }
+        }, "links": ["1.next > 2.in", "4.next > 2.in", "2.next > 3.in"], "notes": { "n1": { "title": "Note", "rect": [0, 0, 10, 10] } } }));
+        assert_eq!(text, ws(got), "written as the app writes it");
+        b.send(&none).unwrap();
+
+        // The same setting changed two ways, and a block one deleted while
+        // the other changed it: asked about.
+        a.fetch(&none).unwrap();
+        a.merge(&HashMap::new(), &who("a")).unwrap();
+        let now: serde_json::Value = serde_json::from_str(&fs::read_to_string(a_dir.join("workspaces/main.json")).unwrap()).unwrap();
+        let mut at_a = now.clone();
+        at_a["nodes"]["2"]["values"]["message"] = "A says".into();
+        write(&a_dir, "workspaces/main.json", &ws(at_a));
+        a.store("A2", &who("a")).unwrap();
+        a.send(&none).unwrap();
+        let mut at_b = now.clone();
+        at_b["nodes"]["2"]["values"]["message"] = "B says".into();
+        write(&b_dir, "workspaces/main.json", &ws(at_b));
+        b.store("B2", &who("b")).unwrap();
+        b.fetch(&none).unwrap();
+        assert_eq!(b.merge(&HashMap::new(), &who("b")).unwrap(), Merged::Conflicts(vec!["workspaces/main.json".into()]));
         let _ = fs::remove_dir_all(&dir);
     }
 }
