@@ -498,6 +498,7 @@ fn private_settings_stay_on_this_computer() {
     let _ = std::fs::remove_dir_all(&dir);
     Project::create(&dir, "P", "discord-bot").unwrap();
     let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+    ed.backups = circuit_core::backup::Backups::new(dir.join("backups"));
     ed.open_project(&dir);
     let private = ed.project.as_ref().unwrap().private_settings.clone();
     for key in ["devServer", "spotifyClientId", "twitchClientId", "sshHost", "rconHost", "dockerHost", "serverToolsAllowed", "serverGivenAllowed", "databaseGivenAllowed"] {
@@ -514,6 +515,17 @@ fn private_settings_stay_on_this_computer() {
     assert!(shared.contains("\"prefix\": \"?\"") && !shared.contains("devServer") && !shared.contains("serverToolsAllowed"), "{shared}");
     let local = std::fs::read_to_string(dir.join(".circuit").join("local.json")).unwrap();
     assert!(local.contains("123456789012345678") && local.contains("serverToolsAllowed"), "{local}");
+
+    // A project of the layout before is sorted the same way when it opens.
+    let old = dir.join("old");
+    std::fs::create_dir_all(old.join("workspaces")).unwrap();
+    std::fs::write(old.join("circuit.json"), r#"{ "format": 1, "name": "Old", "mode": "discord-bot", "settings": { "prefix": "!", "devServer": "111111111111111111" } }"#).unwrap();
+    ed.open_project(&old);
+    assert!(!old.join("circuit.json").exists(), "converted on opening");
+    let shared = std::fs::read_to_string(old.join(circuit_core::project::PROJECT_FILE)).unwrap();
+    assert!(shared.contains("prefix") && !shared.contains("devServer"), "{shared}");
+    assert!(std::fs::read_to_string(old.join(".circuit").join("local.json")).unwrap().contains("111111111111111111"));
+    assert!(ed.backups.list(&old).iter().any(|s| s.info.reason == "Before the new project layout"));
 
     // The bot still gets them all.
     ed.open_project(&dir);

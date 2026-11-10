@@ -346,17 +346,8 @@ impl Editor {
         // Its files may still be being written.
         self.finish_saving();
         match Project::load(root) {
-            Ok(mut project) => {
+            Ok(project) => {
                 self.log(Level::Success, format!("Opened {}", project.root.display()));
-                // A project of the layout before: brought to this one now, so
-                // it has its id and its parts are where they belong.
-                if let Some(from) = project.converted_from {
-                    let _ = self.backups.snapshot(&project, "Before the new project layout");
-                    match project.save() {
-                        Ok(()) => self.log(Level::Info, tf!("This project now has the new project layout (it had layout {from}). An XC Circuit older than 0.3.0 can't open it any more; its old circuit.json is kept in the folder .circuit/layout-1.", from = from)),
-                        Err(e) => self.log(Level::Warn, tf!("This project has an older layout and couldn't be brought to the new one, so it stays as it is: {error}", error = format!("{e:#}"))),
-                    }
-                }
                 for (stem, why) in &project.unreadable {
                     self.log(Level::Error, format!("Couldn't read workspaces/{stem}.json, so it isn't open. The file is left as it is: {why}"));
                 }
@@ -374,6 +365,10 @@ impl Editor {
                 self.plugins_waiting.clear();
                 self.plugin_ask = false;
                 self.reload_plugins();
+                // A project of the layout before: brought to this one now
+                // (the plugins are loaded, so its private settings are known),
+                // so it has its id and its parts are where they belong.
+                self.convert_layout();
                 self.refresh_define_ctx();
                 self.upgrade_blocks();
                 self.upgrade_texts();
@@ -387,6 +382,19 @@ impl Editor {
                 }
             }
             Err(e) => self.log(Level::Error, format!("Could not open {}: {e:#}", root.display())),
+        }
+    }
+
+    /// Saves a project that was read from an older layout in the current
+    /// one, after a backup of it as it was.
+    fn convert_layout(&mut self) {
+        let Some(from) = self.project.as_ref().and_then(|p| p.converted_from) else { return };
+        let Some(project) = self.project.as_mut() else { return };
+        let _ = self.backups.snapshot(project, "Before the new project layout");
+        let saved = project.save();
+        match saved {
+            Ok(()) => self.log(Level::Info, tf!("This project now has the new project layout (it had layout {from}). An XC Circuit older than 0.3.0 can't open it any more; its old circuit.json is kept in the folder .circuit/layout-1.", from = from)),
+            Err(e) => self.log(Level::Warn, tf!("This project has an older layout and couldn't be brought to the new one, so it stays as it is: {error}", error = format!("{e:#}"))),
         }
     }
 
