@@ -40,16 +40,18 @@ impl CircuitApp {
         if custom {
             crate::app::titlebar::drag_region(ui, bar);
         }
-        let label = match &self.ed.project {
+        let search_label = match &self.ed.project {
             Some(p) => tf!("Search {project}", project = p.meta.name),
             None => t!("Search").into(),
         };
+        // Where the menus end: the search box starts after them.
+        let mut menus_end = bar.left();
         let row = |ui: &mut egui::Ui, layout| ui.new_child(egui::UiBuilder::new().max_rect(bar).layout(layout));
         let mut left = row(ui, egui::Layout::left_to_right(egui::Align::Center));
         if self.tour.is_some() {
             left.add(egui::Image::new(egui::include_image!("../../assets/icon.svg")).fit_to_exact_size(egui::vec2(18.0, 18.0)));
             left.add_space(6.0);
-            left.label(RichText::new(t!("Tour")).strong().color(theme.accent));
+            menus_end = left.label(RichText::new(t!("Tour")).strong().color(theme.accent)).rect.right();
         } else {
         // The menus fill the bar's height, so they're easy to hit. (Set before
         // the menu bar: it sizes its row from this.)
@@ -336,13 +338,12 @@ impl CircuitApp {
                     self.show_about = true;
                 }
             }).response);
+            menus_end = tops.last().map_or(menus_end, |r| r.rect.right());
             switch_on_hover(ui.ctx(), &tops);
         });
 
         }
 
-        // Where the menus end: the search box starts after them.
-        let menus_end = left.min_rect().right();
         // Window buttons and Run / Stop on the right.
         let ui = &mut row(ui, egui::Layout::right_to_left(egui::Align::Center));
         if custom {
@@ -392,7 +393,7 @@ impl CircuitApp {
         // left out when there is none (Ctrl+P still opens the search).
         if let Some(search) = search_place(bar, menus_end, ui.min_rect().left()) {
             self.ed.ui_rects.insert("search".into(), search);
-            if crate::app::titlebar::search_box(ui, search, &theme, &label, &self.key_label(Hotkey::CommandPalette)) {
+            if crate::app::titlebar::search_box(ui, search, &theme, &search_label, &self.key_label(Hotkey::CommandPalette)) {
                 self.palette = Some(Default::default());
             }
         }
