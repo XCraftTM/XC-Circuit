@@ -35,7 +35,7 @@ Types for your code editor: `/// <reference types="@xc-circuit/sdk/editor" />` (
 | `xc.blocks()` | every block: `[{ workspace, id, type, values, … }]` |
 | `xc.activeWorkspace()` · `xc.selection()` | what's open and selected |
 | `xc.blockName(type)` | `"core.log"` → `"Log"` |
-| `xc.data.get(key)` | project data (in `circuit.json`) |
+| `xc.data.get(key)` | project data (the project's `data`) |
 | `xc.storage.get(key)` | the plugin's own store (on this computer) |
 | `xc.botRunning()` · `xc.screen()` | is the bot running · window size |
 | `xc.blockTypes(query)` · `xc.blockType(type)` | installed block types · one type's fields, outputs and flows |

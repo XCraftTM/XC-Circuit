@@ -1,5 +1,6 @@
 {
-  "format": 1,
+  "layout": 2,
+  "id": "ac44ba1cf239fb327cfc84ea851eb28d",
   "name": "Server status",
   "mode": "fluxer-bot",
   "plugins": {
@@ -9,6 +10,5 @@
   },
   "settings": {
     "prefix": "!"
-  },
-  "data": {}
+  }
 }

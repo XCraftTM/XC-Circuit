@@ -1,6 +1,7 @@
 {
-  "format": 1,
-  "name": "Welcome & auto role",
+  "layout": 2,
+  "id": "8cd7c5b5ae95edcb6b839ba00c48b6ae",
+  "name": "DemoBot",
   "mode": "discord-bot",
   "plugins": {
     "xc.core": "1.0.0",
@@ -9,10 +10,8 @@
   "settings": {
     "prefix": "!"
   },
-  "data": {
-    "slashCommands": []
-  },
   "folders": [
+    "Commands",
     "Events"
   ]
 }

@@ -1,0 +1,16 @@
+{
+  "layout": 2,
+  "id": "0f7c378a52c263083f3169a92c180953",
+  "name": "Moderation",
+  "mode": "discord-bot",
+  "plugins": {
+    "xc.core": "1.0.0",
+    "xc.discord": "1.0.0"
+  },
+  "settings": {
+    "prefix": "!"
+  },
+  "folders": [
+    "Commands"
+  ]
+}

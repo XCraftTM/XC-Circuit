@@ -1,0 +1,16 @@
+{
+  "layout": 2,
+  "id": "d4c0eaa41c6354b77872ed0d8e5ce9a4",
+  "name": "Alerts",
+  "mode": "discord-bot",
+  "plugins": {
+    "xc.core": "1.0.0",
+    "xc.discord": "1.0.0"
+  },
+  "settings": {
+    "prefix": "!"
+  },
+  "folders": [
+    "Events"
+  ]
+}

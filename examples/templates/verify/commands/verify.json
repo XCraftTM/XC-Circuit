@@ -1,0 +1,8 @@
+[
+  {
+    "name": "verify",
+    "description": "Show you're a person to get in",
+    "options": [],
+    "dm": false
+  }
+]

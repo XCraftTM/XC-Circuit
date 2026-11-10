@@ -1,0 +1,8 @@
+[
+  {
+    "name": "status",
+    "description": "Is the Minecraft server up?",
+    "options": [],
+    "dm": false
+  }
+]

@@ -175,7 +175,7 @@ mod tests {
         let Done::Saved { id: got, name, result, backup, .. } = &done[1] else { panic!("the save comes second") };
         assert_eq!((*got, name.as_str()), (id, "Renamed"));
         assert!(result.is_ok() && matches!(backup, Some(Ok(()))));
-        assert!(std::fs::read_to_string(dir.join("bot").join("circuit.json")).unwrap().contains("Renamed"), "written to disk");
+        assert!(std::fs::read_to_string(dir.join("bot").join(circuit_core::project::PROJECT_FILE)).unwrap().contains("Renamed"), "written to disk");
         assert!(backups.read_recovery(&project).is_none(), "the save clears the recovery copy");
         assert_eq!(backups.list(&project.root).len(), 1, "and makes a backup");
         let _ = std::fs::remove_dir_all(&dir);
@@ -210,7 +210,7 @@ mod tests {
             let id = saver.next_id();
             saver.send(Job::Save { id, project: project.take_save(), backups: Backups::new(dir.join("backups")), backup: None });
         }
-        assert!(std::fs::read_to_string(dir.join("bot").join("circuit.json")).unwrap().contains("Kept"));
+        assert!(std::fs::read_to_string(dir.join("bot").join(circuit_core::project::PROJECT_FILE)).unwrap().contains("Kept"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

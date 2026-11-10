@@ -11,7 +11,7 @@ acme.chat/
 └─ templates/
    └─ basics/
       ├─ template.json
-      ├─ circuit.json
+      ├─ circuit.project.json
       └─ workspaces/
          ├─ ping.json
          └─ help.json
@@ -31,9 +31,9 @@ Each template is an ordinary [project](./project-format) with a `template.json`:
 | --- | --- |
 | `name` | Shown in the list of starters. |
 | `description` | One or two sentences: what the bot does and what to set up. |
-| `mode` | The [build mode](./build-modes) it's for. Default: the `mode` in its `circuit.json`. New Project only offers it for that mode. |
+| `mode` | The [build mode](./build-modes) it's for. Default: the `mode` in its `circuit.project.json`. New Project only offers it for that mode. |
 
-Creating a project from a template copies its `circuit.json` and workspaces (other files, such as a `plugins/` folder, are not copied), gives it the name typed in New Project, and adds a `.gitignore` for `.circuit/`. The app's own starters are in `examples/templates/`.
+Creating a project from a template copies its project file, slash commands and workspaces under a new project id (other files, such as a `plugins/` folder, are not copied), gives it the name typed in New Project, and adds a `.gitignore` for `.circuit/`. The app's own starters are in `examples/templates/`.
 
 Tips:
 

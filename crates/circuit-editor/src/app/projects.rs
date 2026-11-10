@@ -37,7 +37,7 @@ impl CircuitApp {
 
     /// A recent project: opened, or taken off the list when it is gone.
     pub(super) fn open_recent(&mut self, dir: &Path) {
-        if dir.join(circuit_core::project::PROJECT_FILE).is_file() {
+        if circuit_core::project::is_project(dir) {
             self.switch_project(dir);
         } else {
             self.ed.log(Level::Warn, format!("{} isn't there any more, so it's off the recent list", dir.display()));

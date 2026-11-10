@@ -1,4 +1,4 @@
-//! The Slash Command Builder: edits `circuit.json` › `data.slashCommands`.
+//! The Slash Command Builder: edits the project's `data.slashCommands`.
 //! Each command can also be edited as the JSON Discord stores it.
 
 use std::collections::BTreeMap;

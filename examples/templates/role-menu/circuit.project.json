@@ -1,0 +1,17 @@
+{
+  "layout": 2,
+  "id": "f13ca420a03bad38e9df815238542709",
+  "name": "Role menu",
+  "mode": "discord-bot",
+  "plugins": {
+    "xc.core": "1.0.0",
+    "xc.discord": "1.0.0"
+  },
+  "settings": {
+    "prefix": "!"
+  },
+  "folders": [
+    "Commands",
+    "Events"
+  ]
+}

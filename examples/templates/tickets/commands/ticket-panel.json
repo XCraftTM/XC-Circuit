@@ -1,0 +1,12 @@
+[
+  {
+    "name": "ticket-panel",
+    "description": "Posts the ticket panel in this channel",
+    "options": [],
+    "contexts": [
+      "guild"
+    ],
+    "permission": "ManageGuild",
+    "folder": "Tickets"
+  }
+]

@@ -5,10 +5,12 @@ use super::*;
 /// A new project at `dir` from a template folder: its workspaces, slash
 /// commands and settings, under the folder's name.
 pub(super) fn create_from_template(template: &Path, dir: &Path, name: &str) -> anyhow::Result<()> {
-    anyhow::ensure!(!dir.join(circuit_core::project::PROJECT_FILE).exists(), "there is already a project in that folder");
+    anyhow::ensure!(!circuit_core::project::is_project(dir), "there is already a project in that folder");
     let mut project = Project::load(template)?;
     project.root = dir.to_path_buf();
     project.meta.name = name.to_string();
+    // A project of its own, not the template again.
+    project.meta.id = circuit_core::project::new_id();
     project.save()?;
     let ignore = dir.join(".gitignore");
     if !ignore.exists() {
@@ -52,7 +54,7 @@ pub(super) fn writable_example(examples: &Path) -> Option<PathBuf> {
         return None;
     }
     let to = crate::bot::app_data_dir().join("examples").join("DemoBot");
-    if to.join(circuit_core::project::PROJECT_FILE).is_file() {
+    if circuit_core::project::is_project(&to) {
         return Some(to);
     }
     fn copy(from: &Path, to: &Path) -> std::io::Result<()> {

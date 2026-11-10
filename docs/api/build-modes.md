@@ -42,7 +42,7 @@ prefix = { type = "text", group = "Messages", label = "Text command prefix", def
 
 | Key | Description |
 | --- | --- |
-| `id` | **Required.** Unique id, saved in projects' `circuit.json` as `mode`. |
+| `id` | **Required.** Unique id, saved in projects' `circuit.project.json` as `mode`. |
 | `name` | Shown in File › New Project. |
 | `icon` | An icon name. |
 | `description` | One sentence, shown in File › New Project. |

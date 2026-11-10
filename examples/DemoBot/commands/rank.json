@@ -1,0 +1,14 @@
+[
+  {
+    "name": "rank",
+    "description": "Shows your rank and XP",
+    "options": [
+      {
+        "name": "target",
+        "type": "user",
+        "description": "Whose rank to show (you, if empty)",
+        "required": false
+      }
+    ]
+  }
+]

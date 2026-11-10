@@ -1,0 +1,16 @@
+{
+  "layout": 2,
+  "id": "4b937a2f3dd449252e4919b6345c4b00",
+  "name": "Tickets",
+  "mode": "discord-bot",
+  "plugins": {
+    "xc.core": "1.0.0",
+    "xc.discord": "1.0.0"
+  },
+  "settings": {
+    "prefix": "!"
+  },
+  "folders": [
+    "Tickets"
+  ]
+}

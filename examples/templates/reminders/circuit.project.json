@@ -1,6 +1,7 @@
 {
-  "format": 1,
-  "name": "Alerts",
+  "layout": 2,
+  "id": "790a59e0d9a1fc1f5f5f2e89793fd27e",
+  "name": "Reminders",
   "mode": "discord-bot",
   "plugins": {
     "xc.core": "1.0.0",
@@ -9,10 +10,8 @@
   "settings": {
     "prefix": "!"
   },
-  "data": {
-    "slashCommands": []
-  },
   "folders": [
+    "Commands",
     "Events"
   ]
 }

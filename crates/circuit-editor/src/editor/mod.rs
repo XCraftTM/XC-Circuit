@@ -340,8 +340,17 @@ impl Editor {
         // Its files may still be being written.
         self.finish_saving();
         match Project::load(root) {
-            Ok(project) => {
+            Ok(mut project) => {
                 self.log(Level::Success, format!("Opened {}", project.root.display()));
+                // A project of the layout before: brought to this one now, so
+                // it has its id and its parts are where they belong.
+                if let Some(from) = project.converted_from {
+                    let _ = self.backups.snapshot(&project, "Before the new project layout");
+                    match project.save() {
+                        Ok(()) => self.log(Level::Info, tf!("This project now has the new project layout (it had layout {from}). An XC Circuit older than 0.3.0 can't open it any more; its old circuit.json is kept in the folder .circuit/layout-1.", from = from)),
+                        Err(e) => self.log(Level::Warn, tf!("This project has an older layout and couldn't be brought to the new one, so it stays as it is: {error}", error = format!("{e:#}"))),
+                    }
+                }
                 for (stem, why) in &project.unreadable {
                     self.log(Level::Error, format!("Couldn't read workspaces/{stem}.json, so it isn't open. The file is left as it is: {why}"));
                 }

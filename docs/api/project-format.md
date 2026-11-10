@@ -1,43 +1,88 @@
 # Project format
 
 ::: info In short
-A project is a folder: `circuit.json` (name, mode, settings, slash commands) and `workspaces/*.json` (one per canvas: blocks, wires, Try Zones, notes).
+A project is a folder: `circuit.project.json` (name, mode, shared settings), `commands/*.json` (one slash command each), `workspaces/*.json` (one per canvas: blocks, wires, Try Zones, notes) and `.circuit/local.json` (what stays on your computer).
 :::
 
 A project is a folder. All files are JSON, written with stable key order and indentation so they diff well in Git.
 
 ```
 My Bot/
-├─ circuit.json
+├─ circuit.project.json
+├─ commands/
+│  └─ <name>.json
 ├─ workspaces/
 │  └─ <key>.json
 ├─ plugins/          optional: project plugins
-└─ .circuit/         the editor's local state, run folder and bot data (leave out of Git)
+└─ .circuit/         this computer's part (leave out of Git)
+   ├─ local.json     where the bot is uploaded to, database connections, private settings
+   ├─ data/          the bot's stored data
+   └─ run/           the folder the bot runs from
 ```
 
-## circuit.json
+This is **layout 2**, written since XC Circuit 0.3.0. What is shared (what the bot is) and what is yours alone (where it runs) are kept apart, so a project can be put into Git or synced without your server's address in it.
+
+A project of layout 1 (one `circuit.json` holding everything) is brought to layout 2 when it is opened; its `circuit.json` is kept in `.circuit/layout-1/`. Older versions of XC Circuit can't open a layout 2 project: they look for `circuit.json` and find none.
+
+## circuit.project.json
 
 ```json
 {
-  "format": 1,
+  "layout": 2,
+  "id": "8cd7c5b5ae95edcb6b839ba00c48b6ae",
   "name": "DemoBot",
   "mode": "discord-bot",
   "plugins": { "xc.core": "1.0.0", "xc.discord": "1.0.0" },
   "settings": { "prefix": "!" },
-  "data": { "slashCommands": [] },
   "folders": ["Commands", "Events"]
 }
 ```
 
 | Key | Description |
 | --- | --- |
-| `format` | The file format version, `1`. |
+| `layout` | The version of the project folder's layout, `2`. A version of XC Circuit that only knows older layouts doesn't open the project and says which update it needs; a project of an older layout is brought up to date step by step when it opens. |
+| `id` | What tells this project from every other, wherever its folder is. Saved secrets and backups go by it. |
 | `name` | The bot's name. |
 | `mode` | The [build mode](./build-modes) id. |
 | `plugins` | Plugins the project uses, with the versions it was saved with. |
-| `settings` | Bot › Settings values, without secrets. |
-| `data` | Project-wide data: `hosting` (where Bot › Server… uploads the bot: `kind`, `host`, `port`, `user`, `folder`, `panel`, `server` …; no passwords or keys), `slashCommands` (the Slash Command Builder's, in the side bar's order; an entry's `folder` and `disabled` are its side bar folder and whether it's turned off), `slashFolders` (those folders in order), and anything [editor plugins](./editor#changing-the-project) keep. |
+| `settings` | Bot › Settings values that are shared: no secrets, and nothing that says where your databases or servers are. Of `databases` only each one's `id`, `name` and `kind`. |
+| `data` | Project-wide data: `slashFolders` (the side bar's folders for slash commands, in order) and anything [editor plugins](./editor#changing-the-project) keep. |
 | `folders` | Workspace folders in the order of the Workspaces panel. A folder in a folder is its path with `/`, such as `Tickets/Archive`. |
+| `order` | Workspace keys in the side bar's order, when it isn't their files' order (by name). |
+| `commandOrder` | Slash commands in the side bar's order, when it isn't their files' order. |
+
+## Commands
+
+Each file in `commands/` is one slash command: a list of its entries. A plain command has one; a command with subcommands has one per subcommand (and one per group).
+
+```json
+[
+  { "name": "ticket open", "description": "Opens a ticket", "options": [] },
+  { "name": "ticket close", "description": "Closes it", "options": [] }
+]
+```
+
+An entry's `folder` and `disabled` are its side bar folder and whether it's turned off. The file is named after the command (`ticket.json`).
+
+## .circuit/local.json
+
+What belongs to this computer, not to the bot:
+
+```json
+{
+  "hosting": { "kind": "sftp", "host": "203.0.113.7", "user": "bot", "folder": "/home/bot" },
+  "settings": { "devServer": "123456789012345678" },
+  "databases": { "main": { "host": "db.example", "port": 5432, "user": "bot" } }
+}
+```
+
+| Key | Description |
+| --- | --- |
+| `hosting` | Where Bot › Server… uploads the bot (`kind`, `host`, `port`, `user`, `folder`, `panel`, `server` …; no passwords or keys). |
+| `settings` | Private settings, by key. |
+| `databases` | Where each database is, by its id: everything of a connection but its `id`, `name` and `kind`. |
+
+In the editor, to plugins and in the running bot the project is whole: `settings` and `data` hold the shared and the local parts together, as before.
 
 ## Workspaces
 

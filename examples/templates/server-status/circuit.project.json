@@ -1,5 +1,6 @@
 {
-  "format": 1,
+  "layout": 2,
+  "id": "4c8a21a842ac959c5b85c04c85584a59",
   "name": "Server status",
   "mode": "discord-bot",
   "plugins": {
@@ -9,16 +10,6 @@
   },
   "settings": {
     "prefix": "!"
-  },
-  "data": {
-    "slashCommands": [
-      {
-        "name": "status",
-        "description": "Is the Minecraft server up?",
-        "options": [],
-        "dm": false
-      }
-    ]
   },
   "folders": [
     "Commands"

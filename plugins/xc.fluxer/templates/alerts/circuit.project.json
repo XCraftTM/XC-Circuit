@@ -1,6 +1,7 @@
 {
-  "format": 1,
-  "name": "Reminders",
+  "layout": 2,
+  "id": "da1e8a75d95cc711a50d35036b758c60",
+  "name": "Alerts",
   "mode": "fluxer-bot",
   "plugins": {
     "xc.core": "1.0.0",
@@ -8,6 +9,5 @@
   },
   "settings": {
     "prefix": "!"
-  },
-  "data": {}
+  }
 }

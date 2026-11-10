@@ -1,5 +1,6 @@
 {
-  "format": 1,
+  "layout": 2,
+  "id": "00f651045d45672254c953f3f723c30f",
   "name": "Moderation",
   "mode": "fluxer-bot",
   "plugins": {
@@ -8,6 +9,5 @@
   },
   "settings": {
     "prefix": "!"
-  },
-  "data": {}
+  }
 }

@@ -94,6 +94,7 @@ fn reason_text(reason: &str) -> String {
     match reason {
         "Saved" => t!("Saved").into(),
         "Before restore" => t!("Before restore").into(),
+        "Before the new project layout" => t!("Before the new project layout").into(),
         other => other.into(),
     }
 }

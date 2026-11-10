@@ -283,20 +283,20 @@ impl CircuitApp {
         // The last project; the example on the very first start; nothing (the
         // start page) when the last one was closed.
         let closed = last_project.as_ref().is_some_and(|p| p.as_os_str().is_empty());
-        // A project folder (or its circuit.json) given on the command line, or
+        // A project folder (or its circuit.project.json) given on the command line, or
         // in XC_CIRCUIT_PROJECT, opens instead.
         let asked = std::env::var_os("XC_CIRCUIT_PROJECT")
             .map(PathBuf::from)
             .or_else(|| std::env::args_os().nth(1).map(PathBuf::from))
-            .map(|p| if p.ends_with(circuit_core::project::PROJECT_FILE) { p.parent().map(Path::to_path_buf).unwrap_or(p) } else { p })
-            .filter(|p| p.join(circuit_core::project::PROJECT_FILE).is_file());
+            .map(|p| if p.ends_with(circuit_core::project::PROJECT_FILE) || p.ends_with(circuit_core::project::OLD_PROJECT_FILE) { p.parent().map(Path::to_path_buf).unwrap_or(p) } else { p })
+            .filter(|p| circuit_core::project::is_project(p));
         let project = if let Some(p) = asked {
             Some(p)
         } else if closed {
             None
         } else {
             last_project
-                .filter(|p| ed.prefs.reopen_last_project && p.join(circuit_core::project::PROJECT_FILE).is_file())
+                .filter(|p| ed.prefs.reopen_last_project && circuit_core::project::is_project(p))
                 .or_else(|| examples_dir.as_deref().and_then(writable_example))
         };
         if let Some(p) = project {

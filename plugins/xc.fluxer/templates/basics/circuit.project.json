@@ -1,6 +1,7 @@
 {
-  "format": 1,
-  "name": "Verify",
+  "layout": 2,
+  "id": "43f54c32a878b1492209cb798d3ad88c",
+  "name": "Basic commands",
   "mode": "fluxer-bot",
   "plugins": {
     "xc.core": "1.0.0",
@@ -8,6 +9,5 @@
   },
   "settings": {
     "prefix": "!"
-  },
-  "data": {}
+  }
 }

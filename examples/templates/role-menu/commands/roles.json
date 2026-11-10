@@ -1,0 +1,9 @@
+[
+  {
+    "name": "roles",
+    "description": "Post the role menu",
+    "options": [],
+    "permission": "ManageRoles",
+    "dm": false
+  }
+]

@@ -1,0 +1,16 @@
+{
+  "layout": 2,
+  "id": "d9bebfd8250c37944a6257f27ec240e9",
+  "name": "Welcome & auto role",
+  "mode": "discord-bot",
+  "plugins": {
+    "xc.core": "1.0.0",
+    "xc.discord": "1.0.0"
+  },
+  "settings": {
+    "prefix": "!"
+  },
+  "folders": [
+    "Events"
+  ]
+}

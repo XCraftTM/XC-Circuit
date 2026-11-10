@@ -4,7 +4,9 @@
 
 ```
 My Bot/
-├─ circuit.json            the project: name, build mode, settings, slash commands
+├─ circuit.project.json    the project: name, build mode, shared settings
+├─ commands/
+│  └─ rank.json            one file per slash command
 ├─ workspaces/
 │  ├─ welcome.json         one file per workspace
 │  └─ rank-command.json
@@ -14,7 +16,7 @@ My Bot/
 
 Everything is plain, formatted JSON, so a project works well in Git: changes show as readable diffs, and two people can work on different workspaces without conflicts. The exact format is in [Project format](/api/project-format).
 
-What's **not** in the folder: the bot token and other secrets (they're in the [credential store](./safety)), and the editor's own state such as zoom and selection (kept in a hidden `.circuit/` folder that you can leave out of Git).
+What's **not** shared: the bot token and other secrets (they're in the [credential store](./safety)), and what belongs to your computer alone, such as the server the bot is uploaded to, where its databases are and its stored data. Those are kept in a hidden `.circuit/` folder that stays out of Git.
 
 ## Build modes
 

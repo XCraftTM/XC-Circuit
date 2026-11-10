@@ -20,7 +20,11 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use crate::graph::Workspace;
-use crate::project::{PROJECT_FILE, Project, ProjectMeta, WORKSPACE_DIR, write_json};
+use crate::project::{Project, ProjectMeta, WORKSPACE_DIR, write_json};
+
+/// The whole project (settings and data, shared and local) in a snapshot.
+/// Its name is the snapshots' own: they are read only from here.
+const PROJECT_FILE: &str = "circuit.json";
 
 const INFO: &str = "info.json";
 const RECOVERY: &str = "recovery.json";

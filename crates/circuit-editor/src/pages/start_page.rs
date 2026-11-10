@@ -18,7 +18,7 @@ pub enum Pick {
     Example,
 }
 
-/// A recent project as listed: read once from its circuit.json.
+/// A recent project as listed: read once from its project file.
 struct Entry {
     path: String,
     name: String,
@@ -46,7 +46,7 @@ impl StartPage {
 
 fn read_entry(path: &str, reg: &Registry) -> Entry {
     let folder = Path::new(path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.to_string());
-    let meta: Option<serde_json::Value> = std::fs::read_to_string(Path::new(path).join(circuit_core::project::PROJECT_FILE)).ok().and_then(|t| serde_json::from_str(&t).ok());
+    let meta: Option<serde_json::Value> = [circuit_core::project::PROJECT_FILE, circuit_core::project::OLD_PROJECT_FILE].iter().find_map(|file| std::fs::read_to_string(Path::new(path).join(file)).ok()).and_then(|t| serde_json::from_str(&t).ok());
     let text = |k: &str| meta.as_ref().and_then(|m| m.get(k)).and_then(|v| v.as_str()).map(str::to_string);
     let kind = text("mode").map(|m| reg.mode(&m).map(|d| crate::i18n::tr(&d.name).into_owned()).unwrap_or(m)).unwrap_or_default();
     Entry { path: path.to_string(), name: text("name").filter(|n| !n.trim().is_empty()).unwrap_or(folder), kind, exists: meta.is_some() }

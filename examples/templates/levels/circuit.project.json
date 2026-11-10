@@ -1,0 +1,21 @@
+{
+  "layout": 2,
+  "id": "b830eef75979072f01594bf06d5303f8",
+  "name": "Levels & XP",
+  "mode": "discord-bot",
+  "plugins": {
+    "xc.core": "1.0.0",
+    "xc.discord": "1.0.0"
+  },
+  "settings": {
+    "prefix": "!"
+  },
+  "folders": [
+    "Events",
+    "Commands"
+  ],
+  "commandOrder": [
+    "rank",
+    "leaderboard"
+  ]
+}

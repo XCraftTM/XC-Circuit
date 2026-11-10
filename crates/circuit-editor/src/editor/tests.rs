@@ -299,8 +299,8 @@ fn saving_happens_on_its_own_thread() {
     ed.open_project(&dir.join("bot"));
     let other = ed.project.as_ref().unwrap().workspace_path("other");
 
-    // Something in the way of circuit.json: the save fails.
-    let meta = dir.join("bot").join("circuit.json");
+    // Something in the way of the project file: the save fails.
+    let meta = dir.join("bot").join(circuit_core::project::PROJECT_FILE);
     std::fs::remove_file(&meta).unwrap();
     std::fs::create_dir(&meta).unwrap();
     ed.project.as_mut().unwrap().remove_workspace("other");
@@ -475,7 +475,7 @@ fn a_project_s_own_plugins_wait_for_a_yes() {
     // Another folder with the same plugins has to be said yes to itself.
     let copy = dir.join("copy");
     std::fs::create_dir_all(&copy).unwrap();
-    for part in ["circuit.json", "workspaces", "plugins"] {
+    for part in [circuit_core::project::PROJECT_FILE, "workspaces", "plugins"] {
         copy_all(&bot.join(part), &copy.join(part));
     }
     ed.open_project(&copy);

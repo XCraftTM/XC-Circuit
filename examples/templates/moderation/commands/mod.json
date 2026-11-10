@@ -1,0 +1,68 @@
+[
+  {
+    "name": "mod kick",
+    "description": "Kick a member",
+    "options": [
+      {
+        "name": "target",
+        "type": "user",
+        "description": "Who",
+        "required": true
+      },
+      {
+        "name": "reason",
+        "type": "string",
+        "description": "Why (shown in the audit log)",
+        "required": false
+      }
+    ],
+    "permission": "KickMembers",
+    "dm": false
+  },
+  {
+    "name": "mod ban",
+    "description": "Ban a member",
+    "options": [
+      {
+        "name": "target",
+        "type": "user",
+        "description": "Who",
+        "required": true
+      },
+      {
+        "name": "reason",
+        "type": "string",
+        "description": "Why (shown in the audit log)",
+        "required": false
+      }
+    ],
+    "dm": false
+  },
+  {
+    "name": "mod timeout",
+    "description": "Time out a member",
+    "options": [
+      {
+        "name": "target",
+        "type": "user",
+        "description": "Who",
+        "required": true
+      },
+      {
+        "name": "minutes",
+        "type": "integer",
+        "description": "How long",
+        "required": true,
+        "min": 1,
+        "max": 40320
+      },
+      {
+        "name": "reason",
+        "type": "string",
+        "description": "Why (shown in the audit log)",
+        "required": false
+      }
+    ],
+    "dm": false
+  }
+]
