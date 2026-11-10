@@ -1637,6 +1637,14 @@ The sign-in is kept in your system's credential store, one per place (`github.co
 
 When newer changes are stored there, Store says so: press **Fetch** first, then **Store** again.
 
+## Earlier versions
+
+Every Store is a version. **Earlier versions** in File › Git… lists the newest ones with their words, who stored them and when. **Go back to this** makes the project what it was then, as a new version on top: nothing in between is lost, and you can go back to where you were the same way.
+
+## Before something secret is stored
+
+When a block holds something that looks like a secret (a webhook address, a bot token, an access key), Store stops and shows where. Whoever can read the repository could read it. Keep such things in **Bot › Settings** instead; or press **Store anyway** if it is meant to be there.
+
 ## On another computer
 
 **File › Get from Git…** (also on the start page) brings a stored project onto a computer: paste the repository's address, choose where its folder goes, sign in if the repository is private, and press **Get the project**. It opens right away. Then fill in the bot token once in **Bot › Settings**; it was never stored.
@@ -1657,6 +1665,7 @@ Never stored: the `.circuit/` folder. That is this computer's part: where the bo
 
 - A repository you set up yourself with Git works too: File › Git… uses it as it is, and adds `.circuit/` to its `.gitignore`.
 - Files are stored byte for byte, whatever line-ending setting your own Git has, so a project is the same on Windows and Linux.
+- When a project opens, XC Circuit looks whether newer versions are stored there (nothing is changed), so the status bar can say **Git: 2 to fetch**.
 - The status bar shows how the project stands: **Git: stored**, or how many changes wait to be stored or fetched. Click it to open File › Git…. Store, Fetch and the dialog can each get a shortcut in Settings › Shortcuts.
 
 

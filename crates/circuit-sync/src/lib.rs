@@ -82,6 +82,17 @@ pub struct Versions {
     pub theirs: Option<Vec<u8>>,
 }
 
+/// A stored version, for the history.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Version {
+    pub id: String,
+    /// The words that went with it.
+    pub message: String,
+    pub who: String,
+    /// When, in seconds since 1970.
+    pub when: i64,
+}
+
 /// A project's repository.
 pub struct Sync {
     repo: Repository,
@@ -344,6 +355,41 @@ impl Sync {
         Ok(Merged::Updated(paths_of(&self.repo, Some(&before), &tree)?))
     }
 
+    /// The newest stored versions, newest first.
+    pub fn history(&self, limit: usize) -> Result<Vec<Version>> {
+        let Some(tip) = self.tip() else { return Ok(Vec::new()) };
+        let mut walk = self.repo.revwalk()?;
+        walk.push(tip.id())?;
+        walk.simplify_first_parent()?;
+        let mut out = Vec::new();
+        for id in walk.take(limit) {
+            let commit = self.repo.find_commit(id?)?;
+            out.push(Version { id: commit.id().to_string(), message: commit.summary().ok().flatten().unwrap_or_default().to_string(), who: commit.author().name().unwrap_or_default().to_string(), when: commit.time().seconds() });
+        }
+        Ok(out)
+    }
+
+    /// Makes the project what it was in the version `id`, as a new version
+    /// on top: nothing in between is lost, and going back can be undone the
+    /// same way. What changed here must be stored first. Gives the files
+    /// that changed.
+    pub fn go_back(&self, id: &str, who: &Who) -> Result<Vec<String>> {
+        if !self.state()?.changed.is_empty() {
+            bail!("Store what changed here first.");
+        }
+        let tip = self.tip().ok_or_else(|| anyhow!("Nothing is stored yet."))?;
+        let then = self.repo.find_commit(Oid::from_str(id)?).map_err(|_| anyhow!("That version isn't in this project's history."))?;
+        let (now, tree) = (tip.tree()?, then.tree()?);
+        if now.id() == tree.id() {
+            return Ok(Vec::new());
+        }
+        let sig = signature(who)?;
+        let words = then.summary().ok().flatten().unwrap_or_default().to_string();
+        self.repo.commit(Some("HEAD"), &sig, &sig, &format!("Back to: {words}"), &tree, &[&tip])?;
+        self.checkout()?;
+        paths_of(&self.repo, Some(&now), &tree)
+    }
+
     /// Makes the folder what the branch's newest version says. Only called
     /// with everything here stored, so nothing of the user's is lost.
     fn checkout(&self) -> Result<()> {
@@ -576,6 +622,24 @@ mod tests {
         b.send(&none).unwrap();
         a.fetch(&none).unwrap();
         assert_eq!(a.merge(&nothing, &who("a")).unwrap(), Merged::Updated(vec!["workspaces/b.json".into()]));
+
+        // The history, newest first; going back makes a new version on top.
+        let history = a.history(50).unwrap();
+        assert_eq!(history.len(), a.history(3).unwrap().len().max(history.len()));
+        assert!(history.iter().any(|v| v.message == "The first version" && v.who == "a") && history[0].when >= history.last().unwrap().when);
+        let first = history.last().unwrap().clone();
+        assert!(a_dir.join("workspaces/a.json").is_file());
+        let changed = a.go_back(&first.id, &who("a")).unwrap();
+        assert!(changed.contains(&"workspaces/a.json".to_string()) && !a_dir.join("workspaces/a.json").exists(), "{changed:?}");
+        assert_eq!(a.history(1).unwrap()[0].message, "Back to: The first version");
+        // And forward again, to where it was.
+        let before = a.history(2).unwrap()[1].id.clone();
+        a.go_back(&before, &who("a")).unwrap();
+        assert!(a_dir.join("workspaces/a.json").is_file() && a.go_back(&before, &who("a")).unwrap().is_empty());
+        assert!(a.go_back("0000000000000000000000000000000000000001", &who("a")).unwrap_err().to_string().contains("isn't in this project's history"));
+        a.send(&none).unwrap();
+        b.fetch(&none).unwrap();
+        b.merge(&nothing, &who("b")).unwrap();
 
         // One deletes a file the other changed; keeping mine keeps it deleted.
         fs::remove_file(a_dir.join("commands/ping.json")).unwrap();

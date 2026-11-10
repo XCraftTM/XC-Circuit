@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use circuit_runner::secrets;
 use circuit_sync::github::{self, Answer};
-use circuit_sync::{Login, Merged, Side, State, Sync, Who};
+use circuit_sync::{Login, Merged, Side, State, Sync, Version, Who};
 use eframe::egui::{self, RichText};
 
 use crate::editor::{Editor, Level};
@@ -22,7 +22,11 @@ use crate::ui::kit;
 /// What a job on its own thread came back with.
 enum Done {
     /// How the project stands, and who is signed in at its place.
-    Read(Result<Option<State>, String>, Option<String>),
+    Read(Result<Option<State>, String>, Option<String>, Vec<Version>),
+    /// Looked whether newer versions are stored there.
+    Checked,
+    /// Went back to an earlier version: how many files changed.
+    WentBack(Result<usize, String>),
     Connected(Result<(), String>),
     Stored(Result<&'static str, String>),
     Fetched(Result<Merged, String>),
@@ -46,6 +50,56 @@ struct Asked {
 pub struct GetDraft {
     location: String,
     name: String,
+}
+
+/// What in a text looks like a secret that shouldn't be stored where others
+/// can read it.
+fn looks_secret(text: &str) -> Option<&'static str> {
+    use std::sync::OnceLock;
+    static PATTERNS: OnceLock<Vec<(regex::Regex, u8)>> = OnceLock::new();
+    let patterns = PATTERNS.get_or_init(|| {
+        [
+            (r"https://(?:\w+\.)?discord(?:app)?\.com/api/webhooks/\d+/[\w-]+", 0),
+            (r"\b[\w-]{24,28}\.[\w-]{6}\.[\w-]{27,}", 1),
+            (r"\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_\w{30,}|sk-[A-Za-z0-9_-]{20,}|xox[abprs]-[A-Za-z0-9-]{10,})", 2),
+            (r"-----BEGIN [A-Z ]*PRIVATE KEY-----", 3),
+        ]
+        .into_iter()
+        .map(|(p, kind)| (regex::Regex::new(p).unwrap(), kind))
+        .collect()
+    });
+    let kind = patterns.iter().find(|(re, _)| re.is_match(text))?.1;
+    Some(match kind {
+        0 => t!("a webhook address"),
+        1 => t!("a bot token"),
+        2 => t!("an access key"),
+        _ => t!("a private key"),
+    })
+}
+
+/// Where the project's blocks hold something that looks like a secret.
+fn secrets_in(project: &circuit_core::Project) -> Vec<String> {
+    fn walk(v: &serde_json::Value, found: &mut Option<&'static str>) {
+        match v {
+            serde_json::Value::String(s) if found.is_none() => *found = looks_secret(s),
+            serde_json::Value::Array(a) => a.iter().for_each(|v| walk(v, found)),
+            serde_json::Value::Object(o) => o.values().for_each(|v| walk(v, found)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    for ws in project.workspaces.values() {
+        for (id, node) in &ws.nodes {
+            for (field, value) in &node.values {
+                let mut found = None;
+                walk(value, &mut found);
+                if let Some(what) = found {
+                    out.push(format!("{} › #{id} › {field}: {what}", ws.name));
+                }
+            }
+        }
+    }
+    out
 }
 
 /// The folder name an address suggests: `my-bot` for `…/you/my-bot.git`.
@@ -87,6 +141,15 @@ pub struct GitUi {
     pub get: Option<GetDraft>,
     /// The project that Get from Git brought, for the app to open.
     got: Option<PathBuf>,
+    /// The newest stored versions, and whether the list shows.
+    history: Vec<Version>,
+    show_history: bool,
+    /// Whether newer versions were looked for since the project opened.
+    checked: bool,
+    /// What looks like a secret in the project's blocks, found when Store
+    /// was pressed; and that the user said to store it anyway.
+    secrets: Vec<String>,
+    secrets_ok: bool,
     /// The project and its number of saves when its repository was last
     /// read, to read it again after the next save.
     seen: Option<(PathBuf, u64)>,
@@ -151,13 +214,14 @@ impl GitUi {
         let typed = host_of(&self.address);
         self.run(None, move || {
             // Without a project (Get from Git) only who is signed in.
-            let state = match &root {
-                Some(root) => Sync::open(root).and_then(|s| s.map(|s| s.state()).transpose()).map_err(said),
-                None => Ok(None),
+            let (state, history) = match root.as_deref().map(Sync::open) {
+                Some(Ok(Some(sync))) => (sync.state().map(Some).map_err(said), sync.history(30).unwrap_or_default()),
+                Some(Err(e)) => (Err(said(e)), Vec::new()),
+                _ => (Ok(None), Vec::new()),
             };
             let host = typed.or_else(|| state.as_ref().ok().and_then(|s| s.as_ref()).and_then(|s| s.remote.as_deref()).and_then(host_of));
             let account = host.and_then(|h| secrets::sync_login(&h)).map(|(user, _)| if user.is_empty() { "…".to_string() } else { user });
-            Done::Read(state, account)
+            Done::Read(state, account, history)
         });
     }
 
@@ -213,6 +277,17 @@ impl GitUi {
         // A repository set up by hand at an address with no place to sign in
         // at (a folder, say) is used as it is.
         let host = host_of(&remote).unwrap_or_default();
+        // Something in a block that looks like a secret: asked about first,
+        // as whoever can read the repository can read it.
+        if !self.secrets_ok {
+            let found = ed.project.as_ref().map(secrets_in).unwrap_or_default();
+            if !found.is_empty() {
+                self.secrets = found;
+                self.open = true;
+                return;
+            }
+        }
+        self.secrets.clear();
         ed.save();
         ed.finish_saving();
         let message = if self.message.trim().is_empty() { "Changes".to_string() } else { self.message.trim().to_string() };
@@ -228,6 +303,43 @@ impl GitUi {
                 Ok("stored")
             })()
             .map_err(said))
+        });
+    }
+
+    /// Goes back to an earlier version: what changed here is recorded
+    /// first, and going back is a new version on top, so nothing is lost.
+    fn go_back(&mut self, ed: &mut Editor, id: String) {
+        let Some(root) = self.root.clone() else { return };
+        let remote = self.state.as_ref().and_then(|s| s.remote.clone());
+        let host = remote.as_deref().and_then(host_of).unwrap_or_default();
+        ed.save();
+        ed.finish_saving();
+        self.run(Some("Going back"), move || {
+            Done::WentBack((|| {
+                let login = login_of(&host);
+                let who = who_of(&host, &login);
+                let Some(sync) = Sync::open(&root)? else { anyhow::bail!("The project has no repository yet.") };
+                sync.store("Changes on this computer", &who)?;
+                let files = sync.go_back(&id, &who)?;
+                // Sent too, where that works now; otherwise with the next Store.
+                if remote.is_some() {
+                    let _ = sync.send(&login);
+                }
+                Ok(files.len())
+            })()
+            .map_err(said))
+        });
+    }
+
+    /// Looks whether newer versions are stored there, without changing
+    /// anything: the status bar then says so.
+    fn check(&mut self) {
+        let (Some(root), Some(host)) = (self.root.clone(), self.state.as_ref().and_then(|s| s.remote.as_deref()).and_then(host_of)) else { return };
+        self.run(None, move || {
+            if let Ok(Some(sync)) = Sync::open(&root) {
+                let _ = sync.fetch(&login_of(&host));
+            }
+            Done::Checked
         });
     }
 
@@ -336,7 +448,7 @@ impl GitUi {
 
     fn take(&mut self, done: Done, ed: &mut Editor) {
         match done {
-            Done::Read(state, account) => {
+            Done::Read(state, account, history) => {
                 match state {
                     Ok(state) => {
                         if self.address.trim().is_empty() {
@@ -347,6 +459,27 @@ impl GitUi {
                     Err(e) => self.said = Some((false, e)),
                 }
                 self.account = account;
+                self.history = history;
+                // Once per project: is something newer stored there?
+                if !self.checked && self.account.is_some() && self.state.as_ref().is_some_and(|s| s.remote.is_some()) {
+                    self.checked = true;
+                    self.check();
+                }
+            }
+            Done::Checked => self.read(),
+            Done::WentBack(result) => {
+                match result {
+                    Ok(count) => {
+                        if let Some(root) = self.root.clone() {
+                            ed.open_project(&root);
+                        }
+                        let text = tf!("Went back. Files changed: {count}", count = count);
+                        ed.log(Level::Success, text.clone());
+                        self.said = Some((true, text));
+                    }
+                    Err(e) => self.said = Some((false, e)),
+                }
+                self.read();
             }
             Done::Connected(result) => {
                 self.said = Some(match result {
@@ -640,6 +773,7 @@ impl GitUi {
         let connected = remote.as_deref().is_some_and(|r| r == self.address.trim());
         let signed_in = self.account.is_some();
         let (mut connect, mut store, mut fetch, mut close, mut github_in, mut token_in, mut out, mut cancel, mut retyped) = (false, false, false, false, false, false, false, false, false);
+        let (mut anyway, mut not_now, mut back) = (false, false, None::<String>);
         dialog::tab(
             ui,
             &theme,
@@ -691,6 +825,44 @@ impl GitUi {
                         }
                         ui.add_space(6.0);
                         kit::field(ui, &theme, t!("What did you change?"), Some(t!("A few words that go with this version, such as: a welcome message.")), |ui| kit::text_input(ui, &mut self.message, "", false));
+                    }
+                    if !self.secrets.is_empty() {
+                        ui.add_space(8.0);
+                        kit::note(
+                            ui,
+                            &icons,
+                            &theme,
+                            "warning",
+                            t!("This looks like a secret"),
+                            t!("Nothing was stored yet. Whoever runs the place the project is stored at can read it, and so can everyone the repository is shared with. Better: keep it in Bot › Settings and use it from there."),
+                        );
+                        for line in &self.secrets {
+                            ui.label(RichText::new(format!("  {line}")).size(11.5).color(theme.text_muted));
+                        }
+                        ui.horizontal(|ui| {
+                            anyway = kit::secondary_button(ui, &theme, t!("Store anyway")).clicked();
+                            not_now = kit::secondary_button(ui, &theme, t!("Don't store")).clicked();
+                        });
+                    }
+                    if connected && !self.history.is_empty() {
+                        ui.add_space(8.0);
+                        let label = if self.show_history { t!("Hide earlier versions") } else { t!("Earlier versions") };
+                        if kit::link(ui, &theme, label, egui::FontId::proportional(13.0)).clicked() {
+                            self.show_history = !self.show_history;
+                        }
+                        if self.show_history {
+                            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or_default();
+                            for (i, version) in self.history.iter().enumerate() {
+                                ui.horizontal(|ui| {
+                                    let words: String = version.message.chars().take(60).collect();
+                                    ui.label(RichText::new(words).size(12.5));
+                                    ui.label(RichText::new(format!("{} · {}", version.who, crate::bot::ago(Duration::from_secs((now - version.when).max(0) as u64)))).size(11.5).color(theme.text_muted));
+                                    if i > 0 && busy.is_none() && kit::link(ui, &theme, t!("Go back to this"), egui::FontId::proportional(12.0)).on_hover_text(t!("Makes the project what it was then, as a new version: nothing in between is lost")).clicked() {
+                                        back = Some(version.id.clone());
+                                    }
+                                });
+                            }
+                        }
                     }
                     if !self.conflicts.is_empty() {
                         ui.add_space(8.0);
@@ -761,6 +933,16 @@ impl GitUi {
         if store {
             self.store(ed);
         }
+        if anyway {
+            self.secrets_ok = true;
+            self.store(ed);
+        }
+        if not_now {
+            self.secrets.clear();
+        }
+        if let Some(id) = back {
+            self.go_back(ed, id);
+        }
         if fetch {
             self.fetch(ed);
         }
@@ -775,6 +957,7 @@ fn busy_text(what: &str) -> &'static str {
         "Connecting" => t!("Connecting"),
         "Storing" => t!("Storing"),
         "Fetching" => t!("Fetching"),
+        "Going back" => t!("Going back"),
         _ => t!("Signing in"),
     }
 }
@@ -833,6 +1016,15 @@ mod tests {
         assert!(state.remote.as_deref() == Some(stored.as_str()) && state.changed.iter().any(|f| f == "workspaces/main.json"), "{state:?}");
         assert_eq!(ui.address, stored, "the address it is stored at shows");
 
+        // A webhook address in a block: asked about before anything is stored.
+        let node = circuit_core::graph::Node { block: "core.log@1".into(), values: serde_json::json!({ "message": "to https://discord.com/api/webhooks/123456789012345678/abcDEF_ghi-jkl" }).as_object().cloned().unwrap(), ..Default::default() };
+        ed.project.as_mut().unwrap().workspaces["main"].nodes.insert("1".into(), node);
+        ui.store(&mut ed);
+        assert!(ui.jobs.is_empty() && ui.secrets.len() == 1 && ui.secrets[0].contains("#1 › message"), "{:?}", ui.secrets);
+        ed.project.as_mut().unwrap().workspaces["main"].nodes.clear();
+        assert!(looks_secret(&["MTIzNDU2Nzg5MDEyMzQ1Njc4OTAx", "GaBcDe", "abcdefghijklmnopqrstuvwxyz0123456789ab"].join(".")).is_some() && looks_secret("ghp_abcdefghijklmnopqrstuvwxyz0123456789").is_some());
+        assert!(looks_secret("Hello ${user}, see https://discord.com/channels/1/2").is_none() && looks_secret("1.2.3").is_none());
+
         ui.message = "The first version".into();
         ui.store(&mut ed);
         wait(&mut ui, &mut ed);
@@ -875,6 +1067,15 @@ mod tests {
         assert!(ui.conflicts.is_empty(), "{:?}", ui.said);
         assert_eq!(ed.project.as_ref().unwrap().workspaces["main"].name, "Theirs again");
         assert_eq!(ui.state.as_ref().map(|s| (s.ahead, s.behind, s.changed.len())), Some((0, 0, 0)), "put together and sent");
+
+        // The history, and going back to the first version.
+        assert!(ui.history.len() >= 4 && ui.history.last().unwrap().message == "The first version", "{:?}", ui.history);
+        let first = ui.history.last().unwrap().id.clone();
+        ui.go_back(&mut ed, first);
+        wait(&mut ui, &mut ed);
+        assert_eq!(ed.project.as_ref().unwrap().workspaces["main"].name, "Main", "{:?}", ui.said);
+        assert_eq!(ui.history[0].message, "Back to: The first version");
+        assert_eq!(ui.state.as_ref().map(|s| s.ahead), Some(0), "and sent");
 
         // Getting it onto another computer: into a new folder, by its name.
         let mut get = GitUi::new();
