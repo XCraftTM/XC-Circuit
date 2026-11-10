@@ -122,7 +122,7 @@ pub fn build_bundle(project: &Project, reg: &Registry, mode: Option<&BuildMode>)
         settings.insert(key.clone(), value.clone());
     }
 
-    // The project's data without where Bot › Server… uploads it (address,
+    // The project's data without where Bot › Remote… uploads it (address,
     // user name, folder): the bot has no use for it, and exports get shared.
     let mut data = project.meta.data.clone();
     data.remove("hosting");

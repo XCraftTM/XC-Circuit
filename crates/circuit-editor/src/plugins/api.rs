@@ -214,7 +214,7 @@ pub trait Host {
     fn set_bot_settings(&mut self, _values: &serde_json::Value) -> Result<serde_json::Value, String> {
         Err("this editor can't change bot settings for plugins".into())
     }
-    /// The bot's server (Bot › Server…): where it uploads, whether Run acts
+    /// The bot's server (Bot › Remote…): where it uploads, whether Run acts
     /// there, the server's state, the last upload and the server console's
     /// last lines. Never passwords or keys.
     fn server(&self) -> serde_json::Value {

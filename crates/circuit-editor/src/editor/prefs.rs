@@ -76,7 +76,7 @@ pub struct Prefs {
     /// Projects (folders) whose Run buttons act on their server: Server is
     /// picked beside Run.
     pub remote_bots: Vec<String>,
-    /// The server each project (folder) was last saved with in Bot › Server…
+    /// The server each project (folder) was last saved with in Bot › Remote…
     /// on this computer. A project's server settings travel with its files;
     /// its password, API key and the bot token only go to the one kept here.
     pub approved_servers: std::collections::BTreeMap<String, String>,

@@ -1,6 +1,6 @@
-//! Putting the bot on its server: Bot › Server… sets where it goes (SFTP
+//! Putting the bot on its server: Bot › Remote… sets where it goes (SFTP
 //! or a Calagopus panel) and uploads it, by hand or after every save.
-//! For a Calagopus server there's also Bot › Server console: its state,
+//! For a Calagopus server there's also Bot › Remote console: its state,
 //! Start / Restart / Stop, and its live console.
 //!
 //! The settings are kept in the project (`data.hosting`); passwords and API
@@ -52,7 +52,7 @@ fn project_key(ed: &Editor) -> Option<String> {
 }
 
 /// Whether the server in the project's files is the one last saved in
-/// Bot › Server… on this computer. The settings travel with the project (a
+/// Bot › Remote… on this computer. The settings travel with the project (a
 /// plugin, an AI agent or a Git pull can change them); the password, the API
 /// key and the bot token don't, and are only sent to a server the user has
 /// seen and saved.
@@ -156,7 +156,7 @@ impl HostingUi {
         HostingUi { draft: None, job: None, log: VecDeque::new(), outcome: None, seen_saves: None, again: false, sign_in: None, servers: None, console: None, remote: false, watch: None, controllable: None, power: None, view_at: None }
     }
 
-    /// Bot › Server…: the tab with the project's settings.
+    /// Bot › Remote…: the tab with the project's settings.
     pub fn open(&mut self, ed: &Editor) {
         if ed.project.is_none() {
             return;
@@ -368,7 +368,7 @@ impl HostingUi {
                 if let Some(w) = &mut self.watch {
                     w.forget_expect();
                 }
-                ed.log(Level::Error, tf!("The server didn't stop: {error}", error = e));
+                ed.log(Level::Error, tf!("The remote didn't stop: {error}", error = e));
             }
         }
         // What plugins and agents see of it (xc.server()), twice a second.
@@ -423,7 +423,7 @@ impl HostingUi {
             return;
         }
         if !self.can_control(ed) {
-            ed.log(Level::Warn, t!("The server can't be started or stopped from here: choose a Calagopus server in Bot › Server… and sign in."));
+            ed.log(Level::Warn, t!("The remote can't be started or stopped from here: choose a Calagopus server in Bot › Remote… and sign in."));
             return;
         }
         match action {
@@ -541,7 +541,7 @@ impl HostingUi {
         if approved(ed) {
             return false;
         }
-        ed.log(Level::Warn, t!("Nothing was sent: this project's server isn't the one you saved on this computer. Look at it in Bot › Server… and press Save to use it."));
+        ed.log(Level::Warn, t!("Nothing was sent: this project's remote isn't the one you saved on this computer. Look at it in Bot › Remote… and press Save to use it."));
         true
     }
 
@@ -564,7 +564,7 @@ impl HostingUi {
         let h = settings_of(ed);
         // What's missing first: without it nothing would be sent anyway.
         if let Some(what) = h.missing(&saved_secrets(ed)) {
-            ed.log(Level::Warn, tf!("Not uploaded: {what} (Bot › Server…)", what = missing_text(what)));
+            ed.log(Level::Warn, tf!("Not uploaded: {what} (Bot › Remote…)", what = missing_text(what)));
             return;
         }
         if self.another_server(ed) {
@@ -606,9 +606,9 @@ impl HostingUi {
                 (Ok(text), Some(action)) => {
                     let panel = calagopus::Panel::new(&h.panel, s.api_key.as_deref().unwrap_or_default());
                     match panel.power(&h.server, action) {
-                        Ok(()) if action == "restart" => Ok(format!("{text} {}", t!("Restarting the bot on the server."))),
-                        Ok(()) => Ok(format!("{text} {}", t!("Starting the bot on the server."))),
-                        Err(e) => Err(tf!("Uploaded, but the server didn't start: {error}", error = format!("{e:#}"))),
+                        Ok(()) if action == "restart" => Ok(format!("{text} {}", t!("Restarting the bot on the remote."))),
+                        Ok(()) => Ok(format!("{text} {}", t!("Starting the bot on the remote."))),
+                        Err(e) => Err(tf!("Uploaded, but the remote didn't start: {error}", error = format!("{e:#}"))),
                     }
                 }
                 (said, _) => said,
@@ -636,10 +636,10 @@ impl HostingUi {
         });
     }
 
-    /// Bot › Server console, for a Calagopus server.
+    /// Bot › Remote console, for a Calagopus server.
     pub fn open_console(&mut self, ed: &mut Editor) {
         if !self.restore_console(ed) {
-            ed.log(Level::Warn, t!("The server console is for a Calagopus server: choose one in Bot › Server… first."));
+            ed.log(Level::Warn, t!("The remote console is for a Calagopus server: choose one in Bot › Remote… first."));
             self.open(ed);
         }
     }
@@ -679,7 +679,7 @@ impl HostingUi {
         dialog::tab(
             ui,
             &theme,
-            dialog::Spec { id: "hosting", title: t!("Server"), subtitle: Some(t!("Upload the bot to the server it runs on, by hand or after every save")), icon: icon.as_deref(), width: 640.0 },
+            dialog::Spec { id: "hosting", title: t!("Remote"), subtitle: Some(t!("Upload the bot to the remote it runs on, by hand or after every save")), icon: icon.as_deref(), width: 640.0 },
             |ui, part| match part {
                 Part::Body => {
                     if let Some(icons) = &another {
@@ -688,7 +688,7 @@ impl HostingUi {
                             icons,
                             &theme,
                             "warning",
-                            t!("Check this server"),
+                            t!("Check this remote"),
                             t!("These settings came with the project's files: they aren't the ones you last saved on this computer. Your saved password or API key and the bot token are only sent there once you press Save."),
                         );
                         ui.add_space(10.0);
@@ -709,7 +709,7 @@ impl HostingUi {
                             ui.label(RichText::new(missing_text(circuit_runner::hosting::FTP_GONE)).color(theme.warning));
                         }
                         Kind::Sftp => {
-                            kit::field(ui, &theme, t!("Server address"), Some(t!("Its name or IP address, such as node1.example.com.")), |ui| kit::text_input(ui, &mut d.h.host, "example.com", false));
+                            kit::field(ui, &theme, t!("Remote address"), Some(t!("Its name or IP address, such as node1.example.com.")), |ui| kit::text_input(ui, &mut d.h.host, "example.com", false));
                             kit::field(ui, &theme, t!("Port"), Some(t!("Usually 22 (game panels often use 2022).")), |ui| {
                                 let mut port = if d.h.port == 0 { String::new() } else { d.h.port.to_string() };
                                 if kit::text_input(ui, &mut port, "22", false).changed() {
@@ -724,7 +724,7 @@ impl HostingUi {
                                 let w = ui.available_width();
                                 kit::path(ui, &theme, &mut d.h.key_file, "", false, w)
                             });
-                            kit::field(ui, &theme, t!("Folder on the server"), Some(t!("Where the bot's files go, made when missing. Empty: the folder you start in after logging in.")), |ui| kit::text_input(ui, &mut d.h.folder, "bots/my-bot", false));
+                            kit::field(ui, &theme, t!("Folder on the remote"), Some(t!("Where the bot's files go, made when missing. Empty: the folder you start in after logging in.")), |ui| kit::text_input(ui, &mut d.h.folder, "bots/my-bot", false));
                         }
                         Kind::Calagopus => {
                             if kit::field(ui, &theme, t!("Panel address"), Some(t!("The address you open the panel at.")), |ui| kit::text_input(ui, &mut d.h.panel, "https://panel.example.com", false)).changed() {
@@ -755,7 +755,7 @@ impl HostingUi {
                             if kit::field(ui, &theme, t!("API key"), None, |ui| kit::text_input(ui, &mut d.api_key, hint, true)).changed() {
                                 d.typed_at = Some(std::time::Instant::now());
                             }
-                            kit::field(ui, &theme, t!("Server"), d.servers_problem.as_deref(), |ui| {
+                            kit::field(ui, &theme, t!("Remote"), d.servers_problem.as_deref(), |ui| {
                                 ui.horizontal(|ui| {
                                     let shown = if d.h.server_name.is_empty() { t!("Choose a server").to_string() } else { d.h.server_name.clone() };
                                     kit::dropdown(ui, egui::Id::unique("hosting-server"), 300.0, shown, |ui| {
@@ -790,24 +790,24 @@ impl HostingUi {
                                     }
                                 });
                             });
-                            kit::field(ui, &theme, t!("Folder on the server (optional)"), Some(t!("Empty: the server's own folder, where its start command looks.")), |ui| kit::text_input(ui, &mut d.h.folder, "", false));
+                            kit::field(ui, &theme, t!("Folder on the remote (optional)"), Some(t!("Empty: the server's own folder, where its start command looks.")), |ui| kit::text_input(ui, &mut d.h.folder, "", false));
                             kit::toggle_row(ui, &theme, &mut d.h.restart, t!("Restart the server after uploading"), t!("So the new version of the bot runs right away."));
                         }
                         Kind::None => {
-                            ui.label(RichText::new(t!("Choose how the bot gets to the server it runs on. Export (Bot › Export…) makes a folder to copy there by hand.")).color(theme.text_muted));
+                            ui.label(RichText::new(t!("Choose how the bot gets to the remote it runs on. Export (Bot › Export…) makes a folder to copy there by hand.")).color(theme.text_muted));
                         }
                     }
                     if d.h.kind != Kind::None {
                         kit::section(ui, &theme, t!("When"));
-                        kit::toggle_row(ui, &theme, &mut d.h.auto_upload, t!("Upload after every save"), t!("Ctrl+S also puts the new version on the server. Only files that changed are sent."));
+                        kit::toggle_row(ui, &theme, &mut d.h.auto_upload, t!("Upload after every save"), t!("Ctrl+S also puts the new version on the remote. Only files that changed are sent."));
                         kit::toggle_row(
                             ui,
                             &theme,
                             &mut d.h.include_token,
                             t!("Send the bot token"),
-                            &tf!("Uploads .env with {variable} and the other secrets, so the bot can log in there. Turn it off to fill in .env on the server yourself.", variable = token_env),
+                            &tf!("Uploads .env with {variable} and the other secrets, so the bot can log in there. Turn it off to fill in .env on the remote yourself.", variable = token_env),
                         );
-                        kit::hint(ui, &theme, t!("The server needs Node.js 22 or newer and runs npm install itself (game panels' Node.js servers do that when they start). Its data/ folder is never touched."));
+                        kit::hint(ui, &theme, t!("The remote needs Node.js 22 or newer and runs npm install itself (game panels' Node.js servers do that when they start). Its data/ folder is never touched."));
                     }
                     if busy.is_some() || !log.is_empty() {
                         kit::section(ui, &theme, t!("What happened"));
@@ -874,15 +874,15 @@ impl HostingUi {
 /// What [`Hosting::missing`] says, in the interface's language.
 fn missing_text(english: &str) -> &'static str {
     match english {
-        "Choose how the bot gets to its server." => t!("Choose how the bot gets to its server."),
-        "Fill in the server's address." => t!("Fill in the server's address."),
+        "Choose how the bot gets to its remote." => t!("Choose how the bot gets to its remote."),
+        "Fill in the remote's address." => t!("Fill in the remote's address."),
         "Fill in the user name." => t!("Fill in the user name."),
         "Fill in the password, or choose a key file." => t!("Fill in the password, or choose a key file."),
         circuit_runner::hosting::FTP_GONE => t!("FTP is no longer offered: it sends the password and the bot token unprotected. Choose SFTP or a Calagopus panel."),
         "Fill in the panel's address." => t!("Fill in the panel's address."),
         "Sign in to the panel, or paste an API key." => t!("Sign in to the panel, or paste an API key."),
         "Choose the server." => t!("Choose the server."),
-        _ => t!("Something is missing in the server settings."),
+        _ => t!("Something is missing in the remote settings."),
     }
 }
 
@@ -1197,7 +1197,7 @@ mod tests {
 
     /// A project's server settings travel with its files; its saved password
     /// or key and the bot token only go to the server saved on this computer
-    /// (in Bot › Server…).
+    /// (in Bot › Remote…).
     #[test]
     fn secrets_only_go_to_the_server_saved_here() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -1221,7 +1221,7 @@ mod tests {
         assert_eq!(ui.view(&ed)["savedHere"], false);
         assert!(secrets_of(&ed).password.is_none() && secrets_of(&ed).api_key.is_none());
 
-        // Saved in Bot › Server…: now it's the one.
+        // Saved in Bot › Remote…: now it's the one.
         ui.open(&ed);
         assert!(ui.save_draft(&mut ed));
         assert!(approved(&ed));

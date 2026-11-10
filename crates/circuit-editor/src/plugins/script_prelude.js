@@ -186,7 +186,7 @@
     botSettings: () => host("botSettings"),
     /** Changes Bot › Settings ({ key: value }; not secrets). Returns the keys changed. */
     setBotSettings: (values) => host("setBotSettings", values),
-    /** The bot's server (Bot › Server…): where it uploads, Run's target, its state, the last upload, its console. Null without a project. */
+    /** The bot's server (Bot › Remote…): where it uploads, Run's target, its state, the last upload, its console. Null without a project. */
     server: () => host("server"),
     /** A block of a workspace as it is now: its values and pins, with their types. */
     blockPins: (workspace, block) => host("blockPins", workspace, String(block)),

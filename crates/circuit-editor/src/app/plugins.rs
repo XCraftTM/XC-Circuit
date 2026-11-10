@@ -262,7 +262,7 @@ impl CircuitApp {
                 "bot.run" => self.run_command(Cmd::Run, ctx),
                 "bot.stop" => self.run_command(Cmd::Stop, ctx),
                 "file.save" => self.run_command(Cmd::Save, ctx),
-                // The bot's server (Bot › Server…).
+                // The bot's server (Bot › Remote…).
                 "server.upload" => self.bot.hosting.upload(&mut self.ed),
                 "server.start" | "server.restart" | "server.stop" | "server.kill" => {
                     let action = id.trim_start_matches("server.").to_string();
@@ -273,7 +273,7 @@ impl CircuitApp {
                     if self.bot.hosting.can_control(&self.ed) {
                         self.pick_remote(true);
                     } else {
-                        self.ed.log(Level::Info, t!("Run can switch to the server once a Calagopus server is set up (Bot › Server…)."));
+                        self.ed.log(Level::Info, t!("Run can switch to the remote once a Calagopus server is set up (Bot › Remote…)."));
                     }
                 }
                 _ => {

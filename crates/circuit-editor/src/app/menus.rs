@@ -195,15 +195,15 @@ impl CircuitApp {
                     self.bot.open_export(&self.ed);
                 }
                 ui.separator();
-                if kit::menu_item(ui, t!("Server…"), self.shortcut_shown(Hotkey::ServerSettings), has_project).clicked() {
+                if kit::menu_item(ui, t!("Remote…"), self.shortcut_shown(Hotkey::ServerSettings), has_project).clicked() {
                     self.bot.hosting.open(&self.ed);
                 }
                 let configured = has_project && crate::bot::hosting::HostingUi::configured(&self.ed);
-                if kit::menu_item(ui, t!("Upload to the server"), self.shortcut_shown(Hotkey::Upload), configured && self.bot.hosting.busy().is_none()).clicked() {
+                if kit::menu_item(ui, t!("Upload to the remote"), self.shortcut_shown(Hotkey::Upload), configured && self.bot.hosting.busy().is_none()).clicked() {
                     self.bot.hosting.upload(&mut self.ed);
                 }
                 let calagopus = has_project && crate::bot::hosting::settings_of(&self.ed).kind == circuit_runner::hosting::Kind::Calagopus;
-                if calagopus && kit::menu_item(ui, t!("Server console"), self.shortcut_shown(Hotkey::ServerConsole), true).clicked() {
+                if calagopus && kit::menu_item(ui, t!("Remote console"), self.shortcut_shown(Hotkey::ServerConsole), true).clicked() {
                     self.bot.hosting.open_console(&mut self.ed);
                 }
             }).response);
@@ -311,7 +311,7 @@ impl CircuitApp {
         let state = self.bot.shown_state();
         let remote = self.bot.hosting.remote;
         let running = state != BotState::Stopped;
-        let stop_tip = if remote { t!("Stop the bot on its server (Shift+F5)") } else { t!("Stop the bot (Shift+F5)") };
+        let stop_tip = if remote { t!("Stop the bot on its remote (Shift+F5)") } else { t!("Stop the bot (Shift+F5)") };
         if running && kit::menu_item(ui, t!("Stop"), None, true).on_hover_text(stop_tip).clicked() {
             self.bot.stop_pressed(&mut self.ed);
         }
@@ -325,7 +325,7 @@ impl CircuitApp {
         let run = egui::Button::new(RichText::new(label).strong().color(egui::Color32::from_rgb(4, 33, 13)));
         let run = ui.add_enabled_ui(self.ed.project.is_some(), |ui| crate::ui::kit::styled_button(ui, &theme, run, theme.action, egui::Stroke::NONE)).inner;
         self.ed.ui_rects.insert("run".into(), run.rect);
-        let run_tip = if remote { t!("Upload what changed and start the bot on its server (F5)") } else { t!("Run the bot (F5)") };
+        let run_tip = if remote { t!("Upload what changed and start the bot on its remote (F5)") } else { t!("Run the bot (F5)") };
         if run.on_hover_text(run_tip).clicked() {
             self.bot.run_pressed(&mut self.ed, ui.ctx());
         }
@@ -348,7 +348,7 @@ impl CircuitApp {
             self.ed.prefs.remote_bots.push(root);
             if self.bot.state != BotState::Stopped {
                 self.bot.stop(&mut self.ed);
-                self.ed.log(Level::Info, t!("Stopped the bot here: Run, Restart and Stop now act on its server."));
+                self.ed.log(Level::Info, t!("Stopped the bot here: Run, Restart and Stop now act on its remote."));
             }
         }
     }

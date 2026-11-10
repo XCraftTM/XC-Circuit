@@ -71,6 +71,6 @@
 | Invite your bot | Under the bot token, once one is typed or saved: pick the permissions (**What your blocks need**, made from the project's blocks and listed under it, or common bot permissions, Administrator or none), then **Open invite page** opens Discord's page for adding the bot to a server, or **Copy link** copies the link |
 | Run / Stop | F5 / Shift+F5, or Run in the title bar. Running blocks glow; failures show on the block |
 | Export | Bot › Export… writes a folder that runs with `node index.js` |
-| Server | Bot › Server… uploads the bot to its server over SFTP or a Calagopus panel, by hand or after every save; only changed files are sent, and the server's `data/` is never touched. For a Calagopus server, sign in through the browser; Bot › Server console has Start, Restart, Stop, Kill and the live console ([Putting your bot on a server](./hosting)) |
+| Remote | Bot › Remote… uploads the bot to its server over SFTP or a Calagopus panel, by hand or after every save; only changed files are sent, and the server's `data/` is never touched. For a Calagopus server, sign in through the browser; Bot › Remote console has Start, Restart, Stop, Kill and the live console ([Putting your bot on a server](./hosting)) |
 
 Running needs Node.js 22 or newer; the first start page (or Settings › Bot › Node.js) finds or installs it. The first run installs the mode's npm packages (discord.js, or @fluxerjs/core for Fluxer bots) once, into `%APPDATA%\XC Circuit\packages` or `~/.local/share/xc-circuit/packages`.

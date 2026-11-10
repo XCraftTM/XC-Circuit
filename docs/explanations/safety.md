@@ -13,7 +13,7 @@ While the bot runs from the editor, the Console hides its secrets: if the bot pr
 
 An exported bot reads its token from `.env`. Export only includes the token there when you ask it to, and its `.gitignore` keeps `.env` out of Git.
 
-The passwords and API keys for uploading the bot to its server (Bot › Server…) are kept in the credential store too. An upload sends the token in `.env` only while **Send the bot token** is on; over FTP, keep **Encrypted (FTPS)** on, as plain FTP sends it unencrypted. They, and the token, only go to the server you saved in Bot › Server… on this computer, not to one that came with a project's files. See [Putting your bot on a server](./hosting).
+The passwords and API keys for uploading the bot to its server (Bot › Remote…) are kept in the credential store too. An upload sends the token in `.env` only while **Send the bot token** is on; over FTP, keep **Encrypted (FTPS)** on, as plain FTP sends it unencrypted. They, and the token, only go to the server you saved in Bot › Remote… on this computer, not to one that came with a project's files. See [Putting your bot on a server](./hosting).
 
 ## What editor plugins can do
 

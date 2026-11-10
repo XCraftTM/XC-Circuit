@@ -40,7 +40,7 @@ Tools, and how to use them well:
 | `get_problems` · `get_console` | What's wrong; what the bot logged (with the block that wrote it). |
 | `list_block_types` · `get_block_source` · `list_plugins` | Every block type by category; a block type's source code (its JavaScript file), to see exactly what it does; the plugins and their blocks. |
 | `get_app_settings` · `get_bot_settings` · `set_bot_settings` | The app's settings (reading only); Bot › Settings, changed with checks like the page's. Secrets only say whether one is saved and can't be set. |
-| `get_server` · `server_action` · `set_run_target` | The bot's server (Bot › Server…: SFTP or Calagopus): its state, CPU and memory, the last upload, its console; upload, start, restart, stop, kill; whether `run_bot` acts here or there. |
+| `get_server` · `server_action` · `set_run_target` | The bot's server (Bot › Remote…: SFTP or Calagopus): its state, CPU and memory, the last upload, its console; upload, start, restart, stop, kill; whether `run_bot` acts here or there. |
 | `run_bot` · `stop_bot` · `save_project` | Run and save (on the server when the run target is server). |
 | `run_script` | Many steps in one call: JavaScript with `tools` (every tool as a function: `tools.add_block({ … })`), `xc` (the [editor plugin API](docs/api/editor.md)) and `print()`. Sandboxed, 5 seconds. |
 
@@ -51,7 +51,7 @@ Good to know:
 - Texts take `${…}`: JavaScript, with values from earlier blocks by name.
 - Value blocks (Get Property, Math, Compare …) have `in` and `next` too: put them in the flow to make clear when they run (once, there); left out of it, they're worked out when a block reads them.
 - Every change shows in the editor at once and can be undone there (Ctrl+Z). The tools never return tokens or other secrets, and the Console hides them (`[hidden secret]`): don't make the bot print or send them.
-- A project's server (Bot › Server…) and its own plugins are the user's to confirm: `xc.data.set("hosting", …)` is refused, `get_server`'s `savedHere` says whether uploads go anywhere, and plugins in a project's `plugins/` folder load only after the user said yes.
+- A project's server (Bot › Remote…) and its own plugins are the user's to confirm: `xc.data.set("hosting", …)` is refused, `get_server`'s `savedHere` says whether uploads go anywhere, and plugins in a project's `plugins/` folder load only after the user said yes.
 - Plugins can add their own tools with `xc.tool({ name, description, input, run })`.
 
 ## Repository map

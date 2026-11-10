@@ -102,10 +102,10 @@ impl DockViewer<Tab> for Viewer<'_> {
             Tab::SlashCommands => t!("Slash Commands").into(),
             Tab::BotSettings => t!("Bot settings").into(),
             Tab::Export => t!("Export bot").into(),
-            Tab::Hosting => t!("Server").into(),
+            Tab::Hosting => t!("Remote").into(),
             Tab::ServerConsole => match &self.bot.hosting.console {
                 Some(c) => tf!("Console of {server}", server = c.name),
-                None => t!("Server console").into(),
+                None => t!("Remote console").into(),
             },
             Tab::Plugins => t!("Plugins").into(),
             // With a project open it holds the place of its workspaces.

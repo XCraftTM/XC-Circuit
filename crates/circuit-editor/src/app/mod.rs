@@ -62,7 +62,7 @@ pub enum Tab {
     SlashCommands,
     BotSettings,
     Export,
-    /// Bot › Server…: where the bot is uploaded to.
+    /// Bot › Remote…: where the bot is uploaded to.
     Hosting,
     /// A Calagopus server's state, power buttons and live console.
     ServerConsole,
@@ -504,10 +504,10 @@ impl eframe::App for CircuitApp {
                 if self.bot.hosting.can_control(&self.ed) {
                     let server = !self.bot.hosting.remote;
                     self.pick_remote(server);
-                    let to = if server { t!("the server") } else { t!("this computer") };
+                    let to = if server { t!("the remote") } else { t!("this computer") };
                     self.ed.log(Level::Info, tf!("Run, Restart and Stop now act on {place}.", place = to));
                 } else {
-                    self.ed.log(Level::Info, t!("Run can switch to the server once a Calagopus server is set up (Bot › Server…)."));
+                    self.ed.log(Level::Info, t!("Run can switch to the remote once a Calagopus server is set up (Bot › Remote…)."));
                 }
             }
             if hit(Hotkey::Settings) {

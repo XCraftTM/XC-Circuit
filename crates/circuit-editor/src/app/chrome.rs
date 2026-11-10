@@ -193,10 +193,10 @@ impl CircuitApp {
         // Uploading to the bot's server: under way, or how the last one went.
         if has_project && crate::bot::hosting::HostingUi::configured(&self.ed) {
             let (dot, text, tip) = match (self.bot.hosting.busy(), &self.bot.hosting.outcome) {
-                (Some(what), _) => (Some(t.accent), tf!("{what} …", what = what), t!("Bot › Server…").to_string()),
+                (Some(what), _) => (Some(t.accent), tf!("{what} …", what = what), t!("Bot › Remote…").to_string()),
                 (None, Some(o)) if o.ok => (None, tf!("Uploaded {ago}", ago = crate::bot::ago(o.at.elapsed())), o.text.clone()),
                 (None, Some(o)) => (Some(t.error), t!("Upload failed").to_string(), o.text.clone()),
-                (None, None) => (None, t!("Upload to the server").to_string(), t!("Bot › Server…").to_string()),
+                (None, None) => (None, t!("Upload to the remote").to_string(), t!("Bot › Remote…").to_string()),
             };
             if status_item(&mut right, &t, dot, &text).on_hover_text(tip).clicked() {
                 self.bot.hosting.open(&self.ed);

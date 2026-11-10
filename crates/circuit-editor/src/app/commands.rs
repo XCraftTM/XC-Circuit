@@ -22,12 +22,12 @@ impl CircuitApp {
             }
             items.push(Item::new(t!("Bot"), t!("Bot Settings…"), Cmd::Settings).shortcut(self.key_label(Hotkey::BotSettings)));
             items.push(Item::new(t!("Bot"), "Export…", Cmd::Export).shortcut(self.key_label(Hotkey::ExportBot)));
-            items.push(Item::new(t!("Bot"), t!("Server…"), Cmd::Hosting).shortcut(self.key_label(Hotkey::ServerSettings)));
+            items.push(Item::new(t!("Bot"), t!("Remote…"), Cmd::Hosting).shortcut(self.key_label(Hotkey::ServerSettings)));
             if crate::bot::hosting::HostingUi::configured(&self.ed) {
-                items.push(Item::new(t!("Bot"), t!("Upload to the server"), Cmd::Upload).shortcut(self.key_label(Hotkey::Upload)));
+                items.push(Item::new(t!("Bot"), t!("Upload to the remote"), Cmd::Upload).shortcut(self.key_label(Hotkey::Upload)));
             }
             if crate::bot::hosting::settings_of(&self.ed).kind == circuit_runner::hosting::Kind::Calagopus {
-                items.push(Item::new(t!("Bot"), t!("Server console"), Cmd::ServerConsole).shortcut(self.key_label(Hotkey::ServerConsole)));
+                items.push(Item::new(t!("Bot"), t!("Remote console"), Cmd::ServerConsole).shortcut(self.key_label(Hotkey::ServerConsole)));
             }
             items.push(Item::new(t!("File"), "Save", Cmd::Save).shortcut(self.key_label(Hotkey::Save)));
             items.push(Item::new(t!("File"), t!("Import workspaces…"), Cmd::ImportWorkspaces));

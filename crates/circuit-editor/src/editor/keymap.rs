@@ -129,10 +129,10 @@ impl Action {
             Action::BotSettings => t!("Bot settings"),
             Action::SlashCommands => t!("Slash Commands"),
             Action::ExportBot => t!("Export the bot"),
-            Action::Upload => t!("Upload to the server"),
-            Action::ServerConsole => t!("Server console"),
-            Action::ServerSettings => t!("Server settings (Bot › Server…)"),
-            Action::ToggleRemote => t!("Switch Run between this computer and the server"),
+            Action::Upload => t!("Upload to the remote"),
+            Action::ServerConsole => t!("Remote console"),
+            Action::ServerSettings => t!("Remote settings (Bot › Remote…)"),
+            Action::ToggleRemote => t!("Switch Run between this computer and the remote"),
             Action::Undo => t!("Undo"),
             Action::Redo => t!("Redo"),
             Action::Duplicate => t!("Duplicate the selected blocks"),
@@ -153,7 +153,7 @@ impl Action {
         match self {
             Action::CommandPalette | Action::Settings | Action::Save | Action::NewProject | Action::OpenProject => t!("General"),
             Action::Run | Action::Stop | Action::Start | Action::Restart | Action::BotSettings | Action::SlashCommands | Action::ExportBot => t!("Bot"),
-            Action::Upload | Action::ServerConsole | Action::ServerSettings | Action::ToggleRemote => t!("Server"),
+            Action::Upload | Action::ServerConsole | Action::ServerSettings | Action::ToggleRemote => t!("Remote"),
             Action::Undo | Action::Redo | Action::Duplicate | Action::SelectAll | Action::Delete => t!("Editing"),
             _ => t!("Canvas"),
         }
@@ -397,7 +397,7 @@ mod tests {
         // Every default is readable (the newer actions have none to start
         // with), and every key egui knows reads back.
         for a in Action::ALL {
-            assert!(!a.defaults().is_empty() || a.group() == "Server" || matches!(a, Action::Start | Action::Restart | Action::BotSettings | Action::SlashCommands | Action::ExportBot), "{a:?}");
+            assert!(!a.defaults().is_empty() || a.group() == "Remote" || matches!(a, Action::Start | Action::Restart | Action::BotSettings | Action::SlashCommands | Action::ExportBot), "{a:?}");
             assert!(!a.id().is_empty() && Action::ALL.iter().filter(|b| b.id() == a.id()).count() == 1, "{a:?}: one id each");
         }
         for k in Key::ALL {

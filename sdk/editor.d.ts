@@ -123,7 +123,7 @@ export interface Xc {
   } | null;
   /** Changes Bot › Settings ({ key: value }, null for the default; not secrets). Returns the keys changed. */
   setBotSettings(values: Record<string, unknown>): string[];
-  /** The bot's server (Bot › Server…). Never a password or key. Null without a project. */
+  /** The bot's server (Bot › Remote…). Never a password or key. Null without a project. */
   server(): {
     kind: "none" | "sftp" | "ftp" | "calagopus";
     host: string; port: number; user: string; panel: string; server: string; serverName: string; folder: string;

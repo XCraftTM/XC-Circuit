@@ -127,18 +127,18 @@ impl Watch {
     /// The status bar's words for it.
     pub fn label(&self) -> &'static str {
         match self.state() {
-            "running" => t!("Server running"),
-            "starting" => t!("Server starting"),
-            "stopping" => t!("Server stopping"),
-            "offline" => t!("Server stopped"),
-            _ if self.problem.is_some() => t!("Server unreachable"),
-            _ => t!("Server …"),
+            "running" => t!("Remote running"),
+            "starting" => t!("Remote starting"),
+            "stopping" => t!("Remote stopping"),
+            "offline" => t!("Remote stopped"),
+            _ if self.problem.is_some() => t!("Remote unreachable"),
+            _ => t!("Remote …"),
         }
     }
 
     /// The status bar's tooltip: which server, CPU and memory, or what went wrong.
     pub fn tip(&self) -> String {
-        let mut tip = tf!("On the server: {server}", server = self.name);
+        let mut tip = tf!("On the remote: {server}", server = self.name);
         if let Some(p) = &self.problem {
             tip.push_str(&format!("\n{p}"));
         } else if let Some(r) = &self.last {
@@ -159,7 +159,7 @@ pub fn switch(ui: &mut egui::Ui, theme: &Theme, remote: bool) -> Option<bool> {
         ui.spacing_mut().item_spacing.x = 0.0;
         let h = ui.spacing().interact_size.y.max(24.0);
         // Right to left: Server is drawn first, so it reads Local | Server.
-        for (server, label, tip) in [(true, t!("Server"), t!("Run, Restart and Stop act on the bot's server, which the status bar shows")), (false, t!("Local"), t!("Run, Restart and Stop act on the bot on this computer"))] {
+        for (server, label, tip) in [(true, t!("Remote"), t!("Run, Restart and Stop act on the bot's remote, which the status bar shows")), (false, t!("Local"), t!("Run, Restart and Stop act on the bot on this computer"))] {
             let on = server == remote;
             let ink = if on { if theme.dark { Color32::from_rgb(0, 24, 28) } else { Color32::WHITE } } else { theme.text };
             let corner = if server { egui::CornerRadius { nw: 0, sw: 0, ne: 7, se: 7 } } else { egui::CornerRadius { nw: 7, sw: 7, ne: 0, se: 0 } };
@@ -187,20 +187,20 @@ mod tests {
     #[test]
     fn what_was_asked_shows_until_the_server_is_there() {
         let mut w = Watch::new(calagopus::Panel::new("http://127.0.0.1:9", "c7sp_x"), "u-1".into(), "Bot".into());
-        assert_eq!((w.state(), w.label()), ("", "Server …"));
+        assert_eq!((w.state(), w.label()), ("", "Remote …"));
         w.take(res("offline"));
-        assert_eq!((w.bot_state(), w.label()), (BotState::Stopped, "Server stopped"));
+        assert_eq!((w.bot_state(), w.label()), (BotState::Stopped, "Remote stopped"));
         w.expect("start");
         w.take(res("offline"));
-        assert_eq!((w.bot_state(), w.label()), (BotState::Starting, "Server starting"), "still starting");
+        assert_eq!((w.bot_state(), w.label()), (BotState::Starting, "Remote starting"), "still starting");
         w.take(res("running"));
-        assert_eq!(w.label(), "Server starting", "too soon to believe it");
+        assert_eq!(w.label(), "Remote starting", "too soon to believe it");
         w.expect.as_mut().unwrap().since -= AT_LEAST + Duration::from_secs(1);
         w.take(res("running"));
-        assert_eq!((w.bot_state(), w.label()), (BotState::Running, "Server running"));
+        assert_eq!((w.bot_state(), w.label()), (BotState::Running, "Remote running"));
         w.expect("stop");
-        assert_eq!((w.bot_state(), w.label()), (BotState::Starting, "Server stopping"));
+        assert_eq!((w.bot_state(), w.label()), (BotState::Starting, "Remote stopping"));
         w.forget_expect();
-        assert_eq!(w.label(), "Server running");
+        assert_eq!(w.label(), "Remote running");
     }
 }

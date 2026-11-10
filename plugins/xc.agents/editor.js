@@ -196,7 +196,7 @@ tool({
 
 tool({
   name: "get_server",
-  description: "The bot's server (Bot › Server…): how it uploads (sftp, ftp, calagopus or none), where, whether Run acts there (runTarget: local or server) and can (canRunThere: a Calagopus server with a key), the server's state (running, starting, stopping, offline) with CPU and memory, the last upload, and the server console's last lines when its tab is open. savedHere is false when the settings came with the project's files and the user hasn't saved them on this computer: nothing is sent to such a server. Never passwords or keys.",
+  description: "The bot's server (Bot › Remote…): how it uploads (sftp, ftp, calagopus or none), where, whether Run acts there (runTarget: local or server) and can (canRunThere: a Calagopus server with a key), the server's state (running, starting, stopping, offline) with CPU and memory, the last upload, and the server console's last lines when its tab is open. savedHere is false when the settings came with the project's files and the user hasn't saved them on this computer: nothing is sent to such a server. Never passwords or keys.",
   input: schema({}),
   run() {
     needProject();
@@ -211,9 +211,9 @@ tool({
   run({ action }) {
     needProject();
     const server = xc.server() || {};
-    if (!server.kind || server.kind === "none") throw new Error("The project has no server set up: the user chooses one in Bot › Server….");
-    if (server.savedHere === false) throw new Error("The project's server settings aren't the ones the user saved on this computer, so nothing is sent there: the user looks at them in Bot › Server… and presses Save.");
-    if (action !== "upload" && !server.canRunThere) throw new Error("This server can't be started or stopped from here: that needs a Calagopus server with a saved key (Bot › Server…). upload works.");
+    if (!server.kind || server.kind === "none") throw new Error("The project has no server set up: the user chooses one in Bot › Remote….");
+    if (server.savedHere === false) throw new Error("The project's server settings aren't the ones the user saved on this computer, so nothing is sent there: the user looks at them in Bot › Remote… and presses Save.");
+    if (action !== "upload" && !server.canRunThere) throw new Error("This server can't be started or stopped from here: that needs a Calagopus server with a saved key (Bot › Remote…). upload works.");
     if (server.uploading && action !== "stop" && action !== "kill") throw new Error("An upload is under way: try again once it's done (get_server: uploading).");
     xc.run(`server.${action}`);
     return action === "upload" ? "Uploading what changed. get_server's lastUpload says how it went." : `Asked the server to ${action}. get_server shows its state in a few seconds.`;
@@ -226,7 +226,7 @@ tool({
   input: schema({ target: { type: "string", enum: ["local", "server"] } }, ["target"]),
   run({ target }) {
     needProject();
-    if (target === "server" && !(xc.server() || {}).canRunThere) throw new Error("Run can't act on a server here: that needs a Calagopus server with a saved key (Bot › Server…).");
+    if (target === "server" && !(xc.server() || {}).canRunThere) throw new Error("Run can't act on a server here: that needs a Calagopus server with a saved key (Bot › Remote…).");
     xc.run(`run.${target}`);
     return `Run, Restart and Stop now act ${target === "server" ? "on the server" : "on this computer"}.`;
   },

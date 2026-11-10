@@ -114,7 +114,7 @@ impl CircuitApp {
             Tab::Plugin(plugin, panel) => self.plugin_host.panel_title(plugin, panel).unwrap_or_else(|| panel.clone()),
             Tab::ServerConsole => match &self.bot.hosting.console {
                 Some(c) => tf!("Console of {server}", server = c.name),
-                None => t!("Server console").into(),
+                None => t!("Remote console").into(),
             },
             other => Tab::PANELS.iter().find(|(t, _)| t == other).map(|(_, n)| crate::i18n::t(n).to_string()).unwrap_or_default(),
         }
@@ -459,7 +459,7 @@ impl CircuitApp {
                     ui.horizontal(|ui| {
                         ui.add_space(14.0);
                         ui.vertical(|ui| {
-                            ui.label(RichText::new(t!("Not connected to a server.")).size(12.5).color(t.text_muted));
+                            ui.label(RichText::new(t!("Not connected to a remote.")).size(12.5).color(t.text_muted));
                             ui.add_space(6.0);
                             if crate::ui::kit::secondary_button(ui, t, t!("Connect")).clicked() {
                                 connect = true;

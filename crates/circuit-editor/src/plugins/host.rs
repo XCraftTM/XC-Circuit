@@ -391,9 +391,9 @@ impl api::Host for EditorHost<'_> {
 
     fn set_project_data(&mut self, key: &str, json: &str) -> Result<(), String> {
         // Where the bot, its token and the saved password go is the user's
-        // to say, in Bot › Server….
+        // to say, in Bot › Remote….
         if key == "hosting" {
-            return Err("the bot's server is set up by the user in Bot › Server…: a plugin or an agent can't change it".into());
+            return Err("the bot's server is set up by the user in Bot › Remote…: a plugin or an agent can't change it".into());
         }
         let value: Value = serde_json::from_str(json).map_err(|e| e.to_string())?;
         let project = self.ed.project.as_mut().ok_or("no project is open")?;
@@ -1082,7 +1082,7 @@ mod tests {
         assert_eq!(seen["result"], serde_json::json!(["undefined", "function", "undefined"]), "{seen}");
         // Where the bot and its token go is the user's to say: a script can't set it.
         let err = call(&mut ed, "run_script", serde_json::json!({ "code": "xc.data.set('hosting', { kind: 'ftp', host: 'elsewhere.example.com', user: 'bot' })" })).unwrap_err();
-        assert!(err.contains("Bot › Server"), "{err}");
+        assert!(err.contains("Bot › Remote"), "{err}");
         assert!(ed.project.as_ref().unwrap().meta.data.get("hosting").is_none());
         // And a server that came with the project's files isn't uploaded to.
         let came_along = serde_json::json!({ "kind": "sftp", "host": "elsewhere.example.com", "user": "bot", "keyFile": "C:/keys/id_ed25519" });

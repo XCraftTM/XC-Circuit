@@ -102,9 +102,9 @@ impl Hosting {
     /// What's missing before it can upload, in plain words; None when ready.
     pub fn missing(&self, secrets: &Secrets) -> Option<&'static str> {
         match self.kind {
-            Kind::None => Some("Choose how the bot gets to its server."),
+            Kind::None => Some("Choose how the bot gets to its remote."),
             Kind::Ftp => Some(FTP_GONE),
-            Kind::Sftp if self.host.trim().is_empty() => Some("Fill in the server's address."),
+            Kind::Sftp if self.host.trim().is_empty() => Some("Fill in the remote's address."),
             Kind::Sftp if self.user.trim().is_empty() => Some("Fill in the user name."),
             Kind::Sftp if self.key_file.trim().is_empty() && secrets.password.is_none() => Some("Fill in the password, or choose a key file."),
             Kind::Calagopus if self.panel.trim().is_empty() => Some("Fill in the panel's address."),
@@ -234,7 +234,7 @@ fn open(hosting: &Hosting, secrets: &Secrets, known_hosts: &Path, log: &mut dyn 
         Kind::Sftp => Box::new(sftp::Sftp::open(hosting, secrets.password.as_deref(), known_hosts, log)?),
         Kind::Ftp => bail!(FTP_GONE),
         Kind::Calagopus => Box::new(calagopus::Upload::open(hosting, secrets.api_key.as_deref().unwrap_or_default(), log)?),
-        Kind::None => bail!("Choose how the bot gets to its server."),
+        Kind::None => bail!("Choose how the bot gets to its remote."),
     })
 }
 
