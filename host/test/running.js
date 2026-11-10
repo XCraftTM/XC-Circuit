@@ -83,6 +83,44 @@ function connect() {
     const listed = await device.ask({ t: "projects" }, "projects");
     assert.ok(listed.projects.includes(name));
     console.log(`ok: paired, stored 6 MB as ${name} and got it back`);
+
+    // A bot with a package of its own: the host installs it, starts the
+    // bot, says what it prints, and stops it.
+    if (status.can.includes("bots")) {
+      const api = `${address}/api/client/servers/${name}`;
+      const call = async (method, where, body) => {
+        const res = await fetch(`${api}${where}`, { method, headers: { Authorization: `Bearer ${paired.token}`, "Content-Type": typeof body === "string" ? "text/plain" : "application/json" }, body: body == null ? undefined : typeof body === "string" ? body : JSON.stringify(body) });
+        assert.ok(res.ok, `${method} ${where}: ${res.status}`);
+        return res.json().catch(() => ({}));
+      };
+      await call("POST", "/files/write?file=%2Fpackage.json", JSON.stringify({ name: "check", dependencies: { "is-number": "7.0.0" } }));
+      await call("POST", "/files/write?file=%2Findex.js", 'console.log("Bot ready, 7 is a number: " + require("is-number")(7)); setInterval(() => {}, 1000); process.on("SIGTERM", () => process.exit(0));');
+      await call("POST", "/power", { action: "start" });
+      const state = async () => (await call("GET", "/resources")).resources.state;
+      for (let i = 0; i < 600 && (await state()) !== "running"; i++) await new Promise((r) => setTimeout(r, 200));
+      assert.equal(await state(), "running", "the bot runs, with its package installed");
+      const ticket = await call("GET", "/websocket");
+      const printed = await new Promise((resolve, reject) => {
+        const ws = new WebSocket(ticket.url);
+        const timer = setTimeout(() => reject(new Error("the console said nothing")), 15000);
+        ws.onerror = () => reject(new Error(`no console at ${ticket.url}`));
+        ws.onopen = () => ws.send(JSON.stringify({ event: "auth", args: [ticket.token] }));
+        ws.onmessage = (e) => {
+          const m = JSON.parse(e.data);
+          if (m.event === "auth success") ws.send(JSON.stringify({ event: "send logs", args: [] }));
+          if (m.event === "console output" && m.args[0].startsWith("Bot ready")) {
+            clearTimeout(timer);
+            ws.close();
+            resolve(m.args[0]);
+          }
+        };
+      });
+      assert.equal(printed, "Bot ready, 7 is a number: true");
+      await call("POST", "/power", { action: "kill" });
+      for (let i = 0; i < 100 && (await state()) !== "offline"; i++) await new Promise((r) => setTimeout(r, 100));
+      assert.equal(await state(), "offline");
+      console.log("ok: a bot was installed, ran, printed to its console and stopped");
+    }
   } finally {
     await device.ask({ t: "device.remove", id: paired.device }, "device.removed").catch(() => {});
     device.close();
