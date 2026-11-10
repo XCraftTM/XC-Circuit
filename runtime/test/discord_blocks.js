@@ -308,7 +308,124 @@ assert.deepStrictEqual(
       assert.ok(out.type && out.label === choice, `channel info ${key}: typed output`);
     }
   }
-  console.log(`${Object.keys(all).length} Discord blocks checked\ndiscord blocks test passed`);
+  // Read From Message: a part picked step by step, then what to take out of it.
+{
+  const json = (x) => ({ toJSON: () => x });
+  const message = {
+    content: "Hi <@111> and <@!222>, see <#333> and <@&444>.\nOrder #58 costs 12.50 at https://example.com/a?b=1 <:ok:999>",
+    embeds: [
+      json({ title: "Ticket", description: "Opened by <@111>", url: "https://example.com/t", color: 0x00d8f0, author: { name: "Support" }, footer: { text: "Case 7" }, image: { url: "https://img/1.png" }, timestamp: "2026-01-01T00:00:00.000Z", fields: [{ name: "Reason", value: "Spam" }, { name: "Priority", value: "High", inline: true }] }),
+      json({ description: "Second" }),
+    ],
+    components: [
+      json({ type: 1, components: [{ type: 2, label: "Close", custom_id: "ticket-close", style: 4 }, { type: 2, label: "Docs", url: "https://docs", style: 5, disabled: true, emoji: { name: "\u{1F4C4}" } }] }),
+      json({ type: 1, components: [{ type: 3, custom_id: "pick", placeholder: "Choose", options: [{ label: "One", value: "1" }, { label: "Two", value: "2" }] }] }),
+    ],
+    attachments: new Map([["1", { url: "https://cdn/a.png", name: "a.png", size: 120, contentType: "image/png" }], ["2", { url: "https://cdn/b.txt", name: "b.txt", size: 9, contentType: "text/plain" }]]),
+    mentions: { users: new Map([["111", { id: "111" }]]), roles: new Map(), channels: new Map([["333", { id: "333" }]]), everyone: false },
+  };
+  const read = (fields) => run("discord.read_message", { message, ...fields });
+  const shape = (values) => all["discord.read_message"].define({ values });
+
+  // Its text, and what to take out of it.
+  assert.strictEqual(read({}).result, message.content);
+  assert.deepStrictEqual(read({ then: "userMentions" }).result, ["111", "222"]);
+  assert.deepStrictEqual(read({ then: "roleMentions" }).result, ["444"]);
+  assert.deepStrictEqual(read({ then: "channelMentions" }).result, ["333"]);
+  assert.deepStrictEqual(read({ then: "links" }).result, ["https://example.com/a?b=1"]);
+  assert.deepStrictEqual(read({ then: "numbers" }).result, [111, 222, 333, 444, 58, 12.5, 1, 999]);
+  assert.deepStrictEqual(read({ then: "emoji" }).result, ["<:ok:999>"]);
+  assert.strictEqual(read({ then: "lines" }).result.length, 2);
+  assert.strictEqual(read({ then: "regex", pattern: "order #(\\d+)" }).result, "Order #58");
+  assert.strictEqual(read({ then: "regex", pattern: "order #(\\d+)", take: "group" }).result, "58");
+  assert.strictEqual(read({ then: "regex", pattern: "order #(\\d+)", take: "group", ignoreCase: false }).result, "");
+  assert.deepStrictEqual(read({ then: "regex", pattern: "<@!?\\d+>", take: "all" }).result, ["<@111>", "<@!222>"]);
+  assert.throws(() => read({ then: "regex", pattern: "(" }), /isn't a valid regular expression/);
+
+  // An embed's parts.
+  assert.strictEqual(read({ part: "embed" }).result, "Opened by <@111>");
+  assert.strictEqual(read({ part: "embed", embedPart: "title" }).result, "Ticket");
+  assert.strictEqual(read({ part: "embed", embedPart: "color" }).result, "#00D8F0");
+  assert.strictEqual(read({ part: "embed", embedPart: "author" }).result, "Support");
+  assert.strictEqual(read({ part: "embed", embedPart: "footer" }).result, "Case 7");
+  assert.strictEqual(read({ part: "embed", embedPart: "image" }).result, "https://img/1.png");
+  assert.strictEqual(read({ part: "embed", embedPart: "timestamp" }).result.toISOString(), "2026-01-01T00:00:00.000Z");
+  assert.strictEqual(read({ part: "embed", embedPart: "field", fieldName: " reason " }).result, "Spam");
+  assert.strictEqual(read({ part: "embed", embedPart: "fieldNumber", fieldNumber: 2 }).result, "High");
+  assert.strictEqual(read({ part: "embed", embedPart: "fieldNumber", fieldNumber: 9 }).result, "");
+  assert.deepStrictEqual(read({ part: "embed", embedPart: "fields" }).result, [{ name: "Reason", value: "Spam", inline: false }, { name: "Priority", value: "High", inline: true }]);
+  assert.strictEqual(read({ part: "embed", embedPart: "text" }).result, "Support\nTicket\nOpened by <@111>\nReason\nSpam\nPriority\nHigh\nCase 7");
+  assert.strictEqual(read({ part: "embed", embedPart: "whole" }).result.title, "Ticket");
+  assert.strictEqual(read({ part: "embed", embed: "2" }).result, "Second");
+  assert.strictEqual(read({ part: "embed", embed: "last" }).result, "Second");
+  assert.deepStrictEqual(read({ part: "embed", embed: "all" }).result, ["Opened by <@111>", "Second"]);
+  assert.deepStrictEqual(read({ part: "embed", embed: "all", then: "userMentions" }).result, ["111"]);
+  assert.deepStrictEqual(read({ part: "embed", embed: "3" }), { result: "", found: false });
+  assert.strictEqual(read({ part: "embed", then: "userMentions" }).result[0], "111");
+
+  // Buttons and menus.
+  assert.deepStrictEqual(read({ part: "components" }).result, ["Close", "Docs", "Choose"]);
+  assert.deepStrictEqual(read({ part: "components", componentPart: "customId" }).result, ["ticket-close", "", "pick"]);
+  assert.strictEqual(read({ part: "components", row: "1", component: "2", componentPart: "url" }).result, "https://docs");
+  assert.strictEqual(read({ part: "components", row: "1", component: "2", componentPart: "disabled" }).result, true);
+  assert.strictEqual(read({ part: "components", row: "1", component: "2", componentPart: "emoji" }).result, "\u{1F4C4}");
+  assert.strictEqual(read({ part: "components", row: "2", component: "1", componentPart: "kind" }).result, "menu");
+  assert.deepStrictEqual(read({ part: "components", row: "2", component: "1", componentPart: "options" }).result, ["One", "Two"]);
+  assert.strictEqual(read({ part: "components", row: "4", component: "1" }).found, false);
+
+  // A Components V2 layout.
+  const layout = {
+    components: [
+      json({
+        type: 17,
+        accent_color: 0xff0000,
+        components: [
+          { type: 10, content: "# Shop" },
+          { type: 9, components: [{ type: 10, content: "Sword: 5 coins" }], accessory: { type: 11, media: { url: "https://img/sword.png" } } },
+          { type: 12, items: [{ media: { url: "https://img/g1.png" } }, { media: { url: "https://img/g2.png" } }] },
+          { type: 1, components: [{ type: 2, label: "Buy", custom_id: "buy-sword", style: 1 }] },
+        ],
+      }),
+    ],
+  };
+  const lay = (fields) => run("discord.read_message", { message: layout, part: "layout", ...fields });
+  assert.strictEqual(lay({}).result, "# Shop\nSword: 5 coins");
+  assert.deepStrictEqual(lay({ layoutPart: "texts" }).result, ["# Shop", "Sword: 5 coins"]);
+  assert.deepStrictEqual(lay({ layoutPart: "images" }).result, ["https://img/sword.png", "https://img/g1.png", "https://img/g2.png"]);
+  assert.deepStrictEqual(lay({ layoutPart: "buttons" }).result, ["Buy"]);
+  assert.deepStrictEqual(lay({ layoutPart: "customIds" }).result, ["buy-sword"]);
+  assert.strictEqual(lay({ layoutPart: "color" }).result, "#FF0000");
+  assert.deepStrictEqual(lay({ layoutPart: "text", then: "numbers" }).result, [5]);
+  // A layout's buttons are found as buttons too.
+  assert.deepStrictEqual(run("discord.read_message", { message: layout, part: "components", componentPart: "customId" }).result, ["buy-sword"]);
+
+  // Attachments and mentions.
+  assert.strictEqual(read({ part: "attachment" }).result, "https://cdn/a.png");
+  assert.strictEqual(read({ part: "attachment", attachment: "2", attachmentPart: "name" }).result, "b.txt");
+  assert.deepStrictEqual(read({ part: "attachment", attachment: "all", attachmentPart: "size" }).result, [120, 9]);
+  assert.deepStrictEqual(read({ part: "mentions" }).result, [{ id: "111" }]);
+  assert.deepStrictEqual(read({ part: "mentions", mention: "everyone" }), { result: false, found: false });
+  assert.deepStrictEqual(run("discord.read_message", { message: { content: "" } }), { result: "", found: false });
+
+  // In the editor: only the steps of the part picked show, and the result has its type.
+  let s = shape({});
+  assert.strictEqual(s.outputs.result.type, "text");
+  assert.ok(s.hide.includes("embed") && s.hide.includes("pattern") && !s.hide.includes("then"));
+  s = shape({ part: "embed", embedPart: "field", then: "regex", take: "all" });
+  assert.strictEqual(s.outputs.result.type, "list<text>");
+  assert.ok(!s.hide.includes("fieldName") && !s.hide.includes("pattern") && s.hide.includes("fieldNumber") && s.hide.includes("row"));
+  assert.strictEqual(shape({ part: "embed", embedPart: "whole" }).outputs.result.type, "object");
+  assert.ok(shape({ part: "embed", embedPart: "whole" }).hide.includes("then"), "only a text has a last step");
+  assert.strictEqual(shape({ part: "embed", embed: "all", embedPart: "timestamp" }).outputs.result.type, "list<date>");
+  assert.strictEqual(shape({ part: "components" }).outputs.result.type, "list<text>");
+  assert.strictEqual(shape({ part: "components", row: "1", component: "1", componentPart: "disabled" }).outputs.result.type, "boolean");
+  assert.strictEqual(shape({ part: "mentions", mention: "roles" }).outputs.result.type, "list<discord.role>");
+  assert.strictEqual(shape({ then: "numbers" }).outputs.result.type, "list<number>");
+  assert.strictEqual(shape({ then: "trim" }).outputs.result.type, "text");
+  assert.strictEqual(shape({ part: "attachment", attachmentPart: "size" }).outputs.result.type, "number");
+}
+
+console.log(`${Object.keys(all).length} Discord blocks checked\ndiscord blocks test passed`);
 })().catch((e) => {
   console.error(e);
   process.exit(1);

@@ -81,6 +81,7 @@ The blocks below are chosen so these common bots can be built without code:
 | Add Reaction | ✅ | message, emoji | |
 | Delete Message | ✅ | message, delay | |
 | Message Info | ✅ | message, info → value | |
+| Read From Message | ✅ | message, part (text, embed, buttons and menus, layout, attachment, mentions), then its steps → result, found | Step by step; a last step takes mentions, links, numbers or a pattern's matches out of a text |
 | Send Message: Update message | ✅ | new mode for button and menu presses | edits the message the button is on |
 | Send Message: Direct message | ✅ | new mode with a user input | |
 | Send Message: files | ✅ | attachments (URL or text as file) | |
