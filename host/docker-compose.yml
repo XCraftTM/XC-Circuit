@@ -1,0 +1,39 @@
+# XC Circuit Host behind a reverse proxy (Nginx Proxy Manager, Caddy, Traefik …).
+#
+# The host publishes no port: the proxy reaches it over the Docker network
+# they share, at http://xc-circuit-host:7421, and adds HTTPS in front.
+# In the proxy, turn "Websockets Support" on.
+#
+#   docker compose up -d
+#   docker compose logs xc-circuit-host     # shows the code to pair the first device
+
+services:
+  xc-circuit-host:
+    # The published image. To build it yourself from this repository
+    # instead, take this line out and the four below in.
+    image: ghcr.io/xcrafttm/xc-circuit-host:latest
+    # build:
+    #   context: ..
+    #   dockerfile: host/Dockerfile
+    container_name: xc-circuit-host
+    restart: unless-stopped
+    environment:
+      # full: projects, secrets (encrypted by your devices) and live sessions.
+      # relay: only passes live sessions on, keeps nothing, needs no volume.
+      XC_HOST_MODE: full
+      # Whose word to take for an app's address: "private" trusts a proxy on
+      # a private network (the usual Docker setup); or list the proxy's address.
+      XC_HOST_TRUSTED_PROXY: private
+    volumes:
+      # Everything the host keeps. Back this up: nobody else does.
+      - xc-circuit-host-data:/data
+    networks:
+      - proxy
+
+volumes:
+  xc-circuit-host-data:
+
+networks:
+  # The network your reverse proxy is on. Change the name to yours.
+  proxy:
+    external: true

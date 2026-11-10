@@ -1,0 +1,67 @@
+XC™ Circuit Licence
+
+Copyright (c) 2026 XCraftTM. All rights reserved.
+
+XC™ Circuit (the program, its source code, its runtime, its bundled plugins,
+examples, starters, icons and documentation: "the Software") is not open
+source. Everything not allowed below is reserved to XCraftTM.
+
+1. Using the Software
+
+   You may download the official releases of the Software and use them, for
+   free, for any purpose, including making bots you sell or run for others.
+
+2. Your projects and your bots
+
+   Projects you make with the Software are yours. Bots you export with it
+   contain the XC Circuit runtime; you may run them and give them to others
+   as exported, as long as this notice stays in them. You may not take the
+   runtime out of an exported bot to use it on its own or in other software.
+
+3. Your plugins
+
+   You may write plugins for the Software (blocks, build modes, pin types,
+   themes, translations) through its plugin interfaces, and share or sell
+   them under terms of your choice. Your plugins are yours; this licence
+   doesn't cover them, and they may not include parts of the Software beyond
+   what its plugin interfaces need.
+
+4. Contributing to the Software
+
+   You may view the source code, and fork, clone, build and change it, only
+   to try out and propose changes to the Software, such as new blocks,
+   translations or fixes, through pull requests to its official repository
+   (github.com/XCraftTM/XC-Circuit).
+
+   You may not publish, distribute, sell or host the Software, changed or
+   not, or builds of it, or substantial parts of it, nor use its code in
+   other software. A fork on GitHub that only serves proposing changes is
+   fine.
+
+5. Your contributions
+
+   By proposing a contribution (a pull request, patch, translation, block or
+   other change), you confirm you have the right to give it, and you grant
+   XCraftTM a perpetual, worldwide, non-exclusive, free and irrevocable
+   licence to use, change, sublicense and distribute it under any terms,
+   this licence included. You keep the copyright of your contribution.
+
+6. Names and logo
+
+   "XC", "XC™ Circuit" and the logo are not licensed to you. Don't use them
+   for your own software or plugins in a way that suggests they are official.
+
+7. Other people's work
+
+   The Software includes work by others under their own licences: Rust
+   crates (listed in THIRD-PARTY-NOTICES.txt in each release) and the Ubuntu
+   font (Ubuntu Font Licence, in licenses/). Those licences apply to those
+   parts. npm packages a bot installs (such as discord.js) are not part of
+   the Software and come with their own licences.
+
+8. No warranty
+
+   The Software is provided "as is", without warranty of any kind, express or
+   implied. In no event shall XCraftTM be liable for any claim, damages or
+   other liability arising from the Software or its use, as far as the law
+   allows.
