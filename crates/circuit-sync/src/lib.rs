@@ -504,11 +504,12 @@ fn callbacks(login: &Login) -> RemoteCallbacks<'static> {
 /// A Git error in the user's words, without the address's sign-in part.
 fn explain(e: git2::Error, doing: &str) -> anyhow::Error {
     let said = e.message().to_string();
-    match (e.code(), e.class()) {
-        (git2::ErrorCode::Auth, _) | (_, git2::ErrorClass::Http) if said.contains("sign-in refused") || said.contains("401") || said.contains("403") || e.code() == git2::ErrorCode::Auth => {
-            anyhow!("Signing in didn't work while {doing}: check the access token, and that it may read and write this repository.")
-        }
-        (git2::ErrorCode::NotFound, _) => anyhow!("There is no repository at that address (or the sign-in can't see it)."),
+    // Refused by our own sign-in (the place didn't take it), or by Git's.
+    if e.code() == git2::ErrorCode::Auth || said.contains("sign-in refused") || said.contains("401") || said.contains("403") {
+        return anyhow!("Signing in didn't work while {doing}: check the access token, and that it may read and write this repository.");
+    }
+    match e.code() {
+        git2::ErrorCode::NotFound => anyhow!("There is no repository at that address (or the sign-in can't see it)."),
         _ => anyhow!("{doing} didn't work: {said}"),
     }
 }
@@ -733,6 +734,37 @@ mod tests {
         assert!(matches!(b.merge(&keep, &who("b")).unwrap(), Merged::Updated(_)));
         let kept: serde_json::Value = serde_json::from_str(&fs::read_to_string(b_dir.join("workspaces/main.json")).unwrap()).unwrap();
         assert_eq!(kept, serde_json::json!({ "list": { "k": 1 } }), "B's own version");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Against a running XC Circuit Host (`host/server.js`): its address
+    /// and a paired device's token come in a file, `XC_HOST_TEST` names it.
+    /// Skipped without one.
+    #[test]
+    fn stores_and_gets_at_a_host() {
+        let Some(file) = std::env::var_os("XC_HOST_TEST") else { return };
+        let text = fs::read_to_string(file).unwrap();
+        let mut lines = text.lines();
+        let (url, token) = (lines.next().unwrap().to_string(), lines.next().unwrap().to_string());
+        let dir = std::env::temp_dir().join(format!("xc-sync-host-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let (a_dir, b_dir) = (dir.join("a"), dir.join("b"));
+        let login = Login { user: "laptop".into(), token };
+        write(&a_dir, "circuit.project.json", "{}
+");
+        let a = Sync::start(&a_dir).unwrap();
+        a.set_remote(&url).unwrap();
+        a.store("First", &who("a")).unwrap();
+        let refused = a.send(&Login { user: "laptop".into(), token: "wrong".into() }).unwrap_err().to_string();
+        assert!(refused.contains("Signing in didn't work"), "{refused}");
+        a.send(&login).unwrap();
+        let b = Sync::get(&url, &b_dir, &login).unwrap();
+        write(&b_dir, "workspaces/main.json", "{}
+");
+        b.store("Second", &who("b")).unwrap();
+        b.send(&login).unwrap();
+        a.fetch(&login).unwrap();
+        assert_eq!(a.merge(&HashMap::new(), &who("a")).unwrap(), Merged::Updated(vec!["workspaces/main.json".into()]));
         let _ = fs::remove_dir_all(&dir);
     }
 

@@ -76,6 +76,7 @@ Good to know:
 | `plugins/xc.discord` · `plugins/xc.fluxer` | Their build modes (`modes/`), blocks, pin types (`types/`), runtime libraries (`runtime/`). |
 | `plugins/xc.server` · `plugins/xc.agents` | Server tools blocks · the AI agents plugin (MCP tools and its panel). |
 | `examples/DemoBot` · `examples/templates/*` | The example bot and the New Project starters (each with a `template.json`). |
+| `host/` | The XC Circuit Host: the container people run themselves (`server.js`, no dependencies beyond Node.js 24 and Git). Modes `full` (projects as Git repositories, paired devices, a vault of secrets the devices encrypt) and `relay` (only passes live sessions on). Tests: `node host/test/host.js`. |
 | `sdk/` | TypeScript types for block files and editor plugins (`index.d.ts`, `editor.d.ts`). |
 | `docs/` | The website (VitePress). `docs/api/` is the plugin reference; `docs/explanations/` how things work. |
 | `tools/` | `plugin_updates.py` (bundled plugin versions and update packs), `agent_docs.py` (llms-full.txt), `third_party_notices.py`. |
