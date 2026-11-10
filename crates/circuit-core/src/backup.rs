@@ -34,7 +34,8 @@ pub fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
-/// FNV-1a of the project folder's full path: one backup folder per project.
+/// FNV-1a of the project folder's full path: the backup folder of a project
+/// that has no id of its own yet (the layout before).
 pub fn project_id(root: &Path) -> String {
     let path = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
     let hash = path.to_string_lossy().bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3));
@@ -103,7 +104,20 @@ impl Backups {
 
     /// The folder holding one project's backups.
     pub fn folder(&self, root: &Path) -> PathBuf {
-        self.base.join(project_id(root))
+        let by_path = self.base.join(project_id(root));
+        // By the project's id, so its backups stay with it when its folder
+        // is moved or renamed. Those made while it went by its folder's path
+        // come along the first time.
+        match crate::project::id_of(root) {
+            Some(id) => {
+                let by_id = self.base.join(id);
+                if !by_id.exists() && by_path.is_dir() {
+                    let _ = fs::rename(&by_path, &by_id);
+                }
+                by_id
+            }
+            None => by_path,
+        }
     }
 
     /// Saves a copy of the project as it is in memory. Returns `None` when the
@@ -259,6 +273,29 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("xc-backup-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         dir
+    }
+
+    /// Backups go by the project's id: they stay with a project whose folder
+    /// was moved, and those from before it had an id come along.
+    #[test]
+    fn backups_follow_the_project() {
+        let root = temp("follow");
+        let backups = Backups::new(temp("follow-store"));
+        let p = Project::create(&root, "Bot", "none").unwrap();
+        // Made while backups went by the folder's path.
+        let old = backups.base.join(project_id(&root));
+        fs::create_dir_all(&old).unwrap();
+        fs::write(old.join("marker.txt"), "from before").unwrap();
+        let folder = backups.folder(&root);
+        assert_eq!(folder.file_name().unwrap().to_string_lossy(), p.meta.id);
+        assert!(folder.join("marker.txt").is_file() && !old.exists(), "the earlier backups came along");
+        backups.snapshot(&p, "Saved").unwrap().expect("a snapshot");
+
+        // The folder moved: the same backups.
+        let moved = temp("follow-moved");
+        fs::rename(&root, &moved).unwrap();
+        assert_eq!(backups.folder(&moved), folder);
+        assert_eq!(backups.list(&moved).len(), 1);
     }
 
     #[test]

@@ -53,6 +53,14 @@ pub fn is_project(dir: &Path) -> bool {
     dir.join(PROJECT_FILE).is_file() || dir.join(OLD_PROJECT_FILE).is_file()
 }
 
+/// The id in the project file of `dir`, when it has one (a project of the
+/// layout before has none until it is converted).
+pub fn id_of(dir: &Path) -> Option<String> {
+    let text = fs::read_to_string(dir.join(PROJECT_FILE)).ok()?;
+    let id = serde_json::from_str::<Value>(&text).ok()?.get("id")?.as_str()?.to_string();
+    (!id.is_empty()).then_some(id)
+}
+
 /// A new project's id: 128 random bits, as hex. Not a secret, only never the
 /// same twice.
 pub fn new_id() -> String {

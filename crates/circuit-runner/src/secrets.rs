@@ -1,6 +1,13 @@
 //! Secret settings (such as the bot token) in Windows Credential Manager or the
 //! Linux Secret Service. Never written to project files.
 //!
+//! A project's secrets go by the project's id, so they stay with it when its
+//! folder is moved or renamed. A second folder with the same id (a copy)
+//! gets secrets of its own: the first place a project's secrets were saved
+//! from is remembered, and while a project with that id is still there,
+//! another folder with it doesn't get them. (A project file can be copied,
+//! or made up with someone's id in it; their token mustn't come with it.)
+//!
 //! What's read is kept in memory, so the window doesn't wait on the credential
 //! store, which can take seconds (or wait for the keyring to be unlocked).
 //! [`prefetch`] reads a project's secrets in the background when it opens.
@@ -29,9 +36,80 @@ fn open(account: String) -> Result<Entry> {
     Entry::new(SERVICE, &account).map_err(|e| anyhow!("the system credential store is not available: {e}"))
 }
 
-/// One entry per project folder and setting.
+/// The entry names' start for a project folder without an id (a project of
+/// the layout before): from its path.
+fn path_prefix(project_root: &Path) -> String {
+    format!("p{:016x}", stable_hash(&canonical(project_root).to_string_lossy()))
+}
+
+/// The setting under which the place a project's secrets belong to is kept.
+const PLACE: &str = "@place";
+
+/// The start of the entry names for a project with `id` in folder `root`,
+/// and whether `root` is to be remembered as the place of its secrets.
+/// `recorded` is the place remembered so far; `still_there` says whether a
+/// project with this id is still in that folder.
+fn prefix_for(id: &str, root: &str, recorded: Option<&str>, still_there: impl FnOnce(&str) -> bool) -> (String, bool) {
+    match recorded {
+        // Nothing saved for it yet, or this is its place.
+        None => (format!("i{id}"), false),
+        Some(place) if place == root => (format!("i{id}"), false),
+        // The project is still where its secrets were saved: this is a copy.
+        Some(place) if still_there(place) => (format!("i{id}@{:016x}", stable_hash(root)), false),
+        // It was moved or renamed: its secrets come along.
+        Some(_) => (format!("i{id}"), true),
+    }
+}
+
+/// The start of the entry names per project folder, worked out once (until
+/// the project is opened again).
+static PREFIXES: Mutex<Option<HashMap<PathBuf, String>>> = Mutex::new(None);
+
+fn prefix(project_root: &Path) -> String {
+    let known = PREFIXES.lock().unwrap_or_else(|e| e.into_inner()).as_ref().and_then(|m| m.get(project_root).cloned());
+    if let Some(p) = known {
+        return p;
+    }
+    let found = match circuit_core::project::id_of(project_root) {
+        None => path_prefix(project_root),
+        Some(id) => {
+            let root = canonical(project_root).to_string_lossy().into_owned();
+            let place = open(format!("i{id}:{PLACE}")).ok();
+            let recorded = place.as_ref().and_then(|e| e.get_password().ok()).filter(|p| !p.is_empty());
+            let (prefix, moved) = prefix_for(&id, &root, recorded.as_deref(), |there| circuit_core::project::id_of(Path::new(there)).as_deref() == Some(id.as_str()));
+            if moved && let Some(e) = &place {
+                let _ = e.set_password(&root);
+            }
+            prefix
+        }
+    };
+    PREFIXES.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_default().insert(project_root.to_path_buf(), found.clone());
+    found
+}
+
+/// One entry per project and setting.
 fn entry(project_root: &Path, name: &str) -> Result<Entry> {
-    open(format!("p{:016x}:{name}", stable_hash(&canonical(project_root).to_string_lossy())))
+    open(format!("{}:{name}", prefix(project_root)))
+}
+
+/// Where it was kept while secrets went by the project's folder.
+fn path_entry(project_root: &Path, name: &str) -> Result<Entry> {
+    open(format!("{}:{name}", path_prefix(project_root)))
+}
+
+/// Remembers this folder as the place of the project's secrets, when none is
+/// remembered yet (see the module's text).
+fn remember_place(project_root: &Path) {
+    let Some(id) = circuit_core::project::id_of(project_root) else { return };
+    // A copy keeps its own secrets and never becomes the place.
+    if prefix(project_root) != format!("i{id}") {
+        return;
+    }
+    if let Ok(e) = open(format!("i{id}:{PLACE}"))
+        && e.get_password().ok().filter(|p| !p.is_empty()).is_none()
+    {
+        let _ = e.set_password(&canonical(project_root).to_string_lossy());
+    }
 }
 
 /// Where earlier versions kept it.
@@ -70,6 +148,10 @@ pub fn prefetch(project_root: &Path, names: Vec<String>) {
     if let Some(c) = cache().as_mut() {
         c.retain(|(root, _), _| root != project_root);
     }
+    // Its id may be new (a project just brought to the new layout).
+    if let Some(p) = PREFIXES.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+        p.remove(project_root);
+    }
     let root = project_root.to_path_buf();
     let _ = std::thread::Builder::new().name("reading secrets".into()).spawn(move || {
         for name in names {
@@ -100,13 +182,17 @@ fn read(project_root: &Path, name: &str) -> Option<String> {
     if let Some(v) = current.get_password().ok().filter(|s| !s.is_empty()) {
         return Some(v);
     }
-    // Moved over from where an earlier version kept it.
-    let old = legacy_entry(project_root, name).ok()?;
-    let v = old.get_password().ok().filter(|s| !s.is_empty())?;
-    if current.set_password(&v).is_ok() {
-        let _ = old.delete_credential();
+    // Moved over from where an earlier version kept it: by the project's
+    // folder, or before that under another name for the folder.
+    for old in [path_entry(project_root, name), legacy_entry(project_root, name)].into_iter().flatten() {
+        let Some(v) = old.get_password().ok().filter(|s| !s.is_empty()) else { continue };
+        if current.set_password(&v).is_ok() {
+            let _ = old.delete_credential();
+            remember_place(project_root);
+        }
+        return Some(v);
     }
-    Some(v)
+    None
 }
 
 pub fn set(project_root: &Path, name: &str, value: &str) -> Result<()> {
@@ -122,9 +208,13 @@ pub fn set(project_root: &Path, name: &str, value: &str) -> Result<()> {
 
 fn store(project_root: &Path, name: &str, value: &str) -> Result<()> {
     let e = entry(project_root, name)?;
-    // A stale copy at the old place must not come back later.
-    if let Ok(old) = legacy_entry(project_root, name) {
+    // A stale copy at an old place must not come back later.
+    let by_path = prefix(project_root) == path_prefix(project_root);
+    for old in [(!by_path).then(|| path_entry(project_root, name)), Some(legacy_entry(project_root, name))].into_iter().flatten().flatten() {
         let _ = old.delete_credential();
+    }
+    if !value.is_empty() {
+        remember_place(project_root);
     }
     if value.is_empty() {
         let _ = e.delete_credential();
@@ -143,6 +233,24 @@ mod tests {
         assert_eq!(stable_hash(""), 0xcbf2_9ce4_8422_2325);
         assert_eq!(stable_hash("a"), 0xaf63_dc4c_8601_ec8c);
         assert_eq!(stable_hash("foobar"), 0x8594_4171_f739_67e8);
+    }
+
+    /// Secrets go by the project's id: they stay with a project that was
+    /// moved, and a copy of it doesn't get them.
+    #[test]
+    fn secrets_follow_the_project_not_a_copy() {
+        let id = "8cd7c5b5ae95edcb6b839ba00c48b6ae";
+        let own = format!("i{id}");
+        // Nothing saved yet, and at its own place: the project's entries.
+        assert_eq!(prefix_for(id, "C:/bots/a", None, |_| unreachable!()), (own.clone(), false));
+        assert_eq!(prefix_for(id, "C:/bots/a", Some("C:/bots/a"), |_| unreachable!()), (own.clone(), false));
+        // Moved or renamed (nothing at the old place any more): they come along, and the new place is remembered.
+        assert_eq!(prefix_for(id, "D:/moved/a", Some("C:/bots/a"), |_| false), (own.clone(), true));
+        // The original is still there: a copy, with entries of its own, the same each time.
+        let (copy, remember) = prefix_for(id, "C:/bots/copy", Some("C:/bots/a"), |place| place == "C:/bots/a");
+        assert!(copy.starts_with(&format!("{own}@")) && copy != own && !remember, "{copy}");
+        assert_eq!(prefix_for(id, "C:/bots/copy", Some("C:/bots/a"), |_| true).0, copy);
+        assert_ne!(prefix_for(id, "C:/bots/other", Some("C:/bots/a"), |_| true).0, copy);
     }
 
     #[test]
