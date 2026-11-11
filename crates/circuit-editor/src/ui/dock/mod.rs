@@ -51,6 +51,10 @@ pub struct Leaf<T> {
     /// Scroll the tab in front into view, next time it's drawn.
     #[serde(skip)]
     reveal: bool,
+    /// Tabs added in front, with the tab that was in front then: closing one
+    /// goes back there, as in a browser, not to the last tab of the row.
+    #[serde(skip, default = "Vec::new")]
+    openers: Vec<(T, T)>,
 }
 
 /// Two parts of the layout, and how they share the room.
@@ -164,7 +168,7 @@ fn first_window_id() -> u64 {
 
 impl<T> Leaf<T> {
     pub fn new(tabs: Vec<T>) -> Self {
-        Leaf { tabs, active: 0, rect: Rect::NOTHING, body: Rect::NOTHING, scroll: 0.0, reveal: false }
+        Leaf { tabs, active: 0, rect: Rect::NOTHING, body: Rect::NOTHING, scroll: 0.0, reveal: false, openers: Vec::new() }
     }
 
     pub fn active_tab(&self) -> Option<&T> {
@@ -175,6 +179,10 @@ impl<T> Leaf<T> {
 impl<T: Clone + PartialEq> Leaf<T> {
     /// Adds a tab at the end, in front.
     pub fn push(&mut self, tab: T) {
+        self.openers.retain(|(t, _)| *t != tab);
+        if let Some(opener) = self.active_tab().cloned() {
+            self.openers.push((tab.clone(), opener));
+        }
         self.tabs.push(tab);
         self.active = self.tabs.len() - 1;
         self.reveal = true;
@@ -182,10 +190,17 @@ impl<T: Clone + PartialEq> Leaf<T> {
 
     fn remove(&mut self, tab: &T) -> bool {
         let Some(i) = self.tabs.iter().position(|t| t == tab) else { return false };
+        let was_in_front = i == self.active;
         self.tabs.remove(i);
         if i < self.active || self.active >= self.tabs.len() {
             self.active = self.active.saturating_sub(1);
         }
+        // Back to the tab it was opened from, while that's still here.
+        let opener = self.openers.iter().find(|(t, _)| t == tab).map(|(_, o)| o.clone());
+        if was_in_front && let Some(at) = opener.and_then(|o| self.tabs.iter().position(|t| *t == o)) {
+            self.active = at;
+        }
+        self.openers.retain(|(t, o)| t != tab && o != tab);
         true
     }
 }
@@ -848,6 +863,23 @@ mod tests {
         assert_eq!(dock.focused(), Some(&"settings"), "another area: it stays");
         dock.leaf_with(&"canvas").unwrap().active = 1;
         assert_eq!(dock.focused(), None, "behind another tab: not the one the user is in");
+    }
+
+    /// A tab opened from another (a builder from a workspace) goes back to
+    /// that one when it closes, not to the last tab of the row.
+    #[test]
+    fn closing_goes_back_to_the_tab_it_was_opened_from() {
+        let mut dock = Dock::new(vec!["a", "b", "c"]);
+        dock.activate(&"b");
+        dock.leaf_with(&"b").unwrap().push("builder");
+        assert!(dock.is_active(&"builder"));
+        dock.remove(&"builder");
+        assert!(dock.is_active(&"b"), "back where it was opened");
+        // Its opener gone meanwhile: the tab before it, as always.
+        dock.leaf_with(&"a").unwrap().push("builder");
+        dock.remove(&"b");
+        dock.remove(&"builder");
+        assert!(dock.is_active(&"c"));
     }
 
     #[test]

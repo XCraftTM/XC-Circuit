@@ -657,6 +657,7 @@ english_name = "German"
 
 # Components V2, the Layout Builder, JSON views and slash command settings.
 "Layout Builder" = "Layout-Editor"
+"The {builder} has changes that aren't applied yet: apply them or close it, then open the other one." = "Der {builder} hat Änderungen, die noch nicht übernommen sind: Übernimm sie oder schließe ihn, dann öffne den anderen."
 "Empty: add parts in the builder" = "Leer: füge im Editor Teile hinzu"
 "Open the builder for the rest" = "Den Rest zeigt der Editor"
 "Edit layout…" = "Layout bearbeiten …"

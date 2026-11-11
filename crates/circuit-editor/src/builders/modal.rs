@@ -233,6 +233,17 @@ pub struct ModalEdit {
     pub draft: Value,
     /// The draft as JSON, while switched to JSON.
     pub json: Option<JsonText>,
+    /// The draft and its JSON as they were when opened, to tell whether it changed.
+    start: (Value, Option<String>),
+}
+
+impl super::Draft for ModalEdit {
+    fn field(&self) -> (&str, &str, &str) {
+        (&self.ws, &self.node, &self.key)
+    }
+    fn changed(&self) -> bool {
+        (&self.draft, self.json.as_ref().map(|j| &j.text)) != (&self.start.0, self.start.1.as_ref())
+    }
 }
 
 impl ModalEdit {
@@ -244,14 +255,15 @@ impl ModalEdit {
             Err(why) if value.is_array() || value.get("components").is_some_and(Value::is_array) => (empty(), Some(JsonText { error: Some(why), ..JsonText::new(value) })),
             Err(_) => (empty(), None),
         };
-        ModalEdit { ws: ws.into(), node: node.into(), key: key.into(), draft, json }
+        let start = (draft.clone(), json.as_ref().map(|j: &JsonText| j.text.clone()));
+        ModalEdit { ws: ws.into(), node: node.into(), key: key.into(), draft, json, start }
     }
 }
 
 pub fn open(ed: &mut Editor, ws: &str, node: &str, key: &str) {
     let value = ed.workspace(ws).and_then(|w| w.nodes.get(node)).and_then(|n| n.values.get(key).cloned()).unwrap_or(Value::Null);
     let value = if value.is_null() { field_default(ed, ws, node, key) } else { value };
-    ed.modal_edit = Some(ModalEdit::new(ws, node, key, &value));
+    super::open(&mut ed.modal_edit, &mut ed.actions, super::Kind::Modal, ws, node, key, || ModalEdit::new(ws, node, key, &value));
 }
 
 /// The field's default, for a block whose form wasn't changed yet.

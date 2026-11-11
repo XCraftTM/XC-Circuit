@@ -515,6 +515,18 @@ impl CircuitApp {
                         self.ed.selected = None;
                     }
                 }
+                Action::ShowBuilder(kind, kept) => {
+                    let (tab, name) = match kind {
+                        crate::builders::Kind::Embed => (Tab::EmbedBuilder, t!("Embed Builder")),
+                        crate::builders::Kind::Layout => (Tab::LayoutBuilder, t!("Layout Builder")),
+                        crate::builders::Kind::Modal => (Tab::ModalBuilder, t!("Modal Builder")),
+                        crate::builders::Kind::Canvas => (Tab::CanvasBuilder, t!("Canvas Builder")),
+                    };
+                    self.dock.focus(&tab);
+                    if kept {
+                        self.ed.log(Level::Warn, tf!("The {builder} has changes that aren't applied yet: apply them or close it, then open the other one.", builder = name));
+                    }
+                }
             }
         }
         self.drop_placeholder();

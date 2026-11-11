@@ -481,13 +481,25 @@ pub struct CanvasEdit {
     selected: Option<usize>,
     /// A drag in the preview: what it does, where it started, the layer's box then.
     drag: Option<(Drag, Pos2, [f32; 4])>,
+    /// The draft as it was when opened, to tell whether it changed.
+    start: Value,
+}
+
+impl super::Draft for CanvasEdit {
+    fn field(&self) -> (&str, &str, &str) {
+        (&self.ws, &self.node, &self.key)
+    }
+    fn changed(&self) -> bool {
+        self.draft.to_value() != self.start
+    }
 }
 
 impl CanvasEdit {
     pub fn new(ws: &str, node: &str, key: &str, value: &Value) -> CanvasEdit {
         let draft = CanvasData::from_value(value);
         let selected = (!draft.layers.is_empty()).then(|| draft.layers.len() - 1);
-        CanvasEdit { ws: ws.into(), node: node.into(), key: key.into(), draft, selected, drag: None }
+        let start = draft.to_value();
+        CanvasEdit { ws: ws.into(), node: node.into(), key: key.into(), draft, selected, drag: None, start }
     }
 }
 
@@ -495,7 +507,7 @@ impl CanvasEdit {
 pub fn open(ed: &mut Editor, ws: &str, node: &str, key: &str) {
     let n = ed.workspace(ws).and_then(|w| w.nodes.get(node));
     let value = n.and_then(|n| n.values.get(key).cloned().or_else(|| ed.reg.block(&n.block).and_then(|d| d.fields.get(key)).and_then(|f| f.default.clone()))).unwrap_or(Value::Null);
-    ed.canvas_edit = Some(CanvasEdit::new(ws, node, key, &value));
+    super::open(&mut ed.canvas_edit, &mut ed.actions, super::Kind::Canvas, ws, node, key, || CanvasEdit::new(ws, node, key, &value));
 }
 
 /// Ready-made designs to start from.

@@ -401,6 +401,25 @@ pub struct EmbedEdit {
     pub json: Option<JsonText>,
     /// "A set time" was picked for the timestamp and no time typed yet.
     pub set_time: bool,
+    /// The draft and its JSON as they were when opened, to tell whether it changed.
+    start: (Value, Option<String>),
+}
+
+impl super::Draft for EmbedEdit {
+    fn field(&self) -> (&str, &str, &str) {
+        (&self.ws, &self.node, &self.key)
+    }
+    fn changed(&self) -> bool {
+        (self.draft.to_value(), self.json.as_ref().map(|j| &j.text)) != (self.start.0.clone(), self.start.1.as_ref())
+    }
+}
+
+impl EmbedEdit {
+    pub fn new(ws: &str, node: &str, key: &str, value: &Value) -> EmbedEdit {
+        let draft = EmbedData::from_value(value);
+        let start = (draft.to_value(), None);
+        EmbedEdit { ws: ws.into(), node: node.into(), key: key.into(), draft, json: None, set_time: false, start }
+    }
 }
 
 pub fn open(ed: &mut Editor, ws: &str, node: &str, key: &str) {
@@ -409,7 +428,7 @@ pub fn open(ed: &mut Editor, ws: &str, node: &str, key: &str) {
         .and_then(|w| w.nodes.get(node))
         .and_then(|n| n.values.get(key).cloned())
         .unwrap_or(Value::Null);
-    ed.embed_edit = Some(EmbedEdit { ws: ws.into(), node: node.into(), key: key.into(), draft: EmbedData::from_value(&value), json: None, set_time: false });
+    super::open(&mut ed.embed_edit, &mut ed.actions, super::Kind::Embed, ws, node, key, || EmbedEdit::new(ws, node, key, &value));
 }
 
 /// The Embed Builder tab.

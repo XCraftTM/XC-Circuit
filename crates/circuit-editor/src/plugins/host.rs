@@ -864,8 +864,8 @@ impl api::Host for EditorHost<'_> {
         let builder_of = |t: &str| matches!(t, "embed" | "layout" | "modal" | "canvas" | "slash-command-ref");
         let key = if field.is_empty() { def.fields.iter().find(|(_, f)| builder_of(&f.type_name)).map(|(k, _)| k.clone()) } else { Some(field.to_string()) };
         let key = key.ok_or_else(|| format!("block {node} ({}) has nothing a builder edits", def.name))?;
-        let f = def.fields.get(&key).ok_or_else(|| format!("block {node} has no field `{key}`"))?;
-        Ok(match f.type_name.as_str() {
+        let kind = def.fields.get(&key).ok_or_else(|| format!("block {node} has no field `{key}`"))?.type_name.clone();
+        let name = match kind.as_str() {
             "embed" => {
                 crate::builders::embed::open(self.ed, workspace, node, &key);
                 "Embed Builder"
@@ -887,8 +887,21 @@ impl api::Host for EditorHost<'_> {
                 "Slash Commands"
             }
             other => return Err(format!("the field `{key}` is a {other}: no builder edits it")),
+        };
+        // One of its kind open for another field, with changes not applied, stays.
+        use crate::builders::Draft;
+        let target = (workspace, node, key.as_str());
+        let elsewhere = match kind.as_str() {
+            "embed" => self.ed.embed_edit.as_ref().is_some_and(|e| e.field() != target),
+            "layout" => self.ed.layout_edit.as_ref().is_some_and(|e| e.field() != target),
+            "modal" => self.ed.modal_edit.as_ref().is_some_and(|e| e.field() != target),
+            "canvas" => self.ed.canvas_edit.as_ref().is_some_and(|e| e.field() != target),
+            _ => false,
+        };
+        if elsewhere {
+            return Err(format!("the {name} is open for another block and has changes that aren't applied yet, so it was left as it is: the user can apply or close it first"));
         }
-        .to_string())
+        Ok(name.to_string())
     }
 
     fn agent_clients(&self) -> Value {

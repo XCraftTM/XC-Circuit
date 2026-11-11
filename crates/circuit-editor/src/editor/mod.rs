@@ -78,6 +78,9 @@ impl LogLine {
 pub enum Action {
     OpenWorkspace(String),
     CloseWorkspaceTabs(String),
+    /// A builder's tab to the front; `true` when it was kept because it has
+    /// changes not applied yet (another field's builder was asked for).
+    ShowBuilder(crate::builders::Kind, bool),
 }
 
 /// The mode of a project with only the core blocks: no Discord, no npm packages.

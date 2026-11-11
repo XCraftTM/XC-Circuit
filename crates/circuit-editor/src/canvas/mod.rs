@@ -212,7 +212,7 @@ fn edge_push(outer: Rect, p: Pos2) -> Vec2 {
 }
 
 pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
-    let Editor { reg, engine, theme, project, shapes, views, selected, edited, picker, active_workspace, activity, wire_values, multi, selected_notes, recording_frame, define_ctx, node_problems, live_others, embed_edit, layout_edit, modal_edit, canvas_edit, selected_wire, prefs, ui_rects, tour_parts, .. } = ed;
+    let Editor { reg, engine, theme, project, shapes, views, selected, edited, picker, active_workspace, activity, wire_values, multi, selected_notes, recording_frame, define_ctx, node_problems, live_others, embed_edit, layout_edit, modal_edit, canvas_edit, selected_wire, prefs, ui_rects, tour_parts, actions, .. } = ed;
     let Some(project) = project.as_mut() else { return };
     let mode = reg.mode(&project.meta.mode).or_else(|| reg.modes.first());
     let Some(ws) = project.workspaces.get_mut(ws_key) else {
@@ -1032,15 +1032,15 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         }
         if let Some(k) = open_canvas {
             let value = ws.nodes[id].values.get(&k).cloned().or_else(|| shape.and_then(|s| s.field(&k)).and_then(|f| f.default.clone())).unwrap_or(Value::Null);
-            *canvas_edit = Some(crate::builders::canvas::CanvasEdit::new(ws_key, id, &k, &value));
+            crate::builders::open(canvas_edit, actions, crate::builders::Kind::Canvas, ws_key, id, &k, || crate::builders::canvas::CanvasEdit::new(ws_key, id, &k, &value));
         }
         if let Some(k) = open_layout {
             let value = ws.nodes[id].values.get(&k).cloned().or_else(|| shape.and_then(|s| s.field(&k)).and_then(|f| f.default.clone())).unwrap_or(Value::Null);
-            *layout_edit = Some(crate::builders::layout::LayoutEdit::new(ws_key, id, &k, &value));
+            crate::builders::open(layout_edit, actions, crate::builders::Kind::Layout, ws_key, id, &k, || crate::builders::layout::LayoutEdit::new(ws_key, id, &k, &value));
         }
         if let Some(k) = open_modal {
             let value = ws.nodes[id].values.get(&k).cloned().or_else(|| shape.and_then(|s| s.field(&k)).and_then(|f| f.default.clone())).unwrap_or(Value::Null);
-            *modal_edit = Some(crate::builders::modal::ModalEdit::new(ws_key, id, &k, &value));
+            crate::builders::open(modal_edit, actions, crate::builders::Kind::Modal, ws_key, id, &k, || crate::builders::modal::ModalEdit::new(ws_key, id, &k, &value));
         }
 
         // Header interaction: the only place a block can be dragged.
@@ -1139,7 +1139,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     }
     if let Some((node, key)) = open_embed_for {
         let value = ws.nodes.get(&node).and_then(|n| n.values.get(&key).cloned()).unwrap_or(Value::Null);
-        *embed_edit = Some(crate::builders::embed::EmbedEdit { ws: ws_key.to_string(), node, key, draft: crate::builders::embed::EmbedData::from_value(&value), json: None, set_time: false });
+        crate::builders::open(embed_edit, actions, crate::builders::Kind::Embed, ws_key, &node, &key, || crate::builders::embed::EmbedEdit::new(ws_key, &node, &key, &value));
     }
     if let Some((node, pin)) = toggle_pin {
         let n = ws.nodes.get_mut(&node).unwrap();
