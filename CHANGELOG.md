@@ -5,6 +5,7 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 ## Unreleased
 
 ### Fixed
+- **Older graphics cards draw about twice as fast**: on a card that can't do DirectX 12 or Vulkan but works with OpenGL (such as a Radeon HD 5000), XC Circuit now chooses Older OpenGL by itself instead of OpenGL: on a Mobility Radeon HD 5000 it drew about twice as many frames. If it chose OpenGL before, pick Older OpenGL in Settings › Window › Graphics (or Automatic, to let it choose again).
 - **Big workspaces draw faster**: every frame, the canvas worked some things out again for every block, also those off screen: a map of all pins, whether an input comes from the event (rebuilding a list of all wires each time), the project's data written out as text to see whether it changed, and a copy of the Problems list. These are now made with a faster method, kept while nothing changes, or shared instead of copied, so a workspace of 1,600 blocks needs about a tenth less time per frame.
 
 

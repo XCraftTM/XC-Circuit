@@ -81,7 +81,7 @@ fn main() -> eframe::Result {
     );
     if result.is_ok()
         && let Some(why) = app::graphics::switching()
-        && let Some(code) = app::graphics::restart_with("opengl", why)
+        && let Some(code) = app::graphics::restart_with(app::graphics::SWITCH_TO, why)
     {
         std::process::exit(code);
     }

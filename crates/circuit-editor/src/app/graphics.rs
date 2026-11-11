@@ -14,9 +14,11 @@
 //! Graphics cards too old for DirectX 12 and Vulkan (such as a Radeon HD 5000)
 //! don't make `auto` fail: Windows draws with WARP instead. So when `auto`
 //! ends up drawing in software, the app asks OpenGL whether it has a graphics
-//! card; if so, it starts itself again with `opengl` (the window stays hidden
+//! card; if so, it starts itself again with `glow` (the window stays hidden
 //! meanwhile) and remembers that in `graphics.txt` in its data folder, so later
-//! starts begin there. Only such computers pay for the question.
+//! starts begin there. Only such computers pay for the question. `glow`, not
+//! `opengl`: on a Mobility Radeon HD 5000 it drew about twice as many frames
+//! (`--fps`), and it needs less than wgpu's OpenGL 3.3, which found the card.
 //!
 //! XC_RENDERER picks a stage by hand, before `graphics.txt`.
 
@@ -69,7 +71,7 @@ pub fn remembered() -> Option<&'static str> {
 
 /// After the window was made: when `auto` draws in software on Windows but
 /// OpenGL has a graphics card, a stand-in app that closes the still hidden
-/// window, so `main` can start again with OpenGL. None otherwise (and
+/// window, so `main` can start again with [`SWITCH_TO`]. None otherwise (and
 /// OpenGL is only asked when drawing in software).
 pub fn opengl_instead(cc: &eframe::CreationContext<'_>, stage: &str) -> Option<Box<dyn eframe::App>> {
     if !cfg!(windows) || stage != "auto" || std::env::var_os("WGPU_BACKEND").is_some() || !describe(cc).1 {
@@ -77,13 +79,16 @@ pub fn opengl_instead(cc: &eframe::CreationContext<'_>, stage: &str) -> Option<B
     }
     let card = graphics_card(adapters(wgpu::Backends::GL))?;
     let _ = SWITCH.set(format!("DirectX 12 and Vulkan could only draw in software, but OpenGL has {card}"));
-    // Later starts begin with OpenGL. If it stops working, the stages after it still follow.
+    // Later starts begin there. If it stops working, the stages after it still follow.
     let dir = crate::bot::app_data_dir();
-    let _ = std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(dir.join(REMEMBERED), "opengl\n"));
+    let _ = std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(dir.join(REMEMBERED), format!("{SWITCH_TO}\n")));
     Some(Box::new(Switching { _hidden: crate::app::reveal::Reveal::new(cc) }))
 }
 
-/// Why the app should start again with OpenGL, once its window has closed.
+/// The stage for a graphics card that only OpenGL can use.
+pub const SWITCH_TO: &str = "glow";
+
+/// Why the app should start again with [`SWITCH_TO`], once its window has closed.
 pub fn switching() -> Option<&'static str> {
     SWITCH.get().map(String::as_str)
 }
@@ -262,6 +267,7 @@ mod tests {
     #[test]
     fn stages_end_in_software() {
         assert_eq!(STAGES.last(), Some(&"software"));
+        assert!(STAGES.contains(&SWITCH_TO) && SWITCH_TO != "software", "a card only OpenGL can use gets a stage that draws with it");
         assert_eq!(describe_stage("software"), "Software drawing");
     }
 
