@@ -218,9 +218,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           for i in $(seq 1 60); do
-            run=$(gh run list --repo "${{ github.repository }}" --workflow checks.yml --commit "$GITHUB_SHA" --event push --limit 1 --json status,conclusion,url --jq '.[0] // empty')
+            # The newest run for the commit: from its push to main, or started by
+            # hand (Actions › Checks › Run workflow) when that one never ran.
+            run=$(gh run list --repo "${{ github.repository }}" --workflow checks.yml --commit "$GITHUB_SHA" --limit 10 --json status,conclusion,url,event --jq '[.[] | select(.event == "push" or .event == "workflow_dispatch")][0] // empty')
             if [ -z "$run" ]; then
-              echo "No Checks for $GITHUB_SHA: push the commit to main before tagging it."; exit 1
+              echo "No Checks for $GITHUB_SHA: push the commit to main (or run the Checks on it by hand) before tagging it."; exit 1
             fi
             status=$(echo "$run" | jq -r .status); conclusion=$(echo "$run" | jq -r .conclusion)
             if [ "$status" = "completed" ]; then
