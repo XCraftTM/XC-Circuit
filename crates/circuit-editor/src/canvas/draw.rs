@@ -109,6 +109,17 @@ const MAX_WIDER: f32 = 1.15;
 /// grey goes (0 to 1), and the scale left over from rounding its size.
 type Redone = (std::sync::Arc<egui::Galley>, f32, f32, f32);
 
+/// Which text was laid out again, and how: the text egui laid out (it hands
+/// back the same one while a text stays the same), the zoom, the colour grey
+/// text goes towards, and whether there's a bold font.
+type SharpKey = (usize, u32, Color32, bool);
+
+/// Texts laid out again, kept while they're drawn: a canvas that isn't zoomed
+/// doesn't lay all its texts out anew every frame. Each keeps the text it was
+/// made from, so that text's place can't be taken by another meanwhile.
+#[derive(Clone, Default)]
+struct Sharpened(std::collections::HashMap<SharpKey, (std::sync::Arc<egui::Galley>, Option<Redone>, u64)>);
+
 /// egui draws text in a zoomed layer from glyphs rendered for 100% and then
 /// scales them, which blurs them (at 65% the letters are shrunken bitmaps).
 /// This lays every text in the canvas out again at the size it appears on
@@ -135,10 +146,15 @@ pub(super) fn sharpen_text(ctx: &egui::Context, layer: LayerId, to_global: TSTra
         return;
     }
     let bold = ctx.fonts(|f| f.definitions().families.contains_key(&crate::ui::fonts::bold(1.0).family));
+    // Taken out of the context's memory while texts are laid out (both need its lock).
+    let kept_id = layer.id.with("sharpened texts");
+    let mut kept: Sharpened = ctx.data_mut(|d| std::mem::take(d.get_temp_mut_or_default::<Sharpened>(kept_id)));
+    let frame = ctx.cumulative_pass_nr();
     // Laid out before touching the paint lists: both need the context's lock.
     let sharp: Vec<(usize, Pos2, Option<Redone>)> = texts
         .into_iter()
         .map(|(i, pos, galley)| {
+            let key: SharpKey = (std::sync::Arc::as_ptr(&galley) as usize, zoom.to_bits(), text, bold);
             let size = galley.job.sections.iter().map(|s| s.format.font_id.size).fold(0.0, f32::max);
             let screen = size * zoom;
             let small = screen > 0.0 && screen < SMALL_TEXT;
@@ -160,14 +176,24 @@ pub(super) fn sharpen_text(ctx: &egui::Context, layer: LayerId, to_global: TSTra
                 }
                 (ctx.fonts_mut(|f| f.layout_job(job)), k / kq)
             };
-            let big = redo.then(|| {
-                let (mut g, mut fix) = lay(zoom * grow);
-                let wider = g.size().x * fix / zoom / galley.size().x.max(0.1);
-                if free && small && wider > MAX_WIDER {
-                    (g, fix) = lay(zoom * grow * MAX_WIDER / wider);
+            let big = match kept.0.get_mut(&key) {
+                Some((_, big, used)) => {
+                    *used = frame;
+                    big.clone()
                 }
-                (g, screen, how, fix)
-            });
+                None => {
+                    let big = redo.then(|| {
+                        let (mut g, mut fix) = lay(zoom * grow);
+                        let wider = g.size().x * fix / zoom / galley.size().x.max(0.1);
+                        if free && small && wider > MAX_WIDER {
+                            (g, fix) = lay(zoom * grow * MAX_WIDER / wider);
+                        }
+                        (g, screen, how, fix)
+                    });
+                    kept.0.insert(key, (galley.clone(), big.clone(), frame));
+                    big
+                }
+            };
             // Bigger (or bolder, so wider) text stays centred on its place.
             let pos = match &big {
                 Some((g, _, _, fix)) if free => pos - (g.size() * *fix / zoom - galley.size()) / 2.0,
@@ -178,6 +204,9 @@ pub(super) fn sharpen_text(ctx: &egui::Context, layer: LayerId, to_global: TSTra
             (i, snapped, big)
         })
         .collect();
+    // Only what this frame drew stays.
+    kept.0.retain(|_, (_, _, used)| *used == frame);
+    ctx.data_mut(|d| d.insert_temp(kept_id, kept));
     ctx.graphics_mut(|g| {
         let list = g.entry(layer);
         for (i, pos, big) in sharp {

@@ -468,7 +468,7 @@ fn rename_box(ui: &mut Ui, area: Rect, state: &mut Renaming) -> Option<bool> {
 }
 
 /// The Workspaces panel. `problems` counts the Problems panel's entries per workspace.
-pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
+pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<&str, usize>) {
     let theme = ed.theme.clone();
     let icons = Icons::new(ed);
     let Some(project) = ed.project.as_ref() else {
@@ -487,6 +487,15 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
     ed.ws_list_frame = ctx.cumulative_frame_nr();
     let selected = ed.ws_selection.clone();
     let order = std::cell::RefCell::new(Vec::<String>::new());
+    // Each workspace's events, for its hover text: counted again only after
+    // a change, not for every block of every workspace each frame.
+    let events_id = Id::unique("sidebar-event-counts");
+    let events_kept = std::cell::RefCell::new(ctx.data_mut(|d| std::mem::take(d.get_temp_mut_or_default::<HashMap<String, (u64, usize)>>(events_id))));
+    let events_stamp = |ws: &circuit_core::Workspace| {
+        let mut h = crate::editor::Fingerprint::default();
+        std::hash::Hash::hash(&(ed.history.revision(), ed.reloads, ws.nodes.len()), &mut h);
+        std::hash::Hasher::finish(&h)
+    };
     let list_area = ui.max_rect();
     ctx.data_mut(|d| d.remove::<DropHint>(Id::unique(HINT_KEY)));
 
@@ -570,7 +579,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                 let editing = renaming.as_ref().is_some_and(|r| r.target == target);
                 let activity = ran.get(key.as_str());
                 let marks = Marks {
-                    problems: problems.get(key).copied().unwrap_or(0),
+                    problems: problems.get(key.as_str()).copied().unwrap_or(0),
                     live: activity.is_some_and(|(at, _, _)| at.elapsed() < crate::bot::GLOW),
                     failed: activity.is_some_and(|(_, failed, _)| *failed),
                     off: ws.disabled,
@@ -584,7 +593,16 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                     marks.paint(ui, &theme, &icons, resp.rect.right() - 34.0, resp.rect.center().y);
                 }
                 // On hover: what's in it, its problems, what the bot did with it.
-                let events = ws.nodes.values().filter(|n| reg.block(&n.block).is_some_and(|d| d.kind == circuit_core::BlockKind::Event)).count();
+                let stamp = events_stamp(ws);
+                let events = match events_kept.borrow().get(key.as_str()) {
+                    Some((s, n)) if *s == stamp => Some(*n),
+                    _ => None,
+                };
+                let events = events.unwrap_or_else(|| {
+                    let n = ws.nodes.values().filter(|n| reg.block(&n.block).is_some_and(|d| d.kind == circuit_core::BlockKind::Event)).count();
+                    events_kept.borrow_mut().insert(key.clone(), (stamp, n));
+                    n
+                });
                 let blocks = match ws.nodes.len() {
                     1 => t!("1 block").to_string(),
                     n => tf!("{count} blocks", count = n),
@@ -747,7 +765,7 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
                 let open = is_open(folder);
                 // Every workspace in it, also in the folders inside.
                 let inside: Vec<&String> = project.workspaces.iter().filter(|(_, w)| w.folder.as_deref().is_some_and(|f| folders::within(f, folder))).map(|(k, _)| k).collect();
-                let folder_problems: usize = inside.iter().map(|k| problems.get(*k).copied().unwrap_or(0)).sum();
+                let folder_problems: usize = inside.iter().map(|k| problems.get(k.as_str()).copied().unwrap_or(0)).sum();
                 let own = folders::name(folder);
                 let (resp, label_area) = row(ui, &theme, &icons, Id::unique(("sidebar-folder", folder)), folders::depth(folder) + 1, Some(open), Some("folder"), if editing { "" } else { own }, false, false, 60.0, false);
                 if !editing {
@@ -1079,6 +1097,8 @@ pub fn panel(ui: &mut Ui, ed: &mut Editor, problems: &HashMap<String, usize>) {
     if (elsewhere || escape) && ed.ask_delete_workspaces.is_none() {
         ed.ws_selection.clear();
     }
+    let events_kept = events_kept.into_inner();
+    ctx.data_mut(|d| d.insert_temp(events_id, events_kept));
     apply(ed, &ctx, todo, &mut renaming);
     ctx.data_mut(|d| match renaming {
         Some(r) => {
@@ -1698,7 +1718,7 @@ mod tests {
         let node = ed.project.as_ref().unwrap().workspaces["welcome"].nodes.keys().next().unwrap().clone();
         ed.activity.insert(("welcome".into(), node), crate::bot::Activity { at: std::time::Instant::now(), error: Some("Missing Permissions".into()), ms: None });
         let mut problems = HashMap::new();
-        problems.insert("welcome".to_string(), 2);
+        problems.insert("welcome", 2);
         crate::ui::fonts::install(&ctx);
         for _ in 0..2 {
             let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(260.0, 600.0))), ..Default::default() };

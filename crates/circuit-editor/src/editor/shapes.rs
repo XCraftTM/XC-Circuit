@@ -36,6 +36,18 @@ impl ShapeCache {
         self.known.clear();
     }
 
+    /// The blocks that run before `node` (see `values::upstream`), kept until
+    /// the workspace's wires or blocks change. Within a pass (see `begin`).
+    pub fn upstream(&mut self, reg: &Registry, ws_key: &str, ws: &Workspace, project: &Value, node: &str) -> &[String] {
+        let k = self.known(reg, ws_key, ws, project);
+        if !k.upstream.contains_key(node) {
+            let wiring = k.wiring.get_or_insert_with(|| crate::editor::values::Wiring::new(ws));
+            let up = crate::editor::values::upstream_with(ws, node, reg, wiring);
+            k.upstream.insert(node.to_string(), up);
+        }
+        &k.upstream[node]
+    }
+
     /// After plugins reload: every block's `define()` gets a new chance.
     pub fn forget_too_slow(&mut self) {
         self.too_slow.clear();
@@ -74,6 +86,7 @@ impl ShapeCache {
             let rewired = structure != k.structure;
             if rewired || project != k.project {
                 k.names.clear();
+                k.upstream.clear();
                 k.wiring = None;
                 (k.structure, k.project) = (structure, project);
             }
@@ -109,6 +122,8 @@ pub(super) struct Known {
     /// The wires by block, for walking back along them; kept while the
     /// structure stays the same.
     pub(super) wiring: Option<crate::editor::values::Wiring>,
+    /// The blocks before each block asked about, kept like `names`.
+    pub(super) upstream: HashMap<String, Vec<String>>,
 }
 
 /// Checked every frame: the value as it is, not written out as text first.
@@ -221,6 +236,7 @@ pub(super) fn known_names(reg: &Registry, engine: &BlockEngine, cache: &mut Shap
     let hash = h.finish();
     let k = cache.known(reg, ws_key, ws, project);
     k.names.insert(node_id.to_string(), (known, hash));
+    k.upstream.entry(node_id.to_string()).or_insert(upstream);
     k.wiring = Some(wiring);
     hash
 }

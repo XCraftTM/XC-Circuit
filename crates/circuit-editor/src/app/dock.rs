@@ -328,7 +328,7 @@ pub(super) fn side_view_ui(
             let mut counts = std::collections::HashMap::new();
             for (_, _, at) in problems {
                 if let Some((ws, _)) = at {
-                    *counts.entry(ws.clone()).or_insert(0) += 1;
+                    *counts.entry(ws.as_str()).or_insert(0) += 1;
                 }
             }
             crate::pages::sidebar::panel(ui, ed, &counts);

@@ -336,10 +336,15 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         }
     }
     let pin_at = |node: &str, pin: &str, dir: Dir| pin_index.get(&(node, pin, dir)).map(|i| &layouts[i / 1000].pins[i % 1000]);
-    // For inputs that may come from the event: the wires by block, made at
-    // most once a frame, and the blocks before each block asked about.
-    let mut wiring: Option<crate::editor::values::Wiring> = None;
-    let mut before: HashMap<String, Vec<String>> = HashMap::new();
+    // Which pins have a wire, for every field drawn: one look instead of a
+    // search through all the wires each time.
+    let pin_key = |node: &str, pin: &str| {
+        let mut h = crate::editor::Fingerprint::default();
+        (node, pin).hash(&mut h);
+        h.finish()
+    };
+    let wired: std::collections::HashSet<u64, std::hash::BuildHasherDefault<crate::editor::Fingerprint>> =
+        ws.links.iter().flat_map(|l| [pin_key(&l.from.node, &l.from.pin), pin_key(&l.to.node, &l.to.pin)]).collect();
 
     let (outer, _) = ui.allocate_exact_size(ui.available_size(), Sense::hover());
     ui.painter().rect_filled(outer, 0.0, theme.canvas);
@@ -887,15 +892,12 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
                 }
                 RowKind::Field { key, pinned } => {
                     let Some(f) = shape.and_then(|s| s.field(key)) else { continue };
-                    let connected = ws.is_connected(id, key);
+                    let connected = wired.contains(&pin_key(id, key));
                     let node_values = &ws.nodes[id].values;
                     let empty = node_values.get(key).or(f.default.as_ref()).is_none_or(|v| v.is_null() || v == &Value::String(String::new()));
                     // An unconnected interaction or server comes from the event.
                     let from_event = !connected && empty && crate::editor::values::takes_context(&f.type_name) && {
-                        let up = before.entry(id.clone()).or_insert_with(|| {
-                            let wiring = wiring.get_or_insert_with(|| crate::editor::values::Wiring::new(ws));
-                            crate::editor::values::upstream_with(ws, id, reg, wiring)
-                        });
+                        let up = shapes.upstream(reg, ws_key, ws, define_ctx, id);
                         crate::editor::values::from_event_in(ws, up, key, &f.type_name, reg)
                     };
                     let missing = f.required && empty && !connected && !from_event;
