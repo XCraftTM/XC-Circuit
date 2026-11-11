@@ -2,12 +2,13 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## Unreleased
+## 0.3.1
 
 ### Fixed
 - **Older graphics cards draw about twice as fast**: on a card that can't do DirectX 12 or Vulkan but works with OpenGL (such as a Radeon HD 5000), XC Circuit now chooses Older OpenGL by itself instead of OpenGL: on a Mobility Radeon HD 5000 it drew about twice as many frames. If it chose OpenGL before, pick Older OpenGL in Settings › Window › Graphics (or Automatic, to let it choose again).
 - **Big workspaces draw faster**: every frame, the canvas worked some things out again for every block, also those off screen: a map of all pins, whether an input comes from the event (rebuilding a list of all wires each time), the project's data written out as text to see whether it changed, and a copy of the Problems list. These are now made with a faster method, kept while nothing changes, or shared instead of copied. The canvas also kept laying out every text again each frame to keep it sharp when zoomed, looked through all the wires for every field to see whether it's connected, and the Workspaces list counted the events of every workspace each frame for its hover text: all of that is now kept until something changes. On a laptop-sized window, a canvas frame takes about a quarter less time.
 
+## 0.3.0
 
 The biggest release so far: your project can live in a Git repository and on a server of your own, several people can work in it at the same time, and the window is laid out anew.
 
