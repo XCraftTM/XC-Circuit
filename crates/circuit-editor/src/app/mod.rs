@@ -62,6 +62,10 @@ pub enum Tab {
     /// A plugin's panel: plugin id, panel id.
     Plugin(String, String),
     /// Editors that used to be dialogs. Each is open while its draft exists.
+    /// A builder for one field of a block: its kind and number (several can be open).
+    Builder(crate::builders::Kind, u64),
+    /// Builders as earlier versions saved them in the layout: only read, and
+    /// taken out at the start (what they were editing isn't kept).
     EmbedBuilder,
     LayoutBuilder,
     ModalBuilder,

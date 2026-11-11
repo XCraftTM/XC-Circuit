@@ -3,6 +3,7 @@
 //! bot's settings what was being edited, so it comes back as it was.
 
 use super::*;
+use crate::builders::Kind;
 
 /// What a closed builder or settings tab was editing.
 pub(super) enum Draft {
@@ -43,7 +44,7 @@ pub(super) fn places(dock: &Dock<Tab>) -> std::collections::HashMap<Tab, (Option
 pub(super) fn remembered(tab: &Tab, with_draft: bool) -> bool {
     match tab {
         Tab::Canvas(_) | Tab::Settings | Tab::Backups | Tab::PluginPage(_) | Tab::Inspector | Tab::Console | Tab::Problems | Tab::Side(_) | Tab::Plugin(..) | Tab::Git => true,
-        Tab::EmbedBuilder | Tab::LayoutBuilder | Tab::ModalBuilder | Tab::CanvasBuilder | Tab::SlashCommands | Tab::BotSettings => with_draft,
+        Tab::Builder(..) | Tab::SlashCommands | Tab::BotSettings => with_draft,
         _ => false,
     }
 }
@@ -70,7 +71,15 @@ impl CircuitApp {
                 Tab::PluginPage(id) => !self.ed.reg.plugins.iter().chain(self.ed.reg.disabled.iter()).any(|p| p.manifest.id == *id),
                 _ => false,
             };
-            if gone || self.dock.contains(&tab) || self.ed.project.is_none() {
+            // A builder for the same field was opened again meanwhile: that one stays.
+            let field_open = match &draft {
+                Draft::Embed(d) => self.ed.builder_open(Kind::Embed, &d.ws, &d.node, &d.key),
+                Draft::Layout(d) => self.ed.builder_open(Kind::Layout, &d.ws, &d.node, &d.key),
+                Draft::Modal(d) => self.ed.builder_open(Kind::Modal, &d.ws, &d.node, &d.key),
+                Draft::Canvas(d) => self.ed.builder_open(Kind::Canvas, &d.ws, &d.node, &d.key),
+                _ => false,
+            };
+            if gone || field_open || self.dock.contains(&tab) || self.ed.project.is_none() {
                 continue;
             }
             // An icon in the activity bar now: shown there.
@@ -78,13 +87,25 @@ impl CircuitApp {
                 self.show_panel(tab);
                 return true;
             }
-            // A builder comes back with what it was editing, unless one is open.
+            // A builder comes back with what it was editing (and its number, so its tab).
             let taken = match draft {
                 Draft::None => false,
-                Draft::Embed(d) => self.ed.embed_edit.replace(d).is_some(),
-                Draft::Layout(d) => self.ed.layout_edit.replace(d).is_some(),
-                Draft::Modal(d) => self.ed.modal_edit.replace(d).is_some(),
-                Draft::Canvas(d) => self.ed.canvas_edit.replace(d).is_some(),
+                Draft::Embed(d) => {
+                    self.ed.embed_edits.push(d);
+                    false
+                }
+                Draft::Layout(d) => {
+                    self.ed.layout_edits.push(d);
+                    false
+                }
+                Draft::Modal(d) => {
+                    self.ed.modal_edits.push(d);
+                    false
+                }
+                Draft::Canvas(d) => {
+                    self.ed.canvas_edits.push(d);
+                    false
+                }
                 Draft::Slash(d) => self.ed.slash_edit.replace(d).is_some(),
                 Draft::BotSettings(d) => self.bot.settings.replace(d).is_some(),
             };

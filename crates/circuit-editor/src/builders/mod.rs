@@ -10,8 +10,8 @@ pub mod markdown;
 pub mod modal;
 pub mod slash;
 
-/// The builders that edit one field of a block, for showing their tab.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// The builders that edit one field of a block.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Kind {
     Embed,
     Layout,
@@ -19,23 +19,42 @@ pub enum Kind {
     Canvas,
 }
 
-/// A builder's draft, as far as opening another builder of its kind needs to know.
-pub trait Draft {
-    /// The field it edits: workspace, block and field.
-    fn field(&self) -> (&str, &str, &str);
-    /// Whether it holds changes that aren't applied to the block yet.
-    fn changed(&self) -> bool;
+/// What a builder is called, in the interface's language.
+pub fn name(kind: Kind) -> &'static str {
+    match kind {
+        Kind::Embed => t!("Embed Builder"),
+        Kind::Layout => t!("Layout Builder"),
+        Kind::Modal => t!("Modal Builder"),
+        Kind::Canvas => t!("Canvas Builder"),
+    }
 }
 
-/// Opens a builder for a field. Not when one of its kind is open for that
-/// field already (it comes to the front as it is), nor when it's open for
-/// another field with changes not applied yet, which this would throw away:
-/// that one comes to the front, and the Console says why.
-pub fn open<E: Draft>(slot: &mut Option<E>, actions: &mut Vec<crate::editor::Action>, kind: Kind, ws: &str, node: &str, key: &str, make: impl FnOnce() -> E) {
-    match slot.as_ref() {
-        Some(open) if open.field() == (ws, node, key) => actions.push(crate::editor::Action::ShowBuilder(kind, false)),
-        Some(open) if open.changed() => actions.push(crate::editor::Action::ShowBuilder(kind, true)),
-        _ => *slot = Some(make()),
+/// A number for a builder just opened: several can be open, each in a tab of its own.
+pub fn next_id() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
+/// An open builder's draft, as far as opening another one needs to know.
+pub trait Draft {
+    /// Its number (see [`next_id`]).
+    fn id(&self) -> u64;
+    /// The field it edits: workspace, block and field.
+    fn field(&self) -> (&str, &str, &str);
+}
+
+/// Takes an open builder out by its number (its tab closed).
+pub fn take<E: Draft>(open: &mut Vec<E>, id: u64) -> Option<E> {
+    open.iter().position(|e| e.id() == id).map(|i| open.remove(i))
+}
+
+/// Opens a builder for a field, in a tab of its own beside those already
+/// open. One open for that field already comes to the front as it is,
+/// changes and all.
+pub fn open<E: Draft>(open: &mut Vec<E>, actions: &mut Vec<crate::editor::Action>, kind: Kind, ws: &str, node: &str, key: &str, make: impl FnOnce() -> E) {
+    match open.iter().find(|e| e.field() == (ws, node, key)) {
+        Some(e) => actions.push(crate::editor::Action::ShowBuilder(kind, e.id())),
+        None => open.push(make()),
     }
 }
 
@@ -99,34 +118,25 @@ mod tests {
         assert!(!super::web_address_ok("x.example/a.png"));
     }
 
-    /// Opening a builder never throws away changes not applied yet: one open
-    /// for the same field comes to the front as it is, and one for another
-    /// field with changes stays (the app shows it and says why).
+    /// Builders for different fields are open side by side, each with its own
+    /// number; asking again for a field that has one shows that one, as it is.
     #[test]
-    fn opening_a_builder_keeps_changes_not_applied() {
+    fn builders_open_side_by_side() {
         use super::layout::LayoutEdit;
         use super::{Draft, Kind, open};
         use crate::editor::Action;
         let value = serde_json::json!({ "components": [] });
-        let (mut slot, mut actions): (Option<LayoutEdit>, Vec<Action>) = (None, Vec::new());
-        open(&mut slot, &mut actions, Kind::Layout, "w", "a", "layout", || LayoutEdit::new("w", "a", "layout", &value));
-        assert!(slot.as_ref().is_some_and(|e| e.field() == ("w", "a", "layout") && !e.changed()) && actions.is_empty());
+        let (mut list, mut actions): (Vec<LayoutEdit>, Vec<Action>) = (Vec::new(), Vec::new());
+        open(&mut list, &mut actions, Kind::Layout, "w", "a", "layout", || LayoutEdit::new("w", "a", "layout", &value));
+        open(&mut list, &mut actions, Kind::Layout, "w", "b", "layout", || LayoutEdit::new("w", "b", "layout", &value));
+        assert_eq!(list.iter().map(|e| e.field().1).collect::<Vec<_>>(), ["a", "b"]);
+        assert_ne!(list[0].id(), list[1].id());
+        assert!(actions.is_empty());
 
-        // Unchanged: another block's builder takes its place.
-        open(&mut slot, &mut actions, Kind::Layout, "w", "b", "layout", || LayoutEdit::new("w", "b", "layout", &value));
-        assert_eq!(slot.as_ref().unwrap().field(), ("w", "b", "layout"));
-
-        // Changed: it stays, and is shown with a word why.
-        slot.as_mut().unwrap().draft["components"] = serde_json::json!([{ "type": 10, "content": "Hi" }]);
-        assert!(slot.as_ref().unwrap().changed());
-        open(&mut slot, &mut actions, Kind::Layout, "w", "a", "layout", || LayoutEdit::new("w", "a", "layout", &value));
-        assert_eq!(slot.as_ref().unwrap().field(), ("w", "b", "layout"));
-        assert!(matches!(actions.as_slice(), [Action::ShowBuilder(Kind::Layout, true)]));
-
-        // The same field again: shown as it is, changes and all.
-        actions.clear();
-        open(&mut slot, &mut actions, Kind::Layout, "w", "b", "layout", || LayoutEdit::new("w", "b", "layout", &value));
-        assert!(slot.as_ref().unwrap().changed());
-        assert!(matches!(actions.as_slice(), [Action::ShowBuilder(Kind::Layout, false)]));
+        list[0].draft["components"] = serde_json::json!([{ "type": 10, "content": "Hi" }]);
+        open(&mut list, &mut actions, Kind::Layout, "w", "a", "layout", || LayoutEdit::new("w", "a", "layout", &value));
+        assert_eq!(list.len(), 2, "not a second one for the same field");
+        assert_eq!(list[0].draft["components"][0]["content"], "Hi", "kept as it was");
+        assert!(matches!(actions.as_slice(), [Action::ShowBuilder(Kind::Layout, id)] if *id == list[0].id()));
     }
 }

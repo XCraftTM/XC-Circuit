@@ -210,7 +210,8 @@ pub fn preview_and_values(ui: &mut Ui, theme: &Theme, id: &str, preview: impl Fn
 }
 
 pub fn tab(ui: &mut Ui, theme: &Theme, spec: Spec, mut content: impl FnMut(&mut Ui, Part)) {
-    let id = Id::unique(("dialog-tab", spec.id));
+    // Of this tab: two builders of a kind can be open side by side.
+    let id = ui.make_persistent_id(("dialog-tab", spec.id));
     egui::Panel::bottom(id.with("footer"))
         .resizable(false)
         .frame(Frame::new().fill(theme.panel_header).stroke(Stroke::new(1.0, theme.line)).inner_margin(Margin::symmetric(16, 12)))

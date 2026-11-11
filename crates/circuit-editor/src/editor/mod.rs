@@ -78,9 +78,8 @@ impl LogLine {
 pub enum Action {
     OpenWorkspace(String),
     CloseWorkspaceTabs(String),
-    /// A builder's tab to the front; `true` when it was kept because it has
-    /// changes not applied yet (another field's builder was asked for).
-    ShowBuilder(crate::builders::Kind, bool),
+    /// An open builder's tab to the front, by its kind and number.
+    ShowBuilder(crate::builders::Kind, u64),
 }
 
 /// The mode of a project with only the core blocks: no Discord, no npm packages.
@@ -178,9 +177,9 @@ pub struct Editor {
     last_save: u64,
     /// What blocks see as `project` in `define()`: `{ data, settings }` of the open project.
     pub define_ctx: Value,
-    pub embed_edit: Option<crate::builders::embed::EmbedEdit>,
-    pub layout_edit: Option<crate::builders::layout::LayoutEdit>,
-    pub modal_edit: Option<crate::builders::modal::ModalEdit>,
+    pub embed_edits: Vec<crate::builders::embed::EmbedEdit>,
+    pub layout_edits: Vec<crate::builders::layout::LayoutEdit>,
+    pub modal_edits: Vec<crate::builders::modal::ModalEdit>,
     /// Workspaces selected in the Workspaces list (Ctrl- and Shift-click), and
     /// the one a Shift-click counts from. Delete asks to delete them.
     pub ws_selection: Vec<String>,
@@ -190,7 +189,7 @@ pub struct Editor {
     pub ws_list_frame: u64,
     /// Workspaces waiting for "Delete them?" to be answered.
     pub ask_delete_workspaces: Option<Vec<String>>,
-    pub canvas_edit: Option<crate::builders::canvas::CanvasEdit>,
+    pub canvas_edits: Vec<crate::builders::canvas::CanvasEdit>,
     /// The bot's name and picture, for message previews.
     pub bot_profile: crate::bot::profile::Profile,
     /// The bot's servers, channels and roles, for picking ids.
@@ -252,14 +251,14 @@ impl Editor {
             saver: saver::Saver::default(),
             last_save: 0,
             define_ctx: Value::Object(Map::new()),
-            embed_edit: None,
-            layout_edit: None,
-            modal_edit: None,
+            embed_edits: Vec::new(),
+            layout_edits: Vec::new(),
+            modal_edits: Vec::new(),
             ws_selection: Vec::new(),
             ws_anchor: None,
             ws_list_frame: 0,
             ask_delete_workspaces: None,
-            canvas_edit: None,
+            canvas_edits: Vec::new(),
             bot_profile: Default::default(),
             servers: Default::default(),
             slash_edit: None,
@@ -449,13 +448,13 @@ impl Editor {
         self.picker = None;
         self.active_workspace = None;
         self.activity.clear();
-        self.embed_edit = None;
-        self.layout_edit = None;
-        self.modal_edit = None;
+        self.embed_edits.clear();
+        self.layout_edits.clear();
+        self.modal_edits.clear();
         self.ws_selection.clear();
         self.ws_anchor = None;
         self.ask_delete_workspaces = None;
-        self.canvas_edit = None;
+        self.canvas_edits.clear();
         self.slash_edit = None;
         self.ws_export = None;
         self.ws_import = None;
@@ -478,6 +477,37 @@ impl Editor {
         self.last_save = id;
         let backup = self.prefs.backups.then_some((self.prefs.backup_keep, self.prefs.backup_days));
         self.saver.send(saver::Job::Save { id, project: copy, backups: self.backups.clone(), backup });
+    }
+
+    /// The builders open, by kind and number, in the order they were opened.
+    pub fn open_builders(&self) -> Vec<(crate::builders::Kind, u64)> {
+        use crate::builders::{Draft, Kind};
+        let mut out: Vec<(Kind, u64)> = Vec::new();
+        out.extend(self.embed_edits.iter().map(|e| (Kind::Embed, e.id())));
+        out.extend(self.layout_edits.iter().map(|e| (Kind::Layout, e.id())));
+        out.extend(self.modal_edits.iter().map(|e| (Kind::Modal, e.id())));
+        out.extend(self.canvas_edits.iter().map(|e| (Kind::Canvas, e.id())));
+        out.sort_by_key(|(_, id)| *id);
+        out
+    }
+
+    /// The field an open builder edits: workspace, block and field.
+    pub fn builder_field(&self, kind: crate::builders::Kind, id: u64) -> Option<(&str, &str, &str)> {
+        use crate::builders::{Draft, Kind};
+        fn find<E: Draft>(list: &[E], id: u64) -> Option<(&str, &str, &str)> {
+            list.iter().find(|e| e.id() == id).map(|e| e.field())
+        }
+        match kind {
+            Kind::Embed => find(&self.embed_edits, id),
+            Kind::Layout => find(&self.layout_edits, id),
+            Kind::Modal => find(&self.modal_edits, id),
+            Kind::Canvas => find(&self.canvas_edits, id),
+        }
+    }
+
+    /// Whether a builder of this kind is open for this field.
+    pub fn builder_open(&self, kind: crate::builders::Kind, ws: &str, node: &str, key: &str) -> bool {
+        self.open_builders().into_iter().any(|(k, id)| k == kind && self.builder_field(k, id) == Some((ws, node, key)))
     }
 
     /// Keeps a copy of the unsaved changes for after a crash (on the saving thread).

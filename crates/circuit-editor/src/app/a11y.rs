@@ -248,7 +248,7 @@ fn every_builder_names_its_controls() {
     look(&h, "Embed Builder", &mut missing);
     {
         let ed = &mut h.state_mut().ed;
-        ed.embed_edit = None;
+        ed.embed_edits.clear();
         crate::builders::layout::open(ed, &ws, "l", "layout");
     }
     settle(&mut h);
@@ -256,7 +256,7 @@ fn every_builder_names_its_controls() {
     {
         // A form with every kind of part, so each one's controls are looked at.
         let ed = &mut h.state_mut().ed;
-        ed.layout_edit = None;
+        ed.layout_edits.clear();
         let form = serde_json::json!({ "title": "Apply", "custom_id": "apply", "components": [
             { "type": 10, "content": "Read this first" },
             { "type": 18, "label": "Name", "component": { "type": 4, "custom_id": "name", "style": 1 } },
@@ -264,20 +264,20 @@ fn every_builder_names_its_controls() {
             { "type": 18, "label": "Who", "component": { "type": 8, "custom_id": "where" } },
             { "type": 18, "label": "Proof", "component": { "type": 19, "custom_id": "proof" } }
         ] });
-        ed.modal_edit = Some(crate::builders::modal::ModalEdit::new(&ws, "m", "form", &form));
+        ed.modal_edits.push(crate::builders::modal::ModalEdit::new(&ws, "m", "form", &form));
     }
     settle(&mut h);
     look(&h, "Modal Builder", &mut missing);
     {
         let ed = &mut h.state_mut().ed;
-        ed.modal_edit = None;
+        ed.modal_edits.clear();
         crate::builders::canvas::open(ed, &ws, "c", "canvas");
     }
     settle(&mut h);
     look(&h, "Canvas Builder", &mut missing);
     {
         let ed = &mut h.state_mut().ed;
-        ed.canvas_edit = None;
+        ed.canvas_edits.clear();
         crate::builders::slash::open(ed);
     }
     settle(&mut h);
@@ -308,4 +308,40 @@ fn accessibility_can_be_turned_off() {
     ctx.enable_accesskit();
     assert!(!frame(&ctx, true), "off: nothing built, though it was asked for");
     assert!(crate::editor::prefs::Prefs::default().accessibility, "on to start with");
+}
+
+/// Two blocks' layouts open at once: a tab each, named after its block, and
+/// each keeps its own draft; closing one goes back to the other.
+#[test]
+fn two_builders_of_a_kind_are_open_side_by_side() {
+    use crate::builders::Kind;
+    let mut h = window("builders", true);
+    let ws = h.state().ed.project.as_ref().unwrap().workspaces.keys().next().unwrap().clone();
+    {
+        let ed = &mut h.state_mut().ed;
+        crate::builders::layout::open(ed, &ws, "l", "layout");
+        crate::builders::layout::open(ed, &ws, "l", "other");
+    }
+    settle(&mut h);
+    let tabs = |h: &Harness<'_, CircuitApp>| h.state().dock.tabs().filter(|t| matches!(t, Tab::Builder(Kind::Layout, _))).cloned().collect::<Vec<_>>();
+    let open = tabs(&h);
+    assert_eq!(open.len(), 2, "{open:?}");
+    assert_eq!(h.state().ed.layout_edits.len(), 2);
+    assert!(h.state().dock.is_active(&open[1]), "the one opened last in front");
+    assert!(h.query_all_by_label("Layout Builder #l").count() >= 2, "both named after their block");
+
+    // The first again: shown, not a third.
+    {
+        let ed = &mut h.state_mut().ed;
+        crate::builders::layout::open(ed, &ws, "l", "layout");
+    }
+    settle(&mut h);
+    assert_eq!(tabs(&h).len(), 2);
+    assert!(h.state().dock.is_active(&open[0]));
+
+    // Its draft goes with its tab; the other stays.
+    let Tab::Builder(_, first) = open[0] else { unreachable!() };
+    h.state_mut().ed.layout_edits.retain(|e| e.id != first);
+    settle(&mut h);
+    assert_eq!(tabs(&h), [open[1].clone()]);
 }

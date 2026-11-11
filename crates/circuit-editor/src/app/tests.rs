@@ -178,10 +178,10 @@ fn every_tab_has_an_icon() {
         Tab::Settings,
         Tab::Backups,
         Tab::Plugin("p".into(), "q".into()),
-        Tab::EmbedBuilder,
-        Tab::LayoutBuilder,
-        Tab::ModalBuilder,
-        Tab::CanvasBuilder,
+        Tab::Builder(crate::builders::Kind::Embed, 1),
+        Tab::Builder(crate::builders::Kind::Layout, 2),
+        Tab::Builder(crate::builders::Kind::Modal, 3),
+        Tab::Builder(crate::builders::Kind::Canvas, 4),
         Tab::SlashCommands,
         Tab::BotSettings,
         Tab::Export,
@@ -242,13 +242,14 @@ fn the_side_bar_shows_a_second_view_below() {
 fn builders_open_in_the_middle_and_the_remote_console_at_the_bottom() {
     let mut dock = default_layout();
     open_canvas(&mut dock, "main".into());
-    place_panel(&mut dock, Tab::EmbedBuilder);
+    let embed = Tab::Builder(crate::builders::Kind::Embed, 1);
+    place_panel(&mut dock, embed.clone());
     place_panel(&mut dock, Tab::BotSettings);
     place_panel(&mut dock, Tab::ServerConsole);
     assert!(dock.windows.is_empty(), "nothing floats");
     let all = leaves(&dock);
     let middle = all.iter().find(|l| l.contains(&Tab::Canvas("main".into()))).unwrap();
-    assert!(middle.contains(&Tab::EmbedBuilder) && middle.contains(&Tab::BotSettings), "{middle:?}");
+    assert!(middle.contains(&embed) && middle.contains(&Tab::BotSettings), "{middle:?}");
     let bottom = all.iter().find(|l| l.contains(&Tab::Console)).unwrap();
     assert!(bottom.contains(&Tab::ServerConsole), "{bottom:?}");
     assert_eq!(super::chrome::window_key(&Tab::Export), "Export");
@@ -310,7 +311,9 @@ fn a_closed_tab_goes_back_where_it_was() {
     // Alone in its area, it has no neighbour to go back to.
     assert_eq!(places(&dock)[&Tab::Inspector], (None, 0));
     assert!(remembered(&Tab::Canvas("a".into()), false) && remembered(&Tab::Settings, false) && remembered(&Tab::Console, false));
-    assert!(remembered(&Tab::EmbedBuilder, true) && !remembered(&Tab::EmbedBuilder, false), "a builder only with its draft");
+    let builder = Tab::Builder(crate::builders::Kind::Layout, 7);
+    assert!(remembered(&builder, true) && !remembered(&builder, false), "a builder only with its draft");
+    assert!(!remembered(&Tab::LayoutBuilder, true), "an earlier version's builder tab: not at all");
     assert!(!remembered(&Tab::Export, true) && !remembered(&Tab::Start, false) && !remembered(&Tab::ServerConsole, false));
     use crate::editor::keymap::{Action, Shortcut};
     assert_eq!(Action::ReopenTab.defaults(), [Shortcut::parse("Ctrl+Shift+T").unwrap()]);

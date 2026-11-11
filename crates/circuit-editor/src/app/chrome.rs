@@ -456,10 +456,6 @@ impl CircuitApp {
     /// and closed again a window of its own. Returns those windows.
     pub(super) fn sync_dialog_tabs(&mut self) -> Vec<Tab> {
         let wanted = [
-            (Tab::EmbedBuilder, self.ed.embed_edit.is_some()),
-            (Tab::LayoutBuilder, self.ed.layout_edit.is_some()),
-            (Tab::ModalBuilder, self.ed.modal_edit.is_some()),
-            (Tab::CanvasBuilder, self.ed.canvas_edit.is_some()),
             (Tab::SlashCommands, self.ed.slash_edit.is_some()),
             (Tab::BotSettings, self.bot.settings.is_some()),
             (Tab::Export, self.bot.export.is_some()),
@@ -471,6 +467,21 @@ impl CircuitApp {
             (Tab::WorkspaceExport, self.ed.ws_export.is_some()),
             (Tab::WorkspaceImport, self.ed.ws_import.is_some()),
         ];
+        // Builders: a tab for each one open (they never open in the side bar
+        // or a window of their own), and none for one that closed. Tabs of
+        // earlier versions' builders have nothing to edit and go.
+        let builders = self.ed.open_builders();
+        self.dock.remove_where(|t| match t {
+            Tab::Builder(kind, id) => !builders.contains(&(*kind, *id)),
+            Tab::EmbedBuilder | Tab::LayoutBuilder | Tab::ModalBuilder | Tab::CanvasBuilder => true,
+            _ => false,
+        });
+        for (kind, id) in builders {
+            let tab = Tab::Builder(kind, id);
+            if !self.dock.contains(&tab) {
+                place_panel(&mut self.dock, tab);
+            }
+        }
         let mut own = Vec::new();
         for (tab, open) in wanted {
             // Git's window is apart from its short view (a tab or in the side bar).
@@ -515,18 +526,7 @@ impl CircuitApp {
                         self.ed.selected = None;
                     }
                 }
-                Action::ShowBuilder(kind, kept) => {
-                    let (tab, name) = match kind {
-                        crate::builders::Kind::Embed => (Tab::EmbedBuilder, t!("Embed Builder")),
-                        crate::builders::Kind::Layout => (Tab::LayoutBuilder, t!("Layout Builder")),
-                        crate::builders::Kind::Modal => (Tab::ModalBuilder, t!("Modal Builder")),
-                        crate::builders::Kind::Canvas => (Tab::CanvasBuilder, t!("Canvas Builder")),
-                    };
-                    self.dock.focus(&tab);
-                    if kept {
-                        self.ed.log(Level::Warn, tf!("The {builder} has changes that aren't applied yet: apply them or close it, then open the other one.", builder = name));
-                    }
-                }
+                Action::ShowBuilder(kind, id) => self.dock.focus(&Tab::Builder(kind, id)),
             }
         }
         self.drop_placeholder();

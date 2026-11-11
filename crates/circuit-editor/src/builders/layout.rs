@@ -424,16 +424,16 @@ pub struct LayoutEdit {
     pub draft: Value,
     /// The draft as JSON, while switched to JSON.
     pub json: Option<JsonText>,
-    /// The draft and its JSON as they were when opened, to tell whether it changed.
-    start: (Value, Option<String>),
+    /// Its number: which tab it's in (see `super::next_id`).
+    pub id: u64,
 }
 
 impl super::Draft for LayoutEdit {
+    fn id(&self) -> u64 {
+        self.id
+    }
     fn field(&self) -> (&str, &str, &str) {
         (&self.ws, &self.node, &self.key)
-    }
-    fn changed(&self) -> bool {
-        (&self.draft, self.json.as_ref().map(|j| &j.text)) != (&self.start.0, self.start.1.as_ref())
     }
 }
 
@@ -448,24 +448,23 @@ impl LayoutEdit {
             Err(why) if value.is_array() || value.get("components").is_some_and(Value::is_array) => (empty(), Some(JsonText { error: Some(why), ..JsonText::new(value) })),
             Err(_) => (empty(), None),
         };
-        let start = (draft.clone(), json.as_ref().map(|j: &JsonText| j.text.clone()));
-        LayoutEdit { ws: ws.into(), node: node.into(), key: key.into(), draft, json, start }
+        LayoutEdit { ws: ws.into(), node: node.into(), key: key.into(), draft, json, id: super::next_id() }
     }
 }
 
 pub fn open(ed: &mut Editor, ws: &str, node: &str, key: &str) {
     let value = ed.workspace(ws).and_then(|w| w.nodes.get(node)).and_then(|n| n.values.get(key).cloned()).unwrap_or(Value::Null);
-    super::open(&mut ed.layout_edit, &mut ed.actions, super::Kind::Layout, ws, node, key, || LayoutEdit::new(ws, node, key, &value));
+    super::open(&mut ed.layout_edits, &mut ed.actions, super::Kind::Layout, ws, node, key, || LayoutEdit::new(ws, node, key, &value));
 }
 
 /// The Layout Builder tab.
-pub fn tab(ui: &mut Ui, ed: &mut Editor) {
-    let Some((ws, node)) = ed.layout_edit.as_ref().map(|e| (e.ws.clone(), e.node.clone())) else { return };
+pub fn tab(ui: &mut Ui, ed: &mut Editor, id: u64) {
+    let Some((ws, node)) = ed.layout_edits.iter().find(|e| e.id == id).map(|e| (e.ws.clone(), e.node.clone())) else { return };
     // Texts offer the values of earlier blocks after `{`, and list them on the right.
     let values = std::sync::Arc::new(ed.values_for(&ws, &node));
     crate::editor::values::set_scope(ui.ctx(), Some(values.clone()));
     let bot = ed.bot_profile.shown.clone();
-    let Some(edit) = &mut ed.layout_edit else { return };
+    let Some(edit) = ed.layout_edits.iter_mut().find(|e| e.id == id) else { return };
     let theme = ed.theme.clone();
     let icon = ed.reg.icons.get("layers").cloned();
     let (mut apply, mut close, mut cancel) = (false, false, false);
@@ -514,17 +513,17 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
     );
     crate::editor::values::set_scope(ui.ctx(), None);
     if apply {
-        let edit = ed.layout_edit.as_ref().unwrap();
+        let Some(edit) = ed.layout_edits.iter().find(|e| e.id == id) else { return };
         let (ws, node, key, value) = (edit.ws.clone(), edit.node.clone(), edit.key.clone(), edit.draft.clone());
         if close {
-            ed.layout_edit = None;
+            ed.layout_edits.retain(|e| e.id != id);
         }
         if let Some(n) = ed.project.as_mut().and_then(|p| p.workspaces.get_mut(&ws)).and_then(|w| w.nodes.get_mut(&node)) {
             n.values.insert(key, value);
             ed.edited = true;
         }
     } else if cancel {
-        ed.layout_edit = None;
+        ed.layout_edits.retain(|e| e.id != id);
     }
 }
 

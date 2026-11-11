@@ -888,19 +888,6 @@ impl api::Host for EditorHost<'_> {
             }
             other => return Err(format!("the field `{key}` is a {other}: no builder edits it")),
         };
-        // One of its kind open for another field, with changes not applied, stays.
-        use crate::builders::Draft;
-        let target = (workspace, node, key.as_str());
-        let elsewhere = match kind.as_str() {
-            "embed" => self.ed.embed_edit.as_ref().is_some_and(|e| e.field() != target),
-            "layout" => self.ed.layout_edit.as_ref().is_some_and(|e| e.field() != target),
-            "modal" => self.ed.modal_edit.as_ref().is_some_and(|e| e.field() != target),
-            "canvas" => self.ed.canvas_edit.as_ref().is_some_and(|e| e.field() != target),
-            _ => false,
-        };
-        if elsewhere {
-            return Err(format!("the {name} is open for another block and has changes that aren't applied yet, so it was left as it is: the user can apply or close it first"));
-        }
         Ok(name.to_string())
     }
 
@@ -1321,7 +1308,7 @@ mod tests {
         assert!(on_top["warning"].as_str().is_some_and(|w| w.contains(first["id"].as_str().unwrap())), "{on_top}");
         let opened = call("open_builder", serde_json::json!({ "workspace": moderation, "block": embed["id"] })).unwrap();
         assert_eq!(opened, "Opened the Embed Builder.");
-        assert!(ed.embed_edit.is_some(), "the Embed Builder is open on it");
+        assert!(!ed.embed_edits.is_empty(), "the Embed Builder is open on it");
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }

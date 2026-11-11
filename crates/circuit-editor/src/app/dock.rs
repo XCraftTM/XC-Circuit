@@ -1,6 +1,7 @@
 //! The tabs and panels: what each tab shows, and where new ones open.
 
 use super::*;
+use crate::builders::Kind;
 
 pub(super) struct Viewer<'a> {
     pub(super) ed: &'a mut Editor,
@@ -63,10 +64,10 @@ impl Tab {
             Tab::Settings => "settings",
             Tab::Backups => "clock",
             Tab::Plugin(..) | Tab::Plugins | Tab::PluginPage(_) => "plug",
-            Tab::EmbedBuilder => "embed",
-            Tab::LayoutBuilder => "layers",
-            Tab::ModalBuilder => "text",
-            Tab::CanvasBuilder => "palette",
+            Tab::EmbedBuilder | Tab::Builder(Kind::Embed, _) => "embed",
+            Tab::LayoutBuilder | Tab::Builder(Kind::Layout, _) => "layers",
+            Tab::ModalBuilder | Tab::Builder(Kind::Modal, _) => "text",
+            Tab::CanvasBuilder | Tab::Builder(Kind::Canvas, _) => "palette",
             Tab::SlashCommands => "slash",
             Tab::BotSettings => "bolt",
             Tab::Export | Tab::WorkspaceExport => "package",
@@ -118,6 +119,11 @@ impl DockViewer<Tab> for Viewer<'_> {
             Tab::LayoutBuilder => t!("Layout Builder").into(),
             Tab::ModalBuilder => t!("Modal Builder").into(),
             Tab::CanvasBuilder => t!("Canvas Builder").into(),
+            // With the block's number: several can be open.
+            Tab::Builder(kind, id) => {
+                let node = self.ed.builder_field(*kind, *id).map(|(_, node, _)| node.to_string()).unwrap_or_default();
+                format!("{} #{node}", crate::builders::name(*kind))
+            }
             Tab::SlashCommands => t!("Slash Commands").into(),
             Tab::BotSettings => t!("Bot settings").into(),
             Tab::Export => t!("Export bot").into(),
@@ -180,10 +186,15 @@ impl DockViewer<Tab> for Viewer<'_> {
         // with the closed tab, for Ctrl+Shift+T.
         let mut draft = Draft::None;
         match tab {
-            Tab::EmbedBuilder => draft = self.ed.embed_edit.take().map_or(Draft::None, Draft::Embed),
-            Tab::LayoutBuilder => draft = self.ed.layout_edit.take().map_or(Draft::None, Draft::Layout),
-            Tab::ModalBuilder => draft = self.ed.modal_edit.take().map_or(Draft::None, Draft::Modal),
-            Tab::CanvasBuilder => draft = self.ed.canvas_edit.take().map_or(Draft::None, Draft::Canvas),
+            Tab::Builder(kind, id) => {
+                use crate::builders::take;
+                draft = match kind {
+                    Kind::Embed => take(&mut self.ed.embed_edits, *id).map_or(Draft::None, Draft::Embed),
+                    Kind::Layout => take(&mut self.ed.layout_edits, *id).map_or(Draft::None, Draft::Layout),
+                    Kind::Modal => take(&mut self.ed.modal_edits, *id).map_or(Draft::None, Draft::Modal),
+                    Kind::Canvas => take(&mut self.ed.canvas_edits, *id).map_or(Draft::None, Draft::Canvas),
+                };
+            }
             Tab::SlashCommands => draft = self.ed.slash_edit.take().map_or(Draft::None, Draft::Slash),
             Tab::BotSettings => draft = self.bot.settings.take().map_or(Draft::None, Draft::BotSettings),
             Tab::Export => self.bot.export = None,
@@ -243,10 +254,20 @@ impl DockViewer<Tab> for Viewer<'_> {
             // Without a project the start window shows, not the tabs.
             Tab::Start => self.no_workspace = no_workspace(ui, self.ed),
             // The builders keep a size they work at; a smaller tab or window scrolls.
-            Tab::EmbedBuilder => at_least(ui, tab.min_width(), |ui| crate::builders::embed::tab(ui, self.ed)),
-            Tab::LayoutBuilder => at_least(ui, tab.min_width(), |ui| crate::builders::layout::tab(ui, self.ed)),
-            Tab::ModalBuilder => at_least(ui, tab.min_width(), |ui| crate::builders::modal::tab(ui, self.ed)),
-            Tab::CanvasBuilder => at_least(ui, tab.min_width(), |ui| crate::builders::canvas::tab(ui, self.ed)),
+            // Earlier versions' builders: gone at the next sync.
+            Tab::EmbedBuilder | Tab::LayoutBuilder | Tab::ModalBuilder | Tab::CanvasBuilder => {}
+            // Each in its own part of egui's memory: several can be open.
+            Tab::Builder(kind, id) => {
+                let (kind, id) = (*kind, *id);
+                ui.push_id(("builder", id), |ui| {
+                    at_least(ui, tab.min_width(), |ui| match kind {
+                        Kind::Embed => crate::builders::embed::tab(ui, self.ed, id),
+                        Kind::Layout => crate::builders::layout::tab(ui, self.ed, id),
+                        Kind::Modal => crate::builders::modal::tab(ui, self.ed, id),
+                        Kind::Canvas => crate::builders::canvas::tab(ui, self.ed, id),
+                    })
+                });
+            }
             Tab::SlashCommands => at_least(ui, tab.min_width(), |ui| crate::builders::slash::tab(ui, self.ed)),
             Tab::BotSettings => self.bot.settings_tab(ui, self.ed),
             Tab::Export => self.bot.export_tab(ui, self.ed),
@@ -280,10 +301,9 @@ impl Tab {
     /// a window can't get narrower.
     pub(super) fn min_width(&self) -> f32 {
         match self {
-            Tab::EmbedBuilder => 540.0,
-            Tab::LayoutBuilder => 640.0,
-            Tab::ModalBuilder => 620.0,
-            Tab::CanvasBuilder => 620.0,
+            Tab::Builder(Kind::Embed, _) => 540.0,
+            Tab::Builder(Kind::Layout, _) => 640.0,
+            Tab::Builder(Kind::Modal | Kind::Canvas, _) => 620.0,
             Tab::SlashCommands => 600.0,
             _ => 0.0,
         }

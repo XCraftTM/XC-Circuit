@@ -481,16 +481,16 @@ pub struct CanvasEdit {
     selected: Option<usize>,
     /// A drag in the preview: what it does, where it started, the layer's box then.
     drag: Option<(Drag, Pos2, [f32; 4])>,
-    /// The draft as it was when opened, to tell whether it changed.
-    start: Value,
+    /// Its number: which tab it's in (see `super::next_id`).
+    pub id: u64,
 }
 
 impl super::Draft for CanvasEdit {
+    fn id(&self) -> u64 {
+        self.id
+    }
     fn field(&self) -> (&str, &str, &str) {
         (&self.ws, &self.node, &self.key)
-    }
-    fn changed(&self) -> bool {
-        self.draft.to_value() != self.start
     }
 }
 
@@ -498,8 +498,7 @@ impl CanvasEdit {
     pub fn new(ws: &str, node: &str, key: &str, value: &Value) -> CanvasEdit {
         let draft = CanvasData::from_value(value);
         let selected = (!draft.layers.is_empty()).then(|| draft.layers.len() - 1);
-        let start = draft.to_value();
-        CanvasEdit { ws: ws.into(), node: node.into(), key: key.into(), draft, selected, drag: None, start }
+        CanvasEdit { ws: ws.into(), node: node.into(), key: key.into(), draft, selected, drag: None, id: super::next_id() }
     }
 }
 
@@ -507,7 +506,7 @@ impl CanvasEdit {
 pub fn open(ed: &mut Editor, ws: &str, node: &str, key: &str) {
     let n = ed.workspace(ws).and_then(|w| w.nodes.get(node));
     let value = n.and_then(|n| n.values.get(key).cloned().or_else(|| ed.reg.block(&n.block).and_then(|d| d.fields.get(key)).and_then(|f| f.default.clone()))).unwrap_or(Value::Null);
-    super::open(&mut ed.canvas_edit, &mut ed.actions, super::Kind::Canvas, ws, node, key, || CanvasEdit::new(ws, node, key, &value));
+    super::open(&mut ed.canvas_edits, &mut ed.actions, super::Kind::Canvas, ws, node, key, || CanvasEdit::new(ws, node, key, &value));
 }
 
 /// Ready-made designs to start from.
@@ -556,15 +555,15 @@ pub fn starters() -> Vec<(&'static str, CanvasData)> {
 const SIZES: [(&str, f32, f32); 5] = [(n("Rank card 934 × 282"), 934.0, 282.0), (n("Welcome 1024 × 450"), 1024.0, 450.0), (n("Banner 1100 × 400"), 1100.0, 400.0), (n("Square 800 × 800"), 800.0, 800.0), (n("Wide 1200 × 630"), 1200.0, 630.0)];
 
 /// The Canvas Builder tab.
-pub fn tab(ui: &mut Ui, ed: &mut Editor) {
-    let Some((ws, node)) = ed.canvas_edit.as_ref().map(|e| (e.ws.clone(), e.node.clone())) else { return };
+pub fn tab(ui: &mut Ui, ed: &mut Editor, id: u64) {
+    let Some((ws, node)) = ed.canvas_edits.iter().find(|e| e.id == id).map(|e| (e.ws.clone(), e.node.clone())) else { return };
     // Texts offer the values of earlier blocks after `${`.
     let values = std::sync::Arc::new(ed.values_for(&ws, &node));
     crate::editor::values::set_scope(ui.ctx(), Some(values.clone()));
     let theme = ed.theme.clone();
     let icon = ed.reg.icons.get("palette").cloned();
     let icons = Icons::new(ed);
-    let Some(edit) = &mut ed.canvas_edit else { return };
+    let Some(edit) = ed.canvas_edits.iter_mut().find(|e| e.id == id) else { return };
     let (mut apply, mut close, mut cancel) = (false, false, false);
     dialog::tab(
         ui,
@@ -633,17 +632,17 @@ pub fn tab(ui: &mut Ui, ed: &mut Editor) {
     );
     crate::editor::values::set_scope(ui.ctx(), None);
     if apply {
-        let edit = ed.canvas_edit.as_ref().unwrap();
+        let Some(edit) = ed.canvas_edits.iter().find(|e| e.id == id) else { return };
         let (ws, node, key, value) = (edit.ws.clone(), edit.node.clone(), edit.key.clone(), edit.draft.to_value());
         if close {
-            ed.canvas_edit = None;
+            ed.canvas_edits.retain(|e| e.id != id);
         }
         if let Some(n) = ed.project.as_mut().and_then(|p| p.workspaces.get_mut(&ws)).and_then(|w| w.nodes.get_mut(&node)) {
             n.values.insert(key, value);
             ed.edited = true;
         }
     } else if cancel {
-        ed.canvas_edit = None;
+        ed.canvas_edits.retain(|e| e.id != id);
     }
 }
 

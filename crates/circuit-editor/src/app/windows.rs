@@ -60,6 +60,6 @@ mod tests {
         assert_eq!(size, egui::vec2(700.0, 600.0));
         // What is set up once opens this way; what is worked in stays a tab.
         assert!(Tab::Export.own_window().is_some() && Tab::Hosting.own_window().is_some() && Tab::WorkspaceImport.own_window().is_some());
-        assert!(Tab::EmbedBuilder.own_window().is_none() && Tab::BotSettings.own_window().is_none() && Tab::Console.own_window().is_none());
+        assert!(Tab::Builder(crate::builders::Kind::Embed, 1).own_window().is_none() && Tab::BotSettings.own_window().is_none() && Tab::Console.own_window().is_none());
     }
 }
