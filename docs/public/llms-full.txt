@@ -3465,7 +3465,7 @@ prefix = { type = "text", group = "Messages", label = "Text command prefix", def
 
 ## categories
 
-The block picker's categories, in order. Blocks name one in [`search.category`](./blocks#search).
+The block picker's categories: their ids and names. The picker lists them A to Z by name (as translated for the interface), not in the order they're given here. Blocks name one in [`search.category`](./blocks#search).
 
 | Key | Description |
 | --- | --- |

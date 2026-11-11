@@ -45,6 +45,15 @@ fn kind_color(kind: BlockKind, theme: &Theme) -> egui::Color32 {
     }
 }
 
+/// Where a block's category goes in the list: by the name it shows with (in
+/// the interface's language), A to Z, whatever order the build mode lists
+/// them in; blocks without one last.
+fn category_key(mode: Option<&circuit_plugins::BuildMode>, d: &BlockDef) -> (bool, String, String) {
+    let id = d.category.as_deref().unwrap_or("");
+    let name = mode.and_then(|m| m.category(id)).map(|c| crate::i18n::tr(&c.name).into_owned()).unwrap_or_else(|| id.to_string());
+    (id.is_empty(), name.to_lowercase(), id.to_string())
+}
+
 /// Events first in a category: that's where a flow starts.
 fn kind_order(kind: BlockKind) -> u8 {
     match kind {
@@ -231,12 +240,12 @@ pub fn show(ctx: &egui::Context, ed: &mut Editor) {
             None => Some((d, None, found)),
         })
         .collect();
-    let rank = |d: &BlockDef| mode.as_ref().map(|m| m.category_rank(d.category.as_deref().unwrap_or(""))).unwrap_or(usize::MAX);
     if searching {
         // Best matches first (see Match::score), events first among equally good ones.
         list.sort_by(|a, b| a.2.score().cmp(&b.2.score()).then_with(|| kind_order(a.0.kind).cmp(&kind_order(b.0.kind))).then_with(|| a.0.name.cmp(&b.0.name)));
     } else {
-        list.sort_by(|a, b| rank(a.0).cmp(&rank(b.0)).then_with(|| kind_order(a.0.kind).cmp(&kind_order(b.0.kind))).then_with(|| a.0.name.cmp(&b.0.name)));
+        // Categories A to Z; in each, events first, then by name.
+        list.sort_by_cached_key(|e| (category_key(mode.as_ref(), e.0), kind_order(e.0.kind), e.0.name.clone()));
     }
     // Favourites, then recently placed blocks, above the categories (not while searching).
     let mut sections: Vec<Option<&str>> = vec![None; list.len()];
@@ -702,6 +711,26 @@ mod tests {
         run(&mut ed, vec![]);
         run(&mut ed, vec![]);
         assert_eq!(highlighted(&ed), 0, "the best match, not the row under the pointer");
+    }
+
+    /// The categories come A to Z by the name they show with, not in the
+    /// order the build mode lists them; blocks without one come last.
+    #[test]
+    fn categories_come_a_to_z() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+        ed.open_project(&root.join("examples/DemoBot"));
+        let mode = ed.mode().cloned().expect("DemoBot has a build mode");
+        let mut keys: Vec<_> = ed.reg.blocks.values().map(|d| category_key(Some(&mode), d)).collect();
+        keys.sort();
+        keys.dedup();
+        let names: Vec<&str> = keys.iter().filter(|k| !k.0).map(|k| k.1.as_str()).collect();
+        assert!(names.len() > 5, "{names:?}");
+        assert!(names.windows(2).all(|w| w[0] <= w[1]), "{names:?}");
+        let listed: Vec<String> = mode.categories.iter().map(|c| c.name.to_lowercase()).collect();
+        assert_ne!(listed.iter().filter(|n| names.contains(&n.as_str())).collect::<Vec<_>>(), names.iter().collect::<Vec<_>>(), "not simply the mode's order");
+        let none = BlockDef::default();
+        assert!(category_key(Some(&mode), &none) > keys[keys.len() - 1] || keys.last().unwrap().0, "without a category: last");
     }
 
     #[test]
