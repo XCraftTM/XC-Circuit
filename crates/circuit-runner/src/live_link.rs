@@ -483,6 +483,12 @@ mod tests {
         host.send(Some(&id), json!({ "big": "y".repeat(300_000) }));
         let Event::From { id: from, data } = next(&guest) else { panic!("nothing from the host") };
         assert!(from == "host" && data["big"].as_str().unwrap().len() == 300_000);
+        // Too big for one message at the relay (random, so it doesn't pack):
+        // in parts, and whole again at the guest's.
+        let noise: String = (0..12_000).map(|_| VaultKey::new().unwrap().to_text()).collect();
+        host.send(Some(&id), json!({ "noise": noise }));
+        let Event::From { data, .. } = next(&guest) else { panic!("nothing big from the host") };
+        assert_eq!(data["noise"].as_str(), Some(noise.as_str()));
         host.send(None, json!("to all"));
         assert_eq!(next(&guest), Event::From { id: "host".into(), data: json!("to all") });
         // The host leaves: over for the guest.
