@@ -2,6 +2,11 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
+## Unreleased
+
+### Fixed
+- **Remote consoles connect more reliably**: a server that doesn't answer is given up on after 10 seconds instead of the system's minutes, commands typed into the console go out at once instead of up to a quarter of a second later, and a console the server closes connects again right away. After a connection that worked, waiting between tries starts again at one second, instead of staying at 30 seconds once it got there. A link from a panel's sign-in with a % before a letter such as é no longer crashes the app.
+
 ## 0.3.1
 
 ### Added

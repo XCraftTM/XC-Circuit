@@ -184,7 +184,8 @@ fn decode(text: &str) -> String {
     let mut i = 0;
     while i < bytes.len() {
         match bytes[i] {
-            b'%' if i + 2 < bytes.len() => match u8::from_str_radix(&text[i + 1..i + 3], 16) {
+            // From the bytes: a slice of the text there may cut a letter in two.
+            b'%' if i + 2 < bytes.len() => match std::str::from_utf8(&bytes[i + 1..i + 3]).ok().and_then(|hex| u8::from_str_radix(hex, 16).ok()).ok_or(()) {
                 Ok(b) => {
                     out.push(b);
                     i += 3;
@@ -374,7 +375,13 @@ impl Console {
         thread::spawn(move || {
             let mut wait = 1;
             while !stopped.load(Ordering::Relaxed) {
-                match run_console(&panel, &server, &tx, &rx, &stopped) {
+                let mut connected = false;
+                let result = run_console(&panel, &server, &tx, &rx, &stopped, &mut connected);
+                // A connection that worked for a while starts the waiting over.
+                if connected {
+                    wait = 1;
+                }
+                match result {
                     Ok(()) => return,
                     Err(e) => {
                         if tx.send(ConsoleEvent::Problem(format!("{e:#}"))).is_err() {
@@ -411,7 +418,7 @@ pub(crate) trait Stream: Read + Write + Send {}
 impl<T: Read + Write + Send> Stream for T {}
 
 /// One connection to the console, until it closes (Err) or `stop` (Ok).
-fn run_console(panel: &Panel, server: &str, tx: &Sender<ConsoleEvent>, commands: &Receiver<String>, stop: &AtomicBool) -> Result<()> {
+fn run_console(panel: &Panel, server: &str, tx: &Sender<ConsoleEvent>, commands: &Receiver<String>, stop: &AtomicBool, connected: &mut bool) -> Result<()> {
     let (url, token) = panel.websocket(server)?;
     let mut socket = connect_socket(&url)?;
     let send = |socket: &mut tungstenite::WebSocket<Box<dyn Stream>>, event: &str, args: &[&str]| -> Result<()> {
@@ -436,11 +443,18 @@ fn run_console(panel: &Panel, server: &str, tx: &Sender<ConsoleEvent>, commands:
             Err(tungstenite::Error::Io(e)) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => continue,
             Err(e) => bail!("the console connection closed: {e}"),
         };
-        let tungstenite::Message::Text(text) = message else { continue };
+        let text = match message {
+            tungstenite::Message::Text(text) => text,
+            // Closed by the other side: connect again now, not when the
+            // system notices the connection is gone.
+            tungstenite::Message::Close(_) => bail!("the console connection closed"),
+            _ => continue,
+        };
         let Ok(v) = serde_json::from_str::<Value>(&text) else { continue };
         let arg = |i: usize| v["args"][i].as_str().unwrap_or_default().to_string();
         let event = match v["event"].as_str().unwrap_or_default() {
             "auth success" => {
+                *connected = true;
                 send(&mut socket, "send logs", &[])?;
                 Some(ConsoleEvent::Connected)
             }
@@ -467,6 +481,23 @@ fn run_console(panel: &Panel, server: &str, tx: &Sender<ConsoleEvent>, commands:
     }
 }
 
+/// How long a socket's read waits before what is to be sent gets a turn.
+const READ_WAIT: Duration = Duration::from_millis(20);
+
+/// Connects to the first of the host's addresses that answers, giving each
+/// 10 seconds (the system's own wait can be minutes).
+fn connect_tcp(host: &str, port: u16) -> std::io::Result<TcpStream> {
+    use std::net::ToSocketAddrs;
+    let mut last = std::io::Error::new(std::io::ErrorKind::NotFound, "no address found");
+    for address in (host, port).to_socket_addrs()? {
+        match TcpStream::connect_timeout(&address, Duration::from_secs(10)) {
+            Ok(tcp) => return Ok(tcp),
+            Err(e) => last = e,
+        }
+    }
+    Err(last)
+}
+
 /// Opens the websocket (ws:// or wss://, the panel may give http(s)://),
 /// reading with a short timeout so commands go out while it waits.
 pub(crate) fn connect_socket(url: &str) -> Result<tungstenite::WebSocket<Box<dyn Stream>>> {
@@ -477,8 +508,13 @@ pub(crate) fn connect_socket(url: &str) -> Result<tungstenite::WebSocket<Box<dyn
     let authority = rest.split('/').next().unwrap_or(rest);
     let host = authority.rsplit_once(':').filter(|(_, p)| p.parse::<u16>().is_ok()).map(|(h, _)| h).unwrap_or(authority).trim_matches(['[', ']']).to_string();
     let port = authority.rsplit_once(':').and_then(|(_, p)| p.parse::<u16>().ok()).unwrap_or(if secure { 443 } else { 80 });
-    let tcp = TcpStream::connect((host.as_str(), port)).with_context(|| format!("couldn't reach the console at {host}:{port}"))?;
-    tcp.set_read_timeout(Some(Duration::from_millis(250)))?;
+    let tcp = connect_tcp(&host, port).with_context(|| format!("couldn't reach the console at {host}:{port}"))?;
+    // Short: what waits to be sent goes out between reads, so a read
+    // mustn't hold it back long. Small messages go at once (no Nagle), and
+    // a peer that stops taking what is written doesn't hang the thread.
+    tcp.set_read_timeout(Some(READ_WAIT))?;
+    tcp.set_write_timeout(Some(Duration::from_secs(15)))?;
+    tcp.set_nodelay(true)?;
     let stream: Box<dyn Stream> = if secure {
         let name = rustls::pki_types::ServerName::try_from(host.clone()).map_err(|_| anyhow!("{host} isn't a valid server name"))?;
         let conn = rustls::ClientConnection::new(super::tls_config(), name)?;
@@ -684,6 +720,10 @@ mod tests {
         assert_eq!(base_url("http://10.0.0.2:8080"), "http://10.0.0.2:8080");
         assert_eq!(encode("/bots/my bot.js"), "/bots/my%20bot.js");
         assert_eq!(decode("c7sp_ab%2Bc+d"), "c7sp_ab+c d");
+        // A % before a letter of more than one byte is kept, not a crash.
+        assert_eq!(decode("%aé"), "%aé");
+        assert_eq!(decode("%é1"), "%é1");
+        assert_eq!(decode("ü%C3%BC"), "üü");
     }
 
     /// Colour codes become styles, as a terminal shows them.

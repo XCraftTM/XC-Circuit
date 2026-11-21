@@ -294,10 +294,16 @@ fn size(bytes: usize) -> String {
 
 /// TLS settings for the Calagopus console: the usual web roots, ring.
 pub(crate) fn tls_config() -> std::sync::Arc<rustls::ClientConfig> {
-    let roots = rustls::RootCertStore { roots: webpki_roots::TLS_SERVER_ROOTS.to_vec() };
-    let provider = std::sync::Arc::new(rustls::crypto::ring::default_provider());
-    let config = rustls::ClientConfig::builder_with_provider(provider).with_safe_default_protocol_versions().expect("ring supports the default TLS versions").with_root_certificates(roots).with_no_client_auth();
-    std::sync::Arc::new(config)
+    // Made once: every connection uses the same.
+    static CONFIG: std::sync::OnceLock<std::sync::Arc<rustls::ClientConfig>> = std::sync::OnceLock::new();
+    CONFIG
+        .get_or_init(|| {
+            let roots = rustls::RootCertStore { roots: webpki_roots::TLS_SERVER_ROOTS.to_vec() };
+            let provider = std::sync::Arc::new(rustls::crypto::ring::default_provider());
+            let config = rustls::ClientConfig::builder_with_provider(provider).with_safe_default_protocol_versions().expect("ring supports the default TLS versions").with_root_certificates(roots).with_no_client_auth();
+            std::sync::Arc::new(config)
+        })
+        .clone()
 }
 
 #[cfg(test)]
