@@ -222,7 +222,14 @@ pub struct Device {
 pub struct Link {
     socket: tungstenite::WebSocket<Box<dyn Stream>>,
     pub status: Status,
+    /// When the host last said anything (it pings every 30 s, and answers
+    /// ours): long silence means the connection is gone.
+    heard: Instant,
 }
+
+/// Silence from the host for this long: the connection is gone, whatever
+/// the system says.
+const QUIET: Duration = Duration::from_secs(75);
 
 /// The address to store a project at on a host: `https://host/git/name.git`.
 pub fn project_address(host: &str, name: &str) -> String {
@@ -242,7 +249,7 @@ impl Link {
             bail!("A host's address starts with https://");
         }
         let socket = connect_socket(&format!("{address}/ws")).map_err(|e| anyhow!("Couldn't reach the host at {address}: {e:#}"))?;
-        let mut link = Link { socket, status: Status { mode: String::new(), version: String::new(), protocol: 0, can: Vec::new() } };
+        let mut link = Link { socket, status: Status { mode: String::new(), version: String::new(), protocol: 0, can: Vec::new() }, heard: Instant::now() };
         let v = link.wait("status", Duration::from_secs(20))?;
         if v["name"] != "xc-circuit-host" {
             bail!("That address answers, but not as an XC Circuit Host.");
@@ -347,7 +354,13 @@ impl Link {
     pub fn next_change(&mut self, within: Duration) -> Result<Option<(String, String)>> {
         let until = Instant::now() + within;
         loop {
-            match self.socket.read() {
+            let read = self.socket.read();
+            if read.is_ok() {
+                self.heard = Instant::now();
+            } else if self.heard.elapsed() > QUIET {
+                bail!("The host stopped answering.");
+            }
+            match read {
                 Ok(tungstenite::Message::Text(text)) => {
                     let v: Value = serde_json::from_str(&text).unwrap_or_default();
                     if v["t"] == "project.changed" {

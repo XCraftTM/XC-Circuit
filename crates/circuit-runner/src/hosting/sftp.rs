@@ -100,51 +100,80 @@ impl Sftp {
         }
         let user = h.user.trim().to_string();
         let base = runtime.block_on(async {
-            let accepted = if h.key_file.trim().is_empty() {
-                ssh.authenticate_password(user.clone(), password.unwrap_or_default()).await?.success()
-            } else {
-                let key = russh::keys::load_secret_key(h.key_file.trim(), password).map_err(|e| anyhow!("couldn't read the key file {}: {e}", h.key_file.trim()))?;
-                let hash = ssh.best_supported_rsa_hash().await?.flatten();
-                ssh.authenticate_publickey(user.clone(), PrivateKeyWithHashAlg::new(Arc::new(key), hash)).await?.success()
-            };
-            if !accepted {
-                bail!("{host} didn't accept the user name and {}", if h.key_file.trim().is_empty() { "password" } else { "key" });
-            }
-            Ok::<_, anyhow::Error>(())
+            tokio::time::timeout(Duration::from_secs(30), async {
+                let accepted = if h.key_file.trim().is_empty() {
+                    ssh.authenticate_password(user.clone(), password.unwrap_or_default()).await?.success()
+                } else {
+                    let key = russh::keys::load_secret_key(h.key_file.trim(), password).map_err(|e| anyhow!("couldn't read the key file {}: {e}", h.key_file.trim()))?;
+                    let hash = ssh.best_supported_rsa_hash().await?.flatten();
+                    ssh.authenticate_publickey(user.clone(), PrivateKeyWithHashAlg::new(Arc::new(key), hash)).await?.success()
+                };
+                if !accepted {
+                    bail!("{host} didn't accept the user name and {}", if h.key_file.trim().is_empty() { "password" } else { "key" });
+                }
+                Ok::<_, anyhow::Error>(())
+            })
+            .await
+            .unwrap_or_else(|_| Err(anyhow!("{host} didn't finish logging in within 30 seconds")))
         });
         base?;
-        let session = runtime.block_on(async {
-            let channel = ssh.channel_open_session().await?;
-            channel.request_subsystem(true, "sftp").await?;
-            SftpSession::new(channel.into_stream()).await.map_err(|e| anyhow!("{host} doesn't offer SFTP: {e}"))
-        })?;
+        let session = runtime
+            .block_on(tokio::time::timeout(Duration::from_secs(30), async {
+                let channel = ssh.channel_open_session().await?;
+                channel.request_subsystem(true, "sftp").await?;
+                SftpSession::new(channel.into_stream()).await.map_err(|e| anyhow!("{host} doesn't offer SFTP: {e}"))
+            }))
+            .unwrap_or_else(|_| Err(anyhow!("{host} didn't open SFTP within 30 seconds")))?;
         // The folder, made where it's missing.
         let (absolute, parts) = h.folder_parts();
         let mut path = if absolute { "/".to_string() } else { String::new() };
-        runtime.block_on(async {
-            for part in &parts {
-                path.push_str(part);
-                if !session.try_exists(path.clone()).await.unwrap_or(false) {
-                    session.create_dir(path.clone()).await.map_err(|e| anyhow!("couldn't make the folder {path}: {e}"))?;
+        runtime
+            .block_on(tokio::time::timeout(Duration::from_secs(30), async {
+                for part in &parts {
+                    path.push_str(part);
+                    if !session.try_exists(path.clone()).await.unwrap_or(false) {
+                        session.create_dir(path.clone()).await.map_err(|e| anyhow!("couldn't make the folder {path}: {e}"))?;
+                    }
+                    path.push('/');
                 }
-                path.push('/');
-            }
-            Ok::<_, anyhow::Error>(())
-        })?;
+                Ok::<_, anyhow::Error>(())
+            }))
+            .unwrap_or_else(|_| Err(anyhow!("{host} didn't make the bot's folder within 30 seconds")))?;
         log(format!("Logged in to {host} as {user}."));
         Ok(Sftp { runtime, session, ssh, base: path })
     }
 }
 
+/// How long writing one file may take: a minute, and half a minute more for
+/// each megabyte. A connection that stops answering doesn't hang the upload.
+fn time_for(bytes: usize) -> Duration {
+    Duration::from_secs(60 + 30 * (bytes as u64 / 1_048_576))
+}
+
 impl Remote for Sftp {
+    /// Written beside the file, then put in its place: a bot running there
+    /// never reads half a file, and a connection that drops leaves the old
+    /// one whole.
     fn put(&mut self, name: &str, data: &[u8]) -> Result<()> {
         let path = format!("{}{name}", self.base);
-        self.runtime.block_on(async {
-            let mut file = self.session.create(path.clone()).await.map_err(|e| anyhow!("couldn't write {path}: {e}"))?;
+        let temp = format!("{path}.xc-upload");
+        let session = &self.session;
+        let done = self.runtime.block_on(tokio::time::timeout(time_for(data.len()), async {
+            let mut file = session.create(temp.clone()).await.map_err(|e| anyhow!("couldn't write {path}: {e}"))?;
             file.write_all(data).await?;
             file.shutdown().await?;
-            Ok(())
-        })
+            // Most servers don't rename onto a file that is there (SFTP 3):
+            // then the old one goes first.
+            if session.rename(temp.clone(), path.clone()).await.is_err() {
+                let _ = session.remove_file(path.clone()).await;
+                session.rename(temp.clone(), path.clone()).await.map_err(|e| anyhow!("couldn't put {path} in place: {e}"))?;
+            }
+            Ok::<_, anyhow::Error>(())
+        }));
+        match done {
+            Ok(result) => result,
+            Err(_) => bail!("writing {path} took too long: the connection may be gone"),
+        }
     }
 
     fn finish(&mut self, _: &mut dyn FnMut(String)) -> Result<()> {

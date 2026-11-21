@@ -128,14 +128,32 @@ pub struct Draft {
 /// there is asked to say which blocks run, again and again while the editor
 /// looks, and stops by itself when the editor doesn't ask any more.
 struct Ears {
-    console: calagopus::Console,
-    server: String,
+    /// Its own connection; `None` while the Remote console tab has one to
+    /// the same server, which it listens through instead.
+    console: Option<calagopus::Console>,
+    /// What it was opened for (see [`Link`]).
+    link: String,
     values: bool,
     /// When the bot was last asked; `None` until the console is connected.
     asked: Option<Instant>,
     /// Lines from before now are the console's memory, not news.
     since: Instant,
 }
+
+/// The project's panel, server and API key as one fingerprint: what the
+/// Watch, the Ears and the console were opened for. The key is read again
+/// every few seconds, so a new key (or another address) connects them anew
+/// instead of leaving them on the old one.
+struct Link {
+    panel: String,
+    server: String,
+    key: Option<String>,
+    id: String,
+    at: Instant,
+}
+
+/// How long the API key read for a [`Link`] is trusted.
+const LINK_FRESH: std::time::Duration = std::time::Duration::from_secs(5);
 
 pub struct HostingUi {
     pub draft: Option<Draft>,
@@ -165,11 +183,29 @@ pub struct HostingUi {
     ears: Option<Ears>,
     /// When `Editor::server_view` was last written.
     view_at: Option<Instant>,
+    link: Option<Link>,
 }
 
 impl HostingUi {
     pub fn new() -> Self {
-        HostingUi { draft: None, job: None, log: VecDeque::new(), outcome: None, seen_saves: None, again: false, sign_in: None, servers: None, console: None, remote: false, watch: None, controllable: None, power: None, ears: None, view_at: None }
+        HostingUi { draft: None, job: None, log: VecDeque::new(), outcome: None, seen_saves: None, again: false, sign_in: None, servers: None, console: None, remote: false, watch: None, controllable: None, power: None, ears: None, view_at: None, link: None }
+    }
+
+    /// The project's panel link as it is now: its fingerprint, and the API
+    /// key (`None` without one). `None` for a project without a panel server.
+    fn link(&mut self, ed: &Editor, h: &Hosting) -> Option<(String, Option<String>)> {
+        use std::hash::{Hash, Hasher};
+        if ed.project.is_none() || !h.kind.is_panel() || h.server.is_empty() {
+            self.link = None;
+            return None;
+        }
+        if self.link.as_ref().is_none_or(|l| l.panel != h.panel || l.server != h.server || l.at.elapsed() > LINK_FRESH) {
+            let key = secrets_of(ed).api_key;
+            let mut f = crate::editor::Fingerprint::default();
+            (h.panel.trim(), &h.server, &key).hash(&mut f);
+            self.link = Some(Link { panel: h.panel.clone(), server: h.server.clone(), key, id: format!("{:016x}", f.finish()), at: Instant::now() });
+        }
+        self.link.as_ref().map(|l| (l.id.clone(), l.key.clone()))
     }
 
     /// Bot › Remote…: the tab with the project's settings.
@@ -194,6 +230,15 @@ impl HostingUi {
         if self.draft.as_ref().is_some_and(|d| d.h.kind == Kind::Calagopus && d.key_saved) {
             self.read_servers(ed);
         }
+    }
+
+    /// Another project was opened (or none is): Bot › Remote…'s edits were
+    /// the old project's, and Save mustn't write them into this one.
+    pub fn project_changed(&mut self) {
+        self.draft = None;
+        self.servers = None;
+        self.link = None;
+        self.controllable = None;
     }
 
     pub fn busy(&self) -> Option<&'static str> {
@@ -329,12 +374,12 @@ impl HostingUi {
             }
         }
         // The console is the open project's server's: another project (or
-        // none, or another server chosen) closes it.
-        if self.console.as_ref().is_some_and(|c| {
-            let h = settings_of(ed);
-            ed.project.is_none() || !h.kind.is_panel() || h.server != c.server
-        }) {
-            self.console = None;
+        // none, another server, panel address or key) closes it.
+        if self.console.is_some() {
+            let link = self.link(ed, &settings_of(ed));
+            if self.console.as_ref().is_some_and(|c| link.as_ref().is_none_or(|(id, _)| *id != c.link)) {
+                self.console = None;
+            }
         }
         if let Some(c) = &mut self.console {
             c.poll(ctx);
@@ -362,35 +407,46 @@ impl HostingUi {
     fn poll_remote(&mut self, ed: &mut Editor, ctx: &egui::Context) {
         let picked = ed.project.as_ref().is_some_and(|p| ed.prefs.remote_bots.contains(&p.root.display().to_string()));
         self.remote = picked && self.can_control(ed);
-        if !self.remote {
-            self.watch = None;
-        } else {
-            let h = settings_of(ed);
-            if self.watch.as_ref().is_none_or(|w| w.server != h.server)
-                && let Some(key) = secrets_of(ed).api_key
-            {
-                let name = if h.server_name.is_empty() { h.server.clone() } else { h.server_name.clone() };
-                self.watch = Some(super::remote::Watch::new(calagopus::Panel::new(&h.panel, &key), h.server.clone(), name));
+        let h = settings_of(ed);
+        let link = if self.remote { self.link(ed, &h).and_then(|(id, key)| Some((id, key?))) } else { None };
+        match &link {
+            None => self.watch = None,
+            Some((id, key)) => {
+                if self.watch.as_ref().is_none_or(|w| w.link != *id) {
+                    let name = if h.server_name.is_empty() { h.server.clone() } else { h.server_name.clone() };
+                    self.watch = Some(super::remote::Watch::new(calagopus::Panel::new(&h.panel, key), h.server.clone(), name, id.clone()));
+                }
             }
         }
         if let Some(w) = &mut self.watch {
             w.poll(ctx);
         }
         // Watching the bot there: which blocks run, lit up as for a bot
-        // run from here. Only while Remote is picked.
-        if !self.remote {
-            self.ears = None;
-        } else {
-            let h = settings_of(ed);
-            if self.ears.as_ref().is_none_or(|e| e.server != h.server || e.values != h.watch_values)
-                && let Some(key) = secrets_of(ed).api_key
-            {
-                let console = calagopus::Console::open(calagopus::Panel::new(&h.panel, &key), h.server.clone());
-                self.ears = Some(Ears { console, server: h.server.clone(), values: h.watch_values, asked: None, since: Instant::now() });
+        // run from here. Only while Remote is picked. With the Remote
+        // console open for the same server, through its connection: one
+        // connection to the console is enough.
+        match &link {
+            None => self.ears = None,
+            Some((id, key)) => {
+                let shared = self.console.as_ref().is_some_and(|c| c.link == *id);
+                if self.ears.as_ref().is_none_or(|e| e.link != *id || e.values != h.watch_values || e.console.is_none() != shared) {
+                    let console = (!shared).then(|| calagopus::Console::open(calagopus::Panel::new(&h.panel, key), h.server.clone()));
+                    // The console tab's connection may be up already: then
+                    // asking starts now, and only what comes from now is news.
+                    let up = self.console.as_mut().filter(|_| shared).is_some_and(|c| {
+                        c.take_heard();
+                        c.connected
+                    });
+                    self.ears = Some(Ears { console, link: id.clone(), values: h.watch_values, asked: up.then(|| Instant::now() - std::time::Duration::from_secs(3600)), since: Instant::now() });
+                }
             }
         }
         if let Some(ears) = &mut self.ears {
-            while let Ok(event) = ears.console.events.try_recv() {
+            let events: Vec<calagopus::ConsoleEvent> = match &ears.console {
+                Some(c) => c.events.try_iter().collect(),
+                None => self.console.as_mut().map(ConsoleView::take_heard).unwrap_or_default(),
+            };
+            for event in events {
                 match event {
                     calagopus::ConsoleEvent::Connected => {
                         ears.asked = Some(Instant::now() - std::time::Duration::from_secs(3600));
@@ -413,7 +469,15 @@ impl HostingUi {
             // Asked for a minute at a time, every half minute: when the
             // editor goes away, the bot stops saying it by itself.
             if ears.asked.is_some_and(|at| at.elapsed() > std::time::Duration::from_secs(30)) {
-                ears.console.send(if ears.values { "watch 60 values" } else { "watch 60" });
+                let ask = if ears.values { "watch 60 values" } else { "watch 60" };
+                match &ears.console {
+                    Some(c) => c.send(ask),
+                    None => {
+                        if let Some(c) = &self.console {
+                            c.console.send(ask);
+                        }
+                    }
+                }
                 ears.asked = Some(Instant::now());
             }
         }
@@ -506,9 +570,13 @@ impl HostingUi {
             ed.log(Level::Warn, t!("An upload is under way: press Run again once it's done."));
             return;
         }
+        // Start only a server known to be off: one that runs, is on its way
+        // up or down, or hasn't said yet (just switched to Remote) is
+        // restarted, so it never goes on with the old version (a start of
+        // a running server is refused) and a restart starts one that's off.
         let action = match self.watch.as_ref().map(|w| w.state()) {
-            Some("running" | "starting") => "restart",
-            _ => "start",
+            Some("offline") => "start",
+            _ => "restart",
         };
         if let Some(w) = &mut self.watch {
             w.expect(action);
@@ -646,12 +714,19 @@ impl HostingUi {
             let mut log = |line: String| {
                 let _ = tx.send(JobMsg::Log(line));
             };
+            // The token stays only on the server, not in a copy here: the
+            // .env goes however this ends (an export that fails half way,
+            // a failed upload, a panic).
+            struct Forget(PathBuf);
+            impl Drop for Forget {
+                fn drop(&mut self) {
+                    let _ = std::fs::remove_file(&self.0);
+                }
+            }
+            let _forget = Forget(stage.join(".env"));
             let result = (|| {
                 circuit_runner::export(&stage, &bundle, &opts, &mut log)?;
-                let done = hosting::upload(&stage, &h, &s, &record, &known_hosts(), &mut log);
-                // The token stays only on the server, not in a copy here.
-                let _ = std::fs::remove_file(stage.join(".env"));
-                done
+                hosting::upload(&stage, &h, &s, &record, &known_hosts(), &mut log)
             })();
             let said = match result {
                 Ok(up) if up.sent.is_empty() => Ok(tf!("Nothing new to upload to {place}: it has this version already.", place = where_to)),
@@ -706,13 +781,13 @@ impl HostingUi {
     /// the last run comes back when the app starts.
     pub fn restore_console(&mut self, ed: &Editor) -> bool {
         let h = settings_of(ed);
-        let Some(key) = secrets_of(ed).api_key.filter(|_| h.kind.is_panel() && !h.server.is_empty()) else { return false };
-        if self.console.as_ref().is_some_and(|c| c.server == h.server) {
+        let Some((id, Some(key))) = self.link(ed, &h) else { return false };
+        if self.console.as_ref().is_some_and(|c| c.link == id) {
             return true;
         }
         let panel = calagopus::Panel::new(&h.panel, &key);
         let name = if h.server_name.is_empty() { h.server.clone() } else { h.server_name.clone() };
-        self.console = Some(ConsoleView::new(panel, h.server.clone(), name));
+        self.console = Some(ConsoleView::new(panel, h.server.clone(), name, id));
         true
     }
 
@@ -1078,18 +1153,35 @@ pub struct ConsoleView {
     problem: Option<String>,
     /// A power action under way, and its answer.
     action: Option<(String, Receiver<Result<(), String>>)>,
+    /// What it was opened for (see [`Link`]).
+    link: String,
+    /// What the connection said that the Ears listen for (they use this
+    /// connection while the tab is open), until they take it.
+    heard: Vec<calagopus::ConsoleEvent>,
 }
 
 impl ConsoleView {
-    pub(crate) fn new(panel: calagopus::Panel, server: String, name: String) -> ConsoleView {
+    pub(crate) fn new(panel: calagopus::Panel, server: String, name: String, link: String) -> ConsoleView {
         let console = calagopus::Console::open(panel.clone(), server.clone());
-        ConsoleView { console, panel, server, name, lines: VecDeque::new(), heights: VecDeque::new(), wrap_width: 0.0, state: String::new(), stats: None, connected: false, problem: None, action: None }
+        ConsoleView { console, panel, server, name, lines: VecDeque::new(), heights: VecDeque::new(), wrap_width: 0.0, state: String::new(), stats: None, connected: false, problem: None, action: None, link, heard: Vec::new() }
+    }
+
+    /// What the Ears listen for, since they last took it.
+    fn take_heard(&mut self) -> Vec<calagopus::ConsoleEvent> {
+        std::mem::take(&mut self.heard)
     }
 
     pub(crate) fn poll(&mut self, ctx: &egui::Context) {
         let mut any = false;
         while let Ok(e) = self.console.events.try_recv() {
             any = true;
+            if matches!(e, calagopus::ConsoleEvent::Connected | calagopus::ConsoleEvent::Output(_) | calagopus::ConsoleEvent::Problem(_)) {
+                // Nobody takes it when nobody listens: only the newest kept.
+                if self.heard.len() >= 2000 {
+                    self.heard.drain(..1000);
+                }
+                self.heard.push(e.clone());
+            }
             match e {
                 calagopus::ConsoleEvent::Connected => {
                     self.connected = true;
@@ -1362,7 +1454,7 @@ mod tests {
     fn the_console_fits_a_small_area_and_wraps() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let ed = Editor::new(vec![root.join("plugins")], None).unwrap();
-        let mut view = ConsoleView::new(calagopus::Panel::new("http://127.0.0.1:9", "c7sp_x"), "u-1".into(), "Bot".into());
+        let mut view = ConsoleView::new(calagopus::Panel::new("http://127.0.0.1:9", "c7sp_x"), "u-1".into(), "Bot".into(), String::new());
         for i in 0..200 {
             view.push(vec![calagopus::Piece { text: format!("line {i}"), style: Default::default() }]);
         }
@@ -1452,12 +1544,23 @@ mod tests {
         // Nobody signed in to DemoBot's panel: nothing to reconnect at start.
         assert!(!ui.restore_console(&ed));
         // A console for its server (here at an address nobody answers on).
-        ui.console = Some(ConsoleView::new(calagopus::Panel::new("http://127.0.0.1:9", "c7sp_x"), "u-1".into(), "Bot".into()));
+        let open = |ui: &mut HostingUi, ed: &Editor| {
+            let (link, _) = ui.link(ed, &settings_of(ed)).unwrap();
+            ui.console = Some(ConsoleView::new(calagopus::Panel::new("http://127.0.0.1:9", "c7sp_x"), "u-1".into(), "Bot".into(), link));
+        };
+        open(&mut ui, &ed);
         ui.poll(&mut ed, &ctx);
         assert!(ui.console.is_some(), "the project's server: it stays");
         set(&mut ed, "u-2");
         ui.poll(&mut ed, &ctx);
         assert!(ui.console.is_none(), "another server: closed");
+        // Another address for the panel, with the same server: closed too.
+        set(&mut ed, "u-1");
+        open(&mut ui, &ed);
+        let h = Hosting { kind: Kind::Calagopus, panel: "http://127.0.0.1:10".into(), server: "u-1".into(), ..Default::default() };
+        ed.project.as_mut().unwrap().meta.data.insert(DATA_KEY.into(), serde_json::to_value(&h).unwrap());
+        ui.poll(&mut ed, &ctx);
+        assert!(ui.console.is_none(), "another panel: closed");
     }
 
     fn copy_dir(from: &std::path::Path, to: &std::path::Path) {

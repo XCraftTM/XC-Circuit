@@ -74,6 +74,7 @@ impl CircuitApp {
         self.closed_tabs.clear();
         let root = self.ed.project.as_ref().map(|p| p.root.clone());
         self.ed.close_project();
+        self.bot.hosting.project_changed();
         // A guest's copy of a session's project is only for the session.
         if let Some(root) = root.filter(|r| crate::bot::live::is_session_copy(r)) {
             let _ = std::fs::remove_dir_all(root);
@@ -107,6 +108,9 @@ impl CircuitApp {
         self.closed_tabs.clear();
         let before = self.ed.project.as_ref().map(|p| p.root.clone());
         self.ed.open_project(dir);
+        if self.ed.project.as_ref().map(|p| &p.root) != before.as_ref() {
+            self.bot.hosting.project_changed();
+        }
         // A guest's copy of a session's project another project took the place of.
         if let Some(old) = before.filter(|r| crate::bot::live::is_session_copy(r) && r != dir && self.ed.project.as_ref().is_some_and(|p| p.root != *r)) {
             let _ = std::fs::remove_dir_all(old);

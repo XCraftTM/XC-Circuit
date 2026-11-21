@@ -25,7 +25,8 @@ const AT_MOST: Duration = Duration::from_secs(120);
 
 /// The server's state, read in the background while Server is picked.
 pub struct Watch {
-    pub server: String,
+    /// What it was opened for: the panel, server and key (see `hosting::Link`).
+    pub link: String,
     pub name: String,
     rx: Receiver<Result<calagopus::Resources, String>>,
     stop: Arc<AtomicBool>,
@@ -48,11 +49,11 @@ impl Drop for Watch {
 }
 
 impl Watch {
-    pub fn new(panel: calagopus::Panel, server: String, name: String) -> Watch {
+    pub fn new(panel: calagopus::Panel, server: String, name: String, link: String) -> Watch {
         let (tx, rx) = channel();
         let stop = Arc::new(AtomicBool::new(false));
         let stopped = stop.clone();
-        let id = server.clone();
+        let id = server;
         thread::spawn(move || {
             while !stopped.load(Ordering::Relaxed) {
                 if tx.send(panel.resources(&id).map_err(|e| format!("{e:#}"))).is_err() {
@@ -67,7 +68,7 @@ impl Watch {
                 }
             }
         });
-        Watch { server, name, rx, stop, last: None, problem: None, expect: None }
+        Watch { link, name, rx, stop, last: None, problem: None, expect: None }
     }
 
     /// Takes in what the panel said.
@@ -186,7 +187,7 @@ mod tests {
     /// panel may still say the old state).
     #[test]
     fn what_was_asked_shows_until_the_server_is_there() {
-        let mut w = Watch::new(calagopus::Panel::new("http://127.0.0.1:9", "c7sp_x"), "u-1".into(), "Bot".into());
+        let mut w = Watch::new(calagopus::Panel::new("http://127.0.0.1:9", "c7sp_x"), "u-1".into(), "Bot".into(), String::new());
         assert_eq!((w.state(), w.label()), ("", "Remote …"));
         w.take(res("offline"));
         assert_eq!((w.bot_state(), w.label()), (BotState::Stopped, "Remote stopped"));

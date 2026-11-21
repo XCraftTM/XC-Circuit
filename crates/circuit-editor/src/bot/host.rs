@@ -70,6 +70,8 @@ pub struct HostUi {
     pub changed: Vec<String>,
     /// The ear at the host: what it heard, and the switch that stops it.
     heard: Option<(Receiver<String>, Arc<AtomicBool>)>,
+    /// When `listen` last looked whether this computer is paired.
+    listen_checked: Option<Instant>,
     /// About the open project, from Share › Git…, for this dialog to show:
     /// where it is stored, how it stands, and what the last action said.
     pub project: (Option<String>, Option<String>, Option<(bool, String)>),
@@ -136,6 +138,18 @@ fn computer_name() -> String {
 /// computer.
 fn travelling(ed: &Editor) -> Vec<String> {
     super::secret_names(ed).into_iter().filter(|n| n != circuit_runner::hosting::PASSWORD && n != circuit_runner::hosting::API_KEY).collect()
+}
+
+impl Drop for HostUi {
+    /// The listening thread and a device being added stop with it.
+    fn drop(&mut self) {
+        if let Some((_, stop)) = &self.heard {
+            stop.store(true, Ordering::Relaxed);
+        }
+        if let Some(stop) = &self.stop_adding {
+            stop.store(true, Ordering::Relaxed);
+        }
+    }
 }
 
 impl HostUi {
@@ -225,9 +239,17 @@ impl HostUi {
                     if Instant::now() > until {
                         anyhow::bail!("No device typed the code in time. Add a device again for a new code.");
                     }
-                    if let Some(new) = link.devices()?.into_iter().find(|d| !known.contains(&d.id)) {
-                        link.key_put(&new.id, &host_link::wrap(&key, &new.key, &secret)?)?;
-                        return Ok(new.name);
+                    // A moment without the host (Wi-Fi, a restart) doesn't
+                    // end the wait: connected again, it goes on until the
+                    // code runs out.
+                    let found = link.devices().map(|all| all.into_iter().find(|d| !known.contains(&d.id)));
+                    match found {
+                        Ok(Some(new)) => match link.key_put(&new.id, &host_link::wrap(&key, &new.key, &secret)?) {
+                            Ok(()) => return Ok(new.name),
+                            Err(_) => link = linked().map(|(l, _, _)| l).unwrap_or(link),
+                        },
+                        Ok(None) => {}
+                        Err(_) => link = linked().map(|(l, _, _)| l).unwrap_or(link),
                     }
                     thread::sleep(Duration::from_millis(1500));
                 }
@@ -294,32 +316,55 @@ impl HostUi {
     }
 
     /// Listens at the paired host for projects that other devices changed,
-    /// for as long as the app runs (started once; it finds its way back
-    /// after a lost connection, and gives up when the pairing is gone).
-    fn listen(&mut self) {
-        if self.heard.is_some() {
-            return;
+    /// while this computer is paired (it finds its way back after a lost
+    /// connection, and ends when the pairing is gone or the app closes).
+    /// A change wakes the window, so it's fetched without waiting for the
+    /// mouse to move.
+    fn listen(&mut self, ctx: &egui::Context) {
+        // Paired or not is in this file: unpaired, nothing to listen to.
+        let paired = note_file().exists();
+        match (&self.heard, paired) {
+            (Some(_), true) | (None, false) => return,
+            (Some((_, stop)), false) => {
+                stop.store(true, Ordering::Relaxed);
+                self.heard = None;
+                return;
+            }
+            (None, true) => {}
         }
         let (tx, rx) = channel();
         let stop = Arc::new(AtomicBool::new(false));
         self.heard = Some((rx, stop.clone()));
+        let ctx = ctx.clone();
         thread::spawn(move || {
             while !stop.load(Ordering::Relaxed) {
-                if let Ok((mut link, paired, _)) = linked() {
-                    while !stop.load(Ordering::Relaxed) {
-                        match link.next_change(Duration::from_secs(25)) {
-                            // Not what this device stored itself.
-                            Ok(Some((project, by))) if by != paired.device => {
-                                if tx.send(project).is_err() {
-                                    return;
-                                }
-                            }
-                            Ok(_) => {}
-                            Err(_) => break,
+                let Ok((mut link, paired, _)) = linked() else {
+                    // The pairing is gone.
+                    if !note_file().exists() {
+                        return;
+                    }
+                    for _ in 0..20 {
+                        if stop.load(Ordering::Relaxed) {
+                            return;
                         }
+                        thread::sleep(Duration::from_millis(500));
+                    }
+                    continue;
+                };
+                while !stop.load(Ordering::Relaxed) {
+                    match link.next_change(Duration::from_secs(25)) {
+                        // Not what this device stored itself.
+                        Ok(Some((project, by))) if by != paired.device => {
+                            if tx.send(project).is_err() {
+                                return;
+                            }
+                            ctx.request_repaint();
+                        }
+                        Ok(_) => {}
+                        Err(_) => break,
                     }
                 }
-                // Not paired, or the connection is gone: looked at again later.
+                // The connection is gone: tried again later.
                 for _ in 0..20 {
                     if stop.load(Ordering::Relaxed) {
                         return;
@@ -331,7 +376,12 @@ impl HostUi {
     }
 
     pub fn poll(&mut self, ed: &mut Editor, ctx: &egui::Context) {
-        self.listen();
+        // Whether to listen, looked at now and then (pairing and unpairing
+        // happen here, and show at once: see `Done::Paired`).
+        if self.listen_checked.is_none_or(|t| t.elapsed() > Duration::from_secs(5)) {
+            self.listen_checked = Some(Instant::now());
+            self.listen(ctx);
+        }
         if let Some((heard, _)) = &self.heard {
             self.changed.extend(heard.try_iter());
         }
@@ -373,6 +423,8 @@ impl HostUi {
                 self.recovery = recovery;
                 self.code.clear();
                 self.recovery_typed.clear();
+                // Listening starts now, not within a few seconds.
+                self.listen_checked = None;
             }
             Done::Paired(Err(e)) => self.said = Some((false, e)),
             Done::Code(code) => self.adding = Some(code),
@@ -406,6 +458,7 @@ impl HostUi {
             Done::Unpaired => {
                 self.paired = None;
                 self.recovery = None;
+                self.listen_checked = None;
                 self.said = Some((true, t!("Unpaired. Nothing of the host is kept on this computer any more.").into()));
             }
         }
