@@ -232,6 +232,11 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     for ((n, f), h) in &view.field_heights {
         heights_of.entry(n.as_str()).or_default().push((f.as_str(), *h));
     }
+    // The same for previews' measured heights.
+    let mut previews_of: HashMap<&str, Vec<(&str, f32)>> = HashMap::new();
+    for ((n, k), h) in &view.preview_heights {
+        previews_of.entry(n.as_str()).or_default().push((k.as_str(), *h));
+    }
     // Scene sizes depend on the text size too.
     let text_scale = (ui.ctx().pixels_per_point().to_bits(), theme.touch);
     for id in &ids {
@@ -255,10 +260,8 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         for (k, v) in heights_of.get(id.as_str()).into_iter().flatten() {
             (k, v.to_bits()).hash(&mut h);
         }
-        for ((n, k), v) in &view.preview_heights {
-            if n == id {
-                (k, v.to_bits()).hash(&mut h);
-            }
+        for (k, v) in previews_of.get(id.as_str()).into_iter().flatten() {
+            (k, v.to_bits()).hash(&mut h);
         }
         let key = h.finish();
         let same_shape = |cached: &Option<std::sync::Arc<BlockShape>>| match (cached, &shape) {
@@ -345,6 +348,8 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     };
     let wired: std::collections::HashSet<u64, std::hash::BuildHasherDefault<crate::editor::Fingerprint>> =
         ws.links.iter().flat_map(|l| [pin_key(&l.from.node, &l.from.pin), pin_key(&l.to.node, &l.to.pin)]).collect();
+    // Outputs with a wire, apart (an output may have a field's name).
+    let wired_out: std::collections::HashSet<u64, std::hash::BuildHasherDefault<crate::editor::Fingerprint>> = ws.links.iter().map(|l| pin_key(&l.from.node, &l.from.pin)).collect();
 
     let (outer, _) = ui.allocate_exact_size(ui.available_size(), Sense::hover());
     ui.painter().rect_filled(outer, 0.0, theme.canvas);
@@ -576,10 +581,18 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     let wire_selected = |l: &Link| selected_wire.as_ref().is_some_and(|(w, s)| w == ws_key && s == l);
     // Where the selected wire's Delete button goes (screen).
     let mut wire_mid: Option<Pos2> = None;
+    // A wire's curve stays within its four control points: one that is out
+    // of view (with room for its halo) isn't built at all.
+    let wire_margin = theme.wire_width * 6.0 + 4.0;
     for link in &ws.links {
         let a = pin_at(&link.from.node, &link.from.pin, Dir::Out);
         let b = pin_at(&link.to.node, &link.to.pin, Dir::In);
         if let (Some(a), Some(b)) = (a, b) {
+            let [p0, p1, p2, p3] = wire_points(a.pos, b.pos);
+            let bounds = Rect::from_min_max(p0.min(p1).min(p2).min(p3), p0.max(p1).max(p2).max(p3)).expand(wire_margin);
+            if !bounds.intersects(visible) {
+                continue;
+            }
             let lit = if a.ty.is_action() { glow(&link.to.node) } else { 0.0 };
             if wire_selected(link) {
                 // A wire's curve is symmetric, so its middle is halfway between its ends.
@@ -623,7 +636,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         for spot in layout.pins.iter() {
             let color = if spot.pin == "error" { theme.error } else if spot.ty.is_action() { theme.text } else { theme.text_muted };
             painter.text(spot.pos - vec2(16.0, 0.0), Align2::RIGHT_CENTER, &spot.label, FontId::proportional(12.0), color);
-            let connected = ws.links.iter().any(|l| l.from.node == layout.id && l.from.pin == spot.pin);
+            let connected = wired_out.contains(&pin_key(&layout.id, &spot.pin));
             let candidate = drag.as_ref().map(|d| drag_compat(d, &layout.id, spot, reg, flow.as_ref()));
             draw_pin(&painter, spot, connected, candidate, theme, reg);
         }
@@ -1107,7 +1120,7 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
 
         // Pins.
         for spot in layout.pins.iter() {
-            let connected = if spot.dir == Dir::In { ws.links_into(id, &spot.pin).next().is_some() } else { ws.links.iter().any(|l| l.from.node == *id && l.from.pin == spot.pin) };
+            let connected = if spot.dir == Dir::In { ws.links_into(id, &spot.pin).next().is_some() } else { wired_out.contains(&pin_key(id, &spot.pin)) };
             let candidate = drag.as_ref().map(|d| drag_compat(d, id, spot, reg, flow.as_ref()));
             draw_pin(&painter, spot, connected, candidate, theme, reg);
 
@@ -1572,10 +1585,11 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         painter.rect(b, 4.0, with_alpha(theme.accent, 30), Stroke::new(1.0, theme.accent), StrokeKind::Inside);
     }
     sharpen_text(&ctx, layer, to_global, theme.text);
-    for l in &layouts[..node_count] {
+    // node:<block>, pin:<block>:in|out:<pin> and row:<block>:<field>, for the
+    // tour (and tests): not made for every block every frame otherwise.
+    for l in layouts[..node_count].iter().filter(|_| *tour_parts) {
         ui_rects.insert(format!("node:{}", l.id), to_global * l.rect);
-        if *tour_parts {
-            // pin:<block>:in|out:<pin> and row:<block>:<field>, for the tour.
+        {
             for p in l.pins.iter() {
                 let dir = if matches!(p.dir, Dir::In) { "in" } else { "out" };
                 ui_rects.insert(format!("pin:{}:{dir}:{}", l.id, p.pin), to_global * Rect::from_center_size(p.pos, vec2(12.0, 12.0)));

@@ -221,6 +221,9 @@ pub struct CircuitApp {
     frame_stats: Option<(u32, std::time::Instant)>,
     /// `--fps`: the frame rate measurement that drives the app.
     fps: Option<fps::Run>,
+    /// When what plugins and agents see of Git, and Share › Host…'s line
+    /// about the project, were last made (twice a second, not every frame).
+    bot_views_at: Option<std::time::Instant>,
     /// The First Start page, while it is open.
     setup: Option<crate::pages::setup::Setup>,
     /// The guided tour, while it runs, and the layout to put back afterwards.
@@ -308,8 +311,10 @@ impl CircuitApp {
         ed.theme.apply(&cc.egui_ctx);
         // What draws the app, and whether it had to fall back.
         let (graphics, software) = crate::app::graphics::describe(cc);
-        // Drawing in software: lighter drawing, unless turned off by hand.
+        // Drawing in software, or with an older card: lighter drawing,
+        // unless turned off by hand.
         crate::editor::prefs::set_software_drawing(software);
+        crate::editor::prefs::set_older_card(crate::app::graphics::older_card(cc, software));
         ed.restyle();
         ed.theme.apply(&cc.egui_ctx);
         if let Some(why) = crate::app::graphics::remembered() {
@@ -463,6 +468,7 @@ impl CircuitApp {
             reveal: crate::app::reveal::Reveal::new(cc),
             frame_stats: None,
             fps: None,
+            bot_views_at: None,
         }
     }
 
@@ -635,7 +641,11 @@ impl eframe::App for CircuitApp {
         self.bot.poll(&mut self.ed, &ctx);
         self.bot.hosting.poll(&mut self.ed, &ctx);
         self.bot.git.poll(&mut self.ed, &ctx);
-        self.ed.git_view = self.bot.git.view();
+        let views_due = self.bot_views_at.is_none_or(|t| t.elapsed() > std::time::Duration::from_millis(500));
+        if views_due {
+            self.bot_views_at = Some(std::time::Instant::now());
+            self.ed.git_view = self.bot.git.view();
+        }
         self.bot.host.poll(&mut self.ed, &ctx);
         let bot = match self.bot.state {
             crate::bot::BotState::Stopped => "stopped",
@@ -664,7 +674,9 @@ impl eframe::App for CircuitApp {
             }
         }
         // What Share › Host… shows about the open project.
-        self.bot.host.project = (self.bot.git.stored_at().map(str::to_string), self.bot.git.status().map(|(_, text)| text), self.bot.git.last_said().cloned());
+        if views_due {
+            self.bot.host.project = (self.bot.git.stored_at().map(str::to_string), self.bot.git.status().map(|(_, text)| text), self.bot.git.last_said().cloned());
+        }
         // Keep this project on the host: Share › Git… does it.
         if let Some(address) = self.bot.host.keep.take() {
             self.bot.git.connect_to(&self.ed, address);

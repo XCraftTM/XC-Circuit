@@ -133,7 +133,7 @@ A block takes 5–15 microseconds in an exported bot. Real bots spend almost all
   - **No shadows**: windows, menus and blocks without a shadow.
   - **No fading**: menus, tooltips and panels appear and go at once.
   - **Still glows**: empty required fields and blocks that just ran glow without pulsing. A pulsing glow has the app draw itself 30 times a second for as long as it shows; still, an empty field costs nothing, and a block that just ran fades in a few steps.
-  - **Simpler edges**: edges without their soft fringe. The canvas draws about 55–65% fewer triangles (30,200 → 11,000 at 100% zoom), which matters most when drawing in software or on an old graphics chip.
+  - **Simpler edges**: edges without their soft fringe, and wires and pins without their halo (a wire the bot just ran through still shows it). The canvas draws about 55–65% fewer triangles (30,200 → 11,000 at 100% zoom), which matters most when drawing in software or on an old graphics chip.
   - **All without a graphics card** (on to start with) leaves all of them out whenever the app draws in software, whatever is ticked.
 - **The dotted background** is one repeated picture of a dot, so it costs next to nothing (it used to be a small circle per dot: up to 20,000 triangles and a third of a canvas frame).
 

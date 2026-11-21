@@ -37,8 +37,10 @@ const REMEMBERED: &str = "graphics.txt";
 
 /// Why this start uses the stage remembered in graphics.txt, for the Console.
 static FROM_FILE: OnceLock<String> = OnceLock::new();
-/// Set when `auto` drew in software and OpenGL has a card: why, for the restart.
-static SWITCH: OnceLock<String> = OnceLock::new();
+/// Set when the app should start again with another stage (`auto` drew in
+/// software and OpenGL may have a card, or Older OpenGL drew in software
+/// too): which, and why, for the restart.
+static SWITCH: OnceLock<(&'static str, String)> = OnceLock::new();
 
 /// The stage to start with: XC_RENDERER, the one remembered in graphics.txt,
 /// or the first.
@@ -69,18 +71,38 @@ pub fn remembered() -> Option<&'static str> {
     FROM_FILE.get().map(String::as_str)
 }
 
-/// After the window was made: when `auto` draws in software on Windows but
-/// OpenGL has a graphics card, a stand-in app that closes the still hidden
-/// window, so `main` can start again with [`SWITCH_TO`]. None otherwise (and
-/// OpenGL is only asked when drawing in software).
+/// After the window was made: when `auto` draws in software on Windows (and
+/// OpenGL may have a graphics card), or Older OpenGL chosen that way draws
+/// in software too, a stand-in app that closes the still hidden window, so
+/// `main` can start again with the stage in [`switching`]. None otherwise
+/// (and OpenGL is only asked when drawing in software).
 pub fn opengl_instead(cc: &eframe::CreationContext<'_>, stage: &str) -> Option<Box<dyn eframe::App>> {
-    if !cfg!(windows) || stage != "auto" || std::env::var_os("WGPU_BACKEND").is_some() || !describe(cc).1 {
+    if !cfg!(windows) || std::env::var_os("WGPU_BACKEND").is_some() || !describe(cc).1 {
         return None;
     }
-    let card = graphics_card(adapters(wgpu::Backends::GL))?;
-    let _ = SWITCH.set(format!("DirectX 12 and Vulkan could only draw in software, but OpenGL has {card}"));
-    // Later starts begin there. If it stops working, the stages after it still follow.
     let dir = crate::bot::app_data_dir();
+    // Older OpenGL, kept in graphics.txt, draws in software too (it was
+    // tried for a card OpenGL might have): DirectX 12's software drawing
+    // is faster. "software" is kept, so OpenGL isn't tried again.
+    if stage == SWITCH_TO && chosen_in(&dir) == SWITCH_TO {
+        let _ = SWITCH.set(("software", "Older OpenGL could only draw in software as well".to_string()));
+        let _ = std::fs::write(dir.join(REMEMBERED), "software\n");
+        return Some(Box::new(Switching { _hidden: crate::app::reveal::Reveal::new(cc) }));
+    }
+    if stage != "auto" {
+        return None;
+    }
+    // wgpu's OpenGL needs 3.3: a card with OpenGL 2.1 to 3.2 isn't found
+    // there, but Older OpenGL can draw with it. Then it's tried all the
+    // same, once: if it can't start, or draws in software too, the stage
+    // after it is remembered instead (see `restart_with_next`), so this
+    // isn't asked again at every start.
+    let why = match graphics_card(adapters(wgpu::Backends::GL)) {
+        Some(card) => format!("DirectX 12 and Vulkan could only draw in software, but OpenGL has {card}"),
+        None => "DirectX 12 and Vulkan could only draw in software; trying Older OpenGL, for a graphics card with an older OpenGL".to_string(),
+    };
+    let _ = SWITCH.set((SWITCH_TO, why));
+    // Later starts begin there. If it stops working, the stages after it still follow.
     let _ = std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(dir.join(REMEMBERED), format!("{SWITCH_TO}\n")));
     Some(Box::new(Switching { _hidden: crate::app::reveal::Reveal::new(cc) }))
 }
@@ -88,9 +110,9 @@ pub fn opengl_instead(cc: &eframe::CreationContext<'_>, stage: &str) -> Option<B
 /// The stage for a graphics card that only OpenGL can use.
 pub const SWITCH_TO: &str = "glow";
 
-/// Why the app should start again with [`SWITCH_TO`], once its window has closed.
-pub fn switching() -> Option<&'static str> {
-    SWITCH.get().map(String::as_str)
+/// The stage to start again with, and why, once the window has closed.
+pub fn switching() -> Option<(&'static str, &'static str)> {
+    SWITCH.get().map(|(stage, why)| (*stage, why.as_str()))
 }
 
 /// Keeps the window cloaked and closes it at once.
@@ -158,14 +180,29 @@ pub fn is_graphics_error(e: &eframe::Error) -> bool {
 /// its exit code. None when there is no later stage or it couldn't start.
 pub fn restart_with_next(stage: &str, why: &eframe::Error) -> Option<i32> {
     let next = STAGES.iter().position(|s| *s == stage).and_then(|i| STAGES.get(i + 1))?;
+    // A stage kept in graphics.txt that can't start (any more: a new
+    // driver, another card): the next one is kept instead, so later starts
+    // don't try it first every time.
+    let dir = crate::bot::app_data_dir();
+    if remembered().is_some() || chosen_in(&dir) == stage {
+        let _ = std::fs::write(dir.join(REMEMBERED), format!("{next}\n"));
+    }
     restart_with(next, &format!("{} couldn't start: {why}", describe_stage(stage)))
 }
 
-/// Starts the app again with `stage`, waits for it and returns its exit code.
+/// Starts the app again with `stage`. This process ends: it doesn't wait
+/// for the new one (which would keep both in memory), except while
+/// measuring frame rates (`--fps`), whose caller waits for the results.
+/// Returns the exit code for this process.
 pub fn restart_with(stage: &str, why: &str) -> Option<i32> {
     let exe = std::env::current_exe().ok()?;
-    let status = std::process::Command::new(exe).args(std::env::args_os().skip(1)).env(RENDERER_VAR, stage).env(REASON_VAR, why).status().ok()?;
-    Some(status.code().unwrap_or(1))
+    let mut command = std::process::Command::new(exe);
+    command.args(std::env::args_os().skip(1)).env(RENDERER_VAR, stage).env(REASON_VAR, why);
+    if std::env::var_os("XC_FPS_OUT").is_some() {
+        return Some(command.status().ok()?.code().unwrap_or(1));
+    }
+    command.spawn().ok()?;
+    Some(0)
 }
 
 fn describe_stage(stage: &str) -> &'static str {
@@ -182,7 +219,18 @@ fn describe_stage(stage: &str) -> &'static str {
 /// SUPER". `software` is true when no graphics card does it.
 pub fn describe(cc: &eframe::CreationContext<'_>) -> (String, bool) {
     let Some(state) = cc.wgpu_render_state.as_ref() else {
-        return ("OpenGL (glow)".to_string(), false);
+        // Older OpenGL: what OpenGL says it draws with.
+        let (text, software) = match &cc.gl {
+            Some(gl) => {
+                use eframe::glow::HasContext;
+                // SAFETY: plain queries on the context eframe just made current.
+                let (renderer, version) = unsafe { (gl.get_parameter_string(eframe::glow::RENDERER), gl.get_parameter_string(eframe::glow::VERSION)) };
+                (format!("OpenGL (glow) · {renderer} · {version}"), is_software_opengl(&renderer))
+            }
+            None => ("OpenGL (glow)".to_string(), false),
+        };
+        let _ = DESCRIBED.set(text.clone());
+        return (text, software);
     };
     let info = state.adapter.get_info();
     let api = match info.backend {
@@ -195,6 +243,21 @@ pub fn describe(cc: &eframe::CreationContext<'_>) -> (String, bool) {
     let text = format!("{api} · {}", info.name);
     let _ = DESCRIBED.set(text.clone());
     (text, info.device_type == wgpu::DeviceType::Cpu)
+}
+
+/// Whether an OpenGL renderer (its `GL_RENDERER`) draws in software:
+/// Windows' own GDI Generic, Mesa's llvmpipe and softpipe, SwiftShader, or
+/// the Basic Render Driver.
+fn is_software_opengl(renderer: &str) -> bool {
+    let r = renderer.to_lowercase();
+    ["gdi generic", "llvmpipe", "softpipe", "swiftshader", "microsoft basic render"].iter().any(|s| r.contains(s))
+}
+
+/// Whether the app draws with an older graphics card: Older OpenGL on a
+/// card (not in software). Lighter drawing is then on, as when drawing in
+/// software, unless turned off.
+pub fn older_card(cc: &eframe::CreationContext<'_>, software: bool) -> bool {
+    cc.wgpu_render_state.is_none() && cc.gl.is_some() && !software
 }
 
 /// What draws the app this time, as [`describe`] said.
@@ -261,6 +324,17 @@ mod tests {
         assert_eq!(graphics_card(vec![soft("GDI Generic"), card("AMD Radeon HD 5700 Series")]).as_deref(), Some("AMD Radeon HD 5700 Series"));
         assert_eq!(graphics_card(vec![soft("llvmpipe")]), None, "no card anywhere: software, as before");
         assert_eq!(graphics_card(Vec::new()), None);
+    }
+
+    /// OpenGL's software renderers, by the name OpenGL gives them.
+    #[test]
+    fn tells_software_opengl_from_a_card() {
+        for soft in ["GDI Generic", "llvmpipe (LLVM 15.0.7, 256 bits)", "softpipe", "Google SwiftShader", "Microsoft Basic Render Driver"] {
+            assert!(is_software_opengl(soft), "{soft}");
+        }
+        for card in ["AMD Radeon HD 5700 Series", "Intel(R) HD Graphics 4000", "NVIDIA GeForce GT 220/PCIe/SSE2", "Mobile Intel(R) 4 Series Express Chipset Family"] {
+            assert!(!is_software_opengl(card), "{card}");
+        }
     }
 
     /// Every stage has a next one until the last, which is software drawing.

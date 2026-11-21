@@ -72,7 +72,8 @@ fn main() -> eframe::Result {
         "XC Circuit",
         options,
         Box::new(move |cc| {
-            // Drawing in software although OpenGL has a graphics card: start again with OpenGL.
+            // Drawing in software although OpenGL may have a graphics card: start again
+            // with Older OpenGL (or, when that draws in software too, back again).
             if let Some(stand_in) = app::graphics::opengl_instead(cc, stage) {
                 return Ok(stand_in);
             }
@@ -80,8 +81,8 @@ fn main() -> eframe::Result {
         }),
     );
     if result.is_ok()
-        && let Some(why) = app::graphics::switching()
-        && let Some(code) = app::graphics::restart_with(app::graphics::SWITCH_TO, why)
+        && let Some((stage, why)) = app::graphics::switching()
+        && let Some(code) = app::graphics::restart_with(stage, why)
     {
         std::process::exit(code);
     }

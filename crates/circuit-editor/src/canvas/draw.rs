@@ -10,11 +10,16 @@ pub(super) fn draw_grid(painter: &egui::Painter, visible: Rect, theme: &Theme, z
     // A dot's radius in the scene, as before: 1.3 px on screen down to 50%.
     let r = 1.3 / zoom.max(0.5);
     let ppp = painter.ctx().pixels_per_point();
-    // The picture: one grid cell as many pixels as it takes on the screen,
-    // with the dot in its middle.
-    let cell = (step * zoom * ppp).round().clamp(4.0, 256.0) as usize;
+    // The picture: one grid cell, with the dot in its middle, as many pixels
+    // as the next power of two from what it takes on the screen (sampled a
+    // little smaller there). Old OpenGL repeats only such sizes quickly, and
+    // a zoom in progress then reuses a few pictures instead of making one
+    // for every size it passes.
+    let cell = (step * zoom * ppp).max(1.0);
+    let size = (cell.ceil() as usize).next_power_of_two().clamp(8, 256);
+    let scale = size as f32 / cell;
     let dot = (r * zoom * ppp).max(0.5);
-    let texture = grid_texture(painter.ctx(), cell, dot);
+    let texture = grid_texture(painter.ctx(), size, dot, scale);
     // The cell's middle at each grid point: (x / step + 0.5) cells along.
     let uv = |p: Pos2| pos2(p.x / step + 0.5, p.y / step + 0.5);
     let mut mesh = egui::Mesh::with_texture(texture);
@@ -22,11 +27,15 @@ pub(super) fn draw_grid(painter: &egui::Painter, visible: Rect, theme: &Theme, z
     painter.add(egui::Shape::mesh(mesh));
 }
 
-/// A white dot of `dot` pixels' radius in the middle of a `cell`-pixel
-/// square, edges smoothed, repeating; made once per size and kept.
-fn grid_texture(ctx: &egui::Context, cell: usize, dot: f32) -> egui::TextureId {
+/// A white dot in the middle of a `cell`-pixel square (a power of two),
+/// repeating, drawn at `scale` picture pixels to a screen pixel: `dot`
+/// screen pixels' radius, its edge smoothed over one screen pixel. Made once
+/// per size and kept.
+fn grid_texture(ctx: &egui::Context, cell: usize, dot: f32, scale: f32) -> egui::TextureId {
     type Kept = std::collections::HashMap<(usize, u32), egui::TextureHandle>;
-    let key = (cell, (dot * 10.0).round() as u32);
+    // The dot's radius in the picture, in quarter pixels.
+    let in_picture = (dot * scale * 4.0).round() / 4.0;
+    let key = (cell, (in_picture * 4.0) as u32);
     let id = egui::Id::unique("canvas-grid-dots");
     if let Some(t) = ctx.data(|d| d.get_temp::<std::sync::Arc<std::sync::Mutex<Kept>>>(id)).and_then(|k| k.lock().ok().and_then(|k| k.get(&key).map(|t| t.id()))) {
         return t;
@@ -36,8 +45,8 @@ fn grid_texture(ctx: &egui::Context, cell: usize, dot: f32) -> egui::TextureId {
     for y in 0..cell {
         for x in 0..cell {
             let d = ((x as f32 + 0.5 - center).powi(2) + (y as f32 + 0.5 - center).powi(2)).sqrt();
-            // The soft edge egui gave its circles.
-            let a = (dot + 0.65 - d).clamp(0.0, 1.0);
+            // The soft edge egui gave its circles, in screen pixels.
+            let a = ((in_picture - d) / scale + 0.65).clamp(0.0, 1.0);
             pixels.push(egui::Color32::from_white_alpha((a * 255.0).round() as u8));
         }
     }
@@ -106,12 +115,25 @@ const MAX_GROW: f32 = 1.3;
 const MAX_WIDER: f32 = 1.15;
 
 /// A text laid out again, its size on screen in points, how much brighter
-/// grey goes (0 to 1), and the scale left over from rounding its size.
+/// grey goes (0 to 1), and the scale left over from rounding its size (for
+/// the zoom step it was laid out for).
 type Redone = (std::sync::Arc<egui::Galley>, f32, f32, f32);
 
+/// Texts are laid out for the zoom in steps of this many to a doubling
+/// (about 4% each); the few percent between a step and the zoom go with the
+/// scale it's drawn at. A zoom in progress reuses a step's layouts for a few
+/// frames instead of laying every text out anew each frame, and the font's
+/// glyph atlas gets a few sizes instead of new ones every frame (which old
+/// OpenGL drivers upload slowly, and whose atlas they can't make big).
+const ZOOM_STEPS: f32 = 16.0;
+
+fn zoom_step(zoom: f32) -> f32 {
+    2f32.powf((zoom.max(0.01).log2() * ZOOM_STEPS).round() / ZOOM_STEPS)
+}
+
 /// Which text was laid out again, and how: the text egui laid out (it hands
-/// back the same one while a text stays the same), the zoom, the colour grey
-/// text goes towards, and whether there's a bold font.
+/// back the same one while a text stays the same), the zoom step, the colour
+/// grey text goes towards, and whether there's a bold font.
 type SharpKey = (usize, u32, Color32, bool);
 
 /// Texts laid out again, kept while they're drawn: a canvas that isn't zoomed
@@ -131,6 +153,8 @@ struct Sharpened(std::collections::HashMap<SharpKey, (std::sync::Arc<egui::Galle
 /// little bigger, centred on where it was.
 pub(super) fn sharpen_text(ctx: &egui::Context, layer: LayerId, to_global: TSTransform, text: Color32) {
     let zoom = to_global.scaling;
+    // What the texts are laid out for (see ZOOM_STEPS).
+    let step = zoom_step(zoom);
     let ppp = ctx.pixels_per_point();
     // A text box's marked text is painted into its text (a rectangle in the
     // selection colour); laid out again it would lose that, so while one is
@@ -154,15 +178,15 @@ pub(super) fn sharpen_text(ctx: &egui::Context, layer: LayerId, to_global: TSTra
     let sharp: Vec<(usize, Pos2, Option<Redone>)> = texts
         .into_iter()
         .map(|(i, pos, galley)| {
-            let key: SharpKey = (std::sync::Arc::as_ptr(&galley) as usize, zoom.to_bits(), text, bold);
+            let key: SharpKey = (std::sync::Arc::as_ptr(&galley) as usize, step.to_bits(), text, bold);
             let size = galley.job.sections.iter().map(|s| s.format.font_id.size).fold(0.0, f32::max);
-            let screen = size * zoom;
+            let screen = size * step;
             let small = screen > 0.0 && screen < SMALL_TEXT;
             // Only a single line that doesn't wrap may get bigger and bolder:
             // wrapped text (a message box, the embed preview) has to fit its box.
             let free = galley.rows.len() <= 1 && !galley.job.wrap.max_width.is_finite();
             let grow = if small && free && screen < MIN_TEXT { (MIN_TEXT / screen).min(MAX_GROW) } else { 1.0 };
-            let redo = (zoom - 1.0).abs() > 0.001 || small;
+            let redo = (step - 1.0).abs() > 0.001 || small;
             // In steps, like the size below: a zoom in progress then reuses
             // the layouts egui keeps, instead of laying everything out anew.
             let how = (((SMALL_TEXT - screen) / (SMALL_TEXT - 5.0)).clamp(0.0, 1.0) * 8.0).round() / 8.0;
@@ -183,10 +207,10 @@ pub(super) fn sharpen_text(ctx: &egui::Context, layer: LayerId, to_global: TSTra
                 }
                 None => {
                     let big = redo.then(|| {
-                        let (mut g, mut fix) = lay(zoom * grow);
-                        let wider = g.size().x * fix / zoom / galley.size().x.max(0.1);
+                        let (mut g, mut fix) = lay(step * grow);
+                        let wider = g.size().x * fix / step / galley.size().x.max(0.1);
                         if free && small && wider > MAX_WIDER {
-                            (g, fix) = lay(zoom * grow * MAX_WIDER / wider);
+                            (g, fix) = lay(step * grow * MAX_WIDER / wider);
                         }
                         (g, screen, how, fix)
                     });
@@ -196,7 +220,7 @@ pub(super) fn sharpen_text(ctx: &egui::Context, layer: LayerId, to_global: TSTra
             };
             // Bigger (or bolder, so wider) text stays centred on its place.
             let pos = match &big {
-                Some((g, _, _, fix)) if free => pos - (g.size() * *fix / zoom - galley.size()) / 2.0,
+                Some((g, _, _, fix)) if free => pos - (g.size() * *fix / step - galley.size()) / 2.0,
                 _ => pos,
             };
             let screen_pos = to_global * pos;
@@ -214,7 +238,9 @@ pub(super) fn sharpen_text(ctx: &egui::Context, layer: LayerId, to_global: TSTra
                 if let egui::Shape::Text(t) = &mut c.shape {
                     if let Some((big, screen, how, fix)) = big {
                         t.galley = big;
-                        t.transform(TSTransform::from_scaling(fix / zoom));
+                        // Laid out for the step: in the layer, which the zoom
+                        // scales, it's that much smaller again.
+                        t.transform(TSTransform::from_scaling(fix / step));
                         if screen < SMALL_TEXT {
                             t.fallback_color = brighter(t.fallback_color, text, how);
                         }

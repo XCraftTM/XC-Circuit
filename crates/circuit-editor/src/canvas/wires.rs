@@ -29,7 +29,9 @@ pub(super) fn wire_distance(a: Pos2, b: Pos2, p: Pos2) -> f32 {
 pub(super) fn draw_wire(painter: &egui::Painter, a: Pos2, b: Pos2, ty: &PinType, theme: &Theme, reg: &Registry, lit: f32) {
     let color = theme.pin_color(ty, reg);
     let points = wire_points(a, b);
-    if ty.is_action() {
+    // The halo around an Action wire: with simpler edges (lighter drawing)
+    // only while the bot runs through it, as the sign that it did.
+    if ty.is_action() && (lit > 0.0 || !theme.lighter.smoothing) {
         let halo = Stroke::new(theme.wire_width * (3.0 + 3.0 * lit), with_alpha(color, (40.0 + 120.0 * lit) as u8));
         painter.add(CubicBezierShape::from_points_stroke(points, false, Color32::TRANSPARENT, halo));
     }
@@ -48,7 +50,10 @@ pub(super) fn draw_pin(painter: &egui::Painter, spot: &PinSpot, connected: bool,
         let p = spot.pos;
         let tri = vec![p + vec2(-5.0, -7.0), p + vec2(7.0, 0.0), p + vec2(-5.0, 7.0)];
         let fill = if dim { with_alpha(color, 60) } else { color };
-        painter.add(Shape::convex_polygon(tri.iter().map(|q| *q + vec2(0.0, 0.0)).collect(), with_alpha(color, 50), Stroke::new(4.0, with_alpha(color, 40))));
+        // Its soft halo, but not with simpler edges (lighter drawing).
+        if !theme.lighter.smoothing {
+            painter.add(Shape::convex_polygon(tri.clone(), with_alpha(color, 50), Stroke::new(4.0, with_alpha(color, 40))));
+        }
         painter.add(Shape::convex_polygon(tri, fill, Stroke::NONE));
         return;
     }

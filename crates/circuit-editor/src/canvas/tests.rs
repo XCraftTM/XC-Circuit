@@ -161,6 +161,7 @@ fn blocks_in_the_examples_dont_overlap() {
         for ws in keys {
             let ctx = egui::Context::default();
             ed.ui_rects.clear();
+            ed.tour_parts = true;
             for _ in 0..3 {
                 frame(&ctx, &mut ed, &ws, vec![]);
             }
@@ -194,6 +195,7 @@ fn spread_example_blocks() {
         for ws in keys {
             let ctx = egui::Context::default();
             ed.ui_rects.clear();
+            ed.tour_parts = true;
             for _ in 0..3 {
                 frame(&ctx, &mut ed, &ws, vec![]);
             }

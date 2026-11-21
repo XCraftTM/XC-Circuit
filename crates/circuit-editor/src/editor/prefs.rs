@@ -223,6 +223,21 @@ pub fn software_drawing() -> bool {
     SOFTWARE.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// Whether the app draws with an older graphics card (Older OpenGL on a
+/// card), as found when it started: lighter drawing is on then too, unless
+/// turned off.
+static OLDER_CARD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_older_card(on: bool) {
+    OLDER_CARD.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Software drawing or an older card: where Automatic leaves out all of
+/// what lighter drawing can.
+pub fn older_graphics() -> bool {
+    software_drawing() || OLDER_CARD.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// The Console's text size to start with (egui's monospaced size).
 pub const CONSOLE_FONT_SIZE: f32 = 13.0;
 
@@ -272,13 +287,14 @@ impl Prefs {
             theme.wire_width = w;
         }
         theme.touch = self.touch;
-        theme.lighter = self.lighter(software_drawing());
+        theme.lighter = self.lighter(older_graphics());
     }
 
     /// The parts of lighter drawing in use: all of them when drawing in
-    /// software and Automatic is on, otherwise those picked.
-    pub fn lighter(&self, software: bool) -> crate::ui::theme::Lighter {
-        if software && self.lighter_auto { crate::ui::theme::Lighter::ALL } else { self.lighter_parts }
+    /// software or with an older card and Automatic is on, otherwise those
+    /// picked.
+    pub fn lighter(&self, older: bool) -> crate::ui::theme::Lighter {
+        if older && self.lighter_auto { crate::ui::theme::Lighter::ALL } else { self.lighter_parts }
     }
 }
 

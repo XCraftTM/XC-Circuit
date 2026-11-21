@@ -299,14 +299,15 @@ fn editor(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView, 
     });
     // For older computers: lighter drawing, and another way to draw.
     let software = crate::editor::prefs::software_drawing();
+    let older = crate::editor::prefs::older_graphics();
     // A card, not a row: the list goes under the text.
     crate::ui::kit::setting_card(ui, theme, |ui| {
         use crate::ui::theme::Lighter;
         crate::ui::kit::setting_title(ui, theme, t!("Lighter drawing"), t!("For older computers: tick what to leave out, so there's less to draw."));
         ui.add_space(6.0);
-        // Automatic, while drawing in software, has all of them.
-        let forced = software && ed.prefs.lighter_auto;
-        let mut parts = ed.prefs.lighter(software);
+        // Automatic, while drawing in software or with an older card, has all of them.
+        let forced = older && ed.prefs.lighter_auto;
+        let mut parts = ed.prefs.lighter(older);
         let mut auto = ed.prefs.lighter_auto;
         let mut changed = false;
         ui.vertical(|ui| {
@@ -322,7 +323,7 @@ fn editor(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView, 
                         (&mut parts.shadows, t!("No shadows"), t!("Windows, menus and blocks without the shadow under them.")),
                         (&mut parts.animations, t!("No fading"), t!("Menus, tooltips and panels appear and go at once instead of fading.")),
                         (&mut parts.glows, t!("Still glows"), t!("Empty required fields and blocks that just ran glow without pulsing, so the app doesn't draw itself again 30 times a second for them.")),
-                        (&mut parts.smoothing, t!("Simpler edges"), t!("Edges without their soft fringe: about half as many triangles to draw, a little more jagged.")),
+                        (&mut parts.smoothing, t!("Simpler edges"), t!("Edges without their soft fringe, and wires and pins without their halo: about half as many triangles to draw, a little more jagged.")),
                     ];
                     for (on, name, tip) in rows {
                         changed |= crate::ui::kit::checkbox(ui, theme, on, name).on_hover_text(tip).changed();
@@ -330,11 +331,12 @@ fn editor(ui: &mut Ui, ed: &mut Editor, theme: &Theme, view: &mut SettingsView, 
                 });
             });
             ui.add_space(4.0);
-            changed |= crate::ui::kit::checkbox(ui, theme, &mut auto, t!("All without a graphics card"))
-                .on_hover_text(t!("When the app has to draw in software (no graphics card driver it could use), all of them are left out, whatever is ticked."))
+            changed |= crate::ui::kit::checkbox(ui, theme, &mut auto, t!("All on older graphics"))
+                .on_hover_text(t!("When the app has to draw in software (no graphics card driver it could use), or draws with Older OpenGL on an older graphics card, all of them are left out, whatever is ticked."))
                 .changed();
             if forced {
-                ui.label(RichText::new(t!("All on now: the app draws without a graphics card.")).size(11.5).color(theme.text_muted));
+                let now = if software { t!("All on now: the app draws without a graphics card.") } else { t!("All on now: the app draws with Older OpenGL, on an older graphics card.") };
+                ui.label(RichText::new(now).size(11.5).color(theme.text_muted));
             }
         });
         if changed {
@@ -913,7 +915,7 @@ mod tests {
         h.get_by_label("All").click();
         h.run();
         assert_eq!(h.state().0.prefs.lighter_parts, Lighter::NONE);
-        h.get_by_label("All without a graphics card").click();
+        h.get_by_label("All on older graphics").click();
         h.run();
         assert!(!h.state().0.prefs.lighter_auto);
     }
