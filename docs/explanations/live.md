@@ -26,7 +26,7 @@ The plugins that come with XC Circuit are the same for everyone. Others the host
 
 ### When your connection drops
 
-Your app tries to get back in by itself, for about two minutes. Back in, you are who you were, with what the host let you do; your copy catches up with what happened meanwhile, and what you changed while away is sent after all. If the host's own connection drops, the session is over.
+Your app tries to get back in by itself, for about two minutes. Back in, you are who you were, with what the host let you do; your copy catches up with what happened meanwhile, and what you changed while away is sent after all. If the host's own connection drops, the relay keeps the session for a minute and the guests wait (they are told); the host's app gets back in by itself, and everyone catches up. A relay (or Host) that wasn't updated for this can't keep it: there the session is over.
 
 ## Seeing each other
 
@@ -56,7 +56,7 @@ Changes are put together the way they are when [two stored versions meet](git.md
 - Two blocks that got the same number are two blocks: the host's keeps the number, the other gets the next free one, with its wires and what reads it.
 - Where a block sits is everyone's own business until they move it: a move travels like any other change.
 
-**Undo** only takes back your own work. What the others did in between stays.
+**Undo** only takes back your own work. What the others did in between stays. In a workspace someone else is changing, the newest 30 steps can be undone (each change from the others is put into every step that's kept, so fewer keep it quick).
 
 ## The bot, and ending
 
@@ -68,4 +68,4 @@ Every guest sees **which blocks ran**, how long they took, and where one failed,
 
 A guest has no token. Whatever needs it, the host's app reads and passes on, and only what it shows itself: how the bot looks (its name and picture, for the previews: every guest gets that, so previews look the same for all) and, for guests with the tick, the list of servers with their channels and roles. A guest can't ask Discord for anything else through the host, and nothing on this way changes anything at Discord.
 
-**End the session** (the host) ends it for everyone; **Leave the session** (a guest) only for that guest. When the host's app closes or loses its connection, the session is over. A guest's copy stays open as it was, but it is only a copy: what counts is the host's project.
+**End the session** (the host) ends it for everyone; **Leave the session** (a guest) only for that guest. When the host's app closes (or opens another project), or loses its connection for more than a minute, the session is over. A guest's copy stays open as it was, but it is only a copy: what counts is the host's project.

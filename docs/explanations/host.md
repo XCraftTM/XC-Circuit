@@ -110,9 +110,10 @@ Everything but Git goes over one WebSocket at `/ws`, as JSON with a `t`:
 
 | From the app | Answer | |
 | --- | --- | --- |
-| `open` | `opened { room }` | Starts a live session. Its host owns it: when they leave, it ends (`closed`). |
-| `join { room }` | `joined { you }` | The session's host gets `peer { id, on }`. |
-| `to { data, id? }` | | A guest's goes to the host; the host's to one guest (`id`) or all. Arrives as `from { id, data }`. `data` is the apps' own, encrypted by them. |
+| `open` | `opened { room, key }` | Starts a live session. Its host owns it: when they leave, it ends (`closed`). When the host's connection drops instead, the room waits a minute and its guests get `away`. |
+| `reopen { room, key }` | `opened { room, key }` | The host back after a dropped connection, with the room's `key` from `opened` (only the host has it). Who left meanwhile arrives as `peer { id, on: false }`; the guests get `back`, and say hello again. |
+| `join { room }` | `joined { you }` | The session's host gets `peer { id, on }`. While the host is away, the guest gets `away` too. |
+| `to { data, id? }` | | A guest's goes to the host; the host's to one guest (`id`) or all. Arrives as `from { id, data }`. `data` is the apps' own, encrypted by them (one too big for a message goes in several, put together by the apps). A guest's to a host that is away is dropped. |
 | `kick { id }`, `leave`, `ping` | `pong` | |
 | `pair { code, name, key }` | `paired { device, token }` | Full mode. `key` is the device's public key, for the others to wrap the vault's key for it. |
 | `hello { token }` | `welcome { device, name }` | Says who this is. Needed for all below. |
