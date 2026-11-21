@@ -6,6 +6,9 @@ All notable changes to XC™ Circuit. Versions follow [semantic versioning](http
 
 ### Fixed
 - **Remote consoles connect more reliably**: a server that doesn't answer is given up on after 10 seconds instead of the system's minutes, commands typed into the console go out at once instead of up to a quarter of a second later, and a console the server closes connects again right away. After a connection that worked, waiting between tries starts again at one second, instead of staying at 30 seconds once it got there. A link from a panel's sign-in with a % before a letter such as é no longer crashes the app.
+- **The Host's console shows whole lines**: a line the bot printed in two goes (or one that arrived in two pieces) showed as two lines, and when that happened to one of the lines the editor reads to light up blocks on the remote, that block didn't light up.
+- **The Host behind a proxy**: some reverse proxies send an app's first message together with the connection's opening, and the Host dropped it, so the connection got confused from there on. It also says why it closes a connection before closing it, lets go of an app that stops taking what it sends instead of keeping all of it in memory, and no longer holds on to memory for messages it has read already.
+- **The Host runs bots more reliably**: Restart while the bot's packages were being installed did nothing; it now starts the install over with what is there. Stopping during an install on Windows left npm running. Uploads are written beside the old file and then put in its place, so a running bot never reads half a file, and the Host goes on with live sessions and consoles while a big file is written.
 
 ## 0.3.1
 

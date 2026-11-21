@@ -91,8 +91,9 @@ test("a session's messages go from the host to the guests and back", async () =>
   try {
     const [owner, one, two, stranger] = await Promise.all([app(host.port), app(host.port), app(host.port), app(host.port)]);
     owner.send({ t: "open" });
-    const { room } = await owner.next("opened");
+    const { room, key } = await owner.next("opened");
     assert.match(room, /^[0-9a-f]{24}$/);
+    assert.match(key, /^[0-9a-f]{32}$/);
     stranger.send({ t: "join", room: "nope" });
     assert.match((await stranger.next("error")).why, /isn't open/);
     one.send({ t: "join", room });
@@ -123,12 +124,26 @@ test("a session's messages go from the host to the guests and back", async () =>
     one.raw("not json");
     assert.match((await one.next("error")).why, /JSON/);
 
-    // Without its host a session is over.
+    // The host's connection drops: the room waits, and the guests are told.
     owner.close();
+    await one.next("away");
+    one.send({ t: "to", data: "while away" });
+    // Back with the room's key (and only with it): the guests say hello again.
+    const back = await app(host.port);
+    back.send({ t: "reopen", room, key: "0".repeat(32) });
+    assert.match((await back.next("error")).why, /isn't open/);
+    back.send({ t: "reopen", room, key });
+    assert.deepEqual(await back.next("opened"), { t: "opened", room, key });
+    await one.next("back");
+    one.send({ t: "to", data: "hello again" });
+    assert.equal((await back.next("from")).data, "hello again", "what was sent while away is gone, what comes after arrives");
+
+    // A host that leaves ends the session.
+    back.send({ t: "leave" });
     await one.next("closed");
     one.send({ t: "to", data: 1 });
     assert.match((await one.next("error")).why, /no session/);
-    for (const c of [one, two, stranger]) c.close();
+    for (const c of [one, two, stranger, back]) c.close();
   } finally {
     await host.close();
   }
@@ -328,7 +343,8 @@ test("a bot is uploaded, runs on the host, and says what it prints", async () =>
     assert.equal((await call("GET", "/my-bot/resources")).body.resources.state, "offline");
 
     // The app uploads the exported bot, file by file.
-    const bot = 'console.log("Bot ready"); process.stdin.on("data", (d) => console.log("heard " + String(d).trim())); setInterval(() => {}, 1000); process.on("SIGTERM", () => process.exit(0));';
+    // "Bot ready" comes in two pieces: still one line at the console.
+    const bot = 'process.stdout.write("Bot "); setTimeout(() => console.log("ready"), 60); process.stdin.on("data", (d) => console.log("heard " + String(d).trim())); setInterval(() => {}, 1000); process.on("SIGTERM", () => process.exit(0));';
     assert.equal((await call("POST", "/my-bot/files/write?file=%2Findex.js", bot)).status, 200);
     assert.equal((await call("POST", "/my-bot/files/write?file=%2Fpackage.json", '{ "name": "bot" }')).status, 200);
     assert.equal((await call("POST", "/my-bot/files/write?file=%2F.env", "DISCORD_TOKEN=x")).status, 200);
