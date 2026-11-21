@@ -67,10 +67,17 @@ impl CircuitApp {
         if self.ed.unsaved_now() {
             self.ed.save();
         }
+        // A live session is this project's: it ends with it.
+        self.bot.live.leave_for(None);
         self.bot.stop(&mut self.ed);
         clear_canvases(&mut self.dock);
         self.closed_tabs.clear();
+        let root = self.ed.project.as_ref().map(|p| p.root.clone());
         self.ed.close_project();
+        // A guest's copy of a session's project is only for the session.
+        if let Some(root) = root.filter(|r| crate::bot::live::is_session_copy(r)) {
+            let _ = std::fs::remove_dir_all(root);
+        }
         self.plugin_host.sync(&mut self.ed, self.bundled_plugins.as_deref());
         self.watcher.watch(&self.ed.watch_dirs());
         self.stored = Default::default();
@@ -92,10 +99,18 @@ impl CircuitApp {
         if self.ed.unsaved_now() {
             self.ed.save();
         }
+        // Another project: a live session (of the one open now) ends; not
+        // when this is a guest's copy of the session's project arriving.
+        self.bot.live.leave_for(Some(dir));
         self.bot.stop(&mut self.ed);
         clear_canvases(&mut self.dock);
         self.closed_tabs.clear();
+        let before = self.ed.project.as_ref().map(|p| p.root.clone());
         self.ed.open_project(dir);
+        // A guest's copy of a session's project another project took the place of.
+        if let Some(old) = before.filter(|r| crate::bot::live::is_session_copy(r) && r != dir && self.ed.project.as_ref().is_some_and(|p| p.root != *r)) {
+            let _ = std::fs::remove_dir_all(old);
+        }
         // It couldn't be opened: the project before stays, and so does its canvas.
         if let Some(p) = self.ed.project.as_ref().filter(|p| p.root != dir)
             && let Some(first) = p.workspaces.keys().next().cloned()

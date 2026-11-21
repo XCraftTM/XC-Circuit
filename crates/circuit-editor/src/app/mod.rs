@@ -650,7 +650,7 @@ impl eframe::App for CircuitApp {
             None => {}
         }
         // A guest's session is over: the copy closes, back to the start page.
-        if self.bot.live.take_ended() && self.ed.project.as_ref().is_some_and(|p| p.root.starts_with(crate::bot::app_data_dir().join("sessions"))) {
+        if self.bot.live.take_ended() && self.ed.project.as_ref().is_some_and(|p| crate::bot::live::is_session_copy(&p.root)) {
             self.close_project();
         }
         // A guest's copy of a session's project has arrived: opened.

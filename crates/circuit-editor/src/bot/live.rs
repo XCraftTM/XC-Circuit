@@ -34,8 +34,37 @@ pub fn docs_of(ed: &mut Editor) -> Docs {
         ws.give_new_uids();
         docs.insert(key.clone(), serde_json::to_value(&*ws).unwrap_or_default());
     }
-    docs.insert(META.to_string(), serde_json::json!({ "slashCommands": project.meta.data.get("slashCommands").cloned().unwrap_or_else(|| serde_json::json!([])) }));
+    docs.insert(META.to_string(), meta_doc(project));
     docs
+}
+
+fn meta_doc(project: &circuit_core::Project) -> Value {
+    serde_json::json!({ "slashCommands": project.meta.data.get("slashCommands").cloned().unwrap_or_else(|| serde_json::json!([])) })
+}
+
+/// Just one of the project's documents, as [`docs_of`] gives it: for a
+/// change the host sent, which only looks at that one.
+fn doc_of(ed: &mut Editor, key: &str) -> Docs {
+    let Some(project) = ed.project.as_mut() else { return Docs::new() };
+    let mut docs = Docs::new();
+    if key == META {
+        docs.insert(META.to_string(), meta_doc(project));
+    } else if let Some(ws) = project.workspaces.get_mut(key) {
+        ws.give_new_uids();
+        docs.insert(key.to_string(), serde_json::to_value(&*ws).unwrap_or_default());
+    }
+    docs
+}
+
+/// What of the guest's project a message from the host needs to see:
+/// everything for a welcome, one document for a change, nothing for the
+/// rest (pointers, the console …, many a second).
+fn docs_for(ed: &mut Editor, msg: &Msg) -> Docs {
+    match msg {
+        Msg::Welcome { .. } => docs_of(ed),
+        Msg::Update { key, .. } | Msg::Reset { key, .. } => doc_of(ed, key),
+        _ => Docs::new(),
+    }
 }
 
 /// One of the session's documents, put into the open project. `rebase`
@@ -70,7 +99,8 @@ fn put(ed: &mut Editor, key: &str, state: Option<&Value>, rebase: impl Fn(&Value
             }
         }
     }
-    ed.shapes.clear();
+    // Only this workspace's blocks are worked out again.
+    ed.shapes.forget_workspace(key);
     ed.edited = true;
 }
 
@@ -82,6 +112,28 @@ fn other_files(root: &std::path::Path) -> BTreeMap<String, String> {
         files.insert(circuit_core::project::PROJECT_FILE.to_string(), text);
     }
     files
+}
+
+/// A text in parts of at most `most` bytes, each cut between two letters
+/// (a cut inside a letter of several bytes would spoil it).
+fn text_parts(text: &str, most: usize) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut rest = text;
+    while !rest.is_empty() {
+        let mut end = most.min(rest.len());
+        while !rest.is_char_boundary(end) {
+            end -= 1;
+        }
+        let (part, after) = rest.split_at(end);
+        parts.push(part.to_string());
+        rest = after;
+    }
+    parts
+}
+
+/// Whether a project folder is a guest's copy of a session's project.
+pub fn is_session_copy(root: &std::path::Path) -> bool {
+    root.starts_with(super::app_data_dir().join("sessions"))
 }
 
 /// Where a guest's copy of a session's project lives.
@@ -124,9 +176,13 @@ pub struct LiveUi {
     here: Option<(Presence, Instant)>,
     /// A guest asked for the bot to be started or stopped: for the app.
     pub power: Option<Power>,
-    /// How much of the console the guests have (the host), and the bot's
-    /// state they were last told.
-    told: (usize, String),
+    /// How much of the console the guests have (the host: which line, by
+    /// `Editor::log_count`), and the bot's state they were last told.
+    told: (u64, String),
+    /// The window, for the wire to wake when something arrives.
+    ctx: Option<egui::Context>,
+    /// A guest: what came while the session's copy wasn't open yet.
+    held: Vec<Event>,
     /// The bot at the host's, as a guest was last told.
     bot: Option<String>,
     /// The host: the profile the guests have, the server list each guest
@@ -154,6 +210,29 @@ impl LiveUi {
         Self::default()
     }
 
+    /// What the wire calls when something arrives: the window draws again.
+    fn wake(&self) -> circuit_runner::live_link::Wake {
+        let ctx = self.ctx.clone();
+        std::sync::Arc::new(move || {
+            if let Some(ctx) = &ctx {
+                ctx.request_repaint();
+            }
+        })
+    }
+
+    /// Another project is opened (`Some`), or the project is closed: the
+    /// session can't go on with it, so it ends (a host's guests are told);
+    /// unless it is a guest's copy of the session's project arriving.
+    pub fn leave_for(&mut self, opening: Option<&std::path::Path>) {
+        let Some(session) = self.session.as_ref() else { return };
+        if let (Role::Guest { folder, .. }, Some(dir)) = (&session.role, opening)
+            && folder == dir
+        {
+            return;
+        }
+        self.end();
+    }
+
     /// Share › Live session…
     pub fn open(&mut self) {
         self.open = true;
@@ -176,6 +255,7 @@ impl LiveUi {
     /// name and an invitation. Joined, the session's project opens; when
     /// the session is over, it closes again.
     pub fn join_page(&mut self, ui: &mut egui::Ui, ed: &Editor) {
+        self.ctx = Some(ui.ctx().clone());
         let theme = ed.theme.clone();
         let icon = ed.reg.icons.get("user-plus").cloned();
         let waiting = self.session.is_some();
@@ -259,7 +339,7 @@ impl LiveUi {
         }
         ed.finish_saving();
         let docs = docs_of(ed);
-        match Wire::host(&self.relay) {
+        match Wire::host(&self.relay, self.wake()) {
             Ok(wire) => {
                 let mut side = HostSide::new(self.name.trim(), VERSION, docs);
                 // The plugins a guest may lack: all but the app's own.
@@ -274,7 +354,7 @@ impl LiveUi {
 
     /// Joins the session an invitation is for.
     pub fn join(&mut self) {
-        match Wire::join(&self.invite) {
+        match Wire::join(&self.invite, self.wake()) {
             Ok(wire) => {
                 let folder = guest_folder(&self.invite);
                 self.came_with = self.invite.trim().to_string();
@@ -293,6 +373,7 @@ impl LiveUi {
         self.ended = self.is_guest();
         self.drawn.clear();
         self.others.clear();
+        self.held.clear();
         self.bot = None;
         if self.session.take().is_some() {
             self.said = Some((true, t!("The session is over.").into()));
@@ -312,25 +393,63 @@ impl LiveUi {
 
     /// `bot` is how the bot stands here: `stopped`, `starting` or `running`.
     pub fn poll(&mut self, ed: &mut Editor, ctx: &egui::Context, bot: &str) {
+        self.ctx = Some(ctx.clone());
         if self.session.is_none() && !ed.live_others.is_empty() {
             // No session, nobody to show.
             ed.live_others.clear();
         }
+        let wake = self.wake();
         let Some(session) = self.session.as_mut() else { return };
         // After a dropped connection: back in with the same invitation.
         if let Some((when, tries)) = self.retry
             && Instant::now() >= when
         {
-            if let Ok(wire) = Wire::join(&self.came_with) {
+            if let Ok(wire) = Wire::join(&self.came_with, wake) {
                 session.wire = wire;
             }
             // Under way: the next word from the wire decides what follows.
             self.retry = Some((Instant::now() + Duration::from_secs(3600), tries));
         }
         let mut over: Option<String> = None;
-        for event in session.wire.events() {
+        // Everything here was sent already: then what arrives now, put into
+        // the project, needn't be looked at again to find nothing new (the
+        // whole project, made into documents).
+        let all_sent = session.seen == Some(ed.history.revision());
+        let mut own_on_top = false;
+        let mut events = std::mem::take(&mut self.held);
+        events.extend(session.wire.events());
+        let mut events = events.into_iter();
+        while let Some(event) = events.next() {
+            // A guest's changes only ever go into the session's copy: until
+            // it is open (it opens after the welcome), they wait.
+            if let Role::Guest { welcomed: true, folder, .. } = &session.role
+                && matches!(event, Event::From { .. })
+                && !ed.project.as_ref().is_some_and(|p| p.root == *folder)
+            {
+                self.held.push(event);
+                self.held.extend(events);
+                if self.held.len() > 20_000 {
+                    over = Some(t!("The session's project couldn't be opened.").into());
+                }
+                break;
+            }
             match (&mut session.role, event) {
                 (Role::Host { invite, .. }, Event::Opened { invite: text }) => *invite = Some(text),
+                // The connection dropped: the relay keeps the room a minute,
+                // and the wire takes it back; the guests then say hello again.
+                (Role::Host { .. }, Event::Away { why }) => {
+                    ed.log(Level::Warn, tf!("The connection to the relay dropped ({why}). Getting the session back…", why = why));
+                    self.said = Some((false, t!("The connection dropped. Getting the session back…").into()));
+                }
+                (Role::Host { .. }, Event::Back) => {
+                    ed.log(Level::Success, t!("The session is back."));
+                    self.said = Some((true, t!("The session is back.").into()));
+                }
+                (Role::Guest { .. }, Event::HostAway) => {
+                    self.said = Some((false, t!("The host's connection dropped. Waiting for them…").into()));
+                    ed.log(Level::Warn, t!("The host's connection dropped. Waiting for them…"));
+                }
+                (_, Event::Trouble { why }) => ed.log(Level::Warn, tf!("Something couldn't be sent to the session: {why}", why = why)),
                 (Role::Host { side, .. }, Event::Peer { id, on: false }) => {
                     if let Some(guest) = side.guests.get(&id) {
                         ed.log(Level::Info, tf!("{name} left the session", name = guest.name));
@@ -361,7 +480,7 @@ impl LiveUi {
                         for (plugin, version, dir) in &self.plugin_dirs {
                             match pack_plugin(dir) {
                                 Some(text) => {
-                                    let parts: Vec<String> = text.as_bytes().chunks(120_000).map(|c| String::from_utf8_lossy(c).into_owned()).collect();
+                                    let parts = text_parts(&text, 120_000);
                                     for (part, text) in parts.iter().enumerate() {
                                         session.wire.send(Some(&id), serde_json::to_value(Msg::Plugin { id: plugin.clone(), version: version.clone(), part, parts: parts.len(), text: text.clone() }).unwrap_or_default());
                                     }
@@ -390,7 +509,7 @@ impl LiveUi {
                 }
                 (Role::Guest { side, folder, welcomed, .. }, Event::From { data, .. }) => {
                     let Ok(msg) = serde_json::from_value::<Msg>(data) else { continue };
-                    let now = if *welcomed { docs_of(ed) } else { Docs::new() };
+                    let now = if *welcomed { docs_for(ed, &msg) } else { Docs::new() };
                     let turn = side.receive(msg, &now);
                     if let Some(why) = turn.refused {
                         over = Some(why);
@@ -416,6 +535,8 @@ impl LiveUi {
                         continue;
                     }
                     for a in turn.apply {
+                        // Kept changes of one's own on top: those go out again.
+                        own_on_top |= a.local != a.after;
                         let (before, after) = (a.before.clone(), a.after.clone());
                         put(ed, &a.key, a.local.as_ref(), move |earlier| match (&before, &after) {
                             (Some(b), Some(n)) => json::workspace_numbered(Some(b), earlier, n, &|_| Some(Side::Theirs), Side::Theirs).value,
@@ -502,10 +623,14 @@ impl LiveUi {
                 _ => {}
             }
         }
+        if all_sent && !own_on_top && session.seen.is_some() {
+            session.seen = Some(ed.history.revision());
+        }
         if let Some(why) = over {
             self.ended = self.is_guest();
             self.session = None;
             self.retry = None;
+            self.held.clear();
             self.drawn.clear();
             self.others.clear();
             ed.live_others.clear();
@@ -571,12 +696,12 @@ impl LiveUi {
         if let Role::Host { side, .. } = &session.role
             && !side.guests.is_empty()
         {
-            if ed.log.len() < self.told.0 {
-                self.told.0 = 0;
-            }
-            let lines: Vec<(String, String)> = ed.log[self.told.0..].iter().take(100).map(|l| (level_name(l.level).to_string(), l.text.clone())).collect();
+            // Counted by every line ever written, not by place in the
+            // Console: it drops its oldest lines now and then.
+            let new = (ed.log_count.saturating_sub(self.told.0) as usize).min(ed.log.len());
+            let lines: Vec<(String, String)> = ed.log[ed.log.len() - new..].iter().take(100).map(|l| (level_name(l.level).to_string(), l.text.clone())).collect();
             if !lines.is_empty() {
-                self.told.0 += lines.len();
+                self.told.0 = ed.log_count - (new - lines.len()) as u64;
                 session.wire.send(None, serde_json::to_value(Msg::Console { lines }).unwrap_or_default());
             }
             if self.told.1 != bot {
@@ -585,7 +710,7 @@ impl LiveUi {
             }
         } else if matches!(session.role, Role::Host { .. }) {
             // Nobody to tell: what was written before a guest came stays here.
-            self.told = (ed.log.len(), String::new());
+            self.told = (ed.log_count, String::new());
         }
         // The host passes on what it read with the bot's token, and what
         // the bot just did; a guest shows what it was given.
@@ -659,10 +784,19 @@ impl LiveUi {
             }
         }
         ed.live_others = self.others.iter().filter_map(|(id, o)| Some(crate::editor::LiveOther { name: o.name.clone(), color: colour_of(&o.id), ws: o.ws.clone()?, at: self.drawn.get(id).copied(), selected: o.selected.clone() })).collect();
+        // What arrives wakes the window itself (see `wake`): drawn again
+        // only while a pointer glides, a change waits to go out, or a
+        // reconnection is due.
         if moving {
             ctx.request_repaint();
+        } else if session.seen != Some(ed.history.revision()) {
+            ctx.request_repaint_after(Duration::from_millis(200));
+        } else if let Some((when, _)) = self.retry {
+            ctx.request_repaint_after(when.saturating_duration_since(Instant::now()));
         } else {
-            ctx.request_repaint_after(Duration::from_millis(if self.others.is_empty() { 250 } else { 60 }));
+            // Now and then all the same: the console and the bot's state
+            // are passed on from here.
+            ctx.request_repaint_after(Duration::from_secs(1));
         }
     }
 
@@ -978,6 +1112,32 @@ mod tests {
         let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
         ed.open_project(dir);
         ed
+    }
+
+    /// A plugin passed on in parts: every part small enough, none cutting
+    /// a letter, and all together the same text again.
+    #[test]
+    fn texts_are_cut_between_letters() {
+        let text = "aé€😀".repeat(5000);
+        let parts = text_parts(&text, 1000);
+        assert!(parts.len() > 1 && parts.iter().all(|p| p.len() <= 1000 && !p.is_empty()));
+        assert_eq!(parts.concat(), text);
+        assert!(text_parts("", 10).is_empty());
+    }
+
+    /// A message from the host looks at as much of the guest's project as
+    /// it needs: one workspace for a change, none for a pointer.
+    #[test]
+    fn a_message_reads_only_what_it_needs() {
+        let dir = std::env::temp_dir().join(format!("xc-live-docs-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut ed = editor(&dir.join("bot"), "Bot");
+        ed.project.as_mut().unwrap().workspaces.insert("other".into(), Workspace::new("Other"));
+        assert!(docs_for(&mut ed, &Msg::Presence(Presence::default())).is_empty());
+        let update = Msg::Update { key: "main".into(), rev: 1, state: None };
+        assert_eq!(docs_for(&mut ed, &update).keys().collect::<Vec<_>>(), ["main"]);
+        assert_eq!(docs_for(&mut ed, &update)["main"], docs_of(&mut ed)["main"]);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The project goes into documents and comes back the same, and a

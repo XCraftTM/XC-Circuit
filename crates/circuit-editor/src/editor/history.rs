@@ -13,6 +13,8 @@ use circuit_core::{Project, Workspace};
 
 /// The steps kept, until [`Histories::set_limit`] says otherwise (Settings › Editor).
 const LIMIT: usize = crate::editor::prefs::UNDO_STEPS;
+/// The steps kept in a workspace someone else changes in a live session.
+pub const LIVE_STEPS: usize = 30;
 
 /// The states of one thing (a workspace, or the project's settings and data).
 struct History<T> {
@@ -150,8 +152,18 @@ impl Histories {
     /// own, so Undo doesn't take it back; and every earlier step gets the
     /// change too (`with` gives what a state becomes with it), so going
     /// back only takes back one's own work.
+    ///
+    /// Each step is merged with the change, on the window's thread, for
+    /// every change that arrives: so a workspace someone else is changing
+    /// keeps only its newest [`LIVE_STEPS`] steps (older ones would undo
+    /// the others' work, not one's own).
     pub fn take_in(&mut self, key: &str, now: &Workspace, with: impl Fn(&Workspace) -> Workspace) {
         if let Some(h) = self.workspaces.get_mut(key) {
+            // The oldest are first in both lists (the nearest redo is last).
+            let extra = h.undo.len().saturating_sub(LIVE_STEPS);
+            h.undo.drain(..extra);
+            let extra = h.redo.len().saturating_sub(LIVE_STEPS);
+            h.redo.drain(..extra);
             for (state, _) in h.undo.iter_mut().chain(h.redo.iter_mut()) {
                 *state = with(state);
             }
@@ -274,6 +286,40 @@ mod tests {
         p.workspaces.get_mut("main").unwrap().nodes.insert("x".into(), Default::default());
         h.track(&p, true);
         assert_eq!(undos(&mut h, &mut p), 3, "more: room for new steps");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A change from someone else gets into the newest steps (so Undo keeps
+    /// it), and only so many are kept: each one is merged anew every time.
+    #[test]
+    fn a_change_from_someone_else_keeps_the_newest_steps() {
+        let dir = std::env::temp_dir().join(format!("xc-history-live-{}", std::process::id()));
+        let mut p = Project::create(&dir, "H", "m").unwrap();
+        let mut h = Histories::default();
+        h.reset_saved(&p);
+        for i in 0..LIVE_STEPS + 10 {
+            p.workspaces.get_mut("main").unwrap().nodes.insert(format!("n{i}"), Node { block: "x@1".into(), ..Default::default() });
+            h.track(&p, true);
+        }
+        let merged = std::cell::Cell::new(0);
+        let mut theirs = p.workspaces["main"].clone();
+        theirs.nodes.insert("theirs".into(), Node { block: "y@1".into(), ..Default::default() });
+        h.take_in("main", &theirs, |earlier| {
+            merged.set(merged.get() + 1);
+            let mut ws = earlier.clone();
+            ws.nodes.insert("theirs".into(), Node { block: "y@1".into(), ..Default::default() });
+            ws
+        });
+        assert_eq!(merged.get(), LIVE_STEPS, "only the kept steps are merged");
+        *p.workspaces.get_mut("main").unwrap() = theirs;
+        let ws = p.workspaces.get_mut("main").unwrap();
+        let mut undone = 0;
+        while h.undo("main", ws) {
+            undone += 1;
+        }
+        assert_eq!(undone, LIVE_STEPS);
+        assert!(ws.nodes.contains_key("theirs"), "their block stays through every undo");
+        assert_eq!(ws.nodes.len(), 11, "back to the oldest step kept, with theirs");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

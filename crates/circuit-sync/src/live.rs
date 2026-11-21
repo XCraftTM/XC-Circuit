@@ -441,6 +441,16 @@ impl HostSide {
     }
 }
 
+/// A guest deleted a document the host has as `theirs`; `before` is the
+/// host's version the delete started from. Unchanged since, it stays
+/// deleted (the delete is on its way). Changed by the host since, the host's
+/// version comes back, as the host keeps it too: kept deleted here, the
+/// guest would ask again to delete the newer version, and the host's change
+/// would be lost.
+fn deleted_here(before: Option<&Value>, theirs: &Value) -> Option<Value> {
+    (before != Some(theirs)).then(|| theirs.clone())
+}
+
 /// A ticket nobody can guess: 128 random bits.
 fn new_ticket() -> String {
     use std::hash::{BuildHasher, Hasher};
@@ -555,7 +565,7 @@ impl GuestSide {
                         } else {
                             match (&mine, &state) {
                                 (_, None) => None,
-                                (None, Some(_)) => None,
+                                (None, Some(theirs)) => deleted_here(before.as_ref(), theirs),
                                 (Some(mine), Some(theirs)) => Some(merge(&key, before.as_ref(), mine, theirs, Side::Theirs)),
                             }
                         };
@@ -599,8 +609,7 @@ impl GuestSide {
                     match (&mine, &state) {
                         // Deleted by the host: gone here too.
                         (_, None) => None,
-                        // Deleted here, not answered yet: it stays so.
-                        (None, Some(_)) => None,
+                        (None, Some(theirs)) => deleted_here(before.as_ref(), theirs),
                         (Some(mine), Some(theirs)) => Some(merge(&key, before.as_ref(), mine, theirs, Side::Theirs)),
                     }
                 };
@@ -797,6 +806,34 @@ mod tests {
         t.docs("g2").remove("main");
         t.guest_sync("g2");
         assert!(t.same_everywhere() && t.host_docs.contains_key("main"));
+    }
+
+    /// A guest deletes a workspace while the host changes it: the host's
+    /// change wins everywhere, and isn't deleted by the guest asking again.
+    #[test]
+    fn a_delete_and_a_change_at_once() {
+        let mut t = start();
+        t.join("g1", "Grace", "0.3.0");
+        let send = t.host.allow("g1", Perms { blocks: Blocks::All, workspaces: true, ..Default::default() });
+        t.deliver(send);
+        // The guest's delete is on its way when the host's change goes out.
+        t.docs("g1").remove("main");
+        let (guest, docs, _) = t.guests.get_mut("g1").unwrap();
+        let delete = guest.local(&docs.clone());
+        assert!(matches!(&delete[..], [Msg::Propose { state: None, .. }]));
+        t.host_docs.get_mut("main").unwrap()["nodes"]["2"] = node("h", "the host's", [300, 0]);
+        t.host_sync();
+        t.host_gets("g1", delete);
+        for _ in 0..3 {
+            t.guest_sync("g1");
+        }
+        assert!(t.host_docs.get("main").is_some_and(|m| m["nodes"]["2"]["uid"] == "h"), "the host's change is kept: {:?}", t.host_docs.keys());
+        assert!(t.same_everywhere());
+
+        // Unchanged by the host, a delete goes through.
+        t.docs("g1").remove("main");
+        t.guest_sync("g1");
+        assert!(!t.host_docs.contains_key("main") && t.same_everywhere());
     }
 
     #[test]
