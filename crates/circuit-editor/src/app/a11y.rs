@@ -315,7 +315,8 @@ fn accessibility_can_be_turned_off() {
 #[test]
 fn two_builders_of_a_kind_are_open_side_by_side() {
     use crate::builders::Kind;
-    let mut h = window("builders", true);
+    // A scratch folder of its own: tests run at the same time.
+    let mut h = window("builders-side", true);
     let ws = h.state().ed.project.as_ref().unwrap().workspaces.keys().next().unwrap().clone();
     {
         let ed = &mut h.state_mut().ed;
