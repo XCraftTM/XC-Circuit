@@ -79,6 +79,8 @@ impl Session {
                 Ok(mut proc) => {
                     if *s.lock().unwrap() {
                         let _ = proc.kill();
+                        // Reaped, so it doesn't stay behind as a zombie (Unix).
+                        let _ = proc.wait();
                         send(Msg::Exited(None));
                         return;
                     }
@@ -106,8 +108,20 @@ impl Session {
                     for r in readers {
                         let _ = r.join();
                     }
-                    let code = c.lock().unwrap().as_mut().and_then(|p| p.wait().ok()).and_then(|s| s.code());
-                    *c.lock().unwrap() = None;
+                    // Its output is closed; the process may still take a
+                    // moment to end (or not end by itself). Waited for in
+                    // small steps, letting go of it between them: Stop and
+                    // answers from the window take it meanwhile, and would
+                    // otherwise wait for as long as the bot does.
+                    let code = loop {
+                        let looked = c.lock().unwrap_or_else(|e| e.into_inner()).as_mut().map(|p| p.try_wait());
+                        match looked {
+                            Some(Ok(Some(status))) => break status.code(),
+                            Some(Ok(None)) => thread::sleep(std::time::Duration::from_millis(50)),
+                            Some(Err(_)) | None => break None,
+                        }
+                    };
+                    *c.lock().unwrap_or_else(|e| e.into_inner()) = None;
                     send(Msg::Exited(code));
                 }
                 Err(e) => {

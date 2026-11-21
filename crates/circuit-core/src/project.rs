@@ -562,16 +562,48 @@ pub(crate) fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     if fs::read_to_string(path).is_ok_and(|old| old == text) {
         return Ok(());
     }
-    let tmp = path.with_extension("json.tmp");
+    // A name of its own for each write: two saves (or a save and a backup)
+    // at once don't write into one temporary file.
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tmp = path.with_extension(format!("json.{}-{n}.tmp", std::process::id()));
     // On the disk before it takes the old file's place: after a power cut
     // the file is the old one or the new one, never an empty one.
     let written = fs::File::create(&tmp).and_then(|mut f| {
         std::io::Write::write_all(&mut f, text.as_bytes())?;
         f.sync_all()
     });
-    written.with_context(|| format!("writing {}", tmp.display()))?;
-    fs::rename(&tmp, path).with_context(|| format!("replacing {}", path.display()))?;
+    if let Err(e) = written {
+        let _ = fs::remove_file(&tmp);
+        return Err(e).with_context(|| format!("writing {}", tmp.display()));
+    }
+    if let Err(e) = rename_retrying(&tmp, path) {
+        let _ = fs::remove_file(&tmp);
+        return Err(e).with_context(|| format!("replacing {}", path.display()));
+    }
     Ok(())
+}
+
+/// Renames, trying again a few times over a quarter second when the file is
+/// in use: on Windows a virus scanner, the search indexer or Git looking at
+/// the old file for a moment makes the rename fail ("access denied").
+fn rename_retrying(from: &Path, to: &Path) -> std::io::Result<()> {
+    let mut wait = std::time::Duration::from_millis(10);
+    for _ in 0..5 {
+        match fs::rename(from, to) {
+            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied || is_sharing_violation(&e) => {
+                std::thread::sleep(wait);
+                wait *= 2;
+            }
+            other => return other,
+        }
+    }
+    fs::rename(from, to)
+}
+
+/// Windows' "the file is being used by another process" (32) and "locked" (33).
+fn is_sharing_violation(e: &std::io::Error) -> bool {
+    cfg!(windows) && matches!(e.raw_os_error(), Some(32 | 33))
 }
 
 #[cfg(test)]
@@ -583,6 +615,29 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("xc-project-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         dir
+    }
+
+    /// A file is written whole and in place, with nothing left beside it,
+    /// also when written from several threads at once.
+    #[test]
+    fn json_is_written_through_a_temporary_file_of_its_own() {
+        let dir = temp("write-json");
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("a.json");
+        let threads: Vec<_> = (0..8)
+            .map(|i| {
+                let file = file.clone();
+                std::thread::spawn(move || write_json(&file, &serde_json::json!({ "n": i })).unwrap())
+            })
+            .collect();
+        for t in threads {
+            t.join().unwrap();
+        }
+        let v: serde_json::Value = serde_json::from_str(&fs::read_to_string(&file).unwrap()).unwrap();
+        assert!(v["n"].as_u64().is_some_and(|n| n < 8), "one whole write: {v}");
+        let names: Vec<String> = fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        assert_eq!(names, ["a.json"], "no temporary files left");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// A project of layout 2: what is shared is in circuit.project.json and
