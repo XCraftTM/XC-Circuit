@@ -20,7 +20,7 @@ const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
 const { StringDecoder } = require("node:string_decoder");
 
-const VERSION = "0.3.0";
+const VERSION = "0.3.2";
 /// Raised when the messages below change in a way older apps can't follow.
 const PROTOCOL = 1;
 

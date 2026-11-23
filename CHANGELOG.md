@@ -2,7 +2,7 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## Unreleased
+## 0.3.2
 
 ### Changed
 - **Lighter drawing on older graphics cards too**: with Older OpenGL on a graphics card, everything lighter drawing can leave out is now left out by itself (shadows, fading, pulsing glows, soft edges), as it already was when drawing in software. Settings › Window calls the switch **All on older graphics**; turn it off to pick for yourself. **Simpler edges** also leaves out the soft halo around Action wires and pins (a wire the bot just ran through still shows it).
