@@ -18,8 +18,9 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
+const { StringDecoder } = require("node:string_decoder");
 
-const VERSION = "0.3.0";
+const VERSION = "0.3.2";
 /// Raised when the messages below change in a way older apps can't follow.
 const PROTOCOL = 1;
 
@@ -34,6 +35,8 @@ const LIMITS = {
   codeMinutes: 10,
   keyDays: 30, // a key nobody fetched
   quietSeconds: 75, // without an answer to a ping
+  hostAwaySeconds: 60, // a room waits this long for its host's connection to come back
+  slowClient: 4 * 1024 * 1024, // waiting to be sent to one app: more, and it is let go
   bots: 20, // that the host runs
   botFile: 30 * 1024 * 1024, // one file of a bot
   botLines: 300, // of a bot's console kept for whoever looks later
@@ -75,19 +78,26 @@ class Socket {
   }
 
   send(message) {
-    if (!this.closed) this.socket.write(frame(1, Buffer.from(JSON.stringify(message))));
+    if (this.closed) return;
+    // An app that doesn't take what it is sent (a stalled connection
+    // watching a busy console) would fill the host's memory: let go.
+    if (this.socket.writableLength > LIMITS.slowClient) return this.end();
+    this.socket.write(frame(1, Buffer.from(JSON.stringify(message))));
   }
 
   ping() {
     if (!this.closed) this.socket.write(frame(9, Buffer.alloc(0)));
   }
 
+  /// Says why it closes, then closes: the close frame goes out before the
+  /// connection does (ended, not destroyed, unless the app never answers).
   close(code = 1000, why = "") {
     if (this.closed) return;
     const body = Buffer.concat([Buffer.from([code >> 8, code & 255]), Buffer.from(why)]);
-    this.socket.write(frame(8, body));
-    this.socket.end();
-    this.end();
+    this.closed = true;
+    this.socket.end(frame(8, body));
+    setTimeout(() => this.socket.destroy(), 2000).unref();
+    this.onClose();
   }
 
   end() {
@@ -98,7 +108,7 @@ class Socket {
   }
 
   read(chunk) {
-    this.buffer = Buffer.concat([this.buffer, chunk]);
+    this.buffer = this.buffer.length ? Buffer.concat([this.buffer, chunk]) : chunk;
     while (!this.closed) {
       if (this.buffer.length < 2) return;
       const [first, second] = this.buffer;
@@ -123,7 +133,8 @@ class Socket {
       const mask = this.buffer.subarray(at, at + 4);
       const payload = Buffer.from(this.buffer.subarray(at + 4, at + 4 + length));
       for (let i = 0; i < payload.length; i++) payload[i] ^= mask[i & 3];
-      this.buffer = this.buffer.subarray(at + 4 + length);
+      // All read: let go of the old buffer, not a slice that keeps it.
+      this.buffer = this.buffer.length === at + 4 + length ? Buffer.alloc(0) : this.buffer.subarray(at + 4 + length);
       this.heard = Date.now();
       if (opcode === 8) return this.close();
       if (opcode === 9) {
@@ -472,6 +483,46 @@ async function start(options = settings()) {
     }
   }
 
+  /// Passes what a stream of the bot (or npm) prints on in whole lines: a
+  /// chunk may end in the middle of a line, or of a letter, and a line cut
+  /// in two would break what a watching editor reads (`@@xc` lines).
+  function linesOf(stream, bot) {
+    const decoder = new StringDecoder("utf8");
+    let rest = "";
+    stream.on("data", (chunk) => {
+      const text = rest + decoder.write(chunk);
+      const end = text.lastIndexOf("\n");
+      if (end < 0) {
+        // One very long line without an end: passed on in pieces.
+        if (text.length > 64 * 1024) {
+          botSays(bot, text);
+          rest = "";
+        } else rest = text;
+        return;
+      }
+      rest = text.slice(end + 1);
+      botSays(bot, text.slice(0, end));
+    });
+    stream.on("end", () => {
+      const text = rest + decoder.end();
+      rest = "";
+      if (text) botSays(bot, text);
+    });
+  }
+
+  /// Ends a process and what it started: on Windows npm runs in cmd.exe,
+  /// and killing that leaves npm and node running; elsewhere the process
+  /// leads its own group (`detached`), which is ended whole.
+  function killTree(child, signal = "SIGTERM") {
+    if (!child || child.exitCode != null || child.signalCode != null) return;
+    try {
+      if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+      else process.kill(-child.pid, signal);
+    } catch {
+      child.kill(signal);
+    }
+  }
+
   function botState(bot, state) {
     bot.state = state;
     for (const watcher of bot.watchers) watcher.send({ event: "status", args: [state] });
@@ -491,8 +542,8 @@ async function start(options = settings()) {
     bot.child = child;
     bot.started = Date.now();
     botState(bot, "running");
-    child.stdout.on("data", (chunk) => botSays(bot, chunk.toString("utf8")));
-    child.stderr.on("data", (chunk) => botSays(bot, chunk.toString("utf8")));
+    linesOf(child.stdout, bot);
+    linesOf(child.stderr, bot);
     child.stdin.on("error", () => {});
     child.on("error", (e) => botSays(bot, `Couldn't start the bot: ${e.message}`));
     child.on("close", (code) => {
@@ -509,6 +560,7 @@ async function start(options = settings()) {
 
   function startBot(bot) {
     if (bot.child || bot.state === "starting") return;
+    bot.stopping = false;
     if (!fs.existsSync(path.join(bot.dir, "index.js"))) {
       botSays(bot, "There is no bot here yet: upload it first.");
       return;
@@ -526,14 +578,23 @@ async function start(options = settings()) {
     if (!wants || noteOf(bot).installed === wants) return runBot(bot);
     botState(bot, "starting");
     botSays(bot, "Installing the bot's packages …");
-    const npm = spawn("npm", ["install", "--omit=dev", "--no-audit", "--no-fund"], { cwd: bot.dir, shell: process.platform === "win32" });
+    const npm = spawn("npm", ["install", "--omit=dev", "--no-audit", "--no-fund"], { cwd: bot.dir, shell: process.platform === "win32", detached: process.platform !== "win32", windowsHide: true });
     bot.installing = npm;
-    npm.stdout.on("data", (chunk) => botSays(bot, chunk.toString("utf8")));
-    npm.stderr.on("data", (chunk) => botSays(bot, chunk.toString("utf8")));
+    linesOf(npm.stdout, bot);
+    linesOf(npm.stderr, bot);
     npm.on("error", (e) => botSays(bot, `npm isn't available on this host: ${e.message}`));
     npm.on("close", (code) => {
+      if (bot.installing !== npm) return;
       bot.installing = null;
-      if (bot.stopping) return botState(bot, "offline");
+      if (bot.stopping) {
+        botState(bot, "offline");
+        // Restarted while installing: from the start, with what is there now.
+        if (bot.again) {
+          bot.again = false;
+          startBot(bot);
+        }
+        return;
+      }
       if (code !== 0) {
         botSays(bot, "The packages couldn't be installed: the bot wasn't started.");
         return botState(bot, "offline");
@@ -547,7 +608,7 @@ async function start(options = settings()) {
     keepNote(bot, { wanted: "stopped" });
     bot.stopping = true;
     bot.again = false;
-    if (bot.installing) bot.installing.kill();
+    if (bot.installing) killTree(bot.installing);
     const child = bot.child;
     if (!child) return;
     botState(bot, "stopping");
@@ -561,6 +622,14 @@ async function start(options = settings()) {
     if (action === "stop") return stopBot(bot, false);
     if (action === "kill") return stopBot(bot, true);
     if (action === "restart") {
+      // Still installing its packages: that stops, and it starts again
+      // (installing what package.json asks for now).
+      if (bot.installing) {
+        stopBot(bot, false);
+        keepNote(bot, { wanted: "running" });
+        bot.again = true;
+        return;
+      }
       if (!bot.child) return startBot(bot);
       stopBot(bot, false);
       keepNote(bot, { wanted: "running" });
@@ -649,9 +718,23 @@ async function start(options = settings()) {
         if (what === "files/write") {
           const to = botPath(bot, url.searchParams.get("file"));
           if (!to) return answer(422, { errors: ["That isn't a place in the bot's folder."] });
-          fs.mkdirSync(path.dirname(to), { recursive: true });
-          fs.writeFileSync(to, body);
-          return answer(200, {});
+          // Written beside it, then put in its place: a running bot never
+          // reads half a file, and the host goes on with everything else
+          // meanwhile (up to 30 MB).
+          const temp = `${to}.${random(4)}.upload`;
+          fs.promises
+            .mkdir(path.dirname(to), { recursive: true })
+            .then(() => fs.promises.writeFile(temp, body))
+            .then(() => fs.promises.rename(temp, to))
+            .then(
+              () => answer(200, {}),
+              (e) => {
+                fs.promises.rm(temp, { force: true }).catch(() => {});
+                log(`Bot ${id}, ${what}: ${e && e.message}`);
+                answer(500, { errors: ["The host couldn't do that."] });
+              },
+            );
+          return;
         }
         if (what === "files/create-directory") {
           const { root, name } = json();
@@ -670,7 +753,7 @@ async function start(options = settings()) {
 
   /// A bot's live console, as a game panel's: what it printed lately, then
   /// every line as it comes, its state, and now and then its memory.
-  function botConsole(raw, key, address, id) {
+  function botConsole(raw, key, address, id, head) {
     const accept = crypto.createHash("sha1").update(key + GUID).digest("base64");
     raw.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
     const socket = new Socket(raw, address);
@@ -705,16 +788,20 @@ async function start(options = settings()) {
       count(address, -1);
       bot.watchers.delete(socket);
     };
+    if (head && head.length) socket.read(head);
   }
 
-  server.on("upgrade", (req, raw) => {
+  // `head`: what came with the upgrade request already. A proxy in front
+  // often sends the app's first message in the same packet; dropped, it
+  // would be lost, and the frames after it read wrongly.
+  server.on("upgrade", (req, raw, head) => {
     const url = new URL(req.url, "http://host");
     const key = req.headers["sec-websocket-key"];
     const address = addressOf(req);
     const consoleOf = /^\/bot-console\/([^/]+)$/.exec(url.pathname);
     if (mode === "full" && consoleOf && PROJECT.test(consoleOf[1]) && key && (req.headers.upgrade || "").toLowerCase() === "websocket") {
       if ((perAddress.get(address) || 0) >= LIMITS.connectionsPerAddress) return raw.end("HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n");
-      return botConsole(raw, key, address, consoleOf[1]);
+      return botConsole(raw, key, address, consoleOf[1], head);
     }
     if (url.pathname !== "/ws" || !key || (req.headers.upgrade || "").toLowerCase() !== "websocket") {
       raw.end("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
@@ -749,25 +836,39 @@ async function start(options = settings()) {
     socket.onClose = () => {
       sockets.delete(socket);
       count(address, -1);
-      leave(socket);
+      leave(socket, false);
     };
+    if (head && head.length) socket.read(head);
   });
 
-  function leave(socket) {
+  /// The session is the host's: without them it is over.
+  function closeRoom(room) {
+    clearTimeout(room.away);
+    for (const guest of room.guests.values()) {
+      guest.room = null;
+      guest.send({ t: "closed" });
+    }
+    rooms.delete(room.id);
+  }
+
+  /// A socket leaves its room: on purpose (`quitting`), or because its
+  /// connection is gone. A host whose connection dropped gets a minute to
+  /// come back (`reopen`) before the room closes; the guests wait.
+  function leave(socket, quitting) {
     if (!socket.room) return;
     const room = rooms.get(socket.room);
     socket.room = null;
     if (!room) return;
     if (room.host === socket) {
-      // The session is the host's: without them it is over.
-      for (const guest of room.guests.values()) {
-        guest.room = null;
-        guest.send({ t: "closed" });
-      }
-      rooms.delete(room.id);
+      if (quitting) return closeRoom(room);
+      room.host = null;
+      room.away = setTimeout(() => closeRoom(room), LIMITS.hostAwaySeconds * 1000);
+      room.away.unref();
+      for (const guest of room.guests.values()) guest.send({ t: "away" });
     } else {
       room.guests.delete(socket.id);
-      room.host.send({ t: "peer", id: socket.id, on: false });
+      if (room.host) room.host.send({ t: "peer", id: socket.id, on: false });
+      else room.left.add(socket.id);
     }
   }
 
@@ -780,13 +881,38 @@ async function start(options = settings()) {
       // ---- live sessions: passed on, never read, never kept ----
       case "open": {
         if (socket.room) return refuse("You are in a session already.");
-        const mine = [...rooms.values()].filter((r) => r.host.address === socket.address).length;
+        const mine = [...rooms.values()].filter((r) => r.address === socket.address).length;
         if (mine >= LIMITS.roomsPerAddress) return refuse("Too many sessions from this address.");
         const id = random(12);
-        rooms.set(id, { id, host: socket, guests: new Map() });
+        // `key` lets the host (and only the host) back in after a dropped connection.
+        const key = random(16);
+        rooms.set(id, { id, key, address: socket.address, host: socket, guests: new Map(), away: null, left: new Set() });
         socket.room = id;
         socket.id = "host";
-        return socket.send({ t: "opened", room: id });
+        return socket.send({ t: "opened", room: id, key });
+      }
+      case "reopen": {
+        if (socket.room) return refuse("You are in a session already.");
+        const room = rooms.get(String(m.room || ""));
+        if (!room || room.key !== String(m.key || "")) return refuse("That session isn't open (any more).");
+        // The old connection may not be known to be gone yet: it is let go.
+        if (room.host && room.host !== socket) {
+          const old = room.host;
+          old.room = null;
+          old.close(1001, "taken over");
+        }
+        clearTimeout(room.away);
+        room.away = null;
+        room.host = socket;
+        room.address = socket.address;
+        socket.room = room.id;
+        socket.id = "host";
+        socket.send({ t: "opened", room: room.id, key: room.key });
+        // Who left meanwhile, then the guests are told to say hello again.
+        for (const id of room.left) socket.send({ t: "peer", id, on: false });
+        room.left.clear();
+        for (const guest of room.guests.values()) guest.send({ t: "back" });
+        return;
       }
       case "join": {
         if (socket.room) return refuse("You are in a session already.");
@@ -797,12 +923,15 @@ async function start(options = settings()) {
         socket.id = random(6);
         room.guests.set(socket.id, socket);
         socket.send({ t: "joined", you: socket.id });
+        if (!room.host) return socket.send({ t: "away" });
         return room.host.send({ t: "peer", id: socket.id, on: true });
       }
       case "to": {
         const room = rooms.get(socket.room || "");
         if (!room) return refuse("You are in no session.");
-        if (room.host !== socket) return room.host.send({ t: "from", id: socket.id, data: m.data });
+        // To a host that is away: nobody to give it to (the guest says
+        // hello again when the host is back, and catches up).
+        if (room.host !== socket) return room.host ? room.host.send({ t: "from", id: socket.id, data: m.data }) : undefined;
         // From the host: to one guest, or to all of them.
         if (m.id != null) {
           const guest = room.guests.get(String(m.id));
@@ -817,12 +946,12 @@ async function start(options = settings()) {
         const guest = room.guests.get(String(m.id));
         if (guest) {
           guest.send({ t: "closed" });
-          leave(guest);
+          leave(guest, true);
         }
         return;
       }
       case "leave":
-        return leave(socket);
+        return leave(socket, true);
     }
 
     if (mode !== "full") return refuse("This host only passes live sessions on.");
@@ -913,7 +1042,7 @@ async function start(options = settings()) {
             // The bots end with the host; which were running is noted, so
             // they run again when it is back.
             for (const bot of bots.values()) {
-              if (bot.installing) bot.installing.kill();
+              if (bot.installing) killTree(bot.installing);
               if (bot.child) bot.child.kill("SIGTERM");
               bot.child = null;
             }
