@@ -28,6 +28,15 @@ try {
   ssh2 = deps && Module.createRequire(path.join(deps, "package.json"))("ssh2");
 } catch {}
 
+/// A stand-in server's key. ssh2 makes an ed25519 key it can't read back
+/// itself about once in 200 (1.17.0): such a one is made again.
+function hostKey() {
+  for (;;) {
+    const key = ssh2.utils.generateKeyPairSync("ed25519").private;
+    if (!(ssh2.utils.parseKey(key) instanceof Error)) return key;
+  }
+}
+
 const listen = (server, ...args) => new Promise((r) => server.listen(0, "127.0.0.1", ...args, () => r(server.address().port)));
 
 // ── RCON: password "pw"; "list" answers in two parts.
@@ -222,7 +231,7 @@ const say = (message) => n("core.log", { message, level: "info" });
   let ran = [];
   const sshSettings = {};
   if (ssh2) {
-    const key = ssh2.utils.generateKeyPairSync("ed25519").private;
+    const key = hostKey();
     sshServer = new ssh2.Server({ hostKeys: [key] }, (client) => {
       client.on("error", () => {});
       client.on("authentication", (ctx) => (ctx.method === "password" && ctx.username === "bot" && ctx.password === "secret" ? ctx.accept() : ctx.reject()));
@@ -267,7 +276,7 @@ const say = (message) => n("core.log", { message, level: "info" });
     has("usage given: 25");
     // The same address with another key: refused.
     sshServer.close();
-    const other = new ssh2.Server({ hostKeys: [ssh2.utils.generateKeyPairSync("ed25519").private] }, (c) => c.on("error", () => {}).on("authentication", (x) => x.accept()));
+    const other = new ssh2.Server({ hostKeys: [hostKey()] }, (c) => c.on("error", () => {}).on("authentication", (x) => x.accept()));
     await new Promise((r) => other.listen(sshSettings.sshPort, "127.0.0.1", r));
     const again = await runBot({ start: n("core.on_start"), sh: n("server.ssh_command", { command: "whoami" }) }, ["start.next > sh.in"], settings, env, 1, dir);
     assert.ok(again.some((s) => s.includes("server's key isn't the one it had before")), again.join("\n"));
