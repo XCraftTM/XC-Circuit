@@ -20,7 +20,7 @@ circuit-sync.workspace = true
 anyhow.workspace = true
 arboard = "3"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-notify = "8"
+notify = "9"
 dirs.workspace = true
 eframe.workspace = true
 # The fonts installed on the computer, for the Console's (already in the

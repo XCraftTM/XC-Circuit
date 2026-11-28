@@ -17,4 +17,4 @@ rquickjs.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true
-oxc = { version = "0.146.0", features = ["transformer", "codegen", "semantic"] }
+oxc = { version = "0.160.0", features = ["transformer", "codegen", "semantic"] }
