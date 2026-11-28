@@ -118,26 +118,33 @@ impl Sftp {
         });
         base?;
         let session = runtime
-            .block_on(tokio::time::timeout(Duration::from_secs(30), async {
-                let channel = ssh.channel_open_session().await?;
-                channel.request_subsystem(true, "sftp").await?;
-                SftpSession::new(channel.into_stream()).await.map_err(|e| anyhow!("{host} doesn't offer SFTP: {e}"))
-            }))
+            // The time limit is made inside the runtime: tokio's timers need it.
+            .block_on(async {
+                tokio::time::timeout(Duration::from_secs(30), async {
+                    let channel = ssh.channel_open_session().await?;
+                    channel.request_subsystem(true, "sftp").await?;
+                    SftpSession::new(channel.into_stream()).await.map_err(|e| anyhow!("{host} doesn't offer SFTP: {e}"))
+                })
+                .await
+            })
             .unwrap_or_else(|_| Err(anyhow!("{host} didn't open SFTP within 30 seconds")))?;
         // The folder, made where it's missing.
         let (absolute, parts) = h.folder_parts();
         let mut path = if absolute { "/".to_string() } else { String::new() };
         runtime
-            .block_on(tokio::time::timeout(Duration::from_secs(30), async {
-                for part in &parts {
-                    path.push_str(part);
-                    if !session.try_exists(path.clone()).await.unwrap_or(false) {
-                        session.create_dir(path.clone()).await.map_err(|e| anyhow!("couldn't make the folder {path}: {e}"))?;
+            .block_on(async {
+                tokio::time::timeout(Duration::from_secs(30), async {
+                    for part in &parts {
+                        path.push_str(part);
+                        if !session.try_exists(path.clone()).await.unwrap_or(false) {
+                            session.create_dir(path.clone()).await.map_err(|e| anyhow!("couldn't make the folder {path}: {e}"))?;
+                        }
+                        path.push('/');
                     }
-                    path.push('/');
-                }
-                Ok::<_, anyhow::Error>(())
-            }))
+                    Ok::<_, anyhow::Error>(())
+                })
+                .await
+            })
             .unwrap_or_else(|_| Err(anyhow!("{host} didn't make the bot's folder within 30 seconds")))?;
         log(format!("Logged in to {host} as {user}."));
         Ok(Sftp { runtime, session, ssh, base: path })
@@ -158,18 +165,21 @@ impl Remote for Sftp {
         let path = format!("{}{name}", self.base);
         let temp = format!("{path}.xc-upload");
         let session = &self.session;
-        let done = self.runtime.block_on(tokio::time::timeout(time_for(data.len()), async {
-            let mut file = session.create(temp.clone()).await.map_err(|e| anyhow!("couldn't write {path}: {e}"))?;
-            file.write_all(data).await?;
-            file.shutdown().await?;
-            // Most servers don't rename onto a file that is there (SFTP 3):
-            // then the old one goes first.
-            if session.rename(temp.clone(), path.clone()).await.is_err() {
-                let _ = session.remove_file(path.clone()).await;
-                session.rename(temp.clone(), path.clone()).await.map_err(|e| anyhow!("couldn't put {path} in place: {e}"))?;
-            }
-            Ok::<_, anyhow::Error>(())
-        }));
+        let done = self.runtime.block_on(async {
+            tokio::time::timeout(time_for(data.len()), async {
+                let mut file = session.create(temp.clone()).await.map_err(|e| anyhow!("couldn't write {path}: {e}"))?;
+                file.write_all(data).await?;
+                file.shutdown().await?;
+                // Most servers don't rename onto a file that is there (SFTP 3):
+                // then the old one goes first.
+                if session.rename(temp.clone(), path.clone()).await.is_err() {
+                    let _ = session.remove_file(path.clone()).await;
+                    session.rename(temp.clone(), path.clone()).await.map_err(|e| anyhow!("couldn't put {path} in place: {e}"))?;
+                }
+                Ok::<_, anyhow::Error>(())
+            })
+            .await
+        });
         match done {
             Ok(result) => result,
             Err(_) => bail!("writing {path} took too long: the connection may be gone"),

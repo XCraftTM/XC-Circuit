@@ -52,6 +52,14 @@ jobs:
         if: matrix.os == 'ubuntu-22.04'
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      # Uploading a bot over SFTP, against a stand-in server with ssh2.
+      - name: SFTP upload test
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          mkdir -p "$RUNNER_TEMP/sftp-deps"
+          (cd "$RUNNER_TEMP/sftp-deps" && npm init -y > /dev/null && npm install --no-audit --no-fund ssh2@^1.17.0)
+          XC_TEST_DEPS="$RUNNER_TEMP/sftp-deps" node runtime/test/sftp_upload.js
+
       - uses: actions/setup-python@v7
         if: matrix.os == 'ubuntu-22.04'
         with:
