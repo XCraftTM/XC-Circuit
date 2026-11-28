@@ -342,7 +342,7 @@ The desktop, a 1440×900 window, Vulkan. Each workspace was shown still, panned 
 | 800 | 752 FPS | 718 FPS | 487 FPS | 🟢 4.5 ms |
 | 1,600 | 654 FPS | 625 FPS | 402 FPS | 🟢 5.3 ms |
 
-Measured on November 28, 2026, after XC Circuit 0.3.2 (the other tables are older unless they say so). Before blocks out of view stopped being laid out again every frame, 1,600 blocks ran at about 366 FPS still and 277 FPS zooming.
+Measured on November 28, 2026, with XC Circuit 0.3.3 (the other tables are older unless they say so). Before blocks out of view stopped being laid out again every frame, 1,600 blocks ran at about 366 FPS still and 277 FPS zooming.
 
 **Without a graphics card** (drawing in software with Mesa's llvmpipe on Linux, 4 cores of an AMD EPYC 9V45 server), the same test still runs at about 42–67 FPS still or panning, and 34–51 FPS while zooming: usable, but noticeably less smooth.
 

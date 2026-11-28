@@ -2,7 +2,7 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
-## Unreleased
+## 0.3.3
 
 ### Changed
 - **Big workspaces are much lighter**: blocks out of view are no longer worked out again in every frame. They keep their layout until something in the project changes, they move, or they come near the view (and a few are checked each frame all the same, so none stays out of date), and wires between them are left out from where their blocks are. A workspace of 1,600 blocks now draws at about 650 instead of 370 frames a second on a gaming PC, and 3,200 blocks take 2 ms a frame instead of 5. Try Zones are also fitted in one pass over the blocks instead of one per zone.
