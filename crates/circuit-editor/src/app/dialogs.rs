@@ -13,6 +13,38 @@ impl CircuitApp {
         let Some(crash) = self.crash_offer.clone() else { return };
         let theme = self.ed.theme.clone();
         let (mut report, mut open_log, mut later) = (false, false, false);
+        // The graphics card's device was lost: said as what it is, not as a
+        // mistake to report.
+        if crash.graphics.is_some() {
+            let close = dialog::show(
+                ctx,
+                &theme,
+                dialog::Spec { id: "crash-graphics", title: t!("The graphics driver stopped"), subtitle: Some(t!("XC Circuit had to close because the graphics card stopped drawing for a moment.")), icon: None, width: 520.0 },
+                |ui, part| match part {
+                    dialog::Part::Body => {
+                        if crate::app::crash::started_again() {
+                            ui.label(RichText::new(t!("It started again by itself. Unsaved changes are offered back if there were any.")).size(12.5).color(theme.text));
+                            ui.add_space(6.0);
+                        }
+                        ui.label(RichText::new(t!("This happens when Windows resets a graphics driver that hangs, when the driver is updated while the app is open, after sleep, or when a laptop switches graphics cards or a screen is plugged in or out. It isn't a mistake in XC Circuit.")).size(12.0).color(theme.text_muted));
+                        ui.add_space(6.0);
+                        ui.label(RichText::new(t!("If it happens often: update the graphics driver, or pick another way to draw in Settings › Window › Graphics.")).size(12.0).color(theme.text_muted));
+                    }
+                    dialog::Part::Footer => {
+                        later = kit::primary_button(ui, &theme, t!("OK")).clicked();
+                        open_log = kit::secondary_button(ui, &theme, t!("Show crash log")).clicked();
+                    }
+                },
+            );
+            if open_log {
+                let _ = open::that(crash.path.parent().unwrap_or(&crash.path));
+            }
+            if later || close {
+                self.ed.prefs.last_crash_seen = crash.at;
+                self.crash_offer = None;
+            }
+            return;
+        }
         let close = dialog::show(
             ctx,
             &theme,

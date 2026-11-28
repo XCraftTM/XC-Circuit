@@ -2,6 +2,11 @@
 
 All notable changes to XC™ Circuit. Versions follow [semantic versioning](https://semver.org); while in Early Access (0.x), a new minor version may change how things work. Projects are upgraded automatically when they open.
 
+## Unreleased
+
+### Fixed
+- **When the graphics driver stops, XC Circuit says so**: if the graphics card's driver is reset or updated while the app is open (or the card changes: after sleep, on a laptop, a screen plugged in or out), the app has to close. It used to ask you to report that as a bug. Now it starts again by itself (your unsaved changes are offered back) and explains what happened. Every crash log also says which graphics card and way of drawing the app used, and what it was doing at that moment.
+
 ## 0.3.2
 
 ### Changed

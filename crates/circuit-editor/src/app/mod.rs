@@ -311,6 +311,16 @@ impl CircuitApp {
         ed.theme.apply(&cc.egui_ctx);
         // What draws the app, and whether it had to fall back.
         let (graphics, software) = crate::app::graphics::describe(cc);
+        // The graphics card's device lost (the driver reset or updated, the
+        // card changed): the next frame can't be drawn, and the app stops.
+        // Noted first, so the crash log and the next start say what it was.
+        if let Some(state) = &cc.wgpu_render_state {
+            state.device.set_device_lost_callback(|reason, message| {
+                if reason != eframe::wgpu::DeviceLostReason::Destroyed {
+                    crate::app::crash::graphics_lost(format!("{reason:?}: {message}"));
+                }
+            });
+        }
         // Drawing in software, or with an older card: lighter drawing,
         // unless turned off by hand.
         crate::editor::prefs::set_software_drawing(software);

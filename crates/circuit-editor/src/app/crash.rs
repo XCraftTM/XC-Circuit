@@ -53,13 +53,69 @@ pub fn install() {
             .unwrap_or_else(|| "a panic without a message".into());
         let location = info.location().map(|l| format!("{}:{}", l.file(), l.line())).unwrap_or_default();
         let thread = std::thread::current().name().unwrap_or("unnamed").to_string();
+        // The graphics card's device gone (a driver reset, say): not a
+        // mistake in the app, and said so at the next start.
+        let lost = GRAPHICS_LOST.try_lock().ok().and_then(|g| g.clone());
+        let graphics_failed = lost.is_some() || is_graphics_failure(&message);
+        let (about, doing) = crate::app::watchdog::for_crash_log();
+        let lost_line = if graphics_failed { format!("{LOST_LINE}{}\n", lost.as_deref().unwrap_or("(as the panic says)")) } else { String::new() };
         let text = format!(
-            "XC Circuit {}\nThread: {thread}\nPanic: {message}\nAt: {location}\n\nBacktrace:\n{}\n",
+            "XC Circuit {}\nThread: {thread}\nPanic: {message}\nAt: {location}\nRunning on: {about}\n{DOING_LINE}{doing}\n{lost_line}\nBacktrace:\n{}\n",
             version_line(),
             std::backtrace::Backtrace::force_capture()
         );
         let _ = write_log(&logs_dir(), &text);
+        if graphics_failed {
+            start_again();
+        }
     }));
+}
+
+/// Set when wgpu says the graphics card's device is lost: why.
+static GRAPHICS_LOST: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// The graphics device was lost (wgpu's device-lost callback): the crash
+/// that follows (the next frame can't be drawn) is said to be that.
+pub fn graphics_lost(why: String) {
+    if let Ok(mut g) = GRAPHICS_LOST.lock() {
+        g.get_or_insert(why);
+    }
+}
+
+/// How egui-wgpu and wgpu stop when the graphics device is gone (staging
+/// memory can't be had from a lost device either): the driver was reset (Windows does that to a driver that
+/// hangs), updated, or the card changed (a laptop's, after sleep, Remote
+/// Desktop). Also known when the device-lost callback came too late.
+fn is_graphics_failure(panic: &str) -> bool {
+    let p = panic.to_lowercase();
+    ["failed to create staging buffer", "device lost", "device is lost", "devicelost", "parent device is lost"].iter().any(|s| p.contains(s))
+}
+
+const LOST_LINE: &str = "Graphics device lost: ";
+const DOING_LINE: &str = "Doing: ";
+/// How often the app started again by itself after losing its graphics in
+/// a row: twice at most, so a card that keeps failing doesn't loop.
+pub const RESTARTS_VAR: &str = "XC_GRAPHICS_RESTARTS";
+
+/// After losing the graphics device: the app starts again by itself (its
+/// unsaved changes are offered back, from crash recovery), unless it did so
+/// twice in a row already or measures frame rates.
+fn start_again() {
+    if std::env::var_os("XC_FPS_OUT").is_some() {
+        return;
+    }
+    let tries: u32 = std::env::var(RESTARTS_VAR).ok().and_then(|t| t.parse().ok()).unwrap_or(0);
+    if tries >= 2 {
+        return;
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        let _ = std::process::Command::new(exe).args(std::env::args_os().skip(1)).env(RESTARTS_VAR, (tries + 1).to_string()).spawn();
+    }
+}
+
+/// Whether this start is one the app made by itself after losing its graphics.
+pub fn started_again() -> bool {
+    std::env::var_os(RESTARTS_VAR).is_some()
 }
 
 fn now_secs() -> u64 {
@@ -102,6 +158,8 @@ pub struct Crash {
     pub at: u64,
     pub path: PathBuf,
     pub panic: String,
+    /// The graphics device was lost: why (wgpu's words, or the panic's).
+    pub graphics: Option<String>,
 }
 
 pub fn newest_since(seen: u64) -> Option<Crash> {
@@ -113,7 +171,8 @@ fn newest_in(dir: &Path, seen: u64) -> Option<Crash> {
     let text = std::fs::read_to_string(&path).ok()?;
     let line = |p: &str| text.lines().find_map(|l| l.strip_prefix(p)).unwrap_or("").to_string();
     let panic = format!("{} (at {})", line("Panic: "), line("At: "));
-    Some(Crash { at, path, panic })
+    let graphics = text.lines().find_map(|l| l.strip_prefix(LOST_LINE)).map(str::to_string);
+    Some(Crash { at, path, panic, graphics })
 }
 
 /// What a report is about.
@@ -169,6 +228,28 @@ mod tests {
         }
         write_log(&dir, text).unwrap();
         assert_eq!(list(&dir).len(), KEPT);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// egui-wgpu's panic after the graphics device was lost (as a tester
+    /// got it) is told apart from the app's own mistakes, and the next start
+    /// reads it back from the log.
+    #[test]
+    fn a_lost_graphics_device_is_told_apart() {
+        let lost = "Failed to create staging buffer for index data. Index count: 64398. Required index buffer size: 257592. Actual size 390636 and capacity: 390636 (bytes)";
+        assert!(is_graphics_failure(lost));
+        assert!(is_graphics_failure("Validation Error: Parent device is lost"));
+        for own in ["index out of bounds: the len is 3 but the index is 7", "called `Option::unwrap()` on a `None` value", "a panic without a message"] {
+            assert!(!is_graphics_failure(own), "{own}");
+        }
+        let dir = std::env::temp_dir().join(format!("xc-crash-graphics-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        write_log(&dir, &format!("XC Circuit 0.3.2\nThread: main\nPanic: {lost}\nAt: renderer.rs:1033\nRunning on: x86_64 build, graphics: Vulkan · Some Card\n{DOING_LINE}after its frame\n{LOST_LINE}Unknown: Device lost\n\nBacktrace:\n…")).unwrap();
+        let c = newest_in(&dir, 0).unwrap();
+        assert_eq!(c.graphics.as_deref(), Some("Unknown: Device lost"));
+        let _ = std::fs::remove_dir_all(&dir);
+        write_log(&dir, "XC Circuit 0.3.2\nThread: main\nPanic: index out of bounds\nAt: x.rs:1\n").unwrap();
+        assert_eq!(newest_in(&dir, 0).unwrap().graphics, None, "the app's own crash is reported as before");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

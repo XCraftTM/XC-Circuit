@@ -83,6 +83,14 @@ pub fn about(graphics: &str, software: bool) {
     }
 }
 
+/// For a crash log: what this start runs on (see [`about`]) and the step the
+/// frame was at. Without waiting: the crash may come while one is held.
+pub fn for_crash_log() -> (String, String) {
+    let about = ABOUT.try_lock().map(|a| a.clone()).unwrap_or_default();
+    let phase = PHASE.try_lock().map(|p| p.clone()).unwrap_or_default();
+    (about, phase)
+}
+
 fn describe_start(graphics: &str, software: bool, build: &str, processor: Option<&str>) -> String {
     let mut text = format!("{build} build, graphics: {graphics}");
     if software {
