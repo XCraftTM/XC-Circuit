@@ -8,6 +8,15 @@ pub(super) fn wire_points(a: Pos2, b: Pos2) -> [Pos2; 4] {
     [a, a + vec2(dx, 0.0), b - vec2(dx, 0.0), b]
 }
 
+/// Where a wire between two blocks can go, whatever pins of theirs it joins:
+/// its ends are on the blocks, and its curve stays within its control
+/// points, at most half its width (40 at least) past its ends sideways.
+/// `margin` is room for its thickness and glow.
+pub(super) fn wire_bounds(from: Rect, to: Rect, margin: f32) -> Rect {
+    let both = from.union(to);
+    both.expand2(vec2((both.width() * 0.5).max(40.0) + margin, margin))
+}
+
 /// How far `p` is from the wire between `a` and `b`.
 pub(super) fn wire_distance(a: Pos2, b: Pos2, p: Pos2) -> f32 {
     let curve = CubicBezierShape::from_points_stroke(wire_points(a, b), false, Color32::TRANSPARENT, Stroke::NONE);

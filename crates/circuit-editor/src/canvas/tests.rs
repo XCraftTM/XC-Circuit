@@ -686,3 +686,86 @@ fn a_zoom_asked_for_is_taken_when_drawn() {
     let on_screen = view.to_global(canvas.min) * rect.center();
     assert!((on_screen - canvas.center()).length() < 2.0, "the block in the middle: {on_screen:?} vs {:?}", canvas.center());
 }
+
+/// A block out of view keeps its layout from an earlier frame instead of
+/// having it worked out again every frame. It is laid out again at once when
+/// a change is recorded (an edit, undo, someone else's change) or it moves,
+/// and within RECHECK_FRAMES frames even when nothing said it changed.
+#[test]
+fn blocks_out_of_view_keep_their_layout_until_it_may_change() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut ed = Editor::new(vec![root.join("plugins")], None).unwrap();
+    ed.open_project(&root.join("examples/DemoBot"));
+    let ws = "rank-command";
+    fn far(ed: &mut Editor) -> &mut circuit_core::Node {
+        ed.project.as_mut().unwrap().workspaces.get_mut("rank-command").unwrap().nodes.get_mut("far").unwrap()
+    }
+    ed.project.as_mut().unwrap().workspaces.get_mut(ws).unwrap().nodes.insert("far".into(), circuit_core::Node { block: "core.log@1".into(), at: [20000.0, 20000.0], ..Default::default() });
+    ed.check_changes();
+    let ctx = egui::Context::default();
+    for _ in 0..3 {
+        frame(&ctx, &mut ed, ws, vec![]);
+    }
+    // Whether Log's Message pin is a made pin (not a faint inline one).
+    let message_pinned = |ed: &Editor| {
+        let (_, _, layout) = &ed.views[ws].layout_cache["far"];
+        layout.pins.iter().find(|p| p.pin == "message").map(|p| !p.faint)
+    };
+    assert_eq!(message_pinned(&ed), Some(false));
+
+    // Changed without anyone saying so: kept for now, out of view …
+    far(&mut ed).pins.push("message".into());
+    frame(&ctx, &mut ed, ws, vec![]);
+    assert_eq!(message_pinned(&ed), Some(false), "out of view, the layout from before stays");
+    // … and laid out again within RECHECK_FRAMES frames all the same.
+    for _ in 0..RECHECK_FRAMES {
+        frame(&ctx, &mut ed, ws, vec![]);
+    }
+    assert_eq!(message_pinned(&ed), Some(true), "checked again in time");
+
+    // A change the history records: at once.
+    far(&mut ed).pins.clear();
+    ed.check_changes();
+    frame(&ctx, &mut ed, ws, vec![]);
+    assert_eq!(message_pinned(&ed), Some(false), "a recorded change lays it out again");
+
+    // Moved (out of view still): its layout goes with it at once.
+    far(&mut ed).at = [-30000.0, 5000.0];
+    frame(&ctx, &mut ed, ws, vec![]);
+    let rect = ed.views[ws].layout_cache["far"].2.rect;
+    assert_eq!(rect.min, pos2(-30000.0, 5000.0));
+
+    // Brought into view: laid out in the frame it's drawn (asked to be
+    // centred, a jump of the view).
+    far(&mut ed).pins.push("message".into());
+    ed.reveal(ws, "far");
+    frame(&ctx, &mut ed, ws, vec![]);
+    assert_eq!(message_pinned(&ed), Some(true));
+}
+
+/// A wire's bounds from its blocks alone hold the whole curve, wherever on
+/// the two blocks its ends are: a wire is only left out when out of view.
+#[test]
+fn a_wire_stays_within_its_blocks_bounds() {
+    let rects = [
+        Rect::from_min_size(pos2(0.0, 0.0), vec2(240.0, 300.0)),
+        Rect::from_min_size(pos2(380.0, 340.0), vec2(240.0, 120.0)),
+        Rect::from_min_size(pos2(-900.0, 2000.0), vec2(300.0, 80.0)),
+        Rect::from_min_size(pos2(20.0, -50.0), vec2(240.0, 60.0)),
+        Rect::from_min_size(pos2(7000.0, 10.0), vec2(240.0, 200.0)),
+    ];
+    let at = |r: Rect, fx: f32, fy: f32| pos2(r.left() + r.width() * fx, r.top() + r.height() * fy);
+    for from in rects {
+        for to in rects {
+            let bounds = wire_bounds(from, to, 0.0);
+            for (fx, fy, tx, ty) in [(1.0, 0.1, 0.0, 0.1), (1.0, 0.9, 0.0, 0.0), (0.0, 0.5, 1.0, 0.5), (0.5, 0.0, 0.5, 1.0), (1.0, 1.0, 0.0, 1.0)] {
+                let (a, b) = (at(from, fx, fy), at(to, tx, ty));
+                let curve = CubicBezierShape::from_points_stroke(wire_points(a, b), false, Color32::TRANSPARENT, Stroke::NONE);
+                for i in 0..=64 {
+                    let p = curve.sample(i as f32 / 64.0);
+                    assert!(bounds.expand(0.01).contains(p), "{p:?} outside {bounds:?} (from {a:?} to {b:?})");
+                }
+            }
+        }
+    }
+}

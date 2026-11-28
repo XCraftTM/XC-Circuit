@@ -120,7 +120,29 @@ pub struct CanvasView {
     pub last_origin: Option<(Pos2, u64)>,
     /// A note whose editor opens the next time this canvas is drawn (a new one).
     pub edit_note: Option<String>,
+    /// What the blocks out of view were last checked against (the
+    /// workspace's and project's fingerprints, the undo history's revision,
+    /// the text size): when it changes, every block is checked again.
+    checked: Option<Checked>,
+    /// Where the next few blocks out of view to check again start.
+    recheck_from: usize,
+    /// Which pins have a wire (all, and outputs), kept while the wires are
+    /// the same (the workspace's fingerprint).
+    wired: Option<(u64, std::sync::Arc<(PinSet, PinSet)>)>,
+    /// Each wire's two blocks, by their place among the layouts: the same.
+    wire_ends: Option<(u64, WireEnds)>,
 }
+
+/// What blocks out of view were checked against (see `CanvasView::checked`).
+type Checked = ((u64, u64, u64), u64, (u32, bool));
+/// Each wire's two blocks, by their place among the layouts.
+type WireEnds = std::sync::Arc<Vec<Option<(usize, usize)>>>;
+/// Pins (a fingerprint of block and pin) in a set with the fast hasher.
+type PinSet = std::collections::HashSet<u64, std::hash::BuildHasherDefault<crate::editor::Fingerprint>>;
+
+/// Blocks out of view are checked again a few at a time as well, all of
+/// them within this many frames.
+const RECHECK_FRAMES: usize = 30;
 
 impl CanvasView {
     /// A view at 100%, before it was first drawn.
@@ -212,7 +234,7 @@ fn edge_push(outer: Rect, p: Pos2) -> Vec2 {
 }
 
 pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
-    let Editor { reg, engine, theme, project, shapes, views, selected, edited, picker, active_workspace, activity, wire_values, multi, selected_notes, recording_frame, define_ctx, node_problems, live_others, embed_edits, layout_edits, modal_edits, canvas_edits, selected_wire, prefs, ui_rects, tour_parts, actions, .. } = ed;
+    let Editor { reg, engine, theme, project, shapes, views, selected, edited, picker, active_workspace, activity, wire_values, multi, selected_notes, recording_frame, define_ctx, node_problems, live_others, embed_edits, layout_edits, modal_edits, canvas_edits, selected_wire, prefs, ui_rects, tour_parts, actions, history, .. } = ed;
     let Some(project) = project.as_mut() else { return };
     let mode = reg.mode(&project.meta.mode).or_else(|| reg.modes.first());
     let Some(ws) = project.workspaces.get_mut(ws_key) else {
@@ -239,8 +261,39 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     }
     // Scene sizes depend on the text size too.
     let text_scale = (ui.ctx().pixels_per_point().to_bits(), theme.touch);
-    for id in &ids {
+    // A block out of view keeps its layout from before, as long as it stays
+    // where it was: working its shape and layout out again for every block
+    // in every frame cost more than drawing the ones in view. Every block is
+    // checked again when anything in the project changed (an edit, undo,
+    // another's change in a live session, the wires, the text size) or the
+    // view jumps; and a few out of view each frame all the same, so none is
+    // ever out of date for long.
+    let stamp = (shapes.stamp(reg, ws_key, ws, define_ctx), history.revision(), text_scale);
+    let check_all = !view.initialized || view.focus.is_some() || view.zoom_to.is_some() || view.checked != Some(stamp);
+    view.checked = Some(stamp);
+    let near = {
+        // The view as it was, with room for this frame's panning and zooming.
+        let outer = ui.available_rect_before_wrap();
+        let seen = view.to_global(outer.min).inverse() * outer;
+        seen.expand2(seen.size() * 0.5)
+    };
+    let count = ids.len().max(1);
+    let (recheck, recheck_from) = (ids.len().div_ceil(RECHECK_FRAMES), view.recheck_from % count);
+    view.recheck_from = recheck_from + recheck;
+    for (i, id) in ids.iter().enumerate() {
         let node = &ws.nodes[id];
+        if !check_all
+            && (i + count - recheck_from) % count >= recheck
+            && let Some((_, shape, layout)) = view.layout_cache.get(id)
+            && layout.rect.min == pos2(node.at[0], node.at[1])
+            && !layout.rect.intersects(near)
+        {
+            layouts.push(layout.clone());
+            if let Some(s) = shape {
+                node_shapes.insert(id.as_str(), s.clone());
+            }
+            continue;
+        }
         let def = reg.block(&node.block);
         let shape = node_shape(reg, engine, shapes, ws_key, ws, id, define_ctx);
         // Everything the layout is made from besides the shape: where the
@@ -330,15 +383,12 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         }
         layouts.push(zone_layout(zid, *rect));
     }
-    // Made every frame for every block's pins: with the fast hasher.
-    let mut pin_index: HashMap<(&str, &str, Dir), usize, std::hash::BuildHasherDefault<crate::editor::Fingerprint>> =
-        HashMap::with_capacity_and_hasher(layouts.iter().map(|l| l.pins.len()).sum(), Default::default());
-    for (li, l) in layouts.iter().enumerate() {
-        for (pi, p) in l.pins.iter().enumerate() {
-            pin_index.insert((l.id.as_str(), p.pin.as_str(), p.dir), li * 1000 + pi);
-        }
-    }
-    let pin_at = |node: &str, pin: &str, dir: Dir| pin_index.get(&(node, pin, dir)).map(|i| &layouts[i / 1000].pins[i % 1000]);
+    // Made every frame: one entry per block (a pin is found among its few),
+    // with the fast hasher.
+    let node_index: HashMap<&str, usize, std::hash::BuildHasherDefault<crate::editor::Fingerprint>> = layouts.iter().enumerate().map(|(i, l)| (l.id.as_str(), i)).collect();
+    // The last of a block's pins with that name and direction, as before.
+    let pin_at = |node: &str, pin: &str, dir: Dir| node_index.get(node).and_then(|&i| layouts[i].pins.iter().rev().find(|p| p.dir == dir && p.pin == pin));
+    let block_rect = |node: &str| node_index.get(node).map(|&i| layouts[i].rect);
     // Which pins have a wire, for every field drawn: one look instead of a
     // search through all the wires each time.
     let pin_key = |node: &str, pin: &str| {
@@ -346,10 +396,35 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
         (node, pin).hash(&mut h);
         h.finish()
     };
-    let wired: std::collections::HashSet<u64, std::hash::BuildHasherDefault<crate::editor::Fingerprint>> =
-        ws.links.iter().flat_map(|l| [pin_key(&l.from.node, &l.from.pin), pin_key(&l.to.node, &l.to.pin)]).collect();
-    // Outputs with a wire, apart (an output may have a field's name).
-    let wired_out: std::collections::HashSet<u64, std::hash::BuildHasherDefault<crate::editor::Fingerprint>> = ws.links.iter().map(|l| pin_key(&l.from.node, &l.from.pin)).collect();
+    // Made again only when the wires change (they are in the fingerprint).
+    let wiring = stamp.0.0;
+    let sets = match &view.wired {
+        Some((at, sets)) if *at == wiring => sets.clone(),
+        _ => {
+            let all: PinSet = ws.links.iter().flat_map(|l| [pin_key(&l.from.node, &l.from.pin), pin_key(&l.to.node, &l.to.pin)]).collect();
+            // Outputs with a wire, apart (an output may have a field's name).
+            let out: PinSet = ws.links.iter().map(|l| pin_key(&l.from.node, &l.from.pin)).collect();
+            let sets = std::sync::Arc::new((all, out));
+            view.wired = Some((wiring, sets.clone()));
+            sets
+        }
+    };
+    let (wired, wired_out) = (&sets.0, &sets.1);
+    // Where each wire's two blocks are among the layouts, also kept while
+    // the wires are the same; each is checked as it's used (the block's id
+    // still there), and looked up by name otherwise.
+    let wire_ends = match &view.wire_ends {
+        Some((at, ends)) if *at == wiring && ends.len() == ws.links.len() => ends.clone(),
+        _ => {
+            let ends: WireEnds = std::sync::Arc::new(ws.links.iter().map(|l| Some((*node_index.get(l.from.node.as_str())?, *node_index.get(l.to.node.as_str())?))).collect());
+            view.wire_ends = Some((wiring, ends.clone()));
+            ends
+        }
+    };
+    let wire_rects = |i: usize, link: &Link| match wire_ends.get(i).copied().flatten() {
+        Some((a, b)) if layouts.get(a).is_some_and(|l| l.id == link.from.node) && layouts.get(b).is_some_and(|l| l.id == link.to.node) => Some((layouts[a].rect, layouts[b].rect)),
+        _ => block_rect(&link.from.node).zip(block_rect(&link.to.node)),
+    };
 
     let (outer, _) = ui.allocate_exact_size(ui.available_size(), Sense::hover());
     ui.painter().rect_filled(outer, 0.0, theme.canvas);
@@ -568,14 +643,15 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     let wire_pick = (bg.hovered() && view.drag.is_none() && !over_block).then_some(pointer_scene).flatten();
     let reach = if theme.touch { 14.0 } else { 6.0 } / view.zoom.max(0.3);
     let mut hovered_wire: Option<Link> = None;
-    for link in &ws.links {
-        let a = pin_at(&link.from.node, &link.from.pin, Dir::Out);
-        let b = pin_at(&link.to.node, &link.to.pin, Dir::In);
-        if let (Some(a), Some(b)) = (a, b)
-            && let Some(p) = wire_pick
-            && wire_distance(a.pos, b.pos, p) < reach
-        {
-            hovered_wire = Some(link.clone());
+    if let Some(p) = wire_pick {
+        for link in &ws.links {
+            let a = pin_at(&link.from.node, &link.from.pin, Dir::Out);
+            let b = pin_at(&link.to.node, &link.to.pin, Dir::In);
+            if let (Some(a), Some(b)) = (a, b)
+                && wire_distance(a.pos, b.pos, p) < reach
+            {
+                hovered_wire = Some(link.clone());
+            }
         }
     }
     let wire_selected = |l: &Link| selected_wire.as_ref().is_some_and(|(w, s)| w == ws_key && s == l);
@@ -584,7 +660,13 @@ pub fn show(ui: &mut Ui, ed: &mut Editor, ws_key: &str) {
     // A wire's curve stays within its four control points: one that is out
     // of view (with room for its halo) isn't built at all.
     let wire_margin = theme.wire_width * 6.0 + 4.0;
-    for link in &ws.links {
+    for (li, link) in ws.links.iter().enumerate() {
+        // Known out of view from its blocks alone, before finding the pins.
+        if let Some((ra, rb)) = wire_rects(li, link)
+            && !wire_bounds(ra, rb, wire_margin).intersects(visible)
+        {
+            continue;
+        }
         let a = pin_at(&link.from.node, &link.from.pin, Dir::Out);
         let b = pin_at(&link.to.node, &link.to.pin, Dir::In);
         if let (Some(a), Some(b)) = (a, b) {

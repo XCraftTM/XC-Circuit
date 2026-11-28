@@ -247,14 +247,20 @@ pub(super) const ZONE_PANEL_H: f32 = 4.0 * ZONE_ROW_H + 8.0;
 
 /// Rectangles of the zones that have blocks, fitted around them.
 pub(super) fn zone_rects(ws: &Workspace, layouts: &[NodeLayout]) -> Vec<(String, Rect)> {
+    if ws.zones.is_empty() {
+        return Vec::new();
+    }
+    // One pass over the blocks for all zones (every frame).
+    let mut bounds: HashMap<&str, Rect> = HashMap::new();
+    for l in layouts {
+        if let Some(zid) = ws.nodes.get(&l.id).and_then(|n| n.zone.as_deref()) {
+            bounds.entry(zid).and_modify(|b| *b = b.union(l.rect)).or_insert(l.rect);
+        }
+    }
     ws.zones
         .keys()
         .filter_map(|zid| {
-            let bounds = layouts
-                .iter()
-                .filter(|l| ws.nodes.get(&l.id).is_some_and(|n| n.zone.as_deref() == Some(zid)))
-                .map(|l| l.rect)
-                .reduce(|a, b| a.union(b))?;
+            let bounds = bounds.get(zid.as_str())?;
             let rect = Rect::from_min_max(bounds.min - vec2(28.0, 44.0), bounds.max + vec2(28.0 + ZONE_PANEL_W * 0.4, 28.0 + ZONE_PANEL_H));
             Some((zid.clone(), rect))
         })

@@ -22,6 +22,9 @@ pub struct ShapeCache {
     stopped: HashMap<String, u32>,
     /// What to tell in the Console about them.
     reports: Vec<String>,
+    /// Counts the times shapes were forgotten (plugins reloaded, a block's
+    /// shape dropped): part of `stamp`, so the canvas lays blocks out again.
+    forgotten: u64,
 }
 
 impl ShapeCache {
@@ -32,6 +35,7 @@ impl ShapeCache {
     }
 
     pub fn clear(&mut self) {
+        self.forgotten += 1;
         self.blocks.clear();
         self.known.clear();
     }
@@ -50,6 +54,7 @@ impl ShapeCache {
 
     /// After plugins reload: every block's `define()` gets a new chance.
     pub fn forget_too_slow(&mut self) {
+        self.forgotten += 1;
         self.too_slow.clear();
         self.stopped.clear();
     }
@@ -60,11 +65,13 @@ impl ShapeCache {
     }
 
     pub fn forget_workspace(&mut self, key: &str) {
+        self.forgotten += 1;
         self.blocks.remove(key);
         self.known.remove(key);
     }
 
     pub fn forget(&mut self, ws_key: &str, node: &str) {
+        self.forgotten += 1;
         if let Some(blocks) = self.blocks.get_mut(ws_key) {
             blocks.remove(node);
         }
@@ -72,6 +79,16 @@ impl ShapeCache {
 
     pub(super) fn get(&self, ws_key: &str, node: &str) -> Option<&BlockShape> {
         self.blocks.get(ws_key)?.get(node).map(|(_, s)| &**s)
+    }
+
+    /// Fingerprints of the workspace's blocks and wires and of the project's
+    /// values `define()` sees, as of this pass, and how often shapes were
+    /// forgotten: when they change, any block may need laying out again (the
+    /// canvas checks them all then).
+    pub fn stamp(&mut self, reg: &Registry, ws_key: &str, ws: &Workspace, project: &Value) -> (u64, u64, u64) {
+        let forgotten = self.forgotten;
+        let k = self.known(reg, ws_key, ws, project);
+        (k.structure, k.project, forgotten)
     }
 
     /// The workspace's names, emptied when what they depend on changed.

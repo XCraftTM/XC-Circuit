@@ -5,7 +5,7 @@ title: Performance
 # Performance
 
 ::: info In short
-XC™ Circuit draws a typical bot in **about 1 ms per frame** and runs at **800–1,100 frames a second** on a gaming PC when nothing holds it back. Even a workspace of **1,600 blocks** stays smooth on a 120 Hz screen on an everyday computer. Frames only drop with **thousands of blocks in one workspace** or **hundreds of blocks on screen at once on a 4K window**. Bots run **75,000–200,000 blocks a second** once exported.
+XC™ Circuit draws a typical bot in **about 1 ms per frame** and runs at **800–1,100 frames a second** on a gaming PC when nothing holds it back. Even a workspace of **1,600 blocks** stays smooth on a 120 Hz screen on an everyday computer, and blocks out of view cost very little, so **3,200 blocks** take under 2 ms a frame on a gaming PC. Frames only drop with **hundreds of blocks on screen at once on a 4K window**. Bots run **75,000–200,000 blocks a second** once exported.
 :::
 
 The bundled starter bots have 3 to 8 blocks per workspace, and even large bots rarely have more than 100 in one. Everything below is about how far beyond that you can go.
@@ -34,10 +34,12 @@ The desktop, a 1440×900 window, Vulkan. Each workspace was shown still, panned 
 
 | Blocks in the workspace | Still | Panning | Zooming | Slowest frames (95%) |
 | --- | --- | --- | --- | --- |
-| 25 | 1,045 FPS | 1,139 FPS | 374 FPS | 🟢 3.0 ms |
-| 200 | 836 FPS | 801 FPS | 304 FPS | 🟢 4.9 ms |
-| 800 | 493 FPS | 483 FPS | 234 FPS | 🟢 5.9 ms |
-| 1,600 | 312 FPS | 308 FPS | 181 FPS | 🟢 7.4 ms |
+| 25 | 955 FPS | 1,132 FPS | 891 FPS | 🟢 1.4 ms |
+| 200 | 875 FPS | 810 FPS | 509 FPS | 🟢 4.4 ms |
+| 800 | 752 FPS | 718 FPS | 487 FPS | 🟢 4.5 ms |
+| 1,600 | 654 FPS | 625 FPS | 402 FPS | 🟢 5.3 ms |
+
+Measured on November 28, 2026, after XC Circuit 0.3.2 (the other tables are older unless they say so). Before blocks out of view stopped being laid out again every frame, 1,600 blocks ran at about 366 FPS still and 277 FPS zooming.
 
 **Without a graphics card** (drawing in software with Mesa's llvmpipe on Linux, 4 cores of an AMD EPYC 9V45 server), the same test still runs at about 42–67 FPS still or panning, and 34–51 FPS while zooming: usable, but noticeably less smooth.
 
@@ -45,18 +47,18 @@ Out of more than 10,000 frames on the desktop, only two took longer than 16.7 ms
 
 ## Blocks in one workspace
 
-Frame times with a few blocks on screen (100% zoom) and the rest of the workspace off screen. Off-screen blocks cost a little: their layout is kept, and checked each frame for changes.
+Frame times with a few blocks on screen (100% zoom) and the rest of the workspace off screen. Off-screen blocks cost very little: their layout is kept and only worked out again when something in the project changes, when they come near the view, or now and then (a few each frame), so none stays out of date. Their wires are left out from where their blocks are, without looking at the pins.
 
-| Blocks in the workspace | Desktop | Everyday |
+| Blocks in the workspace | Desktop (Nov 28, 2026) | Everyday (before this) |
 | --- | --- | --- |
-| 25 | 🟢 0.9 ms | 🟢 1.7 ms |
-| 200 | 🟢 1.0 ms | 🟢 2.0 ms |
-| 400 | 🟢 1.5 ms | 🟢 2.7 ms |
-| 800 | 🟢 1.7 ms | 🟢 4.1 ms |
-| 1,600 | 🟢 3.3 ms | 🟢 8.2 ms |
-| 3,200 | 🟢 6.4 ms | 🔴 18.5 ms |
+| 25 | 🟢 0.7 ms | 🟢 1.7 ms |
+| 200 | 🟢 0.7 ms | 🟢 2.0 ms |
+| 400 | 🟢 0.6 ms | 🟢 2.7 ms |
+| 800 | 🟢 0.8 ms | 🟢 4.1 ms |
+| 1,600 | 🟢 1.2 ms | 🟢 8.2 ms |
+| 3,200 | 🟢 2.0 ms | 🔴 18.5 ms |
 
-An everyday computer stays smooth at 120 Hz up to about **1,600 blocks** in one workspace and drops frames at 3,200; the desktop handles 3,200 at 120 Hz. For very big bots, split them into several workspaces (the Call Workspace block runs one from another): other workspaces cost nothing.
+On the desktop, 3,200 blocks took 5.4 ms before off-screen blocks stopped being laid out again every frame, and take 2.0 ms now; the everyday column is from before that and will come down too. For very big bots, splitting them into several workspaces still helps (the Call Workspace block runs one from another): other workspaces cost nothing.
 
 ## Blocks on screen at once
 
